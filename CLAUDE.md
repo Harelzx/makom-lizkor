@@ -63,6 +63,33 @@ Persistence uses an `idb-keyval` store named `makom-lizkor-v2`/`v1`, with the ke
 - Tiles and terrain come from OpenFreeMap and AWS, so the map needs network access. The camera is clamped to Israel (`maxBounds`).
 - Basemap labels for community names are suppressed (`OWN_LABELS` in `style.ts`) because the app draws its own.
 
+### The opening's headlines (`src/data/headlines.ts`, `src/components/montage.tsx`)
+The opening's count is a montage:
+- **Landing:** each headline slams onto the screen as the count reaches its date.
+- **Floating:** the pile drifts, dimmed, behind the words.
+- **Falling:** at «ולא נשכח» each clipping falls onto a memorial site. The site's screen position comes from `screenPoints` in the controller. The camera is held (`setTimeHeld`) and drifts again 2.6 seconds later.
+
+Content rules:
+- **Headlines** are in our own words, each with a source link.
+- **Photos** are freely licensed from Wikimedia Commons and stored as 240×180 WebP files (about 10 KB each) in `public/headlines/`. They're credited in About, under «שלוש השנים בכותרות».
+- **Never copy outlets' screenshots, logos or photos.**
+- **Editorial lines:**
+  - no images from the handover ceremonies
+  - no identifiable hostages or families caught in a private moment
+  - no political signs
+- **What appears:** only headlines dated before today. On phones, only those marked `phone: true` (10).
+
+Smoothness is load-bearing:
+- The count is a `MotionValue`, so React state changes only when a clipping lands.
+- Clippings are memoized, and their depth is capped at 6.
+- No filters.
+- Motion animates `x`/`scale`/`rotate` from JavaScript, so anything it moves must be on its own layer (`will-change-transform`), or every frame repaints it. That's why each clipping has **one** moving layer (the slam is the paper's own entrance, with an overshooting ease).
+- Position gets a layer only when it moves (behind the words and in the fall).
+- The drift behind the words is a CSS animation (`.clip-float`).
+- Adding wrappers or shadow layers per clipping brought back 33 ms frames on desktop.
+- `e2e/montage.spec.ts` compares frame times under a 4× CPU throttle against the quiet clock scene in the same run.
+- The montage is lazy-loaded, and its photos are preloaded while the clock ticks, but not in data-saving mode or on 2G.
+
 ### Code splitting (`App.tsx`)
 The opening paints from a small first bundle. `MapCanvas`, `Shell`, `Search`, `About` and `AddPlace` are `lazy()`. `Shell` is prefetched 2.5 seconds into the intro. The About and AddPlace dialogs mount on first open and then stay mounted, so they can animate closed. Keep heavy imports out of `intro.tsx`, `celebration.tsx` and `store.ts`.
 
@@ -77,6 +104,11 @@ The opening paints from a small first bundle. `MapCanvas`, `Shell`, `Search`, `A
 - The script reads `data-src/` by relative path, so run it from this directory.
 
 The journey along Route 232 (`journeyStops`) and a community's "memory" section (`sitesNear`) are computed from coordinates in `store.ts`. They aren't stored data.
+
+### Time since 7 October (`src/lib/since.ts`)
+The opening, its sunrise line and the panel all say how long it has been: "שלוש שנים", "1,093 ימים", "שלושה חורפים". `since()` computes this from today's date **in Israel**, whatever the visitor's time zone. The year count turns on **15 September**, ahead of the Hebrew-calendar memorial day (24 Tishrei), so the whole memorial season names the anniversary being marked. `e2e/three-years.spec.ts` pins the clock to check this. Never hard-code the count in components. There are two deliberate exceptions:
+- The About paragraph is dated text ("נכתב באוקטובר 2026"), because it states facts that will change.
+- The meta and OG tags in `index.html`, plus the cover in `../launch/v2/cover.html`, are rendered into `public/og.png` by `../launch/tools/cover-v2.mjs`. Link previews can't run code, so update them each September.
 
 ## Styling and design rules
 

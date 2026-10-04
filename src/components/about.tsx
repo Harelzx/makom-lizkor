@@ -3,6 +3,7 @@ import { RotateCcwIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { LEGAL_SECTIONS } from "@/data/legal"
+import { HEADLINES } from "@/data/headlines"
 import { CONTACT_EMAIL, LAST_UPDATED } from "@/config"
 import { FONT_CREDIT } from "@/lib/fonts"
 import { PhotoGallery } from "@/components/photo-figure"
@@ -41,6 +42,15 @@ export function About() {
         </SheetHeader>
 
         <div className="flex flex-col gap-4 px-7 pt-4 pb-8 text-body-lg text-pretty text-ink-1">
+          {/* Written for the third anniversary and dated, because some of it will stop being true. */}
+          <div className="flex flex-col gap-1.5">
+            <p>
+              עברו שלוש שנים. בתים נבנו מחדש, ורוב המפונים כבר חזרו הביתה. אבל הבוקר ההוא עדיין לא נגמר: המלחמה נמשכת, ועדיין לא ידוע לנו כל
+              מה שקרה בו. לזכור זה גם לרצות לדעת. ככל שהזמן עובר, החדשות עוברות הלאה. המקומות נשארים, והם הדרך שלנו להגיד: אנחנו זוכרים, ולא
+              נשכח.
+            </p>
+            <p className="text-caption text-ink-3">נכתב באוקטובר 2026</p>
+          </div>
           <p>
             מקום לזכור מרכז אותם במפה אחת: כרגע {sites} אתרי זיכרון ו־{communities} קהילות. לכל קהילה יש כאן שני סיפורים: מי שהיא איבדה,
             ואיך היא חוזרת לחיים. בחרנו בכלנית, הפרח של הנגב המערבי, כי היא חוזרת לפרוח בכל חורף.
@@ -87,6 +97,43 @@ export function About() {
           </div>
 
           <Accordion type="single" collapsible className="mt-4">
+            {/* The opening's headlines, readable here in full: with the source of each and the credit for each photo. */}
+            <AccordionItem value="headlines" id="headlines">
+              <AccordionTrigger className="text-headline text-ink-1">שלוש השנים בכותרות</AccordionTrigger>
+              <AccordionContent>
+                <div className="flex flex-col gap-3 text-body text-ink-2">
+                  <p>
+                    בפתיחה, הספירה עוברת על אירועי שלוש השנים. הכותרות נכתבו כאן במילים שלנו, על סמך הדיווח שמקושר לכל אחת. התמונות
+                    מוויקישיתוף, ברישיון חופשי, חתוכות ומוקטנות.
+                  </p>
+                  <ol className="flex flex-col">
+                    {HEADLINES.map((h) => (
+                      <li key={h.date} className="flex flex-col gap-0.5 border-t border-line py-3 first:border-t-0 first:pt-0">
+                        <span className="text-caption text-ink-3 tabular-nums">{h.when ?? h.date.split("-").reverse().join(".")}</span>
+                        <span className="text-ink-1">{h.text}</span>
+                        <span className="text-caption [&_a]:underline [&_a]:underline-offset-2">
+                          <a href={h.source.url} target="_blank" rel="noopener">
+                            {h.source.label}
+                          </a>
+                          {h.photo && (
+                            <>
+                              {" · צילום: "}
+                              <a href={h.photo.url} target="_blank" rel="noopener">
+                                {h.photo.author}
+                              </a>
+                              {", "}
+                              <a href={h.photo.license_url} target="_blank" rel="noopener">
+                                {h.photo.license}
+                              </a>
+                            </>
+                          )}
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
             {LEGAL_SECTIONS.map((s) => (
               <AccordionItem key={s.id} value={s.id} id={s.id}>
                 <AccordionTrigger className="text-headline text-ink-1">{s.title}</AccordionTrigger>

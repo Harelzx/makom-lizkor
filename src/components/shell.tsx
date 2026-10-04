@@ -11,6 +11,9 @@ import { Explorer } from "@/components/explorer"
 import { useStore } from "@/store"
 import { cn } from "@/lib/utils"
 import { ease, spring } from "@/lib/motion"
+import { daysHe, since, yearsHe } from "@/lib/since"
+
+const { days, years } = since()
 
 function useIsMobile() {
   const [m, setM] = useState(() => window.matchMedia("(max-width: 767px)").matches)
@@ -193,7 +196,9 @@ export function Shell() {
           >
             <div className="flex flex-col gap-1">
               <Wordmark />
-              <p className="ps-10 text-caption text-ink-2">לזכרם של נרצחי ונופלי 7 באוקטובר</p>
+              <p className="ps-10 text-caption text-ink-2">
+                {yearsHe(years)} · {daysHe(days)} · לא נשכח
+              </p>
             </div>
             <Tooltip>
               <TooltipTrigger asChild>

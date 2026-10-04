@@ -18,6 +18,8 @@ export const isMobile = () => window.matchMedia("(max-width: 767px)").matches
 export const ENVELOPE = { center: [34.47, 31.41] as [number, number], zoom: 10.4, pitch: 55, bearing: 0 }
 /** Where the morning begins: low over Be'eri, looking east toward the sunrise. */
 export const DAWN = { center: [34.66, 31.41] as [number, number], zoom: 11.2, pitch: 70, bearing: 92 }
+/** On a phone the opening stands further back, so the envelope's places are in frame for the headlines to fall onto. */
+const dawnZoom = () => (isMobile() ? DAWN.zoom - 0.9 : DAWN.zoom)
 export const ISRAEL: [[number, number], [number, number]] = [
   [34.2, 29.45],
   [35.95, 33.35],
@@ -29,7 +31,7 @@ export function createMap(container: HTMLElement, light: "night" | "morning", la
     container,
     style: buildStyle(current, labels),
     center: DAWN.center,
-    zoom: DAWN.zoom,
+    zoom: dawnZoom(),
     pitch: DAWN.pitch,
     bearing: DAWN.bearing - 14,
     maxPitch: 80,
@@ -84,10 +86,21 @@ export function shiftLight(target: "night" | "morning", duration = 1600): Promis
   return new Promise((resolve) => setTimeout(resolve, d))
 }
 
+let timeHeld = false
+
+/**
+ * At 06:29 the opening stops the world, and the camera with it, until the words say we won't forget.
+ * While time is held, no drift starts, not even one the map asks for when it finishes loading.
+ */
+export function setTimeHeld(held: boolean) {
+  timeHeld = held
+  if (held) stopOrbit()
+}
+
 /** A slow drift around the current center: the camera breathes while the opening words play. */
 export function startOrbit(degPerSec = 2.2) {
   cancelAnimationFrame(orbitRaf)
-  if (!map || reducedMotion()) return
+  if (!map || reducedMotion() || timeHeld) return
   let last = performance.now()
   const tick = (now: number) => {
     if (!map) return
@@ -131,7 +144,7 @@ export function returnToDawn() {
   void shiftLight("night", 1400)
   map.flyTo({
     center: DAWN.center,
-    zoom: DAWN.zoom,
+    zoom: dawnZoom(),
     pitch: DAWN.pitch,
     bearing: DAWN.bearing - 14,
     padding: { top: 0, bottom: 0, left: 0, right: 0 },
@@ -139,6 +152,12 @@ export function returnToDawn() {
     essential: false,
   })
   map.once("moveend", () => startOrbit())
+}
+
+/** Where places sit on the screen right now: the opening's headlines fall onto them. */
+export function screenPoints(points: [number, number][]) {
+  if (!map) return []
+  return points.map((p) => map!.project(p))
 }
 
 export function flyToEnvelope(duration = 4200) {

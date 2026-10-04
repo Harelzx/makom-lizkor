@@ -5,6 +5,8 @@
  * Every particle is a small element animated with CSS transform/opacity keyframes, which run on the
  * compositor: no canvas to re-upload each frame, no JavaScript per frame. Off with reduced motion.
  */
+import { cn } from "@/lib/utils"
+
 type Mode = "embers" | "petals" | "off"
 
 const rnd = (a: number, b: number) => a + Math.random() * (b - a)
@@ -37,7 +39,8 @@ const makePetals = (n: number) =>
 const EMBERS = { small: makeEmbers(18), large: makeEmbers(34) }
 const PETALS = { small: makePetals(16), large: makePetals(30) }
 
-export function Atmosphere({ mode }: { mode: Mode }) {
+/** `frozen` stops every ember where it is, mid-air: the opening holds the world still at 06:29. */
+export function Atmosphere({ mode, frozen = false }: { mode: Mode; frozen?: boolean }) {
   const small = typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches
   const reduce = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
   const embers = small ? EMBERS.small : EMBERS.large
@@ -46,7 +49,7 @@ export function Atmosphere({ mode }: { mode: Mode }) {
   if (reduce || mode === "off") return null
 
   return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
+    <div className={cn("pointer-events-none absolute inset-0 overflow-hidden", frozen && "atmo-frozen")} aria-hidden="true">
       {mode === "embers" &&
         embers.map((e, i) => (
           <span
