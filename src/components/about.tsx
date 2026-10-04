@@ -108,7 +108,7 @@ export function About() {
                   </p>
                   <ol className="flex flex-col">
                     {HEADLINES.map((h) => (
-                      <li key={h.date} className="flex flex-col gap-0.5 border-t border-line py-3 first:border-t-0 first:pt-0">
+                      <li key={h.text} className="flex flex-col gap-0.5 border-t border-line py-3 first:border-t-0 first:pt-0">
                         <span className="text-caption text-ink-3 tabular-nums">{h.when ?? h.date.split("-").reverse().join(".")}</span>
                         <span className="text-ink-1">{h.text}</span>
                         <span className="text-caption [&_a]:underline [&_a]:underline-offset-2">

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Anemone } from "@/components/anemone"
 import { Atmosphere } from "@/components/atmosphere"
 import { cn } from "@/lib/utils"
-import { ease } from "@/lib/motion"
+import { ease, push, rush } from "@/lib/motion"
 import { since, wintersHe, yearsHe } from "@/lib/since"
 import type { CountTiming, MontageMode } from "@/components/montage"
 const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches
@@ -45,7 +45,7 @@ const ENTER = 0.5
 const COUNT_ENTER = 0.6
 
 /** The count starts after the clock has stepped back, and races to today in a few seconds (see montage.tsx). */
-const COUNT: CountTiming = { enter: COUNT_ENTER, delay: COUNT_ENTER + 0.3, seconds: 7.5 }
+const COUNT: CountTiming = { enter: COUNT_ENTER, delay: COUNT_ENTER + 0.3, seconds: 8.5 }
 
 const REMEMBER_SECOND = landed(REMEMBER_LINES[0], ENTER) + 0.15
 const SINCE_DELAYS = [ENTER]
@@ -173,8 +173,26 @@ function Moment() {
   )
 }
 
-/** A scene of words: sentences one after another, each on its own row. */
-function Lines({ sentences, delays, onLanded }: { sentences: string[]; delays: number[]; onLanded?: () => void }) {
+/**
+ * How the words meet the camera. When the count lands, the camera rushes through the pile toward them, so they come from
+ * far away, at half their size; after that it only drifts in. Either way they end at their own size, where text is sharp.
+ */
+type Approach = { from: number; seconds: number; ease: readonly [number, number, number, number] }
+const SINCE_APPROACH: Approach = { from: 0.55, ...rush }
+const REMEMBER_APPROACH: Approach = { from: 0.94, ...push }
+
+/** A scene of words: sentences one after another, each on its own row, coming toward the camera as it moves in. */
+function Lines({
+  sentences,
+  delays,
+  approach,
+  onLanded,
+}: {
+  sentences: string[]
+  delays: number[]
+  approach: Approach
+  onLanded?: () => void
+}) {
   useEffect(() => {
     if (!onLanded) return
     const last = sentences.length - 1
@@ -183,7 +201,11 @@ function Lines({ sentences, delays, onLanded }: { sentences: string[]; delays: n
   }, [sentences, delays, onLanded])
   return (
     <motion.p
+      // no will-change: a promoted layer keeps the text rasterized at its starting size, and it would end blurred
       className="pointer-events-none col-start-1 row-start-1 max-w-2xl text-statement text-balance"
+      initial={{ scale: approach.from }}
+      animate={{ scale: 1 }}
+      transition={{ duration: approach.seconds, ease: approach.ease }}
       exit={{ opacity: 0, y: -8, transition: { duration: 0.6, ease } }}
     >
       {sentences.map((s, i) => (
@@ -461,9 +483,9 @@ export function Intro() {
             <AnimatePresence>
               {inIntro && stage <= TIME && <Clock key="clock" stepBack={stage === TIME} onStop={stop} />}
               {inIntro && stage === MOMENT && <Moment key="moment" />}
-              {inIntro && stage === SINCE && <Lines key="since" sentences={SINCE_LINES} delays={SINCE_DELAYS} />}
+              {inIntro && stage === SINCE && <Lines key="since" sentences={SINCE_LINES} delays={SINCE_DELAYS} approach={SINCE_APPROACH} />}
               {inIntro && stage === REMEMBER && (
-                <Lines key="remember" sentences={REMEMBER_LINES} delays={REMEMBER_DELAYS} onLanded={resume} />
+                <Lines key="remember" sentences={REMEMBER_LINES} delays={REMEMBER_DELAYS} approach={REMEMBER_APPROACH} onLanded={resume} />
               )}
               {inIntro && stage === NAME && <Name key="name" quick={quick} count={count} cta={cta} onMorning={toMorning} />}
               {phase === "dawn" && (

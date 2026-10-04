@@ -65,9 +65,10 @@ Persistence uses an `idb-keyval` store named `makom-lizkor-v2`/`v1`, with the ke
 
 ### The opening's headlines (`src/data/headlines.ts`, `src/components/montage.tsx`)
 The opening's count is a montage:
-- **Landing:** each headline slams onto the screen as the count reaches its date.
+- **Rising:** as the count reaches a headline's date, its clipping rises from the depth behind the number out to its place, slowing in without passing it. Nothing hits or shakes: the build-up comes from the pace and the pile. A slam with a screen shake was tried and rejected as angry, not fitting a memorial.
+- **Rushing in:** once the count lands, the camera rushes through the pile toward the words (`rush` in `lib/motion.ts`, 1.5 s). The number flies past the camera first, each layer's zoom jumps to `RUSH_ZOOM` (up to 2.5×) so the clippings sweep past to the edges and off the screen, darkening as they go, and the words come out of the depth from half their size. In the next scene the words only drift in (`push`). Words always end at exactly their own size and get no `will-change`: a promoted layer keeps text rasterized at its starting size, and it would end blurred.
 - **Floating:** the pile drifts, dimmed, behind the words.
-- **Falling:** at «ולא נשכח» each clipping falls onto a memorial site. The site's screen position comes from `screenPoints` in the controller. The camera is held (`setTimeHeld`) and drifts again 2.6 seconds later.
+- **Falling:** at «ולא נשכח» each clipping falls onto a memorial site. The site's screen position comes from `screenPoints` in the controller. The layers' zoom stops where it is when the fall begins (it's a motion value per layer), and the fall is aimed through that zoom, so it lands on the site even when someone skips mid-rush. The ember and its light undo that zoom (`lens`), so they're the same size whatever it was. The camera is held (`setTimeHeld`) and drifts again 2.6 seconds later.
 
 Content rules:
 - **Headlines** are in our own words, each with a source link.
@@ -77,13 +78,13 @@ Content rules:
   - no images from the handover ceremonies
   - no identifiable hostages or families caught in a private moment
   - no political signs
-- **What appears:** only headlines dated before today. On phones, only those marked `phone: true` (10).
+- **What appears:** only headlines dated before today. On phones, only those marked `phone: true` (16). There are as many slots as headlines (`DESKTOP`, `PHONE` in `montage.tsx`), so a new headline needs a new slot.
 
 Smoothness is load-bearing:
 - The count is a `MotionValue`, so React state changes only when a clipping lands.
 - Clippings are memoized, and their depth is capped at 6.
 - No filters.
-- Motion animates `x`/`scale`/`rotate` from JavaScript, so anything it moves must be on its own layer (`will-change-transform`), or every frame repaints it. That's why each clipping has **one** moving layer (the slam is the paper's own entrance, with an overshooting ease).
+- Motion animates `x`/`scale`/`rotate` from JavaScript, so anything it moves must be on its own layer (`will-change-transform`), or every frame repaints it. That's why each clipping has **one** moving layer (the rise is the paper's own entrance). A whole-screen shake on each landing cost frames too.
 - Position gets a layer only when it moves (behind the words and in the fall).
 - The drift behind the words is a CSS animation (`.clip-float`).
 - Adding wrappers or shadow layers per clipping brought back 33 ms frames on desktop.

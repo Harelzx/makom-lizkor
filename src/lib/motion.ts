@@ -1,6 +1,11 @@
 // Motion presets: every animation in the interface draws from these, so movement feels like one hand.
 export const ease = [0.22, 1, 0.36, 1] as const
 
+/** The opening's camera when the count lands: a rush through the pile toward the words, quick to gather and soft to settle. */
+export const rush = { ease: [0.6, 0, 0.15, 1] as const, seconds: 1.5 }
+/** The opening's camera drifting in while words are read: it eases in and settles slowly, never past. */
+export const push = { ease: [0.33, 0, 0.2, 1] as const, seconds: 4.5 }
+
 export const spring = {
   /** panels, sheets, larger surfaces */
   soft: { type: "spring", stiffness: 260, damping: 30, mass: 1 },
