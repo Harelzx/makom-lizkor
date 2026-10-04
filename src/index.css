@@ -1,130 +1,698 @@
-@import "tailwindcss";
+/*
+ * Classes are read from this folder only. Left to scan the whole project, Tailwind also reads the research
+ * files, notes and docs: words in them turn into stray CSS, and editing any of them reloads the page.
+ * The data folder is text, never classes.
+ */
+@import "tailwindcss" source(".");
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/inter";
+@import "@fontsource-variable/heebo";
+
+@source not "./data";
 
 @custom-variant dark (&:is(.dark *));
 
-@theme inline {
-    --font-heading: var(--font-sans);
-    --font-sans: 'Inter Variable', sans-serif;
-    --color-sidebar-ring: var(--sidebar-ring);
-    --color-sidebar-border: var(--sidebar-border);
-    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-    --color-sidebar-accent: var(--sidebar-accent);
-    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-    --color-sidebar-primary: var(--sidebar-primary);
-    --color-sidebar-foreground: var(--sidebar-foreground);
-    --color-sidebar: var(--sidebar);
-    --color-chart-5: var(--chart-5);
-    --color-chart-4: var(--chart-4);
-    --color-chart-3: var(--chart-3);
-    --color-chart-2: var(--chart-2);
-    --color-chart-1: var(--chart-1);
-    --color-ring: var(--ring);
-    --color-input: var(--input);
-    --color-border: var(--border);
-    --color-destructive: var(--destructive);
-    --color-accent-foreground: var(--accent-foreground);
-    --color-accent: var(--accent);
-    --color-muted-foreground: var(--muted-foreground);
-    --color-muted: var(--muted);
-    --color-secondary-foreground: var(--secondary-foreground);
-    --color-secondary: var(--secondary);
-    --color-primary-foreground: var(--primary-foreground);
-    --color-primary: var(--primary);
-    --color-popover-foreground: var(--popover-foreground);
-    --color-popover: var(--popover);
-    --color-card-foreground: var(--card-foreground);
-    --color-card: var(--card);
-    --color-foreground: var(--foreground);
-    --color-background: var(--background);
-    --radius-sm: calc(var(--radius) * 0.6);
-    --radius-md: calc(var(--radius) * 0.8);
-    --radius-lg: var(--radius);
-    --radius-xl: calc(var(--radius) * 1.4);
-    --radius-2xl: calc(var(--radius) * 1.8);
-    --radius-3xl: calc(var(--radius) * 2.2);
-    --radius-4xl: calc(var(--radius) * 2.6);
-}
-
+/*
+ * ── Design tokens ────────────────────────────────────────────────────────────
+ * Concept: winter in the western Negev. The anemones bloom when the fields are green.
+ * Three layers: primitive scales (--p-*) → semantic roles (--surface, --ink, --brand …)
+ * → component use through Tailwind utilities (bg-surface, text-ink-2, text-title-2 …).
+ * Neutrals are tinted toward the blue ink, never plain gray, never cream.
+ */
 :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
-    --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --radius: 0.625rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.205 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.708 0 0);
+  /* ink: blue-black neutrals (hue ~262) */
+  --p-ink-950: #0b1120;
+  --p-ink-900: #131a2c;
+  --p-ink-800: #1c253b;
+  --p-ink-700: #29334d;
+  --p-ink-600: #3c4764;
+  --p-ink-500: #566181;
+  --p-ink-400: #7c86a1;
+  --p-ink-300: #a8b0c4;
+  --p-ink-200: #cfd5e2;
+  --p-ink-100: #e7eaf1;
+  --p-ink-50: #f4f6fa;
+  /* anemone: the crimson of Anemone coronaria */
+  --p-anemone-900: #3d0610;
+  --p-anemone-700: #8e0c21;
+  --p-anemone-600: #b70f28;
+  --p-anemone-500: #d71a33;
+  --p-anemone-400: #f04a5c;
+  --p-anemone-200: #ffc2c8;
+  --p-anemone-100: #ffe1e4;
+  --p-anemone-50: #fff1f2;
+  /* sun: first light, apricot */
+  --p-sun-500: #e07f2c;
+  --p-sun-400: #f39a48;
+  --p-sun-300: #fbb877;
+  --p-sun-200: #fdd6ad;
+  --p-sun-100: #ffe9d3;
+  --p-sun-50: #fff7ee;
+  /* field: the winter-green of the Negev fields */
+  --p-field-700: #33522c;
+  --p-field-600: #426a38;
+  --p-field-500: #558646;
+  --p-field-400: #74a564;
+  --p-field-300: #a2c793;
+  --p-field-200: #cbe1c0;
+  --p-field-100: #e4f0dd;
+  --p-field-50: #f3f8ef;
+  /* dusk: the violet line of first light, for night surfaces */
+  --p-dusk: #3a2d4a;
+  /* sky */
+  --p-sky-300: #8fbcdc;
+  --p-sky-200: #bad6ea;
+  --p-sky-100: #ddecf6;
+
+  /* semantic: morning */
+  --surface: #ffffff; /* panels, sheets, dialogs */
+  --surface-2: var(--p-ink-50); /* inputs, chips, quiet fills */
+  --surface-3: var(--p-ink-100); /* pressed, selected rows */
+  --canvas: var(--p-field-50); /* behind everything; the map normally covers it */
+  --ink-1: var(--p-ink-900); /* primary text */
+  --ink-2: var(--p-ink-500); /* secondary text */
+  --ink-3: var(--p-ink-400); /* tertiary, captions */
+  --line: color-mix(in oklab, var(--p-ink-900) 9%, transparent);
+  --line-strong: color-mix(in oklab, var(--p-ink-900) 16%, transparent);
+  --brand: var(--p-anemone-500);
+  --brand-strong: var(--p-anemone-600);
+  --brand-soft: var(--p-anemone-50);
+  --brand-ink: #ffffff;
+  --hope: var(--p-field-500);
+  --hope-soft: var(--p-field-50);
+  --hope-ink: var(--p-field-700);
+  --dawn: var(--p-sun-300);
+  --dawn-soft: var(--p-sun-50);
+  --glass: rgb(255 255 255 / 0.96);
+  --shadow-color: 222 40% 12%;
+
+  --radius: 0.75rem;
 }
 
 .dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.556 0 0);
+  --surface: var(--p-ink-900);
+  --surface-2: var(--p-ink-800);
+  --surface-3: var(--p-ink-700);
+  --canvas: var(--p-ink-950);
+  --ink-1: var(--p-ink-50);
+  --ink-2: var(--p-ink-300);
+  --ink-3: var(--p-ink-400);
+  --line: color-mix(in oklab, var(--p-ink-50) 9%, transparent);
+  --line-strong: color-mix(in oklab, var(--p-ink-50) 16%, transparent);
+  --brand: var(--p-anemone-400);
+  --brand-strong: var(--p-anemone-500);
+  --brand-soft: color-mix(in oklab, var(--p-anemone-400) 14%, transparent);
+  --hope: var(--p-field-300);
+  --hope-soft: color-mix(in oklab, var(--p-field-300) 12%, transparent);
+  --hope-ink: var(--p-field-200);
+  --dawn: var(--p-sun-300);
+  --dawn-soft: color-mix(in oklab, var(--p-sun-300) 12%, transparent);
+  --glass: rgb(19 26 44 / 0.96);
+  --shadow-color: 228 60% 3%;
+}
+
+/* shadcn's roles, mapped onto ours, so every library component speaks the same palette */
+:root,
+.dark {
+  /* shadcn fills buttons and inputs with "background": that is our white surface, not the canvas */
+  --background: var(--surface);
+  --foreground: var(--ink-1);
+  --card: var(--surface);
+  --card-foreground: var(--ink-1);
+  --popover: var(--surface);
+  --popover-foreground: var(--ink-1);
+  --primary: var(--ink-1);
+  --primary-foreground: var(--surface);
+  --secondary: var(--surface-2);
+  --secondary-foreground: var(--ink-1);
+  --muted: var(--surface-2);
+  --muted-foreground: var(--ink-2);
+  --accent: var(--surface-2);
+  --accent-foreground: var(--ink-1);
+  --destructive: var(--p-anemone-600);
+  --border: var(--line);
+  --input: var(--line-strong);
+  --ring: color-mix(in oklab, var(--brand) 50%, transparent);
+  /* legacy names still used by markers */
+  --anemone: var(--brand);
+  --sage: var(--hope);
+  --ink: var(--ink-1);
+}
+
+@theme inline {
+  --font-sans: "Heebo Variable", "Heebo", system-ui, sans-serif;
+  --font-display: "Heebo Variable", "Heebo", system-ui, sans-serif;
+  --font-heading: var(--font-display);
+
+  /* Type scale. Each step carries its own line height and weight; Hebrew is never letter-spaced. */
+  --text-display: clamp(3.5rem, 11vw, 8.5rem);
+  --text-display--line-height: 0.92;
+  --text-display--font-weight: 900;
+  --text-statement: clamp(1.6rem, 4vw, 2.75rem);
+  --text-statement--line-height: 1.22;
+  --text-statement--font-weight: 750;
+  --text-title-1: 2.5rem;
+  --text-title-1--line-height: 1.02;
+  --text-title-1--font-weight: 900;
+  --text-title-2: 1.875rem;
+  --text-title-2--line-height: 1.12;
+  --text-title-2--font-weight: 800;
+  --text-title-3: 1.3125rem;
+  --text-title-3--line-height: 1.25;
+  --text-title-3--font-weight: 800;
+  --text-headline: 1.0625rem;
+  --text-headline--line-height: 1.35;
+  --text-headline--font-weight: 650;
+  --text-body-lg: 1.0625rem;
+  --text-body-lg--line-height: 1.8;
+  --text-body: 0.9375rem;
+  --text-body--line-height: 1.6;
+  --text-label: 0.875rem;
+  --text-label--line-height: 1.35;
+  --text-label--font-weight: 550;
+  --text-caption: 0.8125rem;
+  --text-caption--line-height: 1.45;
+  --text-micro: 0.6875rem;
+  --text-micro--line-height: 1.4;
+
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-canvas: var(--canvas);
+  --color-ink-1: var(--ink-1);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-brand: var(--brand);
+  --color-brand-strong: var(--brand-strong);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-ink: var(--brand-ink);
+  --color-hope: var(--hope);
+  --color-hope-soft: var(--hope-soft);
+  --color-hope-ink: var(--hope-ink);
+  --color-dawn: var(--dawn);
+  --color-dawn-soft: var(--dawn-soft);
+  --color-glass: var(--glass);
+  --color-anemone: var(--brand);
+  --color-sage: var(--hope);
+
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* Elevation: three heights, all tinted by the ink, never neutral gray. */
+  --shadow-chip: 0 1px 2px hsl(var(--shadow-color) / 0.08), 0 6px 16px -8px hsl(var(--shadow-color) / 0.28);
+  --shadow-float: 0 1px 2px hsl(var(--shadow-color) / 0.06), 0 12px 32px -12px hsl(var(--shadow-color) / 0.3);
+  --shadow-panel: 0 2px 6px -2px hsl(var(--shadow-color) / 0.1), 0 32px 80px -32px hsl(var(--shadow-color) / 0.45);
+  --shadow-brand: 0 10px 28px -12px color-mix(in oklab, var(--brand) 70%, transparent);
+
+  /* Motion */
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.45, 0.5, 1);
+  --animate-shimmer: shimmer 1.6s linear infinite;
+}
+
+@keyframes cascade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@keyframes pin-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.9);
+  }
+}
+@keyframes shimmer {
+  from {
+    background-position: 150% 0;
+  }
+  to {
+    background-position: -50% 0;
+  }
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
-    }
+  }
+  html,
+  body,
+  #root {
+    @apply h-full;
+  }
   body {
-    @apply bg-background text-foreground;
-    }
+    @apply overflow-hidden bg-canvas text-body text-ink-1 antialiased;
+    font-feature-settings: "kern";
+    -webkit-tap-highlight-color: transparent;
+  }
   html {
     @apply font-sans;
-    }
+  }
+  :lang(he) {
+    letter-spacing: 0;
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--brand) 22%, transparent);
+  }
+  /* Thin, quiet scrollbars inside panels */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+  }
+}
+
+@layer utilities {
+  /* Press feedback for any tappable surface */
+  .pressable {
+    transition:
+      transform 160ms var(--ease-out-soft),
+      background-color 160ms ease,
+      box-shadow 200ms ease;
+  }
+  .pressable:active {
+    transform: scale(0.97);
+  }
+  /* Content that arrives in answer to a click settles in one short sequence instead of appearing all at once.
+     Opacity and transform only, so it stays on the compositor; reduced motion collapses it to the end state. */
+  .cascade > :not([data-no-cascade]) {
+    animation: cascade-in 380ms var(--ease-out-soft) both;
+  }
+  .cascade > :nth-child(2) { animation-delay: 35ms; }
+  .cascade > :nth-child(3) { animation-delay: 70ms; }
+  .cascade > :nth-child(4) { animation-delay: 105ms; }
+  .cascade > :nth-child(5) { animation-delay: 140ms; }
+  .cascade > :nth-child(6) { animation-delay: 175ms; }
+  .cascade > :nth-child(n + 7) { animation-delay: 210ms; }
+  /* A pin that lands rather than appears. */
+  .pin-drop {
+    animation: pin-drop 520ms var(--ease-spring) both;
+  }
+  /* Fade the edges of a scroll area so content dissolves rather than being cut */
+  .scroll-fade {
+    mask-image: linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 28px), transparent 100%);
+  }
+}
+
+/* ───────── Map chrome ───────── */
+
+.maplibregl-map {
+  font-family: var(--font-sans);
+}
+.maplibregl-ctrl-attrib {
+  background: var(--glass) !important;
+  color: var(--muted-foreground) !important;
+  font-size: 10.5px;
+  direction: ltr;
+  border-radius: 8px;
+}
+.maplibregl-ctrl-attrib a {
+  color: var(--foreground) !important;
+}
+.maplibregl-ctrl-group {
+  background: var(--surface) !important;
+  border: 1px solid var(--line);
+  border-radius: 14px !important;
+  box-shadow: var(--shadow-chip) !important;
+  overflow: hidden;
+}
+.dark .maplibregl-ctrl-group button .maplibregl-ctrl-icon {
+  filter: invert(0.9);
+}
+@media (max-width: 767px) {
+  .maplibregl-ctrl-bottom-left .maplibregl-ctrl-group {
+    display: none;
+  }
+  /* Keep the map credit (ODbL) visible above the peeked bottom sheet. Prefixed to beat maplibre-gl.css. */
+  main .maplibregl-ctrl-bottom-left {
+    bottom: calc(23dvh + 10px);
+    left: auto;
+    right: 0; /* the add button holds the other corner */
+    transition: bottom 0.6s var(--ease-out-soft);
+  }
+  /* No sheet during the opening, so the credit rests at the bottom instead of floating mid-screen. */
+  main .is-opening .maplibregl-ctrl-bottom-left {
+    bottom: max(10px, env(safe-area-inset-bottom));
+  }
+  main .maplibregl-ctrl-attrib {
+    font-size: 9.5px;
+  }
+}
+
+/* ───────── Markers ───────── */
+
+.mk {
+  --s: var(--mk, 1);
+}
+/* Each marker gets its own compositor layer: drawn once, then only moved, instead of repainted on every camera frame. */
+.maplibregl-marker.mk {
+  will-change: transform;
+  contain: layout style;
+}
+/*
+ * Shadows and glows are painted gradients, not CSS filters: a filter on ~70 markers would be
+ * recomposited on every frame of a camera move.
+ */
+/* Before dawn the buds hold a faint ember, so the places can be seen in the dark. */
+.dark .mk-flower::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 56px;
+  height: 56px;
+  margin: -28px 0 0 -28px;
+  border-radius: 999px;
+  background: radial-gradient(closest-side, rgb(255 110 100 / 0.5), rgb(255 110 100 / 0.12) 60%, transparent);
+  z-index: -1;
+}
+/* During the opening the flowers are scenery: no hover labels drifting over the words. */
+.is-opening .maplibregl-marker.mk {
+  pointer-events: none;
+}
+/* A chosen or hovered flower, and its label, rise above their neighbours. */
+.maplibregl-marker.mk:has(.is-selected),
+.maplibregl-marker.mk:has(.is-hovered),
+.maplibregl-marker.mk:hover {
+  z-index: 5;
+}
+.mk-flower {
+  position: relative;
+  display: grid;
+  place-items: center;
+  transform: scale(var(--s));
+  transition: transform 0.35s var(--ease-out-soft);
+  cursor: pointer;
+  isolation: isolate;
+}
+.mk-flower:hover,
+.mk-flower.is-hovered,
+.mk-flower:focus-visible {
+  transform: scale(calc(var(--s) * 1.18));
+  z-index: 3;
+}
+.mk-flower:focus-visible {
+  outline: 2px solid var(--anemone);
+  outline-offset: 2px;
+  border-radius: 999px;
+}
+.mk-label {
+  position: absolute;
+  top: calc(100% + 2px);
+  white-space: nowrap;
+  font-size: 0.8125rem;
+  font-weight: 650;
+  color: var(--ink-1);
+  background: var(--surface);
+  padding: 4px 10px;
+  border-radius: 999px;
+  box-shadow: var(--shadow-chip);
+  opacity: 0;
+  translate: 0 -4px;
+  transition: opacity 0.2s, translate 0.25s var(--ease-out-soft);
+  pointer-events: none;
+}
+.mk-thumb {
+  display: block;
+  width: 132px;
+  height: 88px;
+  margin: 2px auto 6px;
+  border-radius: 10px;
+  object-fit: cover;
+  animation: thumb-in 0.28s var(--ease-out-soft);
+}
+@keyframes thumb-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.96);
+  }
+}
+.mk-label:has(.mk-thumb) {
+  border-radius: 16px;
+  padding: 4px 4px 7px;
+  text-align: center;
+}
+.mk-flower:hover .mk-label,
+.mk-flower.is-hovered .mk-label,
+.mk-flower:focus-visible .mk-label,
+.mk-flower.is-selected .mk-label {
+  opacity: 1;
+  translate: 0 0;
+}
+.mk-flower.is-selected {
+  z-index: 4;
+}
+/* The bloom: the bud lets go as the flower turns open. Transform and opacity only, so it stays on the compositor. */
+.mk-bloom {
+  position: relative;
+  display: block;
+  width: 34px;
+  height: 34px;
+  transition-delay: inherit;
+}
+.mk-bloom svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  transition:
+    transform 1.1s cubic-bezier(0.34, 1.45, 0.5, 1),
+    opacity 0.6s ease;
+  transition-delay: inherit;
+  will-change: transform, opacity;
+}
+.mk-bloom .mk-petals {
+  transform: scale(0.25) rotate(-70deg);
+  opacity: 0;
+}
+.mk-bloom .mk-bud {
+  transform: scale(0.85);
+  opacity: 1;
+}
+.mk-bloom.is-open .mk-petals {
+  transform: scale(1) rotate(0deg);
+  opacity: 1;
+}
+.mk-bloom.is-open .mk-bud {
+  transform: scale(0.3);
+  opacity: 0;
+}
+.mk-flower.is-selected .mk-bloom {
+  transform: scale(1.22) translateY(-2px);
+  transition: transform 0.4s var(--ease-out-soft);
+}
+
+/* Two soft rings spread from a flower when it is chosen. */
+.mk-ripple,
+.mk-ripple::after {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  width: 34px;
+  height: 34px;
+  margin: -17px 0 0 -17px;
+  border-radius: 999px;
+  border: 2px solid var(--anemone);
+  opacity: 0;
+  animation: ripple 2.2s var(--ease-out-soft) 2;
+  pointer-events: none;
+}
+.mk-ripple::after {
+  content: "";
+  inset: -2px;
+  margin: 0;
+  animation-delay: 0.5s;
+}
+@keyframes ripple {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(3.2);
+    opacity: 0;
+  }
+}
+.mk-community.is-hovered .mk-community-name,
+.mk-community:hover .mk-community-name {
+  color: var(--anemone);
+}
+
+.mk-community {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transform: scale(calc(0.7 + var(--s) * 0.3));
+  opacity: 0;
+  transition: opacity 0.9s ease;
+  cursor: pointer;
+}
+.mk-community.is-open {
+  opacity: 1;
+}
+.mk-community-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 2px solid var(--ink-1);
+}
+.mk-community-name {
+  font-weight: 800;
+  font-size: 0.875rem;
+  color: var(--ink-1);
+  -webkit-text-stroke: 3px var(--surface);
+  paint-order: stroke fill;
+}
+/* The dot carries the return: filled when the community is home, half while it returns. */
+.mk-community.rv-full .mk-community-dot {
+  background: var(--sage);
+  border-color: var(--sage);
+}
+.mk-community.rv-partial .mk-community-dot {
+  background: linear-gradient(90deg, var(--surface) 50%, var(--hope) 50%);
+  border-color: var(--sage);
+}
+.mk-community.rv-not-yet .mk-community-dot {
+  border-color: var(--sage);
+}
+.mk-community.is-selected .mk-community-dot {
+  background: var(--anemone);
+  border-color: var(--anemone);
+}
+
+.draft-pin {
+  width: 30px;
+  height: 42px;
+  cursor: grab;
+  background: no-repeat center / contain
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 42'%3E%3Cpath d='M15 41s13-14.6 13-25A13 13 0 0 0 2 16c0 10.4 13 25 13 25z' fill='%23d71a33'/%3E%3Ccircle cx='15' cy='16' r='5' fill='%23ffffff'/%3E%3C/svg%3E");
+  filter: drop-shadow(0 4px 6px rgb(0 0 0 / 0.3));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* The invitation breathes, slowly, once it's on screen: the only looping motion in the opening. */
+.cta-breath {
+  box-shadow: 0 0 0 0 color-mix(in oklab, var(--dawn) 55%, transparent);
+  animation: breath 2.8s var(--ease-out-soft) 1.8s infinite;
+}
+@keyframes breath {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--dawn) 55%, transparent);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 18px color-mix(in oklab, var(--dawn) 0%, transparent);
+  }
+}
+
+/* The light switch's circular reveal drives the view transition itself. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+/* ───────── Opening atmosphere: compositor-only keyframes ───────── */
+.atmo-ember {
+  position: absolute;
+  bottom: -12px;
+  border-radius: 999px;
+  background: radial-gradient(closest-side, var(--c), color-mix(in oklab, var(--c) 0%, transparent));
+  box-shadow: 0 0 10px 3px color-mix(in oklab, var(--c) 35%, transparent);
+  animation-name: ember-rise;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  will-change: transform;
+}
+.atmo-ember i {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--c);
+  animation: ember-flicker ease-in-out infinite alternate;
+}
+@keyframes ember-rise {
+  0% {
+    transform: translate3d(0, 0, 0);
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  50% {
+    transform: translate3d(var(--sway), -55vh, 0);
+  }
+  88% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translate3d(0, -112vh, 0);
+    opacity: 0;
+  }
+}
+@keyframes ember-flicker {
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.atmo-petal {
+  position: absolute;
+  opacity: 0;
+  animation-name: petal-fly;
+  animation-timing-function: cubic-bezier(0.2, 0.6, 0.3, 1);
+  animation-fill-mode: both;
+  will-change: transform, opacity;
+}
+@keyframes petal-fly {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(0deg) scale(0.6);
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  75% {
+    opacity: 0.85;
+  }
+  100% {
+    transform: translate3d(var(--dx), var(--dy), 0) rotate(var(--rot)) scale(1);
+    opacity: 0;
+  }
 }

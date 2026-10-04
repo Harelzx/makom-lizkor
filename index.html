@@ -1,13 +1,23 @@
 <!doctype html>
-<html lang="en">
+<html lang="he" dir="rtl">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>vite-app</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b1120" />
+    <title>מקום לזכור</title>
+    <meta name="description" content="מפת הנצחה לזכר נרצחי ונופלי 7 באוקטובר: האנדרטאות, הספסלים, המצפורים והחורשות שהוקמו לזכרם, והקהילות בדרום שחוזרות לפרוח." />
+    <meta property="og:title" content="מקום לזכור" />
+    <meta property="og:description" content="מפת הנצחה לזכר נרצחי ונופלי 7 באוקטובר, והקהילות שחוזרות לפרוח." />
+    <meta property="og:image" content="/og.png" />
+    <meta property="og:locale" content="he_IL" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preconnect" href="https://tiles.openfreemap.org" crossorigin />
+    <link rel="preconnect" href="https://s3.amazonaws.com" crossorigin />
+    <link rel="preload" href="https://tiles.openfreemap.org/planet" as="fetch" crossorigin />
   </head>
-  <body>
+  <body style="background:#0b1120">
     <div id="root"></div>
+    <noscript>כדי להציג את המפה צריך להפעיל JavaScript בדפדפן.</noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

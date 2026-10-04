@@ -18,6 +18,11 @@ const buttonVariants = cva(
         destructive:
           "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
         link: "text-primary underline-offset-4 hover:underline",
+        // The project's own: the anemone action, and round controls that float over the map.
+        brand:
+          "bg-brand font-bold text-brand-ink shadow-brand hover:bg-brand-strong active:translate-y-0 active:scale-[0.97]",
+        float:
+          "bg-surface text-ink-1 shadow-chip ring-1 ring-line hover:bg-surface-2 active:translate-y-0 active:scale-[0.96]",
       },
       size: {
         default:

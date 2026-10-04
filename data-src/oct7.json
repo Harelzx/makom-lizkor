@@ -1,0 +1,2120 @@
+[
+  {
+    "id": "nova-memorial-reim",
+    "name_he": "אתר ההנצחה לנרצחי פסטיבל נובה",
+    "name_en": "Nova Festival Victims Memorial",
+    "kind": "monument",
+    "context": "oct7",
+    "lat": 31.39813,
+    "lng": 34.46969,
+    "precision": "exact",
+    "place_he": "חניון רעים, סמוך לקיבוץ רעים",
+    "summary_he": "אתר זיכרון רחב ידיים במתחם שבו התקיים פסטיבל נובה, ובו עמודי הנצחה אישיים לכל אחד מהנרצחים לצד מיצגים נוספים. האתר הוקם ביוזמת אמן ומשפחות שכולות בשיתוף קק\"ל, וקק\"ל הכריזה עליו כאתר ההנצחה הרשמי לנרצחי הפסטיבל.",
+    "established": 2024,
+    "links": [
+      {
+        "label_he": "ויקיפדיה",
+        "url": "https://he.wikipedia.org/wiki/אנדרטת_נרצחי_פסטיבל_נובה"
+      },
+      {
+        "label_he": "ויקיפדיה (אנגלית)",
+        "url": "https://en.wikipedia.org/wiki/Nova_Festival_Victims_Memorial"
+      },
+      {
+        "label_he": "קהילת שבט נובה (האתר הרשמי)",
+        "url": "https://www.tribeofnova.com/"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/node/11704178677",
+    "verified_notes": "OSM node tagged historic=memorial with wikidata Q126740682; Wikidata P625 (31.3977,34.4716) is ~150 m away, consistent. he.wikipedia article describes site and KKL status.",
+    "scope": "oct7",
+    "scope_note": "Commemorates the 364+ people murdered at the Nova festival site on Oct 7."
+  },
+  {
+    "id": "nova-kalaniot-installation",
+    "name_he": "מיצב \"כלניות לפני הגשם\" באתר הנובה",
+    "name_en": "'Anemones Before the Rain' installation at the Nova site",
+    "kind": "other",
+    "context": "oct7",
+    "lat": 31.39778,
+    "lng": 34.47,
+    "precision": "exact",
+    "place_he": "חניון רעים, סמוך לקיבוץ רעים",
+    "summary_he": "מרבד של אלפי כלניות אדומות מקרמיקה, בעבודת יד של יוצרים מרחבי הארץ, המונח במתחם הנובה בצורת מגן דוד. המיצב הוא חלק ממיזם ארצי שבו הכלנית, הפורחת בחורף בעוטף, משמשת סמל לזיכרון.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "ויקיפדיה",
+        "url": "https://he.wikipedia.org/wiki/כלניות_לפני_הגשם"
+      },
+      {
+        "label_he": "ויקיפדיה – אתר ההנצחה בנובה",
+        "url": "https://he.wikipedia.org/wiki/אנדרטת_נרצחי_פסטיבל_נובה"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/node/11760053469",
+    "verified_notes": "OSM node 'מיצב כלניות לפני הגשם' ~40 m from main memorial; installation listed among the site's exhibits in he.wikipedia Nova memorial article.",
+    "scope": "oct7",
+    "scope_note": "Installation inside the Nova memorial compound, for the festival victims."
+  },
+  {
+    "id": "nova-container-installation",
+    "name_he": "מיצג המכולה באתר הנובה",
+    "name_en": "The yellow container installation at the Nova site",
+    "kind": "site",
+    "context": "oct7",
+    "lat": 31.39855,
+    "lng": 34.47074,
+    "precision": "exact",
+    "place_he": "חניון רעים, סמוך לקיבוץ רעים",
+    "summary_he": "מכולת האשפה הצהובה שבה ניסו צעירים להסתתר בבוקר הטבח, ושבה נרצחו רבים מהם. לאחר שפונתה, איתרו אותה משפחות ושורדים, שיקמו אותה והשיבו אותה למתחם כאתר התייחדות.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "ויקיפדיה – אתר ההנצחה בנובה",
+        "url": "https://he.wikipedia.org/wiki/אנדרטת_נרצחי_פסטיבל_נובה"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/node/12279737401",
+    "verified_notes": "OSM node 'מיצג המכולות' inside the Nova memorial compound; the container is listed as one of the site's exhibits in he.wikipedia.",
+    "scope": "oct7",
+    "scope_note": "The container where festival-goers were murdered on Oct 7."
+  },
+  {
+    "id": "nova-memorial-trees",
+    "name_he": "עצים לזכרם – חורשת הנובה",
+    "name_en": "'Trees in Their Memory' grove at the Nova site",
+    "kind": "grove",
+    "context": "oct7",
+    "lat": 31.39904,
+    "lng": 34.46894,
+    "precision": "exact",
+    "place_he": "חניון רעים, סמוך לקיבוץ רעים",
+    "summary_he": "עצים שנשתלו במתחם הנובה, עץ לזכר כל אחד מהנרצחים. הנטיעה נערכה בט\"ו בשבט תשפ\"ד בידי משפחות הנרצחים יחד עם קק\"ל.",
+    "established": 2024,
+    "links": [
+      {
+        "label_he": "ויקיפדיה – אתר ההנצחה בנובה",
+        "url": "https://he.wikipedia.org/wiki/אנדרטת_נרצחי_פסטיבל_נובה"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/node/12648111801",
+    "verified_notes": "OSM node 'עצים לזכרם' (natural=tree); Tu BiShvat 5784 planting by families described in he.wikipedia Nova memorial article.",
+    "scope": "oct7",
+    "scope_note": "A tree for each person murdered at the Nova festival."
+  },
+  {
+    "id": "iron-swords-forest-kkl",
+    "name_he": "יער חרבות ברזל (קק\"ל)",
+    "name_en": "KKL Iron Swords Forest",
+    "kind": "grove",
+    "context": "war",
+    "lat": 31.405,
+    "lng": 34.47194,
+    "precision": "approx",
+    "place_he": "חורבת מדור, סמוך ליער בארי ולחניון רעים",
+    "summary_he": "יער זיכרון שקק\"ל נוטעת לזכר כל מי שנפלו ונרצחו מאז 7 באוקטובר, אזרחים ולוחמים כאחד, ומשפחות שכולות שותפות בנטיעות. היער נחנך בסתיו 2025.",
+    "established": 2025,
+    "links": [
+      {
+        "label_he": "ויקיפדיה – הנצחת קורבנות 7 באוקטובר",
+        "url": "https://he.wikipedia.org/wiki/הנצחת_קורבנות_טבח_שבעה_באוקטובר_וחללי_מלחמת_חרבות_ברזל"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/node/278474271",
+    "verified_notes": "Search results (KKL page snippet, Srugim, familytrips) place the 367-dunam forest at Horvat Mador near Be'eri Forest and the Re'im parking lot, inaugurated Oct 2025. Point is the OSM 'חרבת מדור' ruins node, not the forest boundary. kkl.org.il/iron_swords_forest now redirects to a generic news archive, so not linked.",
+    "scope": "mixed",
+    "scope_note": "KKL forest for everyone killed since Oct 7, both the civilians murdered that day and soldiers who fell later."
+  },
+  {
+    "id": "car-wall-tkuma",
+    "name_he": "קיר המכוניות ליד תקומה",
+    "name_en": "The Car Wall near Tkuma",
+    "kind": "site",
+    "context": "oct7",
+    "lat": 31.44826,
+    "lng": 34.56912,
+    "precision": "exact",
+    "place_he": "מערבית למושב תקומה",
+    "summary_he": "מגרש שאליו פונו מאות מכוניות שרופות ופגועות מכביש 232 ומפסטיבל נובה לאחר המתקפה. ערימת המכוניות, הנראית כקיר, הפכה לאתר זיכרון שמבקרים רבים מגיעים אליו.",
+    "established": 2023,
+    "links": [
+      {
+        "label_he": "ויקיפדיה",
+        "url": "https://he.wikipedia.org/wiki/קיר_המכוניות"
+      },
+      {
+        "label_he": "ויקיפדיה (אנגלית)",
+        "url": "https://en.wikipedia.org/wiki/The_Car_Wall"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/node/12158099169",
+    "verified_notes": "OSM node agrees with Wikidata Q125398415 (31.44822,34.56953) within ~40 m. he.wikipedia describes it in present tense as a memorial.",
+    "scope": "oct7",
+    "scope_note": "Burnt cars of people attacked on Route 232 and at Nova on Oct 7."
+  },
+  {
+    "id": "shelter-reim-west",
+    "name_he": "מיגונית רעים מערב",
+    "name_en": "Re'im junction shelter (west)",
+    "kind": "shelter",
+    "context": "oct7",
+    "lat": 31.38972,
+    "lng": 34.45799,
+    "precision": "exact",
+    "place_he": "צומת רעים, כביש 232",
+    "summary_he": "מיגונית ציבורית בצומת רעים שאליה נמלטו משתתפי פסטיבל נובה. רבים מהשוהים בה נרצחו וכמה נחטפו לרצועת עזה, והמקום הפך לאתר התייחדות ועלייה לרגל.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "ויקיפדיה – מיגוניות המוות",
+        "url": "https://he.wikipedia.org/wiki/מיגוניות_המוות"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/way/1314046423",
+    "verified_notes": "OSM way named 'מיגונית רעים מערב' at Re'im junction; he.wikipedia 'מיגוניות המוות' uses the same name and places it at צומת רעים.",
+    "scope": "oct7",
+    "scope_note": "Roadside shelter where people fleeing Nova were murdered on Oct 7."
+  },
+  {
+    "id": "shelter-reim-east",
+    "name_he": "מיגונית רעים מזרח",
+    "name_en": "Re'im junction shelter (east)",
+    "kind": "shelter",
+    "context": "oct7",
+    "lat": 31.38974,
+    "lng": 34.45944,
+    "precision": "exact",
+    "place_he": "צומת רעים, כביש 232",
+    "summary_he": "מיגונית נוספת בצומת רעים, שבה הסתתרו עשרות ממשתתפי הפסטיבל. רוב השוהים בה נרצחו, והיא משמשת כיום מקום זיכרון.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "ויקיפדיה – מיגוניות המוות",
+        "url": "https://he.wikipedia.org/wiki/מיגוניות_המוות"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/way/1314046424",
+    "verified_notes": "OSM way named 'מיגונית רעים מזרח', ~140 m east of the west shelter; matches the he.wikipedia section of the same name.",
+    "scope": "oct7",
+    "scope_note": "Roadside shelter where people fleeing Nova were murdered on Oct 7."
+  },
+  {
+    "id": "shelter-beeri-junction",
+    "name_he": "מיגונית בארי (מערב)",
+    "name_en": "Be'eri junction shelter",
+    "kind": "shelter",
+    "context": "oct7",
+    "lat": 31.42879,
+    "lng": 34.49692,
+    "precision": "exact",
+    "place_he": "צומת בארי, כביש 232",
+    "summary_he": "מיגונית בצומת בארי שאליה ברחו משתתפי פסטיבל נובה שניסו להימלט צפונה. רבים מהשוהים בה נרצחו, והמיגונית הפכה לאתר זיכרון.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "ויקיפדיה – מיגוניות המוות",
+        "url": "https://he.wikipedia.org/wiki/מיגוניות_המוות"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/node/12641108901",
+    "verified_notes": "OSM node 'מיגונית בארי' (historic=memorial, wikipedia=he:מיגוניות המוות) near Be'eri junction; matches article section 'מיגונית בארי (מערב)'.",
+    "scope": "oct7",
+    "scope_note": "Roadside shelter where people fleeing Nova were murdered on Oct 7."
+  },
+  {
+    "id": "shelter-alumim-junction",
+    "name_he": "מיגונית צומת עלומים",
+    "name_en": "Alumim junction shelter",
+    "kind": "shelter",
+    "context": "oct7",
+    "lat": 31.4507,
+    "lng": 34.5169,
+    "precision": "approx",
+    "place_he": "צומת עלומים, כביש 232",
+    "summary_he": "מיגונית בצומת עלומים שבה הסתתרו משתתפי פסטיבל שנמלטו מהמתחם, ורבים מהם נרצחו בה. היא נמנית עם המיגוניות שהפכו לסמל ולמקום זיכרון לאורך כביש 232.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "ויקיפדיה – מיגוניות המוות",
+        "url": "https://he.wikipedia.org/wiki/מיגוניות_המוות"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/node/1803066750",
+    "verified_notes": "he.wikipedia lists a shelter at צומת עלומים, but no shelter feature is mapped. The point is the midpoint of the OSM bus stops 'צומת עלומים לצפון/לדרום' on Route 232 near Alumim's entrance. OSM also has a motorway_junction called 'צומת עלומים' ~2 km NE near Sa'ad (31.4654,34.5340), so expect up to ~2 km of uncertainty.",
+    "scope": "oct7",
+    "scope_note": "Roadside shelter where people fleeing Nova were murdered on Oct 7."
+  },
+  {
+    "id": "shelter-mefalsim-entrance",
+    "name_he": "מיגונית בכניסה למפלסים",
+    "name_en": "Mefalsim entrance shelter",
+    "kind": "shelter",
+    "context": "oct7",
+    "lat": 31.502678,
+    "lng": 34.562123,
+    "precision": "approx",
+    "place_he": "קיבוץ מפלסים",
+    "summary_he": "מיגונית בכניסה לקיבוץ מפלסים שבה חיפשו מחסה משתתפי פסטיבל שנמלטו צפונה, ונרצחו בה כמה מהם. המקום נכלל ברשימת \"מיגוניות המוות\" שלאורך העוטף.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "ויקיפדיה – מיגוניות המוות",
+        "url": "https://he.wikipedia.org/wiki/מיגוניות_המוות"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/way/92392969",
+    "verified_notes": "he.wikipedia places this shelter at the kibbutz entrance near the main gate. No mapped feature; point is the Nominatim kibbutz place centroid, so approx (likely within ~500 m).",
+    "scope": "oct7",
+    "scope_note": "Roadside shelter where people fleeing Nova were murdered on Oct 7."
+  },
+  {
+    "id": "zikim-beach-memorial",
+    "name_he": "מרחב הזיכרון והתקומה בחוף זיקים",
+    "name_en": "Zikim Beach Memorial and Recovery Space",
+    "kind": "site",
+    "context": "oct7",
+    "lat": 31.61286,
+    "lng": 34.50548,
+    "precision": "approx",
+    "place_he": "חוף זיקים, מועצה אזורית חוף אשקלון",
+    "summary_he": "מרחב זיכרון בחוף זיקים לזכר האזרחים והחייל שנרצחו בחוף ובמיגונית הסמוכה ב-7 באוקטובר. המיגונית הועתקה ממקומה המקורי ומשמשת חלק ממרחב הזיכרון, ולידה עובר שביל מוגבה לאורך לגונת נחל שקמה. המרחב נחנך במאי 2026.",
+    "established": 2026,
+    "links": [
+      {
+        "label_he": "ויקיפדיה",
+        "url": "https://he.wikipedia.org/wiki/הטבח_בחוף_זיקים"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/relation/21090964",
+    "verified_notes": "Inauguration on 26 May 2026 reported by Davar and AshdodNet. OSM relation 'שביל הנדודים' says the trail starts at the relocated shelter; point is the trail's beach-side endpoint, which is ~100 m from the he.wikipedia massacre coordinate. Sources give the death toll as 18 or 19, so the summary avoids a number.",
+    "scope": "oct7",
+    "scope_note": "For the civilians and the soldier murdered at Zikim beach on Oct 7."
+  },
+  {
+    "id": "nahal-oz-observers-memorial",
+    "name_he": "אנדרטת התצפיתניות",
+    "name_en": "Nahal Oz Observers Memorial",
+    "kind": "lookout",
+    "context": "oct7",
+    "lat": 31.46415,
+    "lng": 34.52439,
+    "precision": "exact",
+    "place_he": "כביש 232, בין סעד לנחל עוז",
+    "summary_he": "מצפה זיכרון לתצפיתניות שנפלו במוצב נחל עוז ב-7 באוקטובר. האתר הוקם בידי ההורים, מתנדבים וסטודנטים, ובשביל המוביל אליו מוצבים סלעי הנצחה. הוא משקיף על רצועת עזה.",
+    "established": 2024,
+    "links": [
+      {
+        "label_he": "ויקיפדיה",
+        "url": "https://he.wikipedia.org/wiki/אנדרטת_התצפיתניות"
+      },
+      {
+        "label_he": "ויקיפדיה (אנגלית)",
+        "url": "https://en.wikipedia.org/wiki/Nahal_Oz_Observers_Memorial_Monument"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/node/12439486620",
+    "verified_notes": "OSM node 'אנדרטת התצפיתניות 07.10.23' agrees with the Nelech guide GPS (31.46325,34.52479) within ~100 m. Wikidata/Wikipedia coordinate (31.4408,34.5050) is ~3 km off and was rejected. Established 27 Jul 2024 per he.wikipedia.",
+    "scope": "oct7",
+    "scope_note": "For the observers who fell at the Nahal Oz outpost on Oct 7."
+  },
+  {
+    "id": "ketav-vashem-kfar-aza",
+    "name_he": "אנדרטת \"כתב ושם\"",
+    "name_en": "'Ketav VaShem' memorial, Kfar Aza",
+    "kind": "monument",
+    "context": "oct7",
+    "lat": 31.47776,
+    "lng": 34.53203,
+    "precision": "exact",
+    "place_he": "סמוך לקיבוץ כפר עזה",
+    "summary_he": "שביל זיכרון סמוך לכפר עזה ובו לוחות ברזל שעליהם חקוקים שמות הנרצחים ולוחמי כיתת הכוננות מבני הקיבוץ, כל שם בכתב ידו של האדם עצמו. בקצה השביל מוצבת מפת מתכת של הקיבוץ.",
+    "established": 2025,
+    "links": [
+      {
+        "label_he": "ויקיפדיה – הטבח בכפר עזה",
+        "url": "https://he.wikipedia.org/wiki/הטבח_בכפר_עזה"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/node/12793444883",
+    "verified_notes": "OSM node 'כתב ושם' (war_memorial) ~600 m south of Kfar Aza. he.wikipedia says it was set up near the kibbutz in 2025; a ynet article describes the design.",
+    "scope": "oct7",
+    "scope_note": "Names of Kfar Aza members and rapid-response team members killed in the Oct 7 attack (may include hostages who died later in captivity)."
+  },
+  {
+    "id": "sderot-police-station-garden",
+    "name_he": "גן הגבורה והזיכרון (אתר תחנת המשטרה)",
+    "name_en": "Sderot Heroism and Remembrance Garden (former police station site)",
+    "kind": "garden",
+    "context": "oct7",
+    "lat": 31.52249,
+    "lng": 34.59205,
+    "precision": "exact",
+    "place_he": "שדרות",
+    "summary_he": "גן זיכרון שהקימה עיריית שדרות במקום שבו עמדה תחנת המשטרה שנהרסה לאחר הקרב בה. בגן אנדרטה לתושבי העיר ולמגיניה שנפלו ב-7 באוקטובר ובמלחמת חרבות ברזל.",
+    "established": 2024,
+    "links": [
+      {
+        "label_he": "ויקיפדיה – הנצחת קורבנות 7 באוקטובר",
+        "url": "https://he.wikipedia.org/wiki/הנצחת_קורבנות_טבח_שבעה_באוקטובר_וחללי_מלחמת_חרבות_ברזל"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/way/1230643408",
+    "verified_notes": "OSM park 'גן הגבורה והזיכרון' with a separate memorial sculpture node (12234533095) inside it, merged here. he.wikipedia says it opened Oct 2024 on the police station site.",
+    "scope": "mixed",
+    "scope_note": "City memorial for Sderot residents and defenders killed on Oct 7 and later in the war; built on the Oct 7 police-station battle site."
+  },
+  {
+    "id": "sderot-oct7-education-center",
+    "name_he": "המרכז החינוכי לשבעה באוקטובר",
+    "name_en": "October 7th Education Center, Sderot",
+    "kind": "museum",
+    "context": "oct7",
+    "lat": 31.53653,
+    "lng": 34.58133,
+    "precision": "exact",
+    "place_he": "שדרות",
+    "summary_he": "מרכז מבקרים וחינוך בשדרות שמציג את אירועי 7 באוקטובר באמצעות עדויות, מיצגים ומציאות מדומה. המרכז פועל בשיתוף תיירות שדרות.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "אתר המרכז (Israel-is)",
+        "url": "https://www.israel-is.org/en/education-center/"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/way/997186924",
+    "verified_notes": "OSM building named 'המרכז החינוכי לשבעה באוקטובר' / 'The October 7th Education Center'. Existence confirmed via the operator's page (israel-is.org) and an Israel Hayom one-year article. Opening year not confirmed.",
+    "scope": "oct7",
+    "scope_note": "Visitor and education center about the events of Oct 7."
+  },
+  {
+    "id": "givat-kobi-lookout-sderot",
+    "name_he": "תצפית גבעת קובי",
+    "name_en": "Givat Kobi lookout, Sderot",
+    "kind": "lookout",
+    "context": "war",
+    "lat": 31.5364,
+    "lng": 34.58032,
+    "precision": "exact",
+    "place_he": "שדרות",
+    "summary_he": "נקודת תצפית בשדרות שממנה נשקפת רצועת עזה, ומבקרים מגיעים אליה לאורך השנים בזמן מבצעים ומלחמות. זו נקודת תצפית ולא אנדרטה ייעודית ל-7 באוקטובר.",
+    "established": null,
+    "links": [],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/node/13528818459",
+    "verified_notes": "OSM viewpoint 'תצפית גבעת קובי - תצפית שדרות'. It is a long-standing lookout and not an Oct 7 memorial. Included because the brief named it; context=war.",
+    "scope": "war-later",
+    "scope_note": "Not a memorial: a long-standing lookout over Gaza, used in every round of fighting; recommend hiding it on an Oct 7-only map."
+  },
+  {
+    "id": "black-arrow-memorial",
+    "name_he": "אנדרטת חץ שחור",
+    "name_en": "Black Arrow Memorial",
+    "kind": "monument",
+    "context": "oct7",
+    "lat": 31.50692,
+    "lng": 34.55282,
+    "precision": "exact",
+    "place_he": "יער נחל חנון, סמוך למפלסים",
+    "summary_he": "אתר זיכרון ומורשת לצנחנים שנפלו בפעולות התגמול בשנות ה-50, על גבעה המשקיפה על עזה. ב-7 באוקטובר התנהל באתר ובסביבתו קרב בין כוחות ביטחון לבין מחבלים רבים שהתרכזו בו.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "ויקיפדיה",
+        "url": "https://he.wikipedia.org/wiki/אנדרטת_חץ_שחור"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/node/5943011229",
+    "verified_notes": "OSM node agrees with Wikidata Q12404075 (31.50714,34.553) within ~25 m. The memorial predates the war. context=oct7 because he.wikipedia documents an Oct 7 battle at the site ('קרב אנדרטת חץ שחור'); it is not an Oct 7 memorial as such.",
+    "scope": "oct7",
+    "scope_note": "Pre-existing 1950s memorial; an Oct 7 battle site, not an Oct 7 memorial."
+  },
+  {
+    "id": "dangour-memorial-sufa",
+    "name_he": "אנדרטת נירים (דנגור)",
+    "name_en": "Nirim (Dangour) Memorial",
+    "kind": "monument",
+    "context": "oct7",
+    "lat": 31.23893,
+    "lng": 34.33814,
+    "precision": "exact",
+    "place_he": "סמוך לקיבוצים סופה וחולית",
+    "summary_he": "אנדרטה ותיקה לזכר מגיני נירים במלחמת העצמאות, הנמצאת סמוך לגבול. ב-7 באוקטובר התבצר בה כוח של לוחמי סיירת הנח\"ל, והתנהל בה קרב שבו נפלו לוחמים.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "ויקיפדיה – הטבח בחולית (פרק הקרבות)",
+        "url": "https://he.wikipedia.org/wiki/הטבח_בחולית"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/node/11555203807",
+    "verified_notes": "OSM war_memorial node. The he.wikipedia Holit article describes the Oct 7 battle at the Dangour memorial and its shelter. The memorial itself is from the 1948 era; context=oct7 because of that battle.",
+    "scope": "oct7",
+    "scope_note": "Pre-existing 1948 memorial; an Oct 7 battle site where soldiers fell, not an Oct 7 memorial."
+  },
+  {
+    "id": "hillel-memorial-corner",
+    "name_he": "פינת הנצחה לזכרו של הלל",
+    "name_en": "Hillel memorial corner",
+    "kind": "bench",
+    "context": "oct7",
+    "lat": 31.39612,
+    "lng": 34.43269,
+    "precision": "exact",
+    "place_he": "מועצה אזורית אשכול, בין רעים לכיסופים",
+    "summary_he": "גלעד ופינת ישיבה בצד הדרך, במקום שבו נרצח רוכב אופניים בבוקר 7 באוקטובר. הפינה צבועה בכתום, בכחול ובלבן, צבעי הסימון של שביל ישראל.",
+    "established": null,
+    "links": [],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/node/13519107601",
+    "verified_notes": "OSM node only (historic=memorial, with a description and a Wikimedia Commons image). No independent source checked. The name on the site uses the first name only.",
+    "scope": "oct7",
+    "scope_note": "At the spot where a cyclist was murdered on the morning of Oct 7."
+  },
+  {
+    "id": "mitzpe-shai-negba",
+    "name_he": "מצפה שי",
+    "name_en": "Mitzpe Shai",
+    "kind": "lookout",
+    "context": "war",
+    "lat": 31.68298,
+    "lng": 34.68876,
+    "precision": "exact",
+    "place_he": "בין נגבה למשואות יצחק",
+    "summary_he": "מצפה זיכרון ותצפית לזכר מפקד בחטיבת הנח\"ל שנפל בצפון רצועת עזה במלחמת חרבות ברזל. במקום שלט הנצחה, ספסלים ותצפית אל נופי השפלה הדרומית.",
+    "established": 2025,
+    "links": [
+      {
+        "label_he": "ויקיפדיה",
+        "url": "https://he.wikipedia.org/wiki/מצפה_שי"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/node/13427512151",
+    "verified_notes": "OSM node 'מצפה שי' agrees with Wikidata Q133894797 within ~10 m. Established Jan 2025 per he.wikipedia.",
+    "scope": "war-later",
+    "scope_note": "For a Nahal commander who fell in northern Gaza later in the war."
+  },
+  {
+    "id": "makom-balev-ashdod",
+    "name_he": "מקום בלב",
+    "name_en": "Makom BaLev memorial, Ashdod",
+    "kind": "grove",
+    "context": "oct7",
+    "lat": 31.798126,
+    "lng": 34.634764,
+    "precision": "exact",
+    "place_he": "פארק אשדוד-ים, אשדוד",
+    "summary_he": "אתר הנצחה בפארק אשדוד-ים לבני העיר שנרצחו ב-7 באוקטובר ושנפלו במלחמת חרבות ברזל. במרכזו חורשה שבה עץ, ספסל ועמוד הנצחה לכל אחד מהם. האתר נחנך באוקטובר 2024.",
+    "established": 2024,
+    "links": [
+      {
+        "label_he": "ויקיפדיה",
+        "url": "https://he.wikipedia.org/wiki/מקום_בלב_(אנדרטה)"
+      }
+    ],
+    "coord_source": "wikidata",
+    "coord_source_url": "https://www.wikidata.org/wiki/Q130705083",
+    "verified_notes": "Wikidata P625 agrees with an OSM stone memorial-plaque node (31.79779,34.63521) about 50 m away. Inaugurated 29 Oct 2024 per he.wikipedia.",
+    "scope": "mixed",
+    "scope_note": "For Ashdod residents murdered on Oct 7 and soldiers who fell later in the war."
+  },
+  {
+    "id": "jerusalem-iron-swords-memorial",
+    "name_he": "אנדרטת חללי מלחמת חרבות ברזל ונפגעי פעולות האיבה הירושלמים",
+    "name_en": "Jerusalem Iron Swords War Memorial",
+    "kind": "monument",
+    "context": "war",
+    "lat": 31.77759,
+    "lng": 35.20147,
+    "precision": "exact",
+    "place_he": "רחוב רופין, קריית המוזיאונים, ירושלים",
+    "summary_he": "אנדרטה עירונית מול הספרייה הלאומית לזכר בני ירושלים שנפלו ונרצחו ב-7 באוקטובר ובמלחמת חרבות ברזל, חיילים ואזרחים כאחד. המבנה, מלוחות ברזל המתנשאים בצורת מגן דוד, נושא את שמות המונצחים.",
+    "established": 2024,
+    "links": [
+      {
+        "label_he": "ויקיפדיה",
+        "url": "https://he.wikipedia.org/wiki/אנדרטה_להנצחת_הנופלים_והנרצחים_הירושלמים_במלחמת_חרבות_ברזל"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/node/12234386671",
+    "verified_notes": "OSM war_memorial node agrees with Wikidata Q132005460 within ~40 m. he.wikipedia overview says it was established Sept 2024.",
+    "scope": "mixed",
+    "scope_note": "For Jerusalem residents murdered or fallen on Oct 7 and throughout the Swords of Iron war."
+  },
+  {
+    "id": "maale-adumim-iron-swords-memorial",
+    "name_he": "אנדרטת חרבות ברזל במעלה אדומים",
+    "name_en": "Ma'ale Adumim Iron Swords Memorial",
+    "kind": "monument",
+    "context": "war",
+    "lat": 31.788053,
+    "lng": 35.314005,
+    "precision": "exact",
+    "place_he": "פארק הצוק, שכונת נופי הסלע, מעלה אדומים",
+    "summary_he": "אנדרטה עירונית לבני מעלה אדומים שנפלו ב-7 באוקטובר ובמלחמת חרבות ברזל, העשויה מחמישה סלעים גדולים. היא נחנכה ב-7 באוקטובר 2024.",
+    "established": 2024,
+    "links": [
+      {
+        "label_he": "ויקיפדיה",
+        "url": "https://he.wikipedia.org/wiki/אנדרטה_לזכר_נופלי_מלחמת_חרבות_ברזל_תושבי_מעלה_אדומים"
+      }
+    ],
+    "coord_source": "wikidata",
+    "coord_source_url": "https://www.wikidata.org/wiki/Q135714903",
+    "verified_notes": "Wikidata P625 agrees with OSM node 12873369779 (31.7882,35.3142) within ~20 m.",
+    "scope": "mixed",
+    "scope_note": "For Ma'ale Adumim residents who fell on Oct 7 and in the Swords of Iron war."
+  },
+  {
+    "id": "har-herzl-terror-victims-memorial",
+    "name_he": "אנדרטת חללי פעולות האיבה, הר הרצל",
+    "name_en": "Victims of Acts of Terror Memorial, Mount Herzl",
+    "kind": "monument",
+    "context": "terror",
+    "lat": 31.774992,
+    "lng": 35.178017,
+    "precision": "exact",
+    "place_he": "הר הרצל, ירושלים",
+    "summary_he": "אתר הזיכרון הלאומי לנרצחי פעולות האיבה והטרור, ועל קירותיו חקוקים שמות הנרצחים. ב-2025 נערך בו הטקס הממלכתי של יום הזיכרון לאירועי 7 באוקטובר עבור משפחות הנרצחים.",
+    "established": 1998,
+    "links": [
+      {
+        "label_he": "ויקיפדיה",
+        "url": "https://he.wikipedia.org/wiki/אנדרטת_חללי_פעולות_האיבה_והטרור_בישראל"
+      },
+      {
+        "label_he": "ויקיפדיה (אנגלית)",
+        "url": "https://en.wikipedia.org/wiki/Victims_of_Acts_of_Terror_Memorial"
+      }
+    ],
+    "coord_source": "wikidata",
+    "coord_source_url": "https://www.wikidata.org/wiki/Q2916616",
+    "verified_notes": "Wikidata P625. he.wikipedia overview article states the 24 Tishrei 5786 (16 Oct 2025) state ceremony was held at this memorial.",
+    "scope": "mixed",
+    "scope_note": "Pre-existing national memorial for all terror victims (since 1851); Oct 7 victims' names were added and the 2025 Oct 7 state ceremony was held here."
+  },
+  {
+    "id": "otef-israel-sculpture-maccabiah",
+    "name_he": "פסל \"עוטף ישראל\"",
+    "name_en": "'Otef Israel' sculpture, Kfar Maccabiah",
+    "kind": "monument",
+    "context": "oct7",
+    "lat": 32.055,
+    "lng": 34.826944,
+    "precision": "approx",
+    "place_he": "כפר המכביה, רמת גן",
+    "summary_he": "פסל של כשלושה מטרים שהוצב ברחבת הכניסה לכפר המכביה לזכר נרצחי 7 באוקטובר וחללי המלחמה. הוא נחנך בדצמבר 2023, ונחשב לאחד מאתרי ההנצחה הראשונים שהוקמו בעקבות המתקפה.",
+    "established": 2023,
+    "links": [
+      {
+        "label_he": "ויקיפדיה – הנצחת קורבנות 7 באוקטובר",
+        "url": "https://he.wikipedia.org/wiki/הנצחת_קורבנות_טבח_שבעה_באוקטובר_וחללי_מלחמת_חרבות_ברזל"
+      }
+    ],
+    "coord_source": "wikidata",
+    "coord_source_url": "https://www.wikidata.org/wiki/Q6795120",
+    "verified_notes": "Dedication on 6 Dec 2023 confirmed by the he.wikipedia overview and a Maariv article. The sculpture is not mapped; point is the Kfar Maccabiah complex centroid from Wikidata, so approx (within ~300 m).",
+    "scope": "mixed",
+    "scope_note": "For the people murdered on Oct 7 and the soldiers who fell in the war."
+  },
+  {
+    "id": "karmiel-nova-memorial",
+    "name_he": "אנדרטת הנובה בכרמיאל",
+    "name_en": "Nova Memorial, Karmiel",
+    "kind": "monument",
+    "context": "oct7",
+    "lat": 32.91046,
+    "lng": 35.28922,
+    "precision": "exact",
+    "place_he": "כרמיאל",
+    "summary_he": "אתר זיכרון עירוני בכרמיאל לתושבי העיר שנרצחו בפסטיבל נובה. בעיצובו יש רמזים לאוהל ולבמה של הפסטיבל, ולצידו שורת ברושים שניטעו לזכר הנרצחים.",
+    "established": null,
+    "links": [],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/node/13514775560",
+    "verified_notes": "OSM war_memorial node with a detailed description and a Commons image; reverse geocode puts it in Karmiel. No independent official page checked.",
+    "scope": "oct7",
+    "scope_note": "For seven Karmiel residents murdered at the Nova festival."
+  },
+  {
+    "id": "yokneam-oct7-memorial",
+    "name_he": "אנדרטת הנצחה לנרצחי יקנעם ב-7/10",
+    "name_en": "Yokneam October 7 Memorial",
+    "kind": "monument",
+    "context": "oct7",
+    "lat": 32.64942,
+    "lng": 35.10093,
+    "precision": "exact",
+    "place_he": "יקנעם עילית",
+    "summary_he": "אנדרטה ביקנעם עילית לזכר בני העיר שנרצחו ב-7 באוקטובר.",
+    "established": null,
+    "links": [],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/node/14183248849",
+    "verified_notes": "OSM historic=monument node only, with no description. The name is explicit, but there is no independent confirmation.",
+    "scope": "oct7",
+    "scope_note": "For Yokneam residents murdered on Oct 7 (per its name)."
+  },
+  {
+    "id": "nova-bridge-petah-tikva",
+    "name_he": "גשר הנובה",
+    "name_en": "Nova Bridge, Petah Tikva",
+    "kind": "other",
+    "context": "oct7",
+    "lat": 32.09085,
+    "lng": 34.87371,
+    "precision": "exact",
+    "place_he": "פתח תקווה (בין נווה גן לרמת ורבר)",
+    "summary_he": "גשר להולכי רגל בפתח תקווה, בין שכונות נווה גן ורמת ורבר, שעיריית פתח תקווה קראה לו על שם פסטיבל נובה לזכר נרצחיו.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "ויקיפדיה – הנצחת קורבנות 7 באוקטובר",
+        "url": "https://he.wikipedia.org/wiki/הנצחת_קורבנות_טבח_שבעה_באוקטובר_וחללי_מלחמת_חרבות_ברזל"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/way/656063186",
+    "verified_notes": "OSM footway bridge 'גשר נובה' between Neve Gan and Ramat Verber, which matches the he.wikipedia overview's description of the renamed bridge.",
+    "scope": "oct7",
+    "scope_note": "Bridge named for the Nova festival in memory of those murdered there."
+  },
+  {
+    "id": "katzrin-heroes-lookout",
+    "name_he": "מצפה הגיבורים",
+    "name_en": "Heroes' Lookout, Katzrin",
+    "kind": "lookout",
+    "context": "war",
+    "lat": 32.99284,
+    "lng": 35.67444,
+    "precision": "exact",
+    "place_he": "קצרין",
+    "summary_he": "פינת זיכרון ותצפית בקצרין שהוקמה לזכר תושבי העיר שנפלו במלחמת חרבות ברזל. במקום פרגולות מוצלות, והיא משקיפה על נופי הגולן.",
+    "established": null,
+    "links": [],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/node/13962754301",
+    "verified_notes": "OSM node only, with a description. Reverse geocode puts it in Katzrin.",
+    "scope": "war-later",
+    "scope_note": "For Katzrin residents who fell in the Swords of Iron war; uncertain whether any fell on Oct 7 itself."
+  },
+  {
+    "id": "mitzpor-hashlosha-mebeeri",
+    "name_he": "מצפור השלושה מבארי",
+    "name_en": "Mitzpor of the Three from Be'eri",
+    "kind": "lookout",
+    "context": "oct7",
+    "lat": 32.604889,
+    "lng": 35.552222,
+    "precision": "approx",
+    "place_he": "סמוך לקיבוץ גשר, עמק הירדן",
+    "summary_he": "מצפור זיכרון בעמק הירדן לזכר שלושה מבני קיבוץ בארי שנרצחו לאחר שיצאו להגן על הקיבוץ ב-7 באוקטובר. במקום ספסלים, פינת פיקניק ושרידי ריהוט שרוף מבית אחת המשפחות.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "ויקיפדיה",
+        "url": "https://he.wikipedia.org/wiki/מצפור_השלושה_מבארי"
+      }
+    ],
+    "coord_source": "wikidata",
+    "coord_source_url": "https://www.wikidata.org/wiki/Q137885030",
+    "verified_notes": "Wikidata P625 only, with no OSM feature. The point lies on the hill by the Ottoman railway bridge over Nahal Tavor (OSM n6466538661 ~300 m away), which matches the article. Marked approx.",
+    "scope": "oct7",
+    "scope_note": "For three Be'eri members murdered on Oct 7 after going out to defend the kibbutz."
+  },
+  {
+    "id": "roni-park-tzur-yitzhak",
+    "name_he": "פארק רוני",
+    "name_en": "Roni Park, Tzur Yitzhak",
+    "kind": "garden",
+    "context": "oct7",
+    "lat": 32.242066,
+    "lng": 35.003087,
+    "precision": "approx",
+    "place_he": "צור יצחק",
+    "summary_he": "פארק זיכרון ציבורי של כשישה דונם בצפון צור יצחק, שהוקם ב-2024 לזכר תצפיתנית שנפלה במתקפה על בסיסה ב-7 באוקטובר.",
+    "established": 2024,
+    "links": [
+      {
+        "label_he": "ויקיפדיה",
+        "url": "https://he.wikipedia.org/wiki/פארק_רוני"
+      }
+    ],
+    "coord_source": "wikidata",
+    "coord_source_url": "https://www.wikidata.org/wiki/Q134463300",
+    "verified_notes": "Wikidata P625 only, at the north edge of Tzur Yitzhak, which matches the article. The park is not mapped in OSM, so approx.",
+    "scope": "oct7",
+    "scope_note": "For an observer who fell at her base on Oct 7."
+  },
+  {
+    "id": "mitzpe-segev-schwartz",
+    "name_he": "מצפה שגב שוורץ",
+    "name_en": "Mitzpe Segev Schwartz",
+    "kind": "lookout",
+    "context": "oct7",
+    "lat": 32.52014,
+    "lng": 35.41766,
+    "precision": "exact",
+    "place_he": "סמוך לבית שאן",
+    "summary_he": "מצפה זיכרון לחייל בן בית שאן שנפל במוצב סופה ב-7 באוקטובר.",
+    "established": null,
+    "links": [],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/node/13050485501",
+    "verified_notes": "OSM node only, with a description. Reverse geocode puts it in the Gilboa regional council next to Beit She'an.",
+    "scope": "oct7",
+    "scope_note": "For a soldier who fell at the Sufa outpost on Oct 7."
+  },
+  {
+    "id": "mitzpe-eliso",
+    "name_he": "מצפה אליסו",
+    "name_en": "Mitzpe Eliso",
+    "kind": "lookout",
+    "context": "oct7",
+    "lat": 32.98998,
+    "lng": 35.50009,
+    "precision": "exact",
+    "place_he": "מועצה אזורית מרום הגליל",
+    "summary_he": "מצפה זיכרון בגליל העליון לזכר צעיר שנרצח בפסטיבל נובה ב-7 באוקטובר.",
+    "established": null,
+    "links": [],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/node/13844721101",
+    "verified_notes": "OSM node only, with a description. Reverse geocode puts it in Merom HaGalil.",
+    "scope": "oct7",
+    "scope_note": "For a young man murdered at the Nova festival on Oct 7."
+  },
+  {
+    "id": "mitzpe-yiftach-gorni",
+    "name_he": "מצפה יפתח גורני",
+    "name_en": "Mitzpe Yiftach Gorni",
+    "kind": "lookout",
+    "context": "oct7",
+    "lat": 30.84229,
+    "lng": 34.42224,
+    "precision": "exact",
+    "place_he": "מועצה אזורית רמת נגב",
+    "summary_he": "מצפה זיכרון בנגב המערבי, הפונה אל גבול מצרים, שנקרא על שם לוחם שנהרג ב-7 באוקטובר. גם שביל אופניים באזור נושא את שמו.",
+    "established": null,
+    "links": [],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/node/13566187401",
+    "verified_notes": "OSM node only, with a description. Reverse geocode puts it in Ramat HaNegev.",
+    "scope": "oct7",
+    "scope_note": "For a fighter killed on Oct 7."
+  },
+  {
+    "id": "ido-shani-lookout",
+    "name_he": "תצפית עידו שני",
+    "name_en": "Ido Shani lookout",
+    "kind": "lookout",
+    "context": "oct7",
+    "lat": 32.22573,
+    "lng": 34.86258,
+    "precision": "exact",
+    "place_he": "ממערב לחרוצים, השרון",
+    "summary_he": "מצפה זיכרון בשרון, ממערב למושב חרוצים, שנקרא על שם קצין שנהרג ב-7 באוקטובר. ממנו נשקפים השדות והיישובים שבסביבה.",
+    "established": null,
+    "links": [],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/node/12299439601",
+    "verified_notes": "OSM node only, with a description.",
+    "scope": "oct7",
+    "scope_note": "For an officer killed on Oct 7."
+  },
+  {
+    "id": "mitzpe-uri-negev",
+    "name_he": "מצפה אורי",
+    "name_en": "Mitzpe Uri",
+    "kind": "lookout",
+    "context": "war",
+    "lat": 30.85195,
+    "lng": 34.79001,
+    "precision": "exact",
+    "place_he": "מועצה אזורית רמת נגב",
+    "summary_he": "מצפה בנגב לזכר לוחם שנהרג ברפיח במלחמת חרבות ברזל.",
+    "established": null,
+    "links": [],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/node/12977599101",
+    "verified_notes": "OSM node only, with a description. Reverse geocode puts it in Ramat HaNegev.",
+    "scope": "war-later",
+    "scope_note": "For a fighter killed in Rafah later in the war."
+  },
+  {
+    "id": "community-beeri",
+    "name_he": "קיבוץ בארי",
+    "name_en": "Kibbutz Be'eri",
+    "kind": "site",
+    "context": "oct7",
+    "lat": 31.424161,
+    "lng": 34.491115,
+    "precision": "approx",
+    "place_he": "קיבוץ בארי, מועצה אזורית אשכול",
+    "summary_he": "קיבוץ בעוטף עזה שספג ב-7 באוקטובר את אחת המתקפות הקשות ביותר. רבים מחבריו נרצחו ונחטפו, ובתים רבים נשרפו. הקהילה בוחנת דרכים להנצחה בשטח הקיבוץ.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "ויקיפדיה – הטבח בבארי",
+        "url": "https://he.wikipedia.org/wiki/הטבח_בבארי"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/way/38918700",
+    "verified_notes": "COMMUNITY POINT, NOT A VERIFIED MEMORIAL: No specific physical memorial inside the community was verified (searched OSM, he.wikipedia, and the web). The point is the Nominatim/OSM settlement place centroid. Web results say Be'eri is considering preserving buildings near the fence as a memorial site; nothing confirmed as built.",
+    "scope": "oct7",
+    "scope_note": "Community point for a community attacked on Oct 7; no specific memorial verified."
+  },
+  {
+    "id": "community-nir-oz",
+    "name_he": "קיבוץ ניר עוז",
+    "name_en": "Kibbutz Nir Oz",
+    "kind": "site",
+    "context": "oct7",
+    "lat": 31.309598,
+    "lng": 34.400815,
+    "precision": "approx",
+    "place_he": "קיבוץ ניר עוז, מועצה אזורית אשכול",
+    "summary_he": "קיבוץ בעוטף עזה שרבים מתושביו נרצחו ונחטפו ב-7 באוקטובר. הקהילה החליטה להשאיר חלק מהבתים כפי שהם, כעדות וכמקום זיכרון.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "ויקיפדיה – הטבח בניר עוז",
+        "url": "https://he.wikipedia.org/wiki/הטבח_בניר_עוז"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/way/82487824",
+    "verified_notes": "COMMUNITY POINT, NOT A VERIFIED MEMORIAL: No specific physical memorial inside the community was verified (searched OSM, he.wikipedia, and the web). The point is the Nominatim/OSM settlement place centroid. Web results report a community decision to leave some homes as memorial sites; no mapped feature.",
+    "scope": "oct7",
+    "scope_note": "Community point for a community attacked on Oct 7; no specific memorial verified."
+  },
+  {
+    "id": "community-nahal-oz",
+    "name_he": "קיבוץ נחל עוז",
+    "name_en": "Kibbutz Nahal Oz",
+    "kind": "site",
+    "context": "oct7",
+    "lat": 31.472407,
+    "lng": 34.498211,
+    "precision": "approx",
+    "place_he": "קיבוץ נחל עוז, מועצה אזורית שער הנגב",
+    "summary_he": "קיבוץ הסמוך לגדר רצועת עזה. ב-7 באוקטובר חדרו אליו מחבלים, ומחבריו נרצחו ונחטפו. סמוך לו נמצא מוצב נחל עוז, שהותקף באותו בוקר.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "ויקיפדיה – הטבח בנחל עוז",
+        "url": "https://he.wikipedia.org/wiki/הטבח_בנחל_עוז"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/way/92392967",
+    "verified_notes": "COMMUNITY POINT, NOT A VERIFIED MEMORIAL: No specific physical memorial inside the community was verified (searched OSM, he.wikipedia, and the web). The point is the Nominatim/OSM settlement place centroid. The observers' memorial (separate entry) commemorates the military outpost, not the kibbutz.",
+    "scope": "oct7",
+    "scope_note": "Community point for a community attacked on Oct 7; no specific memorial verified."
+  },
+  {
+    "id": "community-kissufim",
+    "name_he": "קיבוץ כיסופים",
+    "name_en": "Kibbutz Kissufim",
+    "kind": "site",
+    "context": "oct7",
+    "lat": 31.37416,
+    "lng": 34.399448,
+    "precision": "approx",
+    "place_he": "קיבוץ כיסופים, מועצה אזורית אשכול",
+    "summary_he": "קיבוץ בעוטף עזה שהותקף ב-7 באוקטובר. מתושביו נרצחו ונחטפו, וכן אנשי כוחות ביטחון שנלחמו בו ובסביבתו.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "ויקיפדיה – הטבח בכיסופים",
+        "url": "https://he.wikipedia.org/wiki/הטבח_בכיסופים"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/way/897748805",
+    "verified_notes": "COMMUNITY POINT, NOT A VERIFIED MEMORIAL: No specific physical memorial inside the community was verified (searched OSM, he.wikipedia, and the web). The point is the Nominatim/OSM settlement place centroid.",
+    "scope": "oct7",
+    "scope_note": "Community point for a community attacked on Oct 7; no specific memorial verified."
+  },
+  {
+    "id": "community-holit",
+    "name_he": "קיבוץ חולית",
+    "name_en": "Kibbutz Holit",
+    "kind": "site",
+    "context": "oct7",
+    "lat": 31.231872,
+    "lng": 34.32651,
+    "precision": "approx",
+    "place_he": "קיבוץ חולית, מועצה אזורית אשכול",
+    "summary_he": "קיבוץ בחבל שלום, סמוך לגבול רצועת עזה, שהותקף ב-7 באוקטובר ושמתושביו נרצחו. בסביבתו התנהלו קרבות, ובהם הקרב באנדרטת דנגור.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "ויקיפדיה – הטבח בחולית",
+        "url": "https://he.wikipedia.org/wiki/הטבח_בחולית"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/way/82487677",
+    "verified_notes": "COMMUNITY POINT, NOT A VERIFIED MEMORIAL: No specific physical memorial inside the community was verified (searched OSM, he.wikipedia, and the web). The point is the Nominatim/OSM settlement place centroid.",
+    "scope": "oct7",
+    "scope_note": "Community point for a community attacked on Oct 7; no specific memorial verified."
+  },
+  {
+    "id": "community-nir-yitzhak",
+    "name_he": "קיבוץ ניר יצחק",
+    "name_en": "Kibbutz Nir Yitzhak",
+    "kind": "site",
+    "context": "oct7",
+    "lat": 31.237857,
+    "lng": 34.357788,
+    "precision": "approx",
+    "place_he": "קיבוץ ניר יצחק, מועצה אזורית אשכול",
+    "summary_he": "קיבוץ בחבל שלום שהותקף ב-7 באוקטובר. מתושביו ומהמגינים בו נפגעו, וחלקם נחטפו לרצועת עזה.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "ויקיפדיה – המתקפה על ניר יצחק",
+        "url": "https://he.wikipedia.org/wiki/מתקפת_הטרור_על_ניר_יצחק"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/way/82487672",
+    "verified_notes": "COMMUNITY POINT, NOT A VERIFIED MEMORIAL: No specific physical memorial inside the community was verified (searched OSM, he.wikipedia, and the web). The point is the Nominatim/OSM settlement place centroid.",
+    "scope": "oct7",
+    "scope_note": "Community point for a community attacked on Oct 7; no specific memorial verified."
+  },
+  {
+    "id": "community-ein-hashlosha",
+    "name_he": "קיבוץ עין השלושה",
+    "name_en": "Kibbutz Ein HaShlosha",
+    "kind": "site",
+    "context": "oct7",
+    "lat": 31.35135,
+    "lng": 34.400966,
+    "precision": "approx",
+    "place_he": "קיבוץ עין השלושה, מועצה אזורית אשכול",
+    "summary_he": "קיבוץ בעוטף עזה שאליו חדרו מחבלים ב-7 באוקטובר, ושמתושביו נרצחו.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "ויקיפדיה – המתקפה על עין השלושה",
+        "url": "https://he.wikipedia.org/wiki/מתקפת_הטרור_על_עין_השלושה"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/way/30043472",
+    "verified_notes": "COMMUNITY POINT, NOT A VERIFIED MEMORIAL: No specific physical memorial inside the community was verified (searched OSM, he.wikipedia, and the web). The point is the Nominatim/OSM settlement place centroid.",
+    "scope": "oct7",
+    "scope_note": "Community point for a community attacked on Oct 7; no specific memorial verified."
+  },
+  {
+    "id": "community-nirim",
+    "name_he": "קיבוץ נירים",
+    "name_en": "Kibbutz Nirim",
+    "kind": "site",
+    "context": "oct7",
+    "lat": 31.335199,
+    "lng": 34.395,
+    "precision": "approx",
+    "place_he": "קיבוץ נירים, מועצה אזורית אשכול",
+    "summary_he": "קיבוץ בעוטף עזה שהותקף ב-7 באוקטובר. מתושביו נרצחו ונחטפו.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "ויקיפדיה – הטבח בנירים",
+        "url": "https://he.wikipedia.org/wiki/הטבח_בנירים"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/way/30043468",
+    "verified_notes": "COMMUNITY POINT, NOT A VERIFIED MEMORIAL: No specific physical memorial inside the community was verified (searched OSM, he.wikipedia, and the web). The point is the Nominatim/OSM settlement place centroid.",
+    "scope": "oct7",
+    "scope_note": "Community point for a community attacked on Oct 7; no specific memorial verified."
+  },
+  {
+    "id": "community-netiv-haasara",
+    "name_he": "מושב נתיב העשרה",
+    "name_en": "Moshav Netiv HaAsara",
+    "kind": "site",
+    "context": "oct7",
+    "lat": 31.571679,
+    "lng": 34.539548,
+    "precision": "approx",
+    "place_he": "נתיב העשרה, מועצה אזורית חוף אשקלון",
+    "summary_he": "מושב הסמוך לגבול הצפוני של רצועת עזה. ב-7 באוקטובר חדרו אליו מחבלים, ומתושביו נרצחו.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "ויקיפדיה – הטבח בנתיב העשרה",
+        "url": "https://he.wikipedia.org/wiki/הטבח_בנתיב_העשרה"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/relation/21215366",
+    "verified_notes": "COMMUNITY POINT, NOT A VERIFIED MEMORIAL: No specific physical memorial inside the community was verified (searched OSM, he.wikipedia, and the web). The point is the Nominatim/OSM settlement place centroid. The OSM monument 'אנדרטה לנופלים' (Q105182848) in the moshav predates the war and was not included.",
+    "scope": "oct7",
+    "scope_note": "Community point for a community attacked on Oct 7; no specific memorial verified."
+  },
+  {
+    "id": "community-kerem-shalom",
+    "name_he": "קיבוץ כרם שלום",
+    "name_en": "Kibbutz Kerem Shalom",
+    "kind": "site",
+    "context": "oct7",
+    "lat": 31.227709,
+    "lng": 34.283954,
+    "precision": "approx",
+    "place_he": "קיבוץ כרם שלום, מועצה אזורית אשכול",
+    "summary_he": "קיבוץ במשולש הגבולות של ישראל, מצרים ורצועת עזה, שהותקף ב-7 באוקטובר.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "ויקיפדיה – כרם שלום",
+        "url": "https://he.wikipedia.org/wiki/כרם_שלום"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/way/30062718",
+    "verified_notes": "COMMUNITY POINT, NOT A VERIFIED MEMORIAL: No specific physical memorial inside the community was verified (searched OSM, he.wikipedia, and the web). The point is the Nominatim/OSM settlement place centroid. No he.wikipedia article on the attack itself, so the summary stays general.",
+    "scope": "oct7",
+    "scope_note": "Community point for a community attacked on Oct 7; no specific memorial verified."
+  },
+  {
+    "id": "community-sufa",
+    "name_he": "קיבוץ סופה",
+    "name_en": "Kibbutz Sufa",
+    "kind": "site",
+    "context": "oct7",
+    "lat": 31.236514,
+    "lng": 34.342642,
+    "precision": "approx",
+    "place_he": "קיבוץ סופה, מועצה אזורית אשכול",
+    "summary_he": "קיבוץ בחבל שלום, סמוך לגבול רצועת עזה. ב-7 באוקטובר התנהלו קרבות בסביבתו, במוצב סופה ובאנדרטת דנגור הסמוכה.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "ויקיפדיה – סופה",
+        "url": "https://he.wikipedia.org/wiki/סופה_(קיבוץ)"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/way/82487675",
+    "verified_notes": "COMMUNITY POINT, NOT A VERIFIED MEMORIAL: No specific physical memorial inside the community was verified (searched OSM, he.wikipedia, and the web). The point is the Nominatim/OSM settlement place centroid. The fighting near Sufa is based on the he.wikipedia Holit article (Sufa outpost, Dangour memorial).",
+    "scope": "oct7",
+    "scope_note": "Community point for a community attacked on Oct 7; no specific memorial verified."
+  },
+  {
+    "id": "community-yakhini",
+    "name_he": "מושב יכיני",
+    "name_en": "Moshav Yakhini",
+    "kind": "site",
+    "context": "oct7",
+    "lat": 31.483223,
+    "lng": 34.600085,
+    "precision": "approx",
+    "place_he": "יכיני, מועצה אזורית שער הנגב",
+    "summary_he": "מושב בעוטף עזה שאליו חדרו מחבלים ב-7 באוקטובר, ושמתושביו ומהמגינים בו נרצחו ונפלו.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "ויקיפדיה – הטבח ביכיני",
+        "url": "https://he.wikipedia.org/wiki/הטבח_ביכיני"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/way/680733124",
+    "verified_notes": "COMMUNITY POINT, NOT A VERIFIED MEMORIAL: No specific physical memorial inside the community was verified (searched OSM, he.wikipedia, and the web). The point is the Nominatim/OSM settlement place centroid.",
+    "scope": "oct7",
+    "scope_note": "Community point for a community attacked on Oct 7; no specific memorial verified."
+  },
+  {
+    "id": "community-saad",
+    "name_he": "קיבוץ סעד",
+    "name_en": "Kibbutz Sa'ad",
+    "kind": "site",
+    "context": "oct7",
+    "lat": 31.470228,
+    "lng": 34.532181,
+    "precision": "approx",
+    "place_he": "קיבוץ סעד, מועצה אזורית שדות נגב",
+    "summary_he": "קיבוץ בעוטף עזה הסמוך לצומת עלומים ולכביש 232, שבסביבתם התנהלו קרבות ב-7 באוקטובר. אנדרטת התצפיתניות נמצאת דרומית-מערבית לקיבוץ.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "ויקיפדיה – סעד",
+        "url": "https://he.wikipedia.org/wiki/סעד"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/way/92392960",
+    "verified_notes": "COMMUNITY POINT, NOT A VERIFIED MEMORIAL: No specific physical memorial inside the community was verified (searched OSM, he.wikipedia, and the web). The point is the Nominatim/OSM settlement place centroid. Sources do not establish that the kibbutz itself was breached, so the summary refers only to nearby fighting.",
+    "scope": "oct7",
+    "scope_note": "Community point: fighting took place nearby on Oct 7; no specific memorial verified."
+  },
+  {
+    "id": "community-alumim",
+    "name_he": "קיבוץ עלומים",
+    "name_en": "Kibbutz Alumim",
+    "kind": "site",
+    "context": "oct7",
+    "lat": 31.452129,
+    "lng": 34.513715,
+    "precision": "approx",
+    "place_he": "קיבוץ עלומים, מועצה אזורית שדות נגב",
+    "summary_he": "קיבוץ בעוטף עזה שהותקף ב-7 באוקטובר. בצומת הסמוך לו ובשטחי החקלאות שלו נרצחו גם עובדים חקלאיים ומשתתפי פסטיבל שנמלטו.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "ויקיפדיה – הטבח בעלומים",
+        "url": "https://he.wikipedia.org/wiki/הטבח_בעלומים"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/way/55264850",
+    "verified_notes": "COMMUNITY POINT, NOT A VERIFIED MEMORIAL: No specific physical memorial inside the community was verified (searched OSM, he.wikipedia, and the web). The point is the Nominatim/OSM settlement place centroid. The Alumim junction shelter is a separate entry.",
+    "scope": "oct7",
+    "scope_note": "Community point for a community attacked on Oct 7; no specific memorial verified."
+  },
+  {
+    "id": "ofakim-mishor-hagefen",
+    "name_he": "שכונת מישור הגפן, אופקים",
+    "name_en": "Mishor HaGefen neighborhood, Ofakim",
+    "kind": "site",
+    "context": "oct7",
+    "lat": 31.306792,
+    "lng": 34.61822,
+    "precision": "approx",
+    "place_he": "אופקים",
+    "summary_he": "השכונה באופקים שבה נרצחו רוב תושבי העיר שנפגעו ב-7 באוקטובר. ברחובותיה הוצבו שלטי זיכרון ואנדרטאות קטנות במקומות שבהם נפלו ונרצחו אזרחים, שוטרים ולוחמים.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "ויקיפדיה – הטבח באופקים",
+        "url": "https://he.wikipedia.org/wiki/הטבח_באופקים"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/way/749369975",
+    "verified_notes": "COMMUNITY POINT, NOT A VERIFIED MEMORIAL: Web results (Haaretz/ha-makom, Israel Hayom) describe memorial signs and small memorials throughout the neighborhood's streets, but there is no single mapped memorial and no OSM feature for the neighborhood. Point is the Ofakim town centroid, so approx (the neighborhood is within ~1-2 km). No specific neighborhood memorial monument was verified.",
+    "scope": "oct7",
+    "scope_note": "Neighbourhood where most Ofakim residents killed on Oct 7 were murdered; small street memorials, none mapped individually."
+  },
+  {
+    "id": "community-ashkelon",
+    "name_he": "אשקלון",
+    "name_en": "Ashkelon",
+    "kind": "site",
+    "context": "oct7",
+    "lat": 31.673851,
+    "lng": 34.575242,
+    "precision": "approx",
+    "place_he": "אשקלון",
+    "summary_he": "עיר בדרום הארץ שספגה ירי רקטות כבד ב-7 באוקטובר ולאורך מלחמת חרבות ברזל, ומתושביה נפלו ונרצחו במהלכה.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "ויקיפדיה – אשקלון",
+        "url": "https://he.wikipedia.org/wiki/אשקלון"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/way/1213129792",
+    "verified_notes": "COMMUNITY POINT, NOT A VERIFIED MEMORIAL: No specific physical memorial inside the community was verified (searched OSM, he.wikipedia, and the web). The point is the Nominatim/OSM settlement place centroid. OSM 'כיכר חרבות ברזל' in Ashkelon is only a roundabout name, not a memorial, so it was not used.",
+    "scope": "mixed",
+    "scope_note": "Community point: residents killed on Oct 7 and during the war; no specific memorial verified."
+  },
+  {
+    "id": "amit-lookout-ness-ziona",
+    "name_he": "מצפה עמית",
+    "name_en": "Amit Lookout",
+    "kind": "lookout",
+    "context": "oct7",
+    "lat": 31.93133,
+    "lng": 34.78079,
+    "precision": "approx",
+    "place_he": "גבעות הכורכר, נס ציונה",
+    "summary_he": "מצפה זיכרון בגבעות הכורכר בנס ציונה לזכר עמית מגנזי, בן העיר שנרצח בפסטיבל נובה ב-7 באוקטובר. המצפה הוקם סביב עץ גדול שבו נהגו עמית וחבריו להיפגש, ביוזמת בני משפחתו וחבריו.",
+    "established": 2024,
+    "links": [
+      {
+        "label_he": "ויקיפדיה",
+        "url": "https://he.wikipedia.org/wiki/מצפה_עמית"
+      }
+    ],
+    "coord_source": "wikidata",
+    "coord_source_url": "https://www.wikidata.org/wiki/Q135472245",
+    "verified_notes": "he.wikipedia article (Amit Mganzi, murdered at Nova) and Wikidata Q135472245 with P625; Commons category \"Amit lookout\" lists it under Monuments to the victims of the October 7 attacks. No OSM feature found (nearest is a different lookout ~330 m away), so approx. Wikipedia says inaugurated April 2024; Wikidata P571 says 2025-07 – used 2024 from the article.",
+    "scope": "oct7",
+    "scope_note": "For a young man murdered at the Nova festival on Oct 7."
+  },
+  {
+    "id": "akevot-bibas-tzeelim",
+    "name_he": "עקבות ביבס",
+    "name_en": "Akevot Bibas memorial park",
+    "kind": "garden",
+    "context": "oct7",
+    "lat": 31.20961,
+    "lng": 34.53251,
+    "precision": "approx",
+    "place_he": "חורשה סמוך לקיבוץ צאלים",
+    "summary_he": "פארק זיכרון ציבורי בחורשה ליד קיבוץ צאלים, שבו גדל ירדן ביבס, לזכר שירי, אריאל וכפיר ביבס. השלושה נחטפו מביתם בניר עוז ב-7 באוקטובר ונרצחו בשבי. הפארק הוקם ביוזמה מקומית ב-2025.",
+    "established": 2025,
+    "links": [
+      {
+        "label_he": "ויקיפדיה",
+        "url": "https://he.wikipedia.org/wiki/עקבות_ביבס"
+      }
+    ],
+    "coord_source": "wikidata",
+    "coord_source_url": "https://www.wikidata.org/wiki/Q136803470",
+    "verified_notes": "he.wikipedia article and Wikidata Q136803470 (P625, P571 2025-12, commemorates Bibas family). No OSM feature found; single coordinate source, so approx.",
+    "scope": "oct7",
+    "scope_note": "Abducted from Nir Oz on Oct 7 and murdered in captivity; included as Oct 7 victims (see notes)."
+  },
+  {
+    "id": "petah-tikva-iron-swords-park",
+    "name_he": "פארק חרבות ברזל",
+    "name_en": "Iron Swords Park, Petah Tikva",
+    "kind": "garden",
+    "context": "oct7",
+    "lat": 32.07592,
+    "lng": 34.87166,
+    "precision": "exact",
+    "place_he": "שכונת כפר גנים, פתח תקווה",
+    "summary_he": "פארק ציבורי בשכונת כפר גנים, ובמרכזו אנדרטה לבני פתח תקווה ולבעלי זיקה לעיר שנפלו ונרצחו במלחמת חרבות ברזל. בפארק ניטעו כ-150 עצים, והוא נחנך בינואר 2024 בהשתתפות משפחות שכולות.",
+    "established": 2024,
+    "links": [
+      {
+        "label_he": "ויקיפדיה",
+        "url": "https://he.wikipedia.org/wiki/פארק_חרבות_ברזל"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/way/1213381318",
+    "verified_notes": "OSM park way \"פארק חרבות ברזל\" agrees with Wikidata Q141368544 P625 within ~25 m. he.wikipedia: dedicated 24 Jan 2024.",
+    "scope": "mixed",
+    "scope_note": "City memorial for all Petah Tikva residents killed in the war, from Oct 7 onward."
+  },
+  {
+    "id": "ilay-gamzo-shelter-ashdod",
+    "name_he": "מיגונית להנצחת סמל ראשון אילי גמזו",
+    "name_en": "Memorial shelter for Ilay Gamzo, Ashdod",
+    "kind": "other",
+    "context": "oct7",
+    "lat": 31.77568,
+    "lng": 34.64208,
+    "precision": "approx",
+    "place_he": "המרכז המסחרי ברובע י\"ג, אשדוד",
+    "summary_he": "מיגונית רחוב באשדוד שעוטרה לזכר אילי גמזו, בן העיר ומפקד כיתה בבסיס האימונים של הצנחנים, שנפל בקרב ביד מרדכי ב-7 באוקטובר.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "ויקישיתוף",
+        "url": "https://commons.wikimedia.org/wiki/Category:Migunit_in_memory_of_Ilay_Gamzo,_Rova_Yod_Gimmel_commercial_center"
+      }
+    ],
+    "coord_source": "wikidata",
+    "coord_source_url": "https://www.wikidata.org/wiki/Q130342685",
+    "verified_notes": "Wikidata Q130342685 (P625, commemorates Q130340952 with death 2023-10-07). Commons photo GPS (31.7784,34.6413) is ~300 m away, so approx. Not mapped in OSM. kind=other because it is a memorial-decorated street shelter, not an attack site.",
+    "scope": "oct7",
+    "scope_note": "For a soldier who fell in the battle at Yad Mordechai on Oct 7."
+  },
+  {
+    "id": "izabella-gandlin-shelter-ashdod",
+    "name_he": "מיגונית לזכר איזבלה גנדלין",
+    "name_en": "Memorial shelter for Izabella Gandlin, Ashdod",
+    "kind": "other",
+    "context": "oct7",
+    "lat": 31.78284,
+    "lng": 34.64826,
+    "precision": "approx",
+    "place_he": "מדרחוב הנביאים, רובע י', אשדוד",
+    "summary_he": "מיגונית רחוב במדרחוב הנביאים באשדוד שעוטרה לזכר איזבלה גנדלין, תושבת העיר שנרצחה בפסטיבל נובה ב-7 באוקטובר.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "ויקישיתוף",
+        "url": "https://commons.wikimedia.org/wiki/Category:Migunit_in_memory_of_Izabella_Gandlin,_Hanevi'im_Pedestrian,_Ashdod"
+      }
+    ],
+    "coord_source": "article",
+    "coord_source_url": "https://commons.wikimedia.org/wiki/Category:Migunit_in_memory_of_Izabella_Gandlin,_Hanevi'im_Pedestrian,_Ashdod",
+    "verified_notes": "Commons category with photos (Feb 2024) whose GPS points agree within ~10 m at Hanevi'im pedestrian mall; Wikidata Q130342715 describes it as a memorial to a Nova victim but has no coordinates. Not in OSM; single coordinate source, so approx.",
+    "scope": "oct7",
+    "scope_note": "For a woman murdered at the Nova festival on Oct 7."
+  },
+  {
+    "id": "or-moses-shelter-ashdod",
+    "name_he": "מיגונית להנצחת סרן אור מוזס",
+    "name_en": "Memorial shelter for Or Moses, Ashdod",
+    "kind": "other",
+    "context": "oct7",
+    "lat": 31.80803,
+    "lng": 34.64481,
+    "precision": "approx",
+    "place_he": "כיכר משה שרת, אשדוד",
+    "summary_he": "מיגונית רחוב בכיכר משה שרת באשדוד שעוטרה לזכר אור מוזס, קצינה בבסיס הטירונים בזיקים, שנפלה בקרב על הבסיס ב-7 באוקטובר.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "ויקישיתוף",
+        "url": "https://commons.wikimedia.org/wiki/Category:Migunit_in_memory_of_Or_Moses,_Moshe_Sharett_Square,_Ashdod"
+      }
+    ],
+    "coord_source": "article",
+    "coord_source_url": "https://commons.wikimedia.org/wiki/Category:Migunit_in_memory_of_Or_Moses,_Moshe_Sharett_Square,_Ashdod",
+    "verified_notes": "Commons category photos (Jan 2024) with GPS; Wikidata Q132813883 (memorial race) confirms Or Moses fell in the battle of Zikim on 7 Oct 2023. Not in OSM; single coordinate source, so approx.",
+    "scope": "oct7",
+    "scope_note": "For an officer who fell at the Zikim base on Oct 7."
+  },
+  {
+    "id": "netiv-haasara-victims-memorial",
+    "name_he": "אנדרטה לנרצחי נתיב העשרה – גן העשרים",
+    "name_en": "Netiv HaAsara victims memorial (Garden of the Twenties)",
+    "kind": "grove",
+    "context": "oct7",
+    "lat": 31.56557,
+    "lng": 34.53617,
+    "precision": "approx",
+    "place_he": "מושב נתיב העשרה",
+    "summary_he": "אתר זיכרון במושב נתיב העשרה, בנקודה שבה חדרו המחבלים ב-7 באוקטובר. סביב תורן דגל גדול ניטעו עשרים עצי זית, עץ לזכר כל אחד מתושבי המושב שנרצחו.",
+    "established": 2024,
+    "links": [
+      {
+        "label_he": "ויקישיתוף",
+        "url": "https://commons.wikimedia.org/wiki/Category:Netiv_Ha'asara_Victims_Memorial"
+      }
+    ],
+    "coord_source": "article",
+    "coord_source_url": "https://commons.wikimedia.org/wiki/Category:Netiv_Ha'asara_Victims_Memorial",
+    "verified_notes": "Commons category (Wikidata Q136747632, P571 June 2024) with PikiWiki description (flag + 20 olive trees at the infiltration point) and Nov 2025 photos whose GPS cluster at 31.5655-31.5657, 34.5361-34.5362. Not in OSM; single coordinate source, so approx. Supersedes the \"no memorial verified\" note on community-netiv-haasara.",
+    "scope": "oct7",
+    "scope_note": "For the 20 Netiv HaAsara residents murdered on Oct 7."
+  },
+  {
+    "id": "maglan-memorial-nahal-oz-road",
+    "name_he": "אנדרטת לוחמי מגלן בדרך לנחל עוז",
+    "name_en": "Maglan fighters memorial on the Nahal Oz road",
+    "kind": "monument",
+    "context": "oct7",
+    "lat": 31.47139,
+    "lng": 34.51328,
+    "precision": "exact",
+    "place_he": "הכביש המוביל לקיבוץ נחל עוז",
+    "summary_he": "אנדרטה בצד הכביש המוביל לנחל עוז, לזכר שלושה לוחמי יחידת מגלן – חן בוכריס, יפתח יעבץ ואפיק רוזנטל – שנפלו במקום בקרב ב-7 באוקטובר.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "ויקישיתוף – אנדרטאות 7 באוקטובר",
+        "url": "https://commons.wikimedia.org/wiki/Category:Monuments_to_the_victims_of_the_October_7_attacks"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/node/12787099548",
+    "verified_notes": "Commons photos (Aug 2024, \"Maglan Monument near Nir Oz\") with GPS 31.47139,34.51328 agree within ~7 m with an unnamed OSM war_memorial node 12787099548. Names from the Commons description; Chen Buchris death date confirmed via Wikidata.",
+    "scope": "oct7",
+    "scope_note": "For three Maglan fighters who fell on the Nahal Oz road on Oct 7."
+  },
+  {
+    "id": "gan-nissim-lod",
+    "name_he": "גן ניסים",
+    "name_en": "Nissim's Garden, Lod",
+    "kind": "garden",
+    "context": "oct7",
+    "lat": 31.95052,
+    "lng": 34.89824,
+    "precision": "approx",
+    "place_he": "לוד",
+    "summary_he": "גינת זיכרון בלוד הקרויה על שם ניסים מעיין לוי, שנרצח בפסטיבל נובה ב-7 באוקטובר.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "ויקישיתוף",
+        "url": "https://commons.wikimedia.org/wiki/Category:Nissim_Maayan_Levy"
+      }
+    ],
+    "coord_source": "article",
+    "coord_source_url": "https://commons.wikimedia.org/wiki/Category:Nissim_Maayan_Levy",
+    "verified_notes": "Commons photo \"גן ניסים\" (Sept 2025) with GPS, categorised under Parks in Lod and Re'im music festival massacre. No OSM park of that name found; single coordinate source, so approx.",
+    "scope": "oct7",
+    "scope_note": "For a young man murdered at the Nova festival on Oct 7."
+  },
+  {
+    "id": "avshalom-police-memorial-corner",
+    "name_he": "פינת הנצחה לשוטרים בני אבשלום",
+    "name_en": "Avshalom memorial corner for police officers",
+    "kind": "other",
+    "context": "oct7",
+    "lat": 31.19509,
+    "lng": 34.33079,
+    "precision": "approx",
+    "place_he": "היישוב אבשלום, חבל שלום",
+    "summary_he": "פינת הנצחה ביישוב אבשלום לזכר שוטרים מבני היישוב שנרצחו במתחם פסטיבל נובה ליד רעים ב-7 באוקטובר.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "ויקישיתוף – אבשלום",
+        "url": "https://commons.wikimedia.org/wiki/Category:Avshalom"
+      }
+    ],
+    "coord_source": "nominatim",
+    "coord_source_url": "https://www.openstreetmap.org/way/711327436",
+    "verified_notes": "Commons photo (Dec 2024) titled as a memorial corner in Avshalom for resident police officers murdered at the Re'im party. Exact spot inside the village is unknown; point is the OSM village centroid (error up to ~400 m).",
+    "scope": "oct7",
+    "scope_note": "For police officers murdered at the Nova site on Oct 7."
+  },
+  {
+    "id": "asaf-hamami-bridge-petah-tikva",
+    "name_he": "גשר אל\"מ אסף חממי",
+    "name_en": "Col. Asaf Hamami Bridge",
+    "kind": "other",
+    "context": "oct7",
+    "lat": 32.09873,
+    "lng": 34.87545,
+    "precision": "approx",
+    "place_he": "רחוב אבשלום גיסין, פתח תקווה",
+    "summary_he": "גשר בפתח תקווה שנקרא על שם אסף חממי, מפקד החטיבה הדרומית באוגדת עזה, שנפל בקרב ב-7 באוקטובר.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "ויקישיתוף",
+        "url": "https://commons.wikimedia.org/wiki/Category:Asaf_Hamami_Bridge"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/node/1803061019",
+    "verified_notes": "Commons photos (Sept 2024) of \"גשר ע\"ש אל\"מ אסף חממי\" in Petah Tikva; OSM bus stop \"אבשלום גיסין/גשר אל\"מ אסף חממי\" used as the point (bridge itself not named in OSM), so approx (~150 m).",
+    "scope": "oct7",
+    "scope_note": "Named for a brigade commander who fell on Oct 7."
+  },
+  {
+    "id": "givat-hatatzpitaniyot-petah-tikva",
+    "name_he": "גבעת התצפיתניות",
+    "name_en": "Observers Hill, Petah Tikva",
+    "kind": "monument",
+    "context": "oct7",
+    "lat": 32.08562,
+    "lng": 34.86923,
+    "precision": "approx",
+    "place_he": "רחוב ארלוזורוב, מול קריית המוזיאונים, פתח תקווה",
+    "summary_he": "אתר זיכרון בפתח תקווה המוקדש לתצפיתניות צה\"ל, ובמיוחד לאלה שנרצחו ונפלו ב-7 באוקטובר.",
+    "established": 2025,
+    "links": [
+      {
+        "label_he": "ויקישיתוף",
+        "url": "https://commons.wikimedia.org/wiki/Category:Female_observers_memorial_in_Petah_Tikva"
+      }
+    ],
+    "coord_source": "nominatim",
+    "coord_source_url": "https://www.openstreetmap.org/way/500471733",
+    "verified_notes": "PikiWiki/Commons photos (May 2025) describe a new monument at 30 Arlozorov St. opposite the Museum District. Point is the Nominatim position of Arlozorov St. (Ramat Verber), so approx (up to ~300 m). Year from photo date, not an inauguration source.",
+    "scope": "oct7",
+    "scope_note": "For IDF observers, especially those killed on Oct 7."
+  },
+  {
+    "id": "itay-moreno-lookout-adderet",
+    "name_he": "מצפה איתי מורנו",
+    "name_en": "Itay Moreno Lookout",
+    "kind": "lookout",
+    "context": "oct7",
+    "lat": 31.662,
+    "lng": 34.99592,
+    "precision": "approx",
+    "place_he": "בכניסה ליישוב אדרת, חבל עדולם",
+    "summary_he": "מצפה בכניסה למושב אדרת, המשקיף על עמק האלה, לזכר איתי שלמה מורנו שגדל במושב ונפל בקרב זיקים. בני משפחתו וגרעין הנוער של היישוב שיפצו את המקום והפכו אותו לפינת זיכרון.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "ויקיפדיה",
+        "url": "https://he.wikipedia.org/wiki/מצפה_איתי_מורנו"
+      }
+    ],
+    "coord_source": "wikidata",
+    "coord_source_url": "https://www.wikidata.org/wiki/Q133823786",
+    "verified_notes": "he.wikipedia + Wikidata Q133823786 P625; Commons photo GPS is ~145 m away, so approx. Wikipedia says he fell in the battle of Zikim in October 2023 without giving the day; the Zikim battle was on Oct 7 but the exact date is not confirmed here (see notes).",
+    "scope": "oct7",
+    "scope_note": "For a soldier who fell in the battle of Zikim (Oct 2023; day not confirmed)."
+  },
+  {
+    "id": "ramat-gan-har-habanim-iron-swords",
+    "name_he": "אנדרטת חללי רמת גן במלחמת חרבות ברזל, הר הבנים",
+    "name_en": "Ramat Gan Iron Swords memorial, Har HaBanim",
+    "kind": "monument",
+    "context": "oct7",
+    "lat": 32.07641,
+    "lng": 34.82153,
+    "precision": "approx",
+    "place_he": "פארק הר הבנים, רמת גן",
+    "summary_he": "אנדרטה בהר הבנים ברמת גן לבני העיר שנפלו ונרצחו במלחמת חרבות ברזל. בסמוך לה, באנדרטה העירונית לנפגעי פעולות האיבה, הונצחו גם תושבי רמת גן שנרצחו ב-7 באוקטובר.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "ויקישיתוף – הר הבנים",
+        "url": "https://commons.wikimedia.org/wiki/Category:Har_Habanim"
+      },
+      {
+        "label_he": "ויקישיתוף – אנדרטת נפגעי פעולות האיבה",
+        "url": "https://commons.wikimedia.org/wiki/Category:Terror_Victims_Memorial,_Ramat_Gan"
+      }
+    ],
+    "coord_source": "article",
+    "coord_source_url": "https://commons.wikimedia.org/wiki/File:Har_Habanim_Swords_of_Iron_Memorial.jpg",
+    "verified_notes": "Commons photo (Jan 2025) with GPS for the Iron Swords memorial; a separate Commons photo (May 2024) shows the Har HaBanim terror-victims memorial with Ramat Gan residents murdered on Oct 7. An unnamed OSM historic=monument node lies ~60 m away but cannot be matched with certainty, so approx.",
+    "scope": "mixed",
+    "scope_note": "Ramat Gan residents murdered on Oct 7 and fallen later in the war."
+  },
+  {
+    "id": "ness-ziona-memorial-garden",
+    "name_he": "גן הזיכרון העירוני לנופלי ונרצחי 7 באוקטובר ומלחמת חרבות ברזל",
+    "name_en": "Ness Ziona Municipal Memorial Garden (Oct 7 & Swords of Iron)",
+    "kind": "garden",
+    "context": "oct7",
+    "lat": 31.93636,
+    "lng": 34.78899,
+    "precision": "approx",
+    "place_he": "רחוב סביון, נס ציונה",
+    "summary_he": "גן זיכרון עירוני בנס ציונה לבני ולבנות העיר שנרצחו ונפלו ב-7 באוקטובר ובמלחמת חרבות ברזל. הגן עוצב סביב אלמנטים אנכיים מפלדת קורטן בדמות חרבות, ובמרכזו אנדרטה ספירלית ועץ אלון. הוא תוכנן בשיתוף המשפחות השכולות.",
+    "established": 2026,
+    "links": [
+      {
+        "label_he": "BE106 – חנוכת הגן",
+        "url": "https://www.be106.net/173/143363"
+      },
+      {
+        "label_he": "BE106 – הודעה על טקס החנוכה",
+        "url": "https://www.be106.net/173/142364"
+      }
+    ],
+    "coord_source": "nominatim",
+    "coord_source_url": "https://www.openstreetmap.org/way/61346067",
+    "verified_notes": "BE106 (published 27 May 2026) reports the garden was inaugurated; earlier BE106 notice gives the ceremony as Tuesday 26.5 at Savyon St 6, Ness Ziona. Point = Nominatim centroid of Savyon street way 61346067 (address 'סביון 6' resolved only to the street); no OSM feature for the garden itself found. Expected error up to ~300 m.",
+    "scope": "mixed",
+    "scope_note": "City memorial for residents killed on Oct 7 and fallen in the Swords of Iron war."
+  },
+  {
+    "id": "arad-iron-swords-monument",
+    "name_he": "מונומנט חרבות ברזל בערד",
+    "name_en": "Arad Swords of Iron Monument",
+    "kind": "monument",
+    "context": "oct7",
+    "lat": 31.25488,
+    "lng": 35.20876,
+    "precision": "approx",
+    "place_he": "גן החמישה, כניסה לעיר ערד",
+    "summary_he": "פסל הנצחה ממתכת וסלע שהוצב בגן החמישה בכניסה לערד, לזכר בני העיר שנרצחו ונפלו ב-7 באוקטובר ובמלחמת חרבות ברזל. הפסל נוצר בידי אמן המתכת הערדי איציק גמליאל לבקשת עיריית ערד, ושולבו בו שלוש חרבות ברזל וקטע מגולף של מגילה.",
+    "established": 2024,
+    "links": [
+      {
+        "label_he": "GoArad – מונומנט חרבות ברזל",
+        "url": "https://www.goarad.co.il/%D7%9E%D7%95%D7%A0%D7%95%D7%9E%D7%A0%D7%98-%D7%97%D7%A8%D7%91%D7%95%D7%AA-%D7%91%D7%A8%D7%96%D7%9C-%D7%91%D7%A2%D7%A8%D7%93-%D7%A4%D7%A1%D7%9C-%D7%94%D7%A0%D7%A6%D7%97%D7%94-%D7%9C-7-%D7%91%D7%90/"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/node/3483612649",
+    "verified_notes": "GoArad article: sculpture by Itzik Gamliel placed in Gan HaHamisha at the Arad entrance, inaugurated 29 Sep 2024, commemorating Arad residents killed on Oct 7 / in the war (megapro.org.il also reports Arad inaugurated it). The new monument itself is not in OSM; point is OSM node 3483612649, an older Six-Day-War memorial whose description places it 'in Gan HaHamisha near the city-entrance roundabout'. Same garden, expected error ~50-200 m. Individual death dates of those commemorated not verified (a Haaretz/Van Leer blog headline argues the monument sidesteps Oct 7).",
+    "scope": "mixed",
+    "scope_note": "Per GoArad: Arad residents who died in the Swords of Iron war and the Oct 7 events; individual death dates not verified."
+  },
+  {
+    "id": "ashdod-cemetery-oct7-memorial",
+    "name_he": "אנדרטה לנרצחי 7 באוקטובר הקבורים באשדוד",
+    "name_en": "Memorial to Oct 7 victims buried in Ashdod (Ashdod Cemetery)",
+    "kind": "monument",
+    "context": "oct7",
+    "lat": 31.80031,
+    "lng": 34.66819,
+    "precision": "approx",
+    "place_he": "בית העלמין אשדוד, חלקת נפגעי פעולות איבה",
+    "summary_he": "אנדרטת שיש בבית העלמין של אשדוד, הנושאת את שמות נרצחי 7 באוקטובר שנקברו בעיר, ועליה מפת ארץ ישראל וסמלי מגן דוד והמדינה. האנדרטה הוצבה ביוזמת המועצה הדתית אשדוד חודש לאחר הטבח.",
+    "established": 2023,
+    "links": [
+      {
+        "label_he": "אשדוד נט",
+        "url": "https://ashdodnet.com/%D7%97%D7%93%D7%A9%D7%95%D7%AA-%D7%90%D7%A9%D7%93%D7%95%D7%93/%D7%9E%D7%A8%D7%92%D7%A9-%D7%90%D7%A0%D7%93%D7%A8%D7%98%D7%94-%D7%94%D7%95%D7%A7%D7%9E%D7%94-%D7%9C%D7%96%D7%9B%D7%A8-%D7%A0%D7%A8%D7%A6%D7%97%D7%99-%D7%94-7-%D7%91%D7%90%D7%95%D7%A7%D7%98%D7%95%D7%91%D7%A8-%D7%A9%D7%A7%D7%91%D7%95%D7%A8%D7%99%D7%9D-%D7%91%D7%90%D7%A9%D7%93%D7%95%D7%93-559143"
+      }
+    ],
+    "coord_source": "nominatim",
+    "coord_source_url": "https://www.openstreetmap.org/way/100596638",
+    "verified_notes": "AshdodNet (7 Nov 2023, cited by he.wikipedia memorial article): Ashdod Religious Council erected a marble memorial with names of Oct 7 victims buried in Ashdod, in plot 'ש6' (victims' section) of the Ashdod cemetery. Plot position not found; point = Nominatim centroid of cemetery way 100596638. Expected error up to ~400 m. Distinct from existing record makom-balev-ashdod (~3 km away).",
+    "scope": "oct7",
+    "scope_note": "Names of those murdered on Oct 7 who are buried in Ashdod."
+  },
+  {
+    "id": "mitzpor-roey-chappell-zichron",
+    "name_he": "מצפור רועי",
+    "name_en": "Roey Chappell Lookout",
+    "kind": "lookout",
+    "context": "oct7",
+    "lat": 32.56146,
+    "lng": 34.94254,
+    "precision": "approx",
+    "place_he": "רכס הכרמל, זכרון יעקב",
+    "summary_he": "פינת זיכרון ותצפית בשולי זכרון יעקב לזכרו של רס\"ן רועי צ'אפל, בן המושבה, שנפל בקרב בגזרת סופה ב-7 באוקטובר 2023. במקום ספסל תחת עץ אורן המשקיף אל ואדי ברכס הכרמל.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "יזכור – רב סרן רועי צ'אפל",
+        "url": "https://www.izkor.gov.il/%D7%A8%D7%95%D7%A2%D7%99%20%D7%A6'%D7%90%D7%A4%D7%9C/en_82fa628bed579de760fc052dfcfcac02"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/node/11807021269",
+    "verified_notes": "OSM node 11807021269 'מצפור רועי' (tourism=viewpoint) with description naming Maj. Roey Chappell and website roeychapell.com/lookoutpoint (site refused connection, not linked). Death on 7 Oct 2023 in the Sufa sector confirmed via izkor.gov.il listing and kan 710360 memorial page in search results. A 13tv travel article (403 to curl, not linked) describes the lookout in Zichron Ya'akov with Waze address Sapir St 48; no second coordinate to compare, so precision approx (OSM point only, likely within ~100 m).",
+    "scope": "oct7",
+    "scope_note": "Personal memorial for a Nahal officer who fell on 7 Oct 2023."
+  },
+  {
+    "id": "mitzpe-itay-glisko-yokneam",
+    "name_he": "מצפה איתי",
+    "name_en": "Itay Lookout (Itay Glisko)",
+    "kind": "lookout",
+    "context": "oct7",
+    "lat": 32.6321,
+    "lng": 35.09567,
+    "precision": "approx",
+    "place_he": "יקנעם עילית",
+    "summary_he": "מצפה ביקנעם לזכרו של סמ\"ר איתי גליסקו, לוחם גולני בן העיר, שנפל ב-7 באוקטובר 2023 בהגנה על מוצב בגבול רצועת עזה.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "בשביל המשפחה – מצפה איתי",
+        "url": "https://familytrips.co.il/%D7%9E%D7%A6%D7%A4%D7%94-%D7%90%D7%99%D7%AA%D7%99-%D7%91%D7%99%D7%A7%D7%A0%D7%A2%D7%9D-%D7%9C%D7%96%D7%9B%D7%A8%D7%95-%D7%A9%D7%9C-%D7%90%D7%99%D7%AA%D7%99-%D7%92%D7%9C%D7%99%D7%A1%D7%A7%D7%95-%D7%96/"
+      },
+      {
+        "label_he": "אתר ההנצחה לאיתי גליסקו",
+        "url": "https://itayglisko.co.il/"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/node/12637974201",
+    "verified_notes": "OSM node 12637974201 'מצפה איתי' (tourism=viewpoint, 'לזכרו של איתי גליסקו') whose website tag points to the familytrips.co.il article 'מצפה איתי ביקנעם' (HTTP 200). Search results (ORT Yokneam memorial, itayglisko.co.il, kan 710360) state Itay Glisko, Golani 13th battalion, fell 7 Oct 2023 defending the Gaza-border outposts. No independent GPS found to compare, so precision approx.",
+    "scope": "oct7",
+    "scope_note": "Personal memorial for a Golani soldier who fell on 7 Oct 2023."
+  },
+  {
+    "id": "bor-tiferet-tekoa",
+    "name_he": "בור תפארת",
+    "name_en": "Tiferet Cistern (Tiferet Lapidot memorial)",
+    "kind": "site",
+    "context": "oct7",
+    "lat": 31.62672,
+    "lng": 35.24509,
+    "precision": "approx",
+    "place_he": "תקוע, גוש עציון",
+    "summary_he": "בור מים משוחזר עם סולם, ולצדו פרגולה ופינת ישיבה, שהוקמו בידי בני נוער מתקוע לזכרה של תפארת לפידות, שנרצחה במסיבת נובה ב-7 באוקטובר 2023.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "לעד – תפארת לפידות ז\"ל",
+        "url": "https://laad.btl.gov.il/Web/He/TerrorVictims/Page/Default.aspx?ID=43880"
+      },
+      {
+        "label_he": "חוות ספר המדבר – מקורות מים",
+        "url": "https://sfar-midbar.co.il/%D7%9E%D7%A7%D7%95%D7%A8%D7%95%D7%AA-%D7%9E%D7%99%D7%9D-%D7%9C%D7%99%D7%93-%D7%97%D7%95%D7%95%D7%AA-%D7%A1%D7%A4%D7%A8-%D7%94%D7%9E%D7%93%D7%91%D7%A8/"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/node/13184952646",
+    "verified_notes": "OSM node 13184952646 'בור תפארת' (cistern with ladder and pergola, 'לזכר תפארת לפידות'). sfar-midbar.co.il (fetched) describes Bor Tiferet with ladder/rope, pergola and seating, built in memory of Tiferet Lapidot, reached as a continuation from the 'Olympic pool' near Tekoa. Murder at the Nova festival on 7 Oct 2023 per laad.btl.gov.il (Bituah Leumi victims page, HTTP 200) and search results; youth-built per search summary (Kipa list). No published GPS, so precision approx.",
+    "scope": "oct7",
+    "scope_note": "Personal memorial for a Nova festival victim murdered on 7 Oct 2023."
+  },
+  {
+    "id": "tatzpit-hagvura-sderot",
+    "name_he": "תצפית הגבורה",
+    "name_en": "Tatzpit HaGvura (Heroism Lookout), Sderot",
+    "kind": "lookout",
+    "context": "oct7",
+    "lat": 31.53386,
+    "lng": 34.58027,
+    "precision": "exact",
+    "place_he": "שדרות, גבעה סמוכה לגבעת קובי",
+    "summary_he": "מצפה בקצה העיר שדרות, על גבעה הסמוכה לגבעת קובי ומשקיף אל צפון רצועת עזה. המצפה הוקדש לזכרו של שילה כהן הי\"ד, תושב שדרות שנפל בקרב ב-7 באוקטובר, ולזכר נופלי העיר במלחמה, ובו פרגולה, ספסלים ופינת פויקה.",
+    "established": 2024,
+    "links": [
+      {
+        "label_he": "מקור ראשון",
+        "url": "https://www.makorrishon.co.il/news/article/297249"
+      },
+      {
+        "label_he": "עמוד ענן",
+        "url": "https://amudanan.co.il/w/P316128"
+      },
+      {
+        "label_he": "ציר הזמן של שדרות",
+        "url": "https://sderot.localtimeline.com/index.php?option=com_localstory&view=event&tmpl=component&id=571&lang=he"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/node/13528818487",
+    "verified_notes": "OSM node 13528818487 'תצפית הגבורה' (description: פינת פויקה ע\"ש ... כהן הי\"ד) at 31.53386,34.58027 agrees with Amudanan point P316128 (31.53384,34.58034) within ~7 m; Amudanan is a separate POI database (its text predates the OSM node), so treated as independent. Makor Rishon article (published 2024-06-03) confirms inauguration 'yesterday' in memory of Shilo Cohen and the city's fallen in the war, on a hill next to Givat Kobi. ~280 m from existing givat-kobi-lookout-sderot record, different site. Rank omitted because sources differ (סגן/סרן).",
+    "scope": "mixed",
+    "scope_note": "Dedicated to Shilo Cohen, who fell on Oct 7, and per Makor Rishon also to Sderot's fallen in the war."
+  },
+  {
+    "id": "guy-iluz-corner-magen-junction",
+    "name_he": "פינת המטיילים \"דרך של גיא\" – תחנת הדלק בצומת מגן",
+    "name_en": "\"Guy's Way\" visitors' corner, Magen Junction gas station",
+    "kind": "site",
+    "context": "oct7",
+    "lat": 31.29098,
+    "lng": 34.43225,
+    "precision": "approx",
+    "place_he": "תחנת פז, צומת מגן, כביש 232",
+    "summary_he": "תחנת הדלק בצומת מגן, שהותקפה בידי מחבלים ב-7 באוקטובר, נפתחה מחדש במאי 2024 ונקראה על שמו של גיא אילוז, שנחטף ממסיבת הנובה ונרצח בשבי. במתחם התחנה נחנכה פינת מטיילים בשם \"דרך של גיא\" להנצחתו.",
+    "established": 2024,
+    "links": [
+      {
+        "label_he": "אייס",
+        "url": "https://www.ice.co.il/local-news/news/article/999102"
+      },
+      {
+        "label_he": "ynet",
+        "url": "https://www.ynet.co.il/news/article/yokra13788238"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/node/349078945",
+    "verified_notes": "Point is the OSM Paz fuel node 349078945 (amenity=fuel, brand Paz), the only fuel station within 600 m of OSM junction node 601556784 'צומת מגן'. Ice article (reopening ceremony Mon 2 May 2024) says the station at Magen junction was renamed for Guy Iluz and a visitors' corner 'דרך של גיא' was inaugurated in its compound; ynet confirms the station near Kibbutz Magen was attacked on Oct 7 and renamed for Guy. Exact spot of the corner inside the station unknown; expected error <100 m.",
+    "scope": "oct7",
+    "scope_note": "Commemorates a Nova attendee abducted on Oct 7 and killed in captivity; the station itself was attacked that day."
+  },
+  {
+    "id": "ofakim-fallen-police-memorial",
+    "name_he": "מיצג ההנצחה לשוטרים שנפלו בשכונת מישור הגפן",
+    "name_en": "Memorial to the police officers who fell in Mishor HaGefen, Ofakim",
+    "kind": "monument",
+    "context": "oct7",
+    "lat": 31.30938,
+    "lng": 34.61064,
+    "precision": "approx",
+    "place_he": "אופקים, שכונת מישור הגפן, גינה ציבורית מול בית משפחת אדרי",
+    "summary_he": "מיצג של צלליות ברזל בדמות חמשת השוטרים שנפלו בקרבות על שכונת מישור הגפן באופקים ב-7 באוקטובר. המיצג הוצב בגינה ציבורית מול ביתם של רחל ודוד אדרי, ולצדו טיפות הנושאות את שמות הנרצחים והנופלים של העיר באותו יום.",
+    "established": 2024,
+    "links": [
+      {
+        "label_he": "וואלה שבע דרום",
+        "url": "https://sheva7.walla.co.il/item/3692618"
+      },
+      {
+        "label_he": "B7net",
+        "url": "https://www.b7net.co.il/%D7%97%D7%93%D7%A9%D7%95%D7%AA/%D7%90%D7%9E%D7%A9-%D7%91%D7%90%D7%95%D7%A4%D7%A7%D7%99%D7%9D-%D7%AA%D7%95%D7%A9%D7%91%D7%99-%D7%A9%D7%9B%D7%95%D7%A0%D7%AA-%D7%9E%D7%99%D7%A9%D7%95%D7%A8-%D7%94%D7%92%D7%A4%D7%9F-%D7%94%D7%A6%D7%93%D7%99%D7%A2%D7%95-%D7%9C%D7%A9%D7%95%D7%98%D7%A8%D7%99%D7%9D-%D7%A9%D7%A0%D7%A4%D7%9C%D7%95-%D7%91%D7%A9%D7%9E%D7%99%D7%A8%D7%94-%D7%A2%D7%9C-%D7%94%D7%A2%D7%99%D7%A8-581260"
+      }
+    ],
+    "coord_source": "nominatim",
+    "coord_source_url": "https://www.openstreetmap.org/way/95494391",
+    "verified_notes": "Walla Sheva7 (ceremony 19 Sep 2024) and B7net: iron laser-cut silhouettes of five police officers placed in a public garden opposite the home of Rachel and David Edri in Mishor HaGefen. Edri home address 'רחוב החיטה 1' confirmed in ynet architecture article (https://www.ynet.co.il/architecture/article/bykycajkyx text: 'ביתם של רחל ודוד אדרי, ברחוב החיטה 1 באופקים'); point = Nominatim centroid of HaHita street (OSM way 95494391). Two small OSM parks within ~150 m (w95495170, w998674401); exact garden not confirmed, expected error ~150 m. ~780 m from existing neighborhood record ofakim-mishor-hagefen (different subject). Officer names omitted because spellings could not be verified from the Hebrew original.",
+    "scope": "oct7",
+    "scope_note": "Five police officers who fell in Ofakim on Oct 7, plus names of the city's dead of that day."
+  },
+  {
+    "id": "mitzpe-shilo-eli",
+    "name_he": "מצפה שילה (מצפה החיים)",
+    "name_en": "Shilo Lookout, Eli",
+    "kind": "lookout",
+    "context": "oct7",
+    "lat": 32.07418,
+    "lng": 35.27891,
+    "precision": "approx",
+    "place_he": "היישוב עלי, בנימין",
+    "summary_he": "מצפה ביישוב עלי לזכר סרן שילה ראוכברגר, לוחם גולני מהיישוב שנפל בקרב ב-7 באוקטובר. המצפה הוקם ביוזמת חבריו ללחימה, חניכיו בתנועת הנוער ובני נוער מהיישוב, ומשקיף על הנופים שבהם גדל.",
+    "established": 2024,
+    "links": [
+      {
+        "label_he": "ערוץ 7: הוקם מצפה לזכר סרן שילה ראוכברגר",
+        "url": "https://www.inn.co.il/news/626531"
+      },
+      {
+        "label_he": "יזכור – סרן שילה ראוכברגר",
+        "url": "https://www.izkor.gov.il/%D7%A9%D7%99%D7%9C%D7%94%20%D7%A8%D7%90%D7%95%D7%9B%D7%91%D7%A8%D7%92%D7%A8/en_9a3744bce7e4a2c17dacea56061ac0ac"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/node/11905012469",
+    "verified_notes": "Arutz 7 (inn.co.il/news/626531, 17 Jan 2024) reports the lookout 'Mitzpe HaChaim - Mitzpe Shilo' built in Eli for Capt. Shilo Rauchberger, Golani, who fell on 7 Oct. Coordinate from OSM node only (no second coordinate source found) -> approx; point lies inside Eli, expected error <300 m.",
+    "scope": "oct7",
+    "scope_note": "Single person who fell on 7 Oct 2023."
+  },
+  {
+    "id": "mitzpe-michaeli-nes-ziona",
+    "name_he": "מצפה מיכאלי",
+    "name_en": "Michaeli Lookout",
+    "kind": "lookout",
+    "context": "oct7",
+    "lat": 31.92875,
+    "lng": 34.78256,
+    "precision": "approx",
+    "place_he": "גבעות החול, נס ציונה",
+    "summary_he": "מצפה בגבעות הכורכר של נס ציונה לזכר רס\"ם (מיל') עמרי מיכאלי, לוחם דובדבן מנס ציונה שנפל בקרבות בכפר עזה ב-7 באוקטובר.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "ויקיפדיה – עמרי מיכאלי",
+        "url": "https://he.wikipedia.org/wiki/%D7%A2%D7%9E%D7%A8%D7%99_%D7%9E%D7%99%D7%9B%D7%90%D7%9C%D7%99"
+      },
+      {
+        "label_he": "יזכור – עמרי מיכאלי",
+        "url": "https://www.izkor.gov.il/%D7%A2%D7%9E%D7%A8%D7%99%20%D7%9E%D7%99%D7%9B%D7%90%D7%9C%D7%99/en_743bb4e8a0cce9125bd4487209d3bcd8"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/node/11964085228",
+    "verified_notes": "he.wikipedia 'עמרי מיכאלי' states 'מצפה מיכאלי' was erected in his memory in the kurkar hills of Nes Ziona and that he fell at Kfar Aza on 7 Oct 2023. OSM node 'מצפה מיכאלי' is in the Nes Ziona sands. Single coordinate source -> approx (<300 m).",
+    "scope": "oct7",
+    "scope_note": "Single person who fell on 7 Oct 2023."
+  },
+  {
+    "id": "ilai-edni-noa-prag-pergola-tel-mond",
+    "name_he": "פרגולת הזיכרון לאיליי עדני ונועה פרג'",
+    "name_en": "Memorial Pergola for Ilai Edni and Noa Prag",
+    "kind": "lookout",
+    "context": "oct7",
+    "lat": 32.24714,
+    "lng": 34.91008,
+    "precision": "approx",
+    "place_he": "תל מונד",
+    "summary_he": "פרגולה ותצפית בתל מונד לזכר סרן איליי עדני, לוחם מגלן שנפל בקרב ב-7 באוקטובר, ולזכר נועה פרג', שגדלה ביישוב ונרצחה באותו יום במסיבת נובה. הפרגולה נבנתה בידי משפחתו של איליי בעזרת הצופים, בני נוער וחיילים, ומשמשת למפגשים ולפעילות.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "צומת השרון: הסיפור של איליי עדני",
+        "url": "https://www.tzomet-kfs.co.il/news/67378"
+      },
+      {
+        "label_he": "אתר ההנצחה של הצופים – סרן איליי עדני",
+        "url": "https://izkor.zofim.org.il/nofel/%D7%A1%D7%A8%D7%9F-%D7%90%D7%99%D7%9C%D7%99%D7%99-%D7%A2%D7%93%D7%A0%D7%99/"
+      },
+      {
+        "label_he": "לעד – נעה פרג'",
+        "url": "https://laad.btl.gov.il/Web/He/TerrorVictims/Page/Default.aspx?ID=43945"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/node/11804060474",
+    "verified_notes": "Tzomet HaSharon article quotes Ilai Edni's mother: his father built a pergola in Tel Mond in memory of Ilai and of Noa Prag (murdered at Nova on 7 Oct); Scouts izkor page confirms Ilai fell 7 Oct 2023. OSM node 'פרגולת זיכרון' (viewpoint, 'לזכר סרן איליי עדני') at the edge of Tel Mond. Single coordinate source -> approx (<300 m).",
+    "scope": "oct7",
+    "scope_note": "Two people killed on 7 Oct 2023 (soldier + Nova victim)."
+  },
+  {
+    "id": "mitzpe-reuven-adorayim",
+    "name_he": "מצפה ראובן",
+    "name_en": "Reuven Lookout",
+    "kind": "lookout",
+    "context": "oct7",
+    "lat": 31.48839,
+    "lng": 35.04208,
+    "precision": "approx",
+    "place_he": "סמוך ליישוב אדוריים, הר חברון",
+    "summary_he": "מצפה עם פרגולה וספסלים סמוך לאדוריים בהר חברון, לזכר ראובן שישפורטיש, חבר כיתת הכוננות של שלומית שנפל ב-7 באוקטובר בקרב על פרי גן.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "ערוץ 14: היישוב אדוריים הוכר (מוזכר המצפה)",
+        "url": "https://www.c14.co.il/article/1144583"
+      },
+      {
+        "label_he": "ערוץ 7: ראובן שישפורטיש ז\"ל",
+        "url": "https://www.inn.co.il/news/667724"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/node/13753503995",
+    "verified_notes": "Channel 14 article on Adorayim's recognition mentions a lookout in memory of Reuven Shishportish next to the settlement; multiple sources (yeshuvnik, noflim) confirm he fell 7 Oct 2023 defending Pri Gan as part of Shlomit's response team. Coordinate from OSM node only -> approx (<300 m).",
+    "scope": "oct7",
+    "scope_note": "Single person who fell on 7 Oct 2023."
+  },
+  {
+    "id": "mitzpe-moti-shamir-adora",
+    "name_he": "מצפה מוטי שמיר",
+    "name_en": "Moti Shamir Lookout, Adora",
+    "kind": "lookout",
+    "context": "oct7",
+    "lat": 31.55183,
+    "lng": 35.01637,
+    "precision": "approx",
+    "place_he": "אדורה, הר חברון",
+    "summary_he": "מצפה ביישוב אדורה לזכר רס\"ן מוטי שמיר, שיצא מביתו ב-7 באוקטובר להגן על יישובי העוטף ונפל בקרב. במצפה פינות ישיבה ונוף לעבר מישור החוף ועוטף עזה.",
+    "established": 2023,
+    "links": [
+      {
+        "label_he": "סרוגים: מצפה חדש לזכרו של רס\"ן מוטי שמיר",
+        "url": "https://www.srugim.co.il/876942-%D7%9E%D7%A6%D7%A4%D7%94-%D7%97%D7%93%D7%A9-%D7%9C%D7%96%D7%9B%D7%A8%D7%95-%D7%A9%D7%9C-%D7%A8%D7%A1%D7%9F-%D7%9E%D7%95%D7%98%D7%99-%D7%A9%D7%9E%D7%99%D7%A8-%D7%9C%D7%94%D7%A1%D7%AA%D7%9B%D7%9C"
+      },
+      {
+        "label_he": "יזכור – רס\"ן מרדכי מוטי שמיר",
+        "url": "https://www.izkor.gov.il/%D7%9E%D7%A8%D7%93%D7%9B%D7%99%20%D7%9E%D7%95%D7%98%D7%99%20%D7%A9%D7%9E%D7%99%D7%A8/en_4f5410b507b93bc27a7a61aaff2cd67a"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/node/13357320022",
+    "verified_notes": "Srugim (Dec 2023) reports the lookout inaugurated in Adora for Maj. Moti Shamir, who fell defending Re'im on Simchat Torah (7 Oct). OSM stele node 'מצפה מוטי שמיר' lies at Adora. Note: other Moti Shamir lookouts exist (Havat Yair) – this record is the Adora one. Single coordinate source -> approx.",
+    "scope": "oct7",
+    "scope_note": "Single person who fell on 7 Oct 2023."
+  },
+  {
+    "id": "mitzpe-amichai-maale-hever",
+    "name_he": "מצפה עמיחי – מעלה חבר",
+    "name_en": "Amichai Lookout, Ma'ale Hever",
+    "kind": "lookout",
+    "context": "oct7",
+    "lat": 31.49489,
+    "lng": 35.16262,
+    "precision": "approx",
+    "place_he": "מעלה חבר, הר חברון",
+    "summary_he": "מגדל תצפית ופינת ישיבה במעלה חבר, יישוב הולדתו של עמיחי ונינו, לוחם מגלן שנפל ב-7 באוקטובר. מהמצפה נשקף מדבר יהודה עד ים המלח.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "ערוץ 7: הוקמו שלושה מצפים לזכר עמיחי ונינו",
+        "url": "https://www.inn.co.il/news/630457"
+      },
+      {
+        "label_he": "אתר ההנצחה – מצפה עמיחי במעלה חבר",
+        "url": "https://amichaiva.co.il/%D7%9E%D7%A6%D7%A4%D7%94-%D7%A2%D7%9E%D7%99%D7%97%D7%99-%D7%91%D7%9E%D7%A2%D7%9C%D7%94-%D7%97%D7%91%D7%A8/"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/node/11964899969",
+    "verified_notes": "Arutz 7 (news/630457) lists three lookouts for Amichai Ninno (Maglan, fell on Simchat Torah 7 Oct during a rescue) incl. Ma'ale Hever overlooking the Judean Desert/Dead Sea; tzomet-kfs article also states he was killed on 7 Oct rescuing Ilai Edni. OSM node describes an observation tower + seating 'לזכר עמיחי ונינו' at Ma'ale Hever. Single coordinate source -> approx.",
+    "scope": "oct7",
+    "scope_note": "Single person who fell on 7 Oct 2023."
+  },
+  {
+    "id": "tel-haela-amichai-lookouts",
+    "name_he": "מצפה עמיחי ומצפה עמישר – תל האלה",
+    "name_en": "Amichai and Amishar Lookouts, Tel HaEla",
+    "kind": "lookout",
+    "context": "oct7",
+    "lat": 32.98467,
+    "lng": 35.80984,
+    "precision": "approx",
+    "place_he": "תל האלה, ליד קשת, רמת הגולן",
+    "summary_he": "שני מצפים סמוכים על תל האלה ליד קשת. הפרגולה העליונה הוקמה בידי נוער קשת לזכר שלושה לוחמים בשם עמיחי שנפלו ב-7 באוקטובר – עמיחי ויצן, עמיחי ונינו ועמיחי רובין – והמצפה הנמוך מוקדש לעמישר בן-דוד מקשת, שנפל בעזה במרץ 2024. מהמקום נשקף נוף הגולן והחרמון.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "ערוץ 7: הוקמו שלושה מצפים לזכר עמיחי ונינו",
+        "url": "https://www.inn.co.il/news/630457"
+      },
+      {
+        "label_he": "ynet: עמיחי רובין נפל ב-7/10",
+        "url": "https://www.ynet.co.il/news/article/bktlutvn1l"
+      },
+      {
+        "label_he": "עמוד ענן – תל האלה",
+        "url": "https://amudanan.co.il/w/P113084"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/node/12103165013",
+    "verified_notes": "Arutz 7 confirms a lookout on Tel HaEla near Keshet built by Keshet youth for fallen named Amichai incl. Amichai Ninno (7 Oct). Dates checked: Israel Amichai Weitzen fell 7 Oct at Kerem Shalom (yeshuvnik/710360); Amichai Rubin fell 7 Oct per ynet headline (wounded in battle, died of wounds). OSM's 'תשפ\"ג' is wrong (7 Oct 2023 = Simchat Torah 5784). Lower lookout for Amishar Ben-David (Mar 2024). Single coordinate -> approx. Not a duplicate of katzrin-heroes-lookout (~13 km away).",
+    "scope": "mixed",
+    "scope_note": "Upper pergola: three soldiers who fell 7 Oct; adjacent lower lookout: a soldier who fell March 2024."
+  },
+  {
+    "id": "roi-negri-memorial-galil-yam",
+    "name_he": "אנדרטה לזכר רס\"ן רועי נגרי",
+    "name_en": "Roi Negri Memorial, Galil Yam Park",
+    "kind": "monument",
+    "context": "oct7",
+    "lat": 32.1567,
+    "lng": 34.81897,
+    "precision": "approx",
+    "place_he": "פארק גליל ים, הרצליה",
+    "summary_he": "אנדרטה בפארק גליל ים בהרצליה לזכר רס\"ן (מיל') רועי נגרי, מפקד צוות ביחידת לוט\"ר, שנפל ב-7 באוקטובר בקרב לחילוץ תושבים בקיבוץ בארי. האנדרטה נחנכה באוקטובר 2024.",
+    "established": 2024,
+    "links": [
+      {
+        "label_he": "שרון אונליין: אנדרטה בפארק גליל ים לזכר רועי נגרי",
+        "url": "https://sharonline.co.il/memorial-day/%D7%90%D7%A0%D7%93%D7%A8%D7%98%D7%94-%D7%9C%D7%96%D7%9B%D7%A8-%D7%A8%D7%95%D7%A2%D7%99-%D7%A0%D7%92%D7%A8%D7%99/"
+      },
+      {
+        "label_he": "אתר ההנצחה לרועי נגרי",
+        "url": "https://www.roeenegri.com/"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/node/12863145602",
+    "verified_notes": "Sharonline reports the monument in Galil Yam Park (Herzliya), inaugurated 9 Oct 2024, for Roi Negri who fell 7 Oct 2023 at Be'eri. OSM memorial node 'רועי נגרי' is inside Galil Yam park. Single coordinate source -> approx.",
+    "scope": "oct7",
+    "scope_note": "Single person who fell on 7 Oct 2023."
+  },
+  {
+    "id": "october-7-bridge-petah-tikva",
+    "name_he": "גשר 7 באוקטובר",
+    "name_en": "October 7 Bridge, Petah Tikva",
+    "kind": "site",
+    "context": "oct7",
+    "lat": 32.09485,
+    "lng": 34.86966,
+    "precision": "approx",
+    "place_he": "מעל דרך הרב מלכה, בין נווה גן לפארק יצחק אוחיון, פתח תקווה",
+    "summary_he": "גשר להולכי רגל באורך כ-100 מטר מעל דרך הרב מלכה בפתח תקווה, המחבר את שכונת נווה גן לפארק הגדול ובו מרפסת תצפית. שמו ניתן לזכר אירועי 7 באוקטובר והנופלים בהם, והוא נחנך בספטמבר 2025.",
+    "established": 2025,
+    "links": [
+      {
+        "label_he": "פתח תקווה NEWS: הושק גשר ה-7 באוקטובר",
+        "url": "https://www.ptnews.co.il/43788"
+      },
+      {
+        "label_he": "BE106: נחנך גשר השבעה באוקטובר",
+        "url": "https://www.be106.net/207/116308"
+      }
+    ],
+    "coord_source": "osm",
+    "coord_source_url": "https://www.openstreetmap.org/way/1364223810",
+    "verified_notes": "ptnews.co.il: bridge from Mivtza HaDekel St. (Neve Gan) over Rav Malka road to the park, 102 m, inaugurated 9 Sep 2025, named for 7 Oct. OSM footway bridge way named '7 באוקטובר'; coordinate is the way centre -> approx (bridge ~100 m long). Distinct from existing nova-bridge-petah-tikva (spans Jabotinsky, ~580 m away).",
+    "scope": "oct7",
+    "scope_note": "Named for the 7 Oct 2023 attack and its victims."
+  },
+  {
+    "id": "chen-bouchris-memorial-ashdod",
+    "name_he": "פינת הנצחה לרס\"ן חן בוכריס – \"בדרכו של חן\"",
+    "name_en": "Major Chen Bouchris Memorial, Ashdod",
+    "kind": "monument",
+    "context": "oct7",
+    "lat": 31.81709,
+    "lng": 34.64906,
+    "precision": "exact",
+    "place_he": "אשדוד",
+    "summary_he": "פסל ופינת הנצחה באשדוד לזכר רס\"ן חן בוכריס, סגן מפקד יחידת מגלן, שנפל בקרב נחל עוז ב-7 באוקטובר.",
+    "established": null,
+    "links": [
+      {
+        "label_he": "ויקינתונים",
+        "url": "https://www.wikidata.org/wiki/Q130294756"
+      },
+      {
+        "label_he": "יזכור – רס\"ן חן בוכריס",
+        "url": "https://www.izkor.gov.il/%D7%97%D7%9F%20%D7%91%D7%95%D7%9B%D7%A8%D7%99%D7%A1/en_3539680b50e217ee82d621affa0f4bbe"
+      }
+    ],
+    "coord_source": "wikidata",
+    "coord_source_url": "https://www.wikidata.org/wiki/Q130294756",
+    "verified_notes": "Wikidata Q130294756 ('Major Chen Bouchris Memorial', commemorates Q130294769, description: fell in the Nahal Oz battle 7 Oct 2023) P625 31.8170889,34.6490583 matches OSM node 12175580086 'בדרכו של חן' (31.8170924,34.6490833) within ~3 m -> exact. Not a duplicate of makom-balev-ashdod (~2.5 km away).",
+    "scope": "oct7",
+    "scope_note": "Single person who fell on 7 Oct 2023."
+  }
+]
