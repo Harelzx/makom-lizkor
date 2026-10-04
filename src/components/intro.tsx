@@ -1,5 +1,6 @@
-import { Fragment, lazy, Suspense, useCallback, useEffect, useRef, useState } from "react"
+import { Fragment, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
 import { AnimatePresence, motion } from "motion/react"
+import { Volume2, VolumeX } from "lucide-react"
 import { INTRO_SEEN, useStore } from "@/store"
 import { Button } from "@/components/ui/button"
 import { Anemone } from "@/components/anemone"
@@ -7,6 +8,18 @@ import { Atmosphere } from "@/components/atmosphere"
 import { cn } from "@/lib/utils"
 import { ease, push, rush } from "@/lib/motion"
 import { since, wintersHe, yearsHe } from "@/lib/since"
+import {
+  cue,
+  disableSound,
+  enableSound,
+  isSoundOn,
+  setBed,
+  setScoreClock,
+  soundPreference,
+  stopScore,
+  subscribeSound,
+  syncScore,
+} from "@/lib/sound"
 import type { CountTiming, MontageMode } from "@/components/montage"
 const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches
 
@@ -18,6 +31,7 @@ const Montage = lazy(() => loadMontage().then((m) => ({ default: m.Montage })))
 
 /**
  * The opening is a short film, and only one thing moves at a time.
+ * before it: the clock waits at 06:28:57 while the visitor chooses to watch with sound or without.
  * moment: the clock reaches 06:29 and the world stops. A second of stillness, then the date and what happened.
  * time: the clock steps back, still stopped, and the days count up to today while the headlines of those days pile up.
  * since, remember: the words. As the last one says we won't forget, time comes back.
@@ -36,9 +50,17 @@ const SINCE_LINES = [SINCE_LINE]
 
 const WORD_STEP = 0.055
 const WORD_TIME = 0.95
-const words = (text: string) => text.split(" ").length
-/** When a revealed line has fully arrived, counted from its first word. */
-const landed = (text: string, delay = 0) => delay + (words(text) - 1) * WORD_STEP + WORD_TIME
+
+/**
+ * From the count to the name the words are typed, as on a typewriter: a key heard for every letter, each letter coming
+ * into focus as it lands, a thin caret leading the way. The pace sets the scenes' lengths, and so the score's sections:
+ * change it and the score has to be cut again (see CLAUDE.md).
+ */
+const TYPE_RATE = 16
+/** A typed letter's own focus-in, after its key. */
+const LETTER_TIME = 0.15
+/** When a typed line is complete, counted from its first key. */
+const typed = (text: string, delay = 0) => delay + text.length / TYPE_RATE + LETTER_TIME
 /** A scene's new content waits for the last one to leave, so the eye is never split between two. */
 const ENTER = 0.5
 /** The count waits for the clock to finish stepping back. */
@@ -47,18 +69,32 @@ const COUNT_ENTER = 0.6
 /** The count starts after the clock has stepped back, and races to today in a few seconds (see montage.tsx). */
 const COUNT: CountTiming = { enter: COUNT_ENTER, delay: COUNT_ENTER + 0.3, seconds: 8.5 }
 
-const REMEMBER_SECOND = landed(REMEMBER_LINES[0], ENTER) + 0.15
+/** The second line waits a beat after the first, like a carriage return. */
+const REMEMBER_SECOND = typed(REMEMBER_LINES[0], ENTER) + 0.3
 const SINCE_DELAYS = [ENTER]
 const REMEMBER_DELAYS = [ENTER, REMEMBER_SECOND]
+/** The clock's last seconds are a little longer than real ones, so each tick lands. */
+const TICK = 1.1
+/** When the clock reaches 06:29:00 and stops, counted from the click that starts the film. */
+const FREEZE = 0.2 + 3 * TICK
 /** How long each scene holds before the next one, when nobody presses Enter. */
 const HOLD_MS = [
-  6800,
+  // after the freeze, a second of stillness, the date and what happened
+  (FREEZE + 4.5) * 1000,
   // after the count lands, a moment of stillness
   (COUNT.delay + COUNT.seconds + 1.4) * 1000,
-  (landed(SINCE_LINE, ENTER) + 1.4) * 1000,
+  (typed(SINCE_LINE, ENTER) + 1.4) * 1000,
   // the headlines begin to fall; the name comes in while their lights are still landing
-  (landed(REMEMBER_LINES[1], REMEMBER_SECOND) + 1.7) * 1000,
+  (typed(REMEMBER_LINES[1], REMEMBER_SECOND) + 1.7) * 1000,
 ]
+
+/**
+ * The score (public/sound/score.mp3) is composed in sections cut to these timings: it begins with the line of what
+ * happened, and each scene starts at a known point in it. A scene reached early (Enter) moves the music there.
+ * Change the scene timings and the score has to be composed again to match (see CLAUDE.md).
+ */
+const SCORE_START = FREEZE + 1.5
+const SCORE_AT = HOLD_MS.reduce((at, ms, i) => [...at, at[i] + ms / 1000], [-SCORE_START])
 
 const seen = () => {
   try {
@@ -109,15 +145,20 @@ function RollingDigit({ value, delay = 0 }: { value: string; delay?: number }) {
 }
 
 /**
- * 06:28:57, and the seconds run out. At 06:29:00 it stops for good and takes the color of first light.
- * It stays through the count, stepped back and dimmed, because it never moves again.
+ * 06:28:57, waiting for the visitor; then the seconds run out. At 06:29:00 it stops for good and takes the color of
+ * first light. It stays through the count, stepped back and dimmed, because it never moves again.
  */
-function Clock({ stepBack, onStop }: { stepBack: boolean; onStop: () => void }) {
+function Clock({ running, stepBack, onStop }: { running: boolean; stepBack: boolean; onStop: () => void }) {
   const [second, setSecond] = useState(57)
   useEffect(() => {
-    const ticks = [1, 2, 3].map((k) => setTimeout(() => setSecond(57 + k), 200 + k * 700))
+    if (!running) return
+    const ticks = [1, 2, 3].map((k) => setTimeout(() => setSecond(57 + k), (0.2 + k * TICK) * 1000))
     return () => ticks.forEach(clearTimeout)
-  }, [])
+  }, [running])
+  // every second that passes is heard, the last one too: then nothing
+  useEffect(() => {
+    if (second > 57) cue("tick")
+  }, [second])
   const stopped = second >= 60
   useEffect(() => {
     if (stopped) onStop()
@@ -150,6 +191,65 @@ function Clock({ stepBack, onStop }: { stepBack: boolean; onStop: () => void }) 
   )
 }
 
+/**
+ * Before time runs: with sound or without. The browser plays nothing until the visitor clicks, and the first sounds
+ * matter most (the last seconds, then the silence at 06:29), so the film waits for this one click.
+ * The last choice is the one in focus, so Enter keeps it.
+ */
+function Choice({ onChoose }: { onChoose: (sound: boolean) => void }) {
+  const withSound = useRef<HTMLButtonElement>(null)
+  const without = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    ;(soundPreference() === "off" ? without : withSound).current?.focus({ preventScroll: true })
+  }, [])
+  return (
+    <motion.div
+      role="group"
+      aria-label="איך לצפות"
+      className="pointer-events-auto absolute inset-x-0 top-1/2 mt-[2vh] flex justify-center gap-3 px-6"
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.9, duration: 0.8, ease }}
+      exit={{ opacity: 0, transition: { duration: 0.35 } }}
+    >
+      <Button
+        ref={withSound}
+        size="lg"
+        onClick={() => onChoose(true)}
+        className="pressable h-12 gap-2 rounded-full bg-white px-6 text-headline font-bold text-[var(--p-ink-900)] hover:bg-[var(--p-sun-50)]"
+      >
+        <Volume2 aria-hidden="true" className="size-5" />
+        עם צליל
+      </Button>
+      <Button
+        ref={without}
+        size="lg"
+        variant="ghost"
+        onClick={() => onChoose(false)}
+        className="pressable h-12 gap-2 rounded-full px-6 text-headline text-white/75 hover:bg-white/10 hover:text-white"
+      >
+        <VolumeX aria-hidden="true" className="size-5" />
+        בלי צליל
+      </Button>
+    </motion.div>
+  )
+}
+
+/** Sound on or off during the film, for anyone who changes their mind. */
+function SoundToggle() {
+  const on = useSyncExternalStore(subscribeSound, isSoundOn)
+  return (
+    <button
+      aria-label="צליל"
+      aria-pressed={on}
+      onClick={() => (on ? disableSound() : void enableSound())}
+      className="pressable pointer-events-auto absolute top-5 right-5 z-10 grid size-9 place-items-center rounded-full text-white/70 hover:bg-white/10 hover:text-white"
+    >
+      {on ? <Volume2 aria-hidden="true" className="size-5" /> : <VolumeX aria-hidden="true" className="size-5" />}
+    </button>
+  )
+}
+
 /** Under the stopped clock, after a second of stillness: the date, then what happened. */
 function Moment() {
   return (
@@ -162,12 +262,12 @@ function Moment() {
         className="text-title-2 font-bold text-white/85 tabular-nums"
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 3.3, duration: 1.0, ease }}
+        transition={{ delay: FREEZE + 1, duration: 1.0, ease }}
       >
         07.10.2023
       </motion.p>
       <p className="max-w-2xl text-statement text-balance">
-        <Reveal text={WHAT_HAPPENED} delay={3.9} />
+        <Reveal text={WHAT_HAPPENED} delay={FREEZE + 1.6} />
       </p>
     </motion.div>
   )
@@ -180,6 +280,70 @@ function Moment() {
 type Approach = { from: number; seconds: number; ease: readonly [number, number, number, number] }
 const SINCE_APPROACH: Approach = { from: 0.55, ...rush }
 const REMEMBER_APPROACH: Approach = { from: 0.94, ...push }
+
+/**
+ * A line typed letter by letter. Words are kept whole, so a line never breaks inside a word. The caret sits before the
+ * next letter (after the last one at a word's end), and when the line is done it blinks twice and goes. The letters are
+ * hidden from screen readers, which get the line whole.
+ */
+function Typed({ text, delay }: { text: string; delay: number }) {
+  const [n, setN] = useState(0)
+  useEffect(() => {
+    let frame = 0
+    let shown = 0
+    const from = performance.now() + delay * 1000
+    const tick = (now: number) => {
+      const due = Math.min(text.length, Math.max(0, Math.floor(((now - from) / 1000) * TYPE_RATE)))
+      if (due > shown) {
+        // one key per frame is heard, even if a slow frame brings two letters: keys piled up would be noise
+        cue(text[due - 1] === " " ? "space" : "key")
+        shown = due
+        setN(due)
+      }
+      if (shown < text.length) frame = requestAnimationFrame(tick)
+    }
+    frame = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(frame)
+  }, [text, delay])
+
+  const caretBefore = n > 0 && n < text.length && text[n] !== " " ? n : -1
+  const caretAfter = n > 0 && (n === text.length || text[n] === " ") ? n - 1 : -1
+  const caret = <span className={cn("type-caret", n === text.length && "type-caret-done")} aria-hidden="true" />
+  // each word with the index of its first letter in the line
+  const words = useMemo(
+    () =>
+      text
+        .split(" ")
+        .reduce<{ word: string; start: number }[]>(
+          (all, word, w) => [...all, { word, start: w ? all[w - 1].start + all[w - 1].word.length + 1 : 0 }],
+          [],
+        ),
+    [text],
+  )
+  return (
+    <>
+      <span className="sr-only">{text}</span>
+      <span aria-hidden="true">
+        {words.map(({ word, start }, w) => {
+          return (
+            <Fragment key={w}>
+              <span className="whitespace-nowrap">
+                {[...word].map((ch, k) => (
+                  <Fragment key={k}>
+                    {caretBefore === start + k && caret}
+                    <span className={cn("type-letter", start + k < n && "type-on")}>{ch}</span>
+                    {caretAfter === start + k && caret}
+                  </Fragment>
+                ))}
+              </span>
+              {w < words.length - 1 && " "}
+            </Fragment>
+          )
+        })}
+      </span>
+    </>
+  )
+}
 
 /** A scene of words: sentences one after another, each on its own row, coming toward the camera as it moves in. */
 function Lines({
@@ -196,13 +360,14 @@ function Lines({
   useEffect(() => {
     if (!onLanded) return
     const last = sentences.length - 1
-    const t = setTimeout(onLanded, landed(sentences[last], delays[last]) * 1000)
+    const t = setTimeout(onLanded, typed(sentences[last], delays[last]) * 1000)
     return () => clearTimeout(t)
   }, [sentences, delays, onLanded])
   return (
     <motion.p
-      // no will-change: a promoted layer keeps the text rasterized at its starting size, and it would end blurred
-      className="pointer-events-none col-start-1 row-start-1 max-w-2xl text-statement text-balance"
+      // no will-change: a promoted layer keeps the text rasterized at its starting size, and it would end blurred.
+      // Above the montage on purpose: its dark pool is a positioned layer, and in-flow text would sit under it, dimmed.
+      className="pointer-events-none relative z-10 col-start-1 row-start-1 max-w-2xl text-statement text-balance"
       initial={{ scale: approach.from }}
       animate={{ scale: 1 }}
       transition={{ duration: approach.seconds, ease: approach.ease }}
@@ -210,7 +375,7 @@ function Lines({
     >
       {sentences.map((s, i) => (
         <span key={i} className={i > 0 ? "mt-4 block" : "block"}>
-          <Reveal text={s} delay={delays[i]} />
+          <Typed text={s} delay={delays[i]} />
         </span>
       ))}
     </motion.p>
@@ -239,13 +404,20 @@ function Name({
   useEffect(() => {
     if (quick) return
     const t = setTimeout(() => setOpen(true), 700)
-    return () => clearTimeout(t)
+    // The light is heard passing over the name. The shine starts 1.1 s in and, on its easing (index.css, .title-shine),
+    // the band enters the letters at 0.53 s, is mid-way at 0.70 s and leaves at 0.93 s, right to left. The whoosh flies
+    // right to left too and is mid-way 0.6 s into itself, so it starts at 1.1 + 0.70 - 0.6 = 1.2 s.
+    const light = setTimeout(() => cue("sweep"), 1200)
+    return () => {
+      clearTimeout(t)
+      clearTimeout(light)
+    }
   }, [quick])
   // the beats after the light has crossed the name
   const after = (k: number) => (quick ? 0.15 + k * 0.15 : 2.9 + k * 0.4)
   return (
     <motion.div
-      className="pointer-events-auto col-start-1 row-start-1 flex flex-col items-center gap-5"
+      className="pointer-events-auto relative z-10 col-start-1 row-start-1 flex flex-col items-center gap-5"
       exit={{ opacity: 0, y: -10, transition: { duration: 0.9 } }}
     >
       <motion.div
@@ -334,6 +506,16 @@ export function Intro() {
   // Returning visitors, and anyone who asked for less motion, go straight to the name.
   const [quick] = useState(() => reducedMotion() || seen())
   const [stage, setStage] = useState(quick ? NAME : MOMENT)
+  // the film runs once the visitor has chosen how to watch it
+  const [started, setStarted] = useState(quick)
+  const choosing = useRef(false)
+  const choose = async (sound: boolean) => {
+    if (choosing.current) return
+    choosing.current = true
+    if (sound) await enableSound()
+    else disableSound()
+    setStarted(true)
+  }
   // Time stops at 06:29 and comes back with "we won't forget", or with the name for anyone who skipped ahead.
   const [stopped, setStopped] = useState(false)
   const [resumed, setResumed] = useState(false)
@@ -343,6 +525,23 @@ export function Intro() {
   const stop = useCallback(() => setStopped(true), [])
   const resume = useCallback(() => setResumed(true), [])
   const montage: MontageMode = stage === TIME ? "count" : back ? "fall" : "float"
+
+  // The real sound follows time: night air until 06:29, cut dead when the clock stops, birds when time comes back.
+  useEffect(() => {
+    if (!started) return
+    if (held) setBed(null, 0.03)
+    else setBed(back ? "dawn" : "night", back ? 3 : 1.5)
+  }, [started, held, back])
+
+  // The score follows the scenes: each scene knows where in the music it begins, so the music is wherever the film is,
+  // even when someone moves ahead with Enter or turns sound on midway.
+  const scene = useRef({ stage, since: 0 })
+  useEffect(() => {
+    if (!started) return
+    scene.current = { stage, since: performance.now() }
+    setScoreClock(() => SCORE_AT[scene.current.stage] + (performance.now() - scene.current.since) / 1000)
+    syncScore()
+  }, [stage, started])
 
   // the headlines and their photos are fetched while the clock ticks, ready for the count
   useEffect(() => {
@@ -373,6 +572,13 @@ export function Intro() {
       /* private mode */
     }
     const { flyToEnvelope, setLabels, setTimeHeld, shiftLight, stopOrbit } = await import("@/map/controller")
+    // the morning is heard coming, then the day is quiet; the score plays on into the sunrise only from the name,
+    // where it has reached its dawn, and leaves with anyone who skips the film
+    setBed("dawn", 1.5)
+    if (stage < NAME) {
+      setScoreClock(null)
+      stopScore(1.5)
+    }
     setTimeHeld(false)
     stopOrbit()
     setPhase("dawn")
@@ -380,6 +586,8 @@ export function Intro() {
     setTimeout(() => setLabels(true), reducedMotion() ? 0 : 2600)
     await shiftLight("morning", reducedMotion() ? 0 : 5200)
     setPhase("day")
+    setBed(null, 14)
+    stopScore(8)
   }
 
   useEffect(() => {
@@ -388,14 +596,17 @@ export function Intro() {
       cta.current?.focus({ preventScroll: true })
       return
     }
+    if (!started) return
     const t = setTimeout(() => setStage((s) => s + 1), HOLD_MS[stage])
     return () => clearTimeout(t)
-  }, [stage, phase])
+  }, [stage, phase, started])
 
   useEffect(() => {
     if (phase !== "intro") return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") void toMorning()
+      // before the film starts, Enter belongs to the choice in focus
+      if (!started) return
       if (e.key === "Enter" || (e.key === " " && document.activeElement === document.body)) {
         e.preventDefault()
         if (stage < NAME) setStage((x) => x + 1)
@@ -450,10 +661,11 @@ export function Intro() {
             />
           )}
 
+          {inIntro && started && <SoundToggle />}
           {inIntro && (
             <button
               onClick={toMorning}
-              className="pressable pointer-events-auto absolute top-5 left-5 rounded-full px-3 py-1.5 text-label text-white/70 hover:bg-white/10 hover:text-white"
+              className="pressable pointer-events-auto absolute top-5 left-5 z-10 rounded-full px-3 py-1.5 text-label text-white/70 hover:bg-white/10 hover:text-white"
             >
               דילוג
             </button>
@@ -481,8 +693,9 @@ export function Intro() {
               </Suspense>
             )}
             <AnimatePresence>
-              {inIntro && stage <= TIME && <Clock key="clock" stepBack={stage === TIME} onStop={stop} />}
-              {inIntro && stage === MOMENT && <Moment key="moment" />}
+              {inIntro && stage <= TIME && <Clock key="clock" running={started} stepBack={stage === TIME} onStop={stop} />}
+              {inIntro && !started && <Choice key="choice" onChoose={choose} />}
+              {inIntro && started && stage === MOMENT && <Moment key="moment" />}
               {inIntro && stage === SINCE && <Lines key="since" sentences={SINCE_LINES} delays={SINCE_DELAYS} approach={SINCE_APPROACH} />}
               {inIntro && stage === REMEMBER && (
                 <Lines key="remember" sentences={REMEMBER_LINES} delays={REMEMBER_DELAYS} approach={REMEMBER_APPROACH} onLanded={resume} />

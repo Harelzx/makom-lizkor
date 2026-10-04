@@ -1,16 +1,19 @@
-import { expect, test } from "@playwright/test"
+import { expect, test, type Page } from "@playwright/test"
 
 // The time since that morning is computed from today's date in Israel, never written by hand.
 // The browser runs on New York time on purpose: a visitor abroad must see the same count.
 test.use({ timezoneId: "America/New_York" })
 
 const panelLine = (years: string, days: string) => `${years} · ${days} ימים · לא נשכח`
+/** A typed line: whole for screen readers and letter by letter on screen, so it is found by the paragraph that holds it. */
+const typedLine = (page: Page, text: string) => page.locator("p", { hasText: text })
 
 test("the opening stops at 06:29, counts the days to today, and says how long it has been", async ({ page }) => {
   // plays the whole opening and the sunrise
   test.slow()
   await page.clock.setFixedTime(new Date("2026-10-04T10:00:00+03:00"))
   await page.goto("/")
+  await page.getByRole("button", { name: "בלי צליל" }).click()
 
   // the clock runs out its last seconds and stops, and the world stops with it
   // (by design that takes a few seconds after the page loads, more on a busy machine)
@@ -23,9 +26,13 @@ test("the opening stops at 06:29, counts the days to today, and says how long it
   await expect(page.getByText("1,093 ימים")).toBeVisible({ timeout: 15_000 })
 
   await page.keyboard.press("Enter")
-  await expect(page.getByText("מאז עברו שלוש שנים, והבוקר ההוא עדיין לא נגמר.")).toBeVisible()
+  await expect(typedLine(page, "מאז עברו שלוש שנים, והבוקר ההוא עדיין לא נגמר.")).toBeVisible()
+  // the words are typed, letter by letter: not there at once, and all there a few seconds later
+  const untyped = page.locator(".type-letter:not(.type-on)")
+  await expect(untyped.first()).toBeAttached()
+  await expect(untyped).toHaveCount(0, { timeout: 8_000 })
   await page.keyboard.press("Enter")
-  await expect(page.getByText("ולא נשכח, גם כשהזמן עובר.")).toBeVisible()
+  await expect(typedLine(page, "ולא נשכח, גם כשהזמן עובר.")).toBeVisible()
   // time comes back once the words say we won't forget
   await expect(page.locator(".atmo-frozen")).toHaveCount(0, { timeout: 8_000 })
   await page.keyboard.press("Enter")

@@ -310,12 +310,24 @@
   .cascade > :not([data-no-cascade]) {
     animation: cascade-in 380ms var(--ease-out-soft) both;
   }
-  .cascade > :nth-child(2) { animation-delay: 35ms; }
-  .cascade > :nth-child(3) { animation-delay: 70ms; }
-  .cascade > :nth-child(4) { animation-delay: 105ms; }
-  .cascade > :nth-child(5) { animation-delay: 140ms; }
-  .cascade > :nth-child(6) { animation-delay: 175ms; }
-  .cascade > :nth-child(n + 7) { animation-delay: 210ms; }
+  .cascade > :nth-child(2) {
+    animation-delay: 35ms;
+  }
+  .cascade > :nth-child(3) {
+    animation-delay: 70ms;
+  }
+  .cascade > :nth-child(4) {
+    animation-delay: 105ms;
+  }
+  .cascade > :nth-child(5) {
+    animation-delay: 140ms;
+  }
+  .cascade > :nth-child(6) {
+    animation-delay: 175ms;
+  }
+  .cascade > :nth-child(n + 7) {
+    animation-delay: 210ms;
+  }
   /* A pin that lands rather than appears. */
   .pin-drop {
     animation: pin-drop 520ms var(--ease-spring) both;
@@ -441,7 +453,9 @@
   box-shadow: var(--shadow-chip);
   opacity: 0;
   translate: 0 -4px;
-  transition: opacity 0.2s, translate 0.25s var(--ease-out-soft);
+  transition:
+    opacity 0.2s,
+    translate 0.25s var(--ease-out-soft);
   pointer-events: none;
 }
 .mk-thumb {
@@ -689,6 +703,53 @@
     title-shine 1.9s cubic-bezier(0.45, 0, 0.2, 1) both,
     title-shine-out 0.8s ease-out 1.7s both;
 }
+/* The words from the count to the name are typed: each letter comes into focus as its key lands, and the caret that
+   led the typing blinks twice at the end of the line and goes. */
+.type-letter {
+  display: inline-block;
+  opacity: 0;
+  filter: blur(5px);
+  transform: translateY(0.12em);
+  transition:
+    opacity 0.12s ease-out,
+    filter 0.18s ease-out,
+    transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.type-letter.type-on {
+  opacity: 1;
+  filter: none;
+  transform: none;
+}
+.type-caret {
+  display: inline-block;
+  width: 0.08em;
+  height: 0.95em;
+  margin-inline: 0.03em;
+  vertical-align: -0.12em;
+  background: var(--dawn);
+  border-radius: 1px;
+}
+.type-caret-done {
+  animation: type-caret-out 1.2s steps(1) forwards;
+}
+@keyframes type-caret-out {
+  25% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  75%,
+  100% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .type-letter {
+    transition: none;
+  }
+}
+
 @keyframes title-sweep {
   from {
     mask-position: 0% 0;

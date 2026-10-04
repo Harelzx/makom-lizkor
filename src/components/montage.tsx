@@ -1,10 +1,11 @@
-import { memo, useEffect, useMemo, useState } from "react"
+import { memo, useEffect, useMemo, useRef, useState } from "react"
 import { animate, AnimatePresence, motion, useMotionValue, useMotionValueEvent, useTransform } from "motion/react"
 import { HEADLINES, type Headline } from "@/data/headlines"
 import { useStore } from "@/store"
 import { dayOf } from "@/lib/since"
 import { cn } from "@/lib/utils"
 import { ease, rush } from "@/lib/motion"
+import { cue } from "@/lib/sound"
 
 /**
  * The opening's count, told in headlines. While the days run, every day that changed something brings a clipping up
@@ -157,6 +158,18 @@ export function Montage({ mode, days, count }: { mode: MontageMode; days: number
     const c = animate(value, days, { delay: count.delay, duration: count.seconds, ease: RACE })
     return () => c.stop()
   }, [mode, days, count, value])
+
+  // Each clipping is heard as it rises, a breath of paper; in the race to today they gather into a rustle.
+  useEffect(() => {
+    if (landed && mode === "count") cue("rise")
+  }, [landed, mode])
+  // The rush toward the words is heard once, as the camera goes through the pile.
+  const was = useRef(mode)
+  useEffect(() => {
+    // pages flutter past as the camera goes through the pile, fullest about 0.9 s in, as the clippings sweep by
+    if (was.current === "count" && mode === "float") cue("rush")
+    was.current = mode
+  }, [mode])
 
   // The camera: creeping in through the count, rushing in toward the words, and still from the moment the fall begins,
   // so the fall can aim at where the sites are. Each layer's zoom is a motion value, read when the fall is aimed.

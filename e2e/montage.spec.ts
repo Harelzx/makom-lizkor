@@ -8,7 +8,7 @@ test("a headline from after the day of the visit stays out of the count", async 
   test.slow()
   await page.clock.setFixedTime(new Date("2026-01-01T10:00:00+02:00"))
   await page.goto("/")
-  await page.locator("time").waitFor()
+  await page.getByRole("button", { name: "בלי צליל" }).click()
   await page.keyboard.press("Enter")
   await expect(page.getByText("כל עשרים החטופים החיים בבית")).toBeVisible({ timeout: 15_000 })
   await expect(page.getByText("817 ימים")).toBeVisible({ timeout: 5_000 })
@@ -40,7 +40,7 @@ const longPerSecond = (f: number[]) => f.filter((x) => x > 50).length / (f.reduc
 test("the pile of headlines keeps the frame rate of the quiet opening, on a CPU four times slower", async ({ page }) => {
   test.slow()
   await page.goto("/")
-  await page.locator("time").waitFor()
+  await page.getByRole("button", { name: "בלי צליל" }).click()
   await page.waitForTimeout(2500)
   const cdp = await page.context().newCDPSession(page)
   await cdp.send("Emulation.setCPUThrottlingRate", { rate: 4 })
