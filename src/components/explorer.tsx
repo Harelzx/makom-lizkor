@@ -66,7 +66,10 @@ export function Explorer() {
           exit={{ opacity: 0, x: 32, transition: { duration: 0.18 } }}
           transition={{ duration: 0.32, ease }}
         >
+          {/* A tab opens when chosen (Enter, Space, a click), not when the focus merely passes over it: VoiceOver moves
+              the focus as it reads, and with tabs that open on focus a screen reader always landed on the last one. */}
           <Tabs
+            activationMode="manual"
             value={tab}
             onValueChange={(v) => {
               setDir(order(v as Tab) >= order(tab) ? 1 : -1)
