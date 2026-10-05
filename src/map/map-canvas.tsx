@@ -20,12 +20,13 @@ export function MapCanvas() {
 
   const seed = useStore((s) => s.seed)
   const local = useStore((s) => s.local)
+  const remote = useStore((s) => s.remote)
   const phase = useStore((s) => s.phase)
   const light = useStore((s) => s.light)
   const selectedId = useStore((s) => s.selectedId)
   const picking = useStore((s) => s.picking)
   const draft = useStore((s) => s.draft)
-  const places = useMemo(() => allPlaces({ seed, local }), [seed, local])
+  const places = useMemo(() => allPlaces({ seed, remote, local }), [seed, remote, local])
 
   // Create the map once, at 06:29.
   useEffect(() => {
@@ -73,10 +74,15 @@ export function MapCanvas() {
     if (phase === "day" && ready) void shiftLight(light, 1800)
   }, [light, phase, ready])
 
-  // Camera follows the selection.
+  // Camera follows the selection: once when it changes, or when the chosen place first arrives (a shared link to
+  // an approved place can open before the feed does). A later feed update leaves the camera where the visitor put it.
+  const flownTo = useRef<string | null>(null)
   useEffect(() => {
     const p = places.find((x) => x.id === selectedId)
-    if (!p || useStore.getState().tab === "journey") return
+    if (!p) return void (flownTo.current = null)
+    if (flownTo.current === p.id) return
+    flownTo.current = p.id
+    if (useStore.getState().tab === "journey") return
     flyToPlace(p.lng, p.lat, { zoom: p.kind === "community" ? 13.6 : p.precision === "exact" ? 16 : 14 })
   }, [selectedId, places])
 

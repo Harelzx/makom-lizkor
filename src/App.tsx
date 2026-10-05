@@ -24,8 +24,9 @@ function useHashRoute() {
       const s = useStore.getState()
       if (route === "place" && id) {
         const pid = decodeURIComponent(id)
-        // A link to a place that isn't here (a typo, an old link) opens the overview instead. Local places load later, so they're trusted.
-        if (pid.startsWith("local-") || s.seed.some((p) => p.id === pid)) s.select(pid)
+        // A link to a place that isn't here (a typo, an old link) opens the overview instead. Local places and approved
+        // contributions (p_…) load later, so they're trusted.
+        if (pid.startsWith("local-") || pid.startsWith("p_") || s.seed.some((p) => p.id === pid)) s.select(pid)
         else {
           history.replaceState(null, "", "#/")
           void import("@/map/controller").then((m) => m.flyToEnvelope(2400))
@@ -43,6 +44,17 @@ function useHashRoute() {
     window.addEventListener("hashchange", onHash)
     return () => window.removeEventListener("hashchange", onHash)
   }, [phase])
+  // A contribution's link is trusted until the feed has come; if the feed doesn't have it (a typo, a rejected or hidden
+  // place), the link falls back to the overview, as any unknown link does.
+  const feedVersion = useStore((s) => s.feedVersion)
+  useEffect(() => {
+    const s = useStore.getState()
+    const id = s.selectedId
+    if (!feedVersion || !id?.startsWith("p_") || s.remote.some((p) => p.id === id)) return
+    history.replaceState(null, "", "#/")
+    s.select(null)
+    void import("@/map/controller").then((m) => m.flyToEnvelope(2400))
+  }, [feedVersion])
   useEffect(() => {
     if (phase !== "day") return
     const next = selectedId ? `#/place/${encodeURIComponent(selectedId)}` : "#/"
@@ -91,6 +103,21 @@ export default function App() {
     const t = setTimeout(() => void import("@/components/shell"), 2500)
     return () => clearTimeout(t)
   }, [])
+
+  // Approved contributions come from the server once the day has begun. The sync loads on its own, so the opening's
+  // bundle stays free of network code, and a server that is down changes nothing the visitor sees.
+  useEffect(() => {
+    if (phase !== "day") return
+    let stop: (() => void) | undefined
+    let cancelled = false
+    void import("@/lib/feed").then((m) => {
+      if (!cancelled) stop = m.startFeedSync()
+    })
+    return () => {
+      cancelled = true
+      stop?.()
+    }
+  }, [phase])
 
   // The interface wears the night palette during the opening and whenever night is chosen.
   useEffect(() => {

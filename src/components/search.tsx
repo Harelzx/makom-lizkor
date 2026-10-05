@@ -18,8 +18,9 @@ export function Search() {
   const setOpen = useStore((s) => s.setSearchOpen)
   const seed = useStore((s) => s.seed)
   const local = useStore((s) => s.local)
+  const remote = useStore((s) => s.remote)
   const light = useStore((s) => s.light)
-  const places = useMemo(() => allPlaces({ seed, local }), [seed, local])
+  const places = useMemo(() => allPlaces({ seed, remote, local }), [seed, remote, local])
   const communities = places.filter((p) => p.kind === "community")
   const sites = places.filter((p) => p.kind !== "community")
 

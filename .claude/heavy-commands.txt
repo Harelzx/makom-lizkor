@@ -7,3 +7,4 @@
 ^(npx\s+)?vite\s+build(\s|$)
 ^node\s+\S*render-film\.mjs(\s|$)
 ^(npx\s+)?remotion\s+render(\s|$)
+^(npx\s+)?vitest(\s|$)|^npm\s+(run\s+)?test(\s|$)

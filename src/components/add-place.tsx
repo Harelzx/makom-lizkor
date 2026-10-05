@@ -13,17 +13,20 @@ import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert"
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "@/components/ui/input-group"
 import { Anemone } from "@/components/anemone"
 import { ADDABLE_KINDS, KINDS } from "@/data/taxonomy"
-import { CONSENT_TEXT, FAMILY_CONSENT_TEXT, fillLegal, LEGAL_SECTIONS, PHOTO_RIGHTS_TEXT } from "@/data/legal"
+import { CONSENT_TEXT, FAMILY_CONSENT_TEXT, noticeHtml, PHOTO_RIGHTS_TEXT } from "@/data/legal"
+import { submitPlace } from "@/lib/api"
 import { downloadJSON, resizeImage } from "@/lib/storage"
 import { getMap, reducedMotion } from "@/map/controller"
 import { useStore } from "@/store"
 import { ease, spring } from "@/lib/motion"
 import { cn } from "@/lib/utils"
+import { CURRENT_SUBMISSION_NOTICE, type SubmissionInput } from "@/shared/contract"
 import type { Kind, Place } from "@/types"
 
 type Step = 0 | 1 | 2
 
-const PRIVACY_HTML = LEGAL_SECTIONS.find((s) => s.id === "privacy")!.html
+// The form sends the place for review, so it shows the notice for submissions: the same version each submission records.
+const NOTICE_HTML = noticeHtml(CURRENT_SUBMISSION_NOTICE)
 
 /** People type "www.site.co.il" or paste a full address; either way we store a working https link. */
 const stripScheme = (v: string) =>
@@ -37,7 +40,7 @@ const TITLES = ["איפה המקום?", "מה יש שם?", "לפני שמוסי�
 const DESCRIPTIONS = [
   "ספסל, מצפור, עץ או פינה קטנה. כל מקום שהוקם לזכר מי שנרצחו או נפלו ב־7 באוקטובר מקבל כאן כלנית.",
   "כמה פרטים, כפי שהמשפחה רוצה שיופיעו.",
-  "בגרסה הזו המקום נשמר רק במכשיר שלכם.",
+  "ההצעה תישלח לבדיקה ותופיע לכולם אחרי אישור. עד אז היא מוצגת רק אצלכם.",
 ]
 /** The flower opens as the form moves on: a bud, then one anemone, then a bouquet. */
 const ART = ["/art/bud.webp", "/art/anemone-watercolor.webp", "/art/bouquet.webp"]
@@ -98,6 +101,11 @@ export function AddPlace() {
   const [consent, setConsent] = useState(false)
   const [error, setError] = useState("")
   const [saved, setSaved] = useState(false)
+  // Places that never reached the server (it was down); only these still need the export.
+  const unsent = local.filter((p) => !p.local?.remoteId).length
+  // Set the moment saving starts, before the send: a second tap or Enter while the server answers must not send it again.
+  const sending = useRef(false)
+  const [busy, setBusy] = useState(false)
   const uid = useId()
   const titleRef = useRef<HTMLHeadingElement>(null)
   // stable, so the bar takes the focus once when it appears and not on every render after
@@ -184,7 +192,9 @@ export function AddPlace() {
   const save = async () => {
     if (!draft) return setStep(0)
     if (!family || !consent) return fail("כדי לשמור צריך לסמן את שתי ההצהרות.")
-    if (saved) return
+    if (saved || sending.current) return
+    sending.current = true
+    setBusy(true)
     const now = new Date().toISOString()
     const place: Place = {
       id: `local-${Date.now().toString(36)}`,
@@ -209,6 +219,25 @@ export function AddPlace() {
         photoCredit: photo ? photoCredit.trim() || undefined : undefined,
       },
     }
+    // Sent for review first; the local copy is kept either way, and steps aside once the approved place reaches the feed.
+    // The photo stays on this device until uploads arrive (phase 2).
+    const sent = await submitPlace({
+      kind: kind as SubmissionInput["kind"],
+      name_he: place.name_he,
+      lat: place.lat,
+      lng: place.lng,
+      place_he: placeHe.trim() || undefined,
+      in_memory_of: inMemoryOf.trim() || undefined,
+      story_he: story.trim() || undefined,
+      link_url: link ? `https://${link}` : undefined,
+      submitter_name: submitter.trim() || undefined,
+      on_private_property: false,
+      consent_version: CURRENT_SUBMISSION_NOTICE,
+    })
+    if (sent && place.local) {
+      place.local.remoteId = sent.id
+      place.local.trackingToken = sent.trackingToken
+    }
     await addLocal(place)
     // The button confirms first; then the dialog steps aside and the map flies to the new flower.
     setSaved(true)
@@ -221,11 +250,16 @@ export function AddPlace() {
         setTimeout(() => {
           reset()
           setSaved(false)
+          setBusy(false)
+          sending.current = false
         }, 300)
         useStore.getState().setTab("places")
         select(place.id)
         useStore.getState().celebrate()
-        toast("הכלנית במקומה", { description: "המקום נשמר במכשיר הזה. אפשר לייצא אותו ולשלוח לנו מחלון ההוספה.", duration: 6000 })
+        toast("הכלנית במקומה", {
+          description: sent ? "ההצעה נשלחה לבדיקה. היא תופיע לכולם אחרי אישור." : "לא הצלחנו לשלוח כרגע. המקום נשמר במכשיר הזה.",
+          duration: 6000,
+        })
       },
       reducedMotion() ? 0 : 650,
     )
@@ -416,7 +450,9 @@ export function AddPlace() {
                           <p className="text-caption text-ink-2">
                             {local.length === 0
                               ? "עוד לא הוספתם מקומות מהמכשיר הזה."
-                              : `${local.length === 1 ? "מקום אחד" : `${local.length} מקומות`} שמור במכשיר. ייצאו לקובץ ושלחו לנו כדי שיופיעו אצל כולם.`}
+                              : unsent === 0
+                                ? `${local.length === 1 ? "המקום שהוספתם נשלח" : `כל ${local.length} המקומות שהוספתם נשלחו`} לבדיקה. עותק נשמר גם במכשיר.`
+                                : `${unsent === 1 ? "מקום אחד לא נשלח" : `${unsent} מקומות לא נשלחו`} ונשמר במכשיר בלבד. ייצאו לקובץ ושלחו לנו כדי שיופיעו אצל כולם.`}
                           </p>
                           <div className="flex gap-2">
                             <Button
@@ -646,7 +682,7 @@ export function AddPlace() {
                           <summary className="pressable cursor-pointer text-label text-ink-1 marker:text-ink-3">הודעת הפרטיות</summary>
                           <div
                             className="mt-2 flex flex-col gap-2 [&_a]:text-ink-1 [&_a]:underline [&_a]:underline-offset-2"
-                            dangerouslySetInnerHTML={{ __html: fillLegal(PRIVACY_HTML) }}
+                            dangerouslySetInnerHTML={{ __html: NOTICE_HTML }}
                           />
                         </details>
                         <Field orientation="horizontal">
@@ -697,7 +733,8 @@ export function AddPlace() {
                     variant="brand"
                     className="relative overflow-hidden rounded-full px-6"
                     disabled={!family || !consent}
-                    aria-disabled={saved}
+                    aria-disabled={saved || busy}
+                    aria-busy={busy && !saved}
                     onClick={save}
                   >
                     <motion.span

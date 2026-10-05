@@ -27,7 +27,8 @@ export function Explorer() {
   const setQuery = useStore((s) => s.setQuery)
   const seed = useStore((s) => s.seed)
   const local = useStore((s) => s.local)
-  const selected = selectedId ? allPlaces({ seed, local }).find((p) => p.id === selectedId) : null
+  const remote = useStore((s) => s.remote)
+  const selected = selectedId ? allPlaces({ seed, remote, local }).find((p) => p.id === selectedId) : null
   const showDetail = selected && tab !== "journey"
   // which way the new tab's content arrives: from the side of the tab that was chosen
   const [dir, setDir] = useState(1)

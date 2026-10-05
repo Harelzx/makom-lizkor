@@ -36,11 +36,13 @@ export interface Place {
   summary_he: string
   established?: number | null
   links: Link[]
-  coord_source: "osm" | "wikidata" | "manual" | "community"
+  coord_source: "osm" | "wikidata" | "manual" | "community" | "contribution"
   coord_source_url?: string
   /** Which area the place belongs to, for grouping: the Gaza envelope or elsewhere in Israel. */
   region: "envelope" | "country"
   photos?: Photo[]
+  /** Whom a contributed place remembers, as the family wrote it. */
+  inMemoryOf?: string
   /** Only on attacked communities. */
   revival?: Revival
   /** Only on places a visitor added on this device. */
@@ -56,4 +58,8 @@ export interface LocalFields {
   photo?: string
   photoAlt?: string
   photoCredit?: string
+  /** The id the server gave this place when it was sent for review; once approved, the feed carries it. */
+  remoteId?: string
+  /** The private capability to follow the submission's status; only its hash is on the server. */
+  trackingToken?: string
 }

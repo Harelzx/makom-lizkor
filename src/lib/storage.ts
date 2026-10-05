@@ -1,7 +1,8 @@
 import { createStore, get, set } from "idb-keyval"
 import type { Place } from "@/types"
 
-// Everything a visitor adds stays in this browser's IndexedDB. Nothing is sent anywhere.
+// The visitor's own copy of what they added, and their anemones, in this browser's IndexedDB. A place is also sent
+// for review (src/lib/api.ts); its photo and the anemones stay here.
 const store = createStore("makom-lizkor-v2", "v1")
 
 export async function loadLocal(): Promise<Place[]> {
