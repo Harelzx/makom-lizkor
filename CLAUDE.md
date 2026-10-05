@@ -12,6 +12,7 @@ This directory (`web/`) is v2, the current site, and the git repository. It's th
 
 - `../app/`: v1, a frozen archive that covers memorials across all of Israel's wars. Don't change it.
 - `../launch/`: launch assets (LinkedIn post, cover, demo video, stills) and ad-hoc Playwright capture/perf scripts in `../launch/tools/`, which has its own `package.json`. These scripts aren't part of the test suite.
+  - `../launch/tools/render-film.mjs` renders the opening as a film frame by frame (needs the dev server): Playwright's clock moves the page one frame at a time, CSS and motion's animations are held to that clock, randomness is seeded, and the sound is the site's own engine rendered offline, so the film is exact however slow the capture. A screen recording drops frames and lags; use this for any film that will be posted. `--from` renders one scene quickly; `--date` sets the day counted to.
 - `../docs/`: written in Hebrew. `../docs/design-system.md` is the source of truth for design and motion rules, and `../docs/data-notes.md` records the data scope decisions.
 - `../.claude/launch.json`: the preview server entries (`makom-lizkor-v2` runs this app on :5190).
 
