@@ -1,4 +1,4 @@
-import type { SubmissionInput } from "@/shared/contract"
+import type { Feed, PublicPlace, SubmissionInput } from "@/shared/contract"
 import { newToken, placeId, sameHash, sha256Hex, ulid } from "../lib/ids"
 
 // An approximation of a month; phase 5 replaces it with calendar months read from RETENTION (src/config.ts).
@@ -108,4 +108,29 @@ export async function transition(
       .bind(t.placeId, tid, `a_${ulid(now.getTime())}`, at, t.actor, t.action),
   ])
   return placeUpdate.meta.changes === 1 ? "ok" : "conflict"
+}
+
+/** One batch, so the version and the places come from the same moment. Only public fields leave the database. */
+export async function readFeed(db: D1Database, epoch: string): Promise<Feed> {
+  const [state, rows] = await db.batch([
+    db.prepare("SELECT n FROM feed_state WHERE id = 1"),
+    db.prepare(
+      `SELECT p.id, r.kind, r.name_he, r.lat, r.lng, r.location_precision, r.place_he, r.story_he, r.in_memory_of, r.link_url
+       FROM places p JOIN revisions r ON r.id = p.published_revision_id WHERE p.status = 'published'`,
+    ),
+  ])
+  const n = (state.results[0] as { n: number }).n
+  const places = (rows.results as Record<string, string | number | null>[]).map((r): PublicPlace => ({
+    id: r.id as string,
+    kind: r.kind as PublicPlace["kind"],
+    name_he: r.name_he as string,
+    lat: r.lat as number,
+    lng: r.lng as number,
+    precision: r.location_precision === "approximate" ? "approx" : "exact",
+    place_he: (r.place_he as string | null) ?? "",
+    summary_he: (r.story_he as string | null) ?? "",
+    in_memory_of: (r.in_memory_of as string | null) ?? undefined,
+    link_url: (r.link_url as string | null) ?? undefined,
+  }))
+  return { v: `${epoch}.${n}`, places }
 }
