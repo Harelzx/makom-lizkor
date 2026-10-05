@@ -766,12 +766,14 @@
     mask-position: 100% 0;
   }
 }
+/* The band starts and ends wholly off the letters (at 0% its trailing edge lay over the «מ», which showed half-lit
+   through the delay), and crosses them on the same beat: -8% and 108% are symmetric around the middle. */
 @keyframes title-shine {
   from {
-    background-position: 0% 0;
+    background-position: -8% 0;
   }
   to {
-    background-position: 100% 0;
+    background-position: 108% 0;
   }
 }
 @keyframes title-shine-out {
