@@ -47,3 +47,14 @@ export const ACCESS_RESPONSE_DAYS = 30
 
 export const CONTACT_EMAIL = OPERATOR.email
 export const LAST_UPDATED = "2026-10-05"
+
+/**
+ * What the notices already promise but the code doesn't do yet. Publishing with any of these would be publishing a
+ * false statement, so `npm run release:check` fails while the list isn't empty. Remove an entry only in the commit
+ * that implements it, with its test.
+ */
+export const PENDING_PROMISES: string[] = [
+  "a returned submission not corrected within 30 days is erased (phase 5)",
+  "anemone count rows are deleted after RETENTION.tributeDays (phase 5)",
+  "a photo file whose deletion failed on withdrawal or rejection is swept from storage (phase 5)",
+]
