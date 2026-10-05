@@ -2,7 +2,7 @@
 import { env } from "cloudflare:workers"
 import { describe, expect, it } from "vitest"
 import { CURRENT_SUBMISSION_NOTICE } from "@/shared/contract"
-import { sweepPhotos } from "../db/places"
+import { revise as reviseDirect, sweepPhotos } from "../db/places"
 import { call } from "./app"
 import { decide, feed, jpeg, objects, queued, rev, revise, send, upload } from "./submission-helpers"
 
@@ -126,6 +126,16 @@ describe("phase 2 close-out", () => {
     expect((await call(`http://local${(published.photo as { url: string }).url}`)).status).toBe(200)
   })
 
+  it("two approvals of the same photo at once: the loser's cleanup never deletes the winner's published photo", async () => {
+    const { id, trackingToken } = await send("ספסל דמו שני אישורים")
+    await upload(id, trackingToken)
+    const item = await queued(id)
+    const both = await Promise.all([decide(id, item, "approve"), decide(id, item, "approve")])
+    expect(both.map((r) => r.status).sort()).toEqual([200, 409])
+    const url = ((await feed()).find((p) => p.id === id)!.photo as { url: string }).url
+    expect((await call(`http://local${url}`)).status).toBe(200)
+  })
+
   it("the sweep leaves a copy younger than an hour alone: an approval may be about to record it", async () => {
     const { id } = await send("ספסל דמו העתק טרי")
     await env.MEDIA.put(`public/${id}/r_fresh.jpg`, jpeg())
@@ -182,6 +192,57 @@ describe("the review queue's capacity", () => {
     )
     expect(res.status).toBe(503)
     expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM revisions WHERE place_id = ? AND state = 'pending'").bind(id).first("n")).toBe(0)
+  })
+
+  it("the cap is checked in the correction's own update, not only before it", async () => {
+    const { id, trackingToken } = await send("ספסל דמו תיקון בעדכון")
+    await decide(id, await queued(id), "approve")
+    const r = await reviseDirect(
+      env.DB,
+      id,
+      trackingToken,
+      { name_he: "ספסל דמו לא ייכנס", consent_version: CURRENT_SUBMISSION_NOTICE },
+      await rev(id, trackingToken),
+      new Date(),
+      await pending(),
+    )
+    expect(r).toBe("queue_full")
+  })
+
+  it("a stale correction is told it's stale, not that the queue is full, even when the queue is full", async () => {
+    const { id, trackingToken } = await send("ספסל דמו תיקון ישן בתור מלא")
+    await decide(id, await queued(id), "approve")
+    const stale = (await rev(id, trackingToken)) - 1
+    const r = await reviseDirect(
+      env.DB,
+      id,
+      trackingToken,
+      { name_he: "ספסל דמו ישן", consent_version: CURRENT_SUBMISSION_NOTICE },
+      stale,
+      new Date(),
+      await pending(),
+    )
+    expect(r).toBe("conflict")
+  })
+
+  it("a correction and a new submission racing for the last place in the queue: one gets in", async () => {
+    const { id, trackingToken } = await send("ספסל דמו מרוץ על המקום האחרון")
+    await decide(id, await queued(id), "approve")
+    const at = await rev(id, trackingToken)
+    const e = { ...env, QUEUE_LIMIT: String((await pending()) + 1) }
+    const [fix, fresh] = await Promise.all([
+      call(
+        `http://local/api/v1/submissions/${id}/revisions`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${trackingToken}`, "Turnstile-Token": "pass-revise" },
+          body: JSON.stringify({ expectedRev: at, name_he: "ספסל דמו תיקון במרוץ", consent_version: CURRENT_SUBMISSION_NOTICE }),
+        },
+        e,
+      ),
+      submitTo(e, "ספסל דמו הגשה במרוץ"),
+    ])
+    expect([fix.status, fresh.status].filter((s) => s === 200 || s === 201)).toHaveLength(1)
   })
 
   it("#22 a second correction while one is pending is refused, at once or concurrently, and the published text stays", async () => {

@@ -149,6 +149,8 @@ export function Tracking() {
       consent_version: CURRENT_SUBMISSION_NOTICE,
     })
     if (r === "failed") return void toast("לא הצלחנו לשלוח את התיקון", { description: "התיקון לא נשמר. נסו שוב בעוד רגע." })
+    if (r === "queue_full")
+      return void toast("יש עכשיו יותר הצעות ממה שאפשר לבדוק", { description: "התיקון לא נשמר. נסו שוב בעוד כמה שעות." })
     if (r === "conflict") toast("ההצעה השתנתה בינתיים", { description: "הנה המצב העדכני." })
     setFixing(false)
     await reload()

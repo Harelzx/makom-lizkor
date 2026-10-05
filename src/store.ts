@@ -76,13 +76,19 @@ interface State {
   addLocal: (p: Place) => Promise<boolean>
   updateLocal: (id: string, patch: Partial<LocalFields>) => Promise<boolean>
   removeLocal: (id: string) => Promise<void>
-  importLocal: (places: Place[]) => Promise<number>
+  /** How many places were new, and whether they were also saved on the device. */
+  importLocal: (places: Place[]) => Promise<{ added: number; saved: boolean }>
   leaveAnemone: (id: string) => void
   setTributeTotals: (t: Record<string, number>) => void
   setJourney: (i: number, playing?: boolean) => void
   celebrate: () => void
   replayIntro: () => void
 }
+
+/** Every place this tab has had in its list, removed ones included. */
+const held = new Set<string>()
+/** A place stored as "sending" by a visit that closed mid-send, or by another tab: here it waits for a retry. */
+const waiting = (p: Place): Place => (p.local?.send === "sending" ? { ...p, local: { ...p.local, send: "waiting" as const } } : p)
 
 /**
  * Saves a change to the visitor's places on the device; false when the browser won't keep them (a private window, a
@@ -91,10 +97,10 @@ interface State {
 async function persist(change: (stored: Place[]) => Place[]): Promise<boolean> {
   try {
     const stored = await changeLocal(change)
-    const mine = useStore.getState().local
-    const known = new Set(mine.map((p) => p.id))
-    const theirs = stored.filter((p) => !known.has(p.id))
-    if (theirs.length) useStore.setState({ local: [...mine, ...theirs] })
+    // Only places this tab has never held: one it removed is not brought back by a write that was still in flight.
+    const theirs = stored.filter((p) => !held.has(p.id)).map(waiting)
+    for (const p of theirs) held.add(p.id)
+    if (theirs.length) useStore.setState({ local: [...useStore.getState().local, ...theirs] })
     return true
   } catch {
     return false
@@ -131,7 +137,8 @@ export const useStore = create<State>((set, get) => ({
   init: async () => {
     const [stored, tributes] = await Promise.all([loadLocal(), loadTributes()])
     // A place still "sending" is from a visit that closed mid-send; nothing is sending it now, so it waits for a retry.
-    const local = stored.map((p) => (p.local?.send === "sending" ? { ...p, local: { ...p.local, send: "waiting" as const } } : p))
+    const local = stored.map(waiting)
+    for (const p of local) held.add(p.id)
     set({ local, tributes })
   },
   setPhase: (phase) => set({ phase }),
@@ -150,6 +157,7 @@ export const useStore = create<State>((set, get) => ({
   setDraft: (draft) => set({ draft }),
   setRemote: (feedVersion, remote, live = true) => set({ feedVersion, remote, feedLive: live || get().feedLive }),
   addLocal: async (p) => {
+    held.add(p.id)
     set({ local: [...get().local, p] })
     return persist((stored) => [...stored.filter((s) => s.id !== p.id), p])
   },
@@ -169,9 +177,10 @@ export const useStore = create<State>((set, get) => ({
       (p) => p && typeof p.id === "string" && !known.has(p.id) && Number.isFinite(p.lat) && Number.isFinite(p.lng) && p.name_he,
     )
     const added = valid.map((p) => ({ ...p, coord_source: "community" as const }))
+    for (const p of added) held.add(p.id)
     set({ local: [...get().local, ...added] })
-    await persist((stored) => [...stored, ...added.filter((p) => !stored.some((s) => s.id === p.id))])
-    return valid.length
+    const saved = await persist((stored) => [...stored, ...added.filter((p) => !stored.some((s) => s.id === p.id))])
+    return { added: added.length, saved }
   },
   leaveAnemone: (id) => {
     const tributes = { ...get().tributes, [id]: (get().tributes[id] ?? 0) + 1 }

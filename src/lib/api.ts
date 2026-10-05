@@ -88,7 +88,11 @@ export async function withdrawSubmission(id: string, token: string): Promise<boo
 }
 
 /** "ok", "conflict" when the place changed since the sender looked (reload and try again), or "failed". */
-export async function reviseSubmission(id: string, token: string, body: RevisionInput): Promise<"ok" | "conflict" | "failed"> {
+export async function reviseSubmission(
+  id: string,
+  token: string,
+  body: RevisionInput,
+): Promise<"ok" | "conflict" | "queue_full" | "failed"> {
   try {
     const check = await turnstileToken("revise")
     const res = await fetch(`/api/v1/submissions/${encodeURIComponent(id)}/revisions`, {
@@ -97,7 +101,10 @@ export async function reviseSubmission(id: string, token: string, body: Revision
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(8000),
     })
-    return res.ok ? "ok" : res.status === 409 ? "conflict" : "failed"
+    if (res.ok) return "ok"
+    if (res.status === 409) return "conflict"
+    const code = ((await res.json().catch(() => ({}))) as { code?: string }).code
+    return code === "queue_full" ? "queue_full" : "failed"
   } catch {
     return "failed"
   }

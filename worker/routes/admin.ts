@@ -45,11 +45,11 @@ admin.post(
     const correction =
       (await c.env.DB.prepare("SELECT status FROM places WHERE id = ?").bind(placeId).first<string>("status")) === "published"
     // An approval publishes the photo in the same step as the place; the copy is made first.
-    const photoKey = body.action === "approve" ? await preparePhoto(c.env.DB, c.env.MEDIA, placeId, body.revisionId) : undefined
-    const result = await transition(c.env.DB, { placeId, ...body, actor: c.get("actor"), photoKey }, clock(c.req.raw, c.env))
+    const photo = body.action === "approve" ? await preparePhoto(c.env.DB, c.env.MEDIA, placeId, body.revisionId) : undefined
+    const result = await transition(c.env.DB, { placeId, ...body, actor: c.get("actor"), photoKey: photo?.key }, clock(c.req.raw, c.env))
     if (result !== "ok") {
-      // Nothing was decided: a copy made for it goes again.
-      if (photoKey?.endsWith(`/${body.revisionId}.jpg`)) await c.env.MEDIA.delete(photoKey).catch(() => undefined)
+      // Nothing was decided: the copy this attempt made goes again (a failure here is left for the sweep).
+      if (photo?.fresh && photo.key) await c.env.MEDIA.delete(photo.key).catch(() => undefined)
       return problem(c, 409, "changed_meanwhile")
     }
     await photosAfterDecision(c.env.DB, c.env.MEDIA, placeId, body.revisionId, body.action)

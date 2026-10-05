@@ -425,7 +425,15 @@ export async function revise(
       .bind(id, tid, `a_${ulid(now.getTime())}`, at),
   ])
   if (placeUpdate.meta.changes === 1) return "ok"
-  return (await pendingCount(db)) >= queueLimit ? "queue_full" : "conflict"
+  // Full only if nothing else stood in the way: a stale view or a correction already waiting is a conflict either way.
+  const open = await db
+    .prepare(
+      `SELECT 1 FROM places WHERE id = ?1 AND rev = ?2 AND status IN ('returned', 'published')
+         AND NOT EXISTS (SELECT 1 FROM revisions WHERE place_id = ?1 AND state = 'pending')`,
+    )
+    .bind(id, expectedRev)
+    .first()
+  return open && (await pendingCount(db)) >= queueLimit ? "queue_full" : "conflict"
 }
 
 /** One batch, so the version and the places come from the same moment. Only public fields leave the database. */
@@ -523,16 +531,24 @@ export async function attachPhoto(
  * its photo in one step (the feed never names a photo that isn't there). Returns the key the approved revision will
  * hold: the new public one, the public one a correction inherited, or null when the photo was lost (published without
  * it rather than with a key that serves nothing). A copy that fails throws, and nothing is decided.
+ *
+ * `fresh` says the copy was made by this attempt, under a key of its own: if the decision then loses (another moderator
+ * decided first), only that copy goes, never the one the winning approval published.
  */
-export async function preparePhoto(db: D1Database, media: R2Bucket, placeId: string, revisionId: string): Promise<string | null> {
+export async function preparePhoto(
+  db: D1Database,
+  media: R2Bucket,
+  placeId: string,
+  revisionId: string,
+): Promise<{ key: string | null; fresh: boolean }> {
   const rev = await db.prepare("SELECT photo_key FROM revisions WHERE id = ?").bind(revisionId).first<{ photo_key: string | null }>()
   const key = rev?.photo_key ?? null
-  if (!key || key.startsWith("public/")) return key
+  if (!key || key.startsWith("public/")) return { key, fresh: false }
   const object = await media.get(key)
-  if (!object) return null
-  const published = `public/${placeId}/${revisionId}.jpg`
+  if (!object) return { key: null, fresh: false }
+  const published = `public/${placeId}/${revisionId}-${ulid()}.jpg`
   await media.put(published, await object.arrayBuffer(), { httpMetadata: { contentType: "image/jpeg" } })
-  return published
+  return { key: published, fresh: true }
 }
 
 /**

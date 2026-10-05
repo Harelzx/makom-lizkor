@@ -562,8 +562,11 @@ export function AddPlace() {
                                     if (!f) return
                                     try {
                                       const data = JSON.parse(await f.text())
-                                      const n = await importLocal(Array.isArray(data) ? data : [])
-                                      toast(n ? `נוספו ${n} מקומות` : "לא נמצאו בקובץ מקומות חדשים")
+                                      const { added: n, saved } = await importLocal(Array.isArray(data) ? data : [])
+                                      if (!n) toast("לא נמצאו בקובץ מקומות חדשים")
+                                      else if (!saved)
+                                        toast(`נוספו ${n} מקומות`, { description: "הם לא נשמרו במכשיר הזה, ויימחקו כשתסגרו את הדף." })
+                                      else toast(`נוספו ${n} מקומות`)
                                     } catch {
                                       toast("הקובץ לא נקרא. צריך קובץ JSON שיוצא מכאן.")
                                     }
