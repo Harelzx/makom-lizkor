@@ -32,6 +32,7 @@ describe("admin", () => {
     const { id } = await submit("גן דמו לתור")
     const item = await queued(id)
     expect(item).toMatchObject({ id, rev: 1, name_he: "גן דמו לתור", kind: "bench" })
+    expect((await admin("/api/admin/queue")).headers.get("Cache-Control")).toBe("private, no-store")
   })
   it("approves once: the feed moves on, and a second decision on the same revision conflicts", async () => {
     const { id } = await submit()
@@ -43,6 +44,7 @@ describe("admin", () => {
       admin(`/api/admin/places/${id}/transitions`, { method: "POST", body: body.replace("approve", "reject") }),
     ])
     expect([a.status, b.status].sort()).toEqual([200, 409])
+    expect([a, b].map((r) => r.headers.get("Cache-Control"))).toEqual(["private, no-store", "private, no-store"])
     expect(await env.DB.prepare("SELECT n FROM feed_state").first<number>("n")).toBe((before ?? 0) + (a.status === 200 ? 1 : 0))
     const audit = await env.DB.prepare("SELECT action, fields FROM audit_log WHERE entity_id = ?").bind(id).all()
     expect(audit.results).toHaveLength(1)
