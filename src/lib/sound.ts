@@ -2,8 +2,8 @@
 // (public/sound/, made with ElevenLabs). Two layers only, so it sounds like one film:
 // - the score: one piece for felt piano and strings, composed in sections cut to the scenes (see CLAUDE.md);
 // - real sound under it: the night air and the clock before 06:29, paper as the clippings rise, birds when time returns,
-//   a typewriter key for every letter typed from the count to the name, and a sparkling whoosh that passes over the name
-//   with the light.
+//   a typewriter key for every letter typed from the count to the name, and a harp shimmer in the score's key as the
+//   light passes over the name.
 // Never: sounds of the attack, voices, synthetic tones, or anything that breathes or gasps (that reads as horror).
 //
 // A bed is a loop that holds a scene; a cue is a single sound on a beat. Scenes say which bed they want, and where the

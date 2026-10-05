@@ -43,34 +43,41 @@ node scripts/build-data.mjs                      # regenerate src/data/*.json fr
 ## Architecture
 
 ### State and phases (`src/store.ts`)
+
 A single Zustand store holds everything: the seed places, the visitor's local places, tributes, the selection, the tab, open dialogs and the journey index. The `phase` field is the app's main state machine:
 
-- `intro` (the 06:29 opening) → `dawn` (the sunrise is playing) → `day` (the site itself). `components/intro.tsx` drives this sequence: it sets `dawn`, awaits `shiftLight("morning")`, then sets `day`.
+- `intro` (the 06:29 opening) → `dawn` (the sunrise is playing) → `day` (the site itself). `components/intro.tsx` drives this sequence: it sets `dawn`, awaits `shiftLight("first")` and then `shiftLight("morning")` (7 s in all, `SUNRISE`), fades the place names in near its end (`fadeInLabels`), then sets `day`.
 - `App.tsx` toggles `.dark` on `<html>`, and the `theme-color` meta, from `phase` and `light`. The interface is dark during the intro and in night mode.
 - `INTRO_SEEN` in localStorage makes return visits skip straight to the name. A `#/place/<id>` link skips the intro entirely: `linkedPlaceId()` resolves the place before the first render.
 
 ### Routing (`useHashRoute` in `App.tsx`)
-The only route is `#/place/<id>`, kept in sync with `selectedId`. Opening a card from the list pushes a history entry, so the browser Back button (or a swipe back on a phone) closes the card. Moving from one place to another replaces the entry instead. An unknown id falls back to `#/` and flies to the envelope view. Ids that start with `local-` are visitor-added places. They load asynchronously, so the router trusts them.
+
+The only route is `#/place/<id>`, kept in sync with `selectedId`. Opening a card from the list pushes a history entry, so the browser Back button (or a swipe back on a phone) closes the card. Moving from one place to another replaces the entry instead. An unknown id falls back to `#/` and flies to the envelope view. Ids that start with `local-` are visitor-added places. They load asynchronously, so the router trusts them. When the day starts, the router reads the hash as an entrance (`apply(true)`), so a place opened during the sunrise stays open instead of being read as Back.
 
 ### Persistence (`src/lib/storage.ts`)
+
 Persistence uses an `idb-keyval` store named `makom-lizkor-v2`/`v1`, with the keys `local` (the visitor's places) and `tributes` (anemones left at each place). Uploaded photos are downscaled and re-encoded, which strips EXIF data, then stored as data URLs. Nothing is sent over the network.
 
 ### Map (`src/map/`)
+
 - `controller.ts` is an **imperative module-level singleton** around the MapLibre instance. It exposes `getMap`, `flyToPlace`, `flyToEnvelope`, `shiftLight`, `startOrbit`, `returnToDawn` and `setLabels`. React code reaches it with `await import("@/map/controller")` so MapLibre stays out of the first bundle. Keep that pattern.
-- `palette.ts` defines the `NIGHT` and `MORNING` palettes. The `BINDINGS` table in `style.ts` maps each palette key to a layer paint property, and the sunrise tween walks that table. **A new colored layer needs a palette key in both palettes and a row in `BINDINGS`.**
+- `palette.ts` defines the `NIGHT`, `FIRST_LIGHT` (the warm golden-rose step the sunrise passes through, so it never goes grey) and `MORNING` palettes. The `BINDINGS` table in `style.ts` maps each palette key to a layer paint property, and the sunrise tween walks that table. **A new colored layer needs a palette key in all three palettes and a row in `BINDINGS`.** `shiftLight` waits for the style to load before it paints (a skip right after the page opens used to leave the map at night).
 - `map-canvas.tsx` renders one DOM `maplibregl.Marker` per place and portals a React flower into each one. Marker scale comes from a `--mk` CSS variable on the container, written only when the coarse zoom step changes. The flowers use a shared SVG sprite (`flower-sprite.tsx`, `<use>`), and their bloom is a CSS transition.
 - These settings are load-bearing for MapLibre v6: `optimizeDeps.exclude: ["maplibre-gl"]` and `worker.format: "es"` in `vite.config.ts`, and the explicit `setWorkerUrl(workerUrl)` in `controller.ts`.
 - Tiles and terrain come from OpenFreeMap and AWS, so the map needs network access. The camera is clamped to Israel (`maxBounds`).
 - Basemap labels for community names are suppressed (`OWN_LABELS` in `style.ts`) because the app draws its own.
 
 ### The opening's headlines (`src/data/headlines.ts`, `src/components/montage.tsx`)
+
 The opening's count is a montage:
-- **Rising:** as the count reaches a headline's date, its clipping rises from the depth behind the number out to its place, slowing in without passing it. Nothing hits or shakes: the build-up comes from the pace and the pile. A slam with a screen shake was tried and rejected as angry, not fitting a memorial.
+
+- **Rising:** as the count reaches a headline's date, its clipping rises from the depth behind the number out to its place, slowing in without passing it, and it shows only once it is clear of the number. Nothing hits or shakes: the build-up comes from the pace and the pile. A slam with a screen shake was tried and rejected as angry, not fitting a memorial. Layers go by arrival (`layerOf`), so the newest clippings are on top. Headlines are right-aligned, as in a Hebrew paper.
 - **Rushing in:** once the count lands, the camera rushes through the pile toward the words (`rush` in `lib/motion.ts`, 1.5 s). The number flies past the camera first, each layer's zoom jumps to `RUSH_ZOOM` (up to 2.5×) so the clippings sweep past to the edges and off the screen, darkening as they go, and the words come out of the depth from half their size. In the next scene the words only drift in (`push`). Words always end at exactly their own size and get no `will-change`: a promoted layer keeps text rasterized at its starting size, and it would end blurred.
 - **Floating:** the pile drifts, dimmed, behind the words.
-- **Falling:** at «ולא נשכח» each clipping falls onto a memorial site. The site's screen position comes from `screenPoints` in the controller. The layers' zoom stops where it is when the fall begins (it's a motion value per layer), and the fall is aimed through that zoom, so it lands on the site even when someone skips mid-rush. The ember and its light undo that zoom (`lens`), so they're the same size whatever it was. The camera is held (`setTimeHeld`) and drifts again 2.6 seconds later.
+- **Falling:** once «ולא נשכח» is typed, one thing moves at a time: the words leave (`WORDS_LEAVE`, 0.3 s), then the clippings fall (`FALL_AFTER`, 0.9 s), each onto a memorial site, 20 ms apart, 1.2 s each, warming from amber to anemone red as they shrink to an ember. The site's screen position comes from `screenPoints` in the controller; at most two clippings share a site. A clipping mostly out of the frame (under 30% in view) never crosses back over the screen: it fades where it is and only its light appears on its site, so every headline still becomes a light (32 on desktop, 16 on a phone). The lights stay 2.8 s and fade into the sites' glow. The layers' zoom stops where it is when the fall begins (it's a motion value per layer), and the fall is aimed through that zoom, so it lands on the site even when someone skips mid-rush. The ember and its light undo that zoom (`lens`), so they're the same size whatever it was. Then a breath (`BREATH`, 1.2 s) with only the lights, before the name. The camera is held (`setTimeHeld`) and drifts again 5.4 s after the words are typed (`ORBIT_AFTER`), once the lights have faded.
 
 Content rules:
+
 - **Headlines** are in our own words, each with a source link.
 - **Photos** are freely licensed from Wikimedia Commons and stored as 240×180 WebP files (about 10 KB each) in `public/headlines/`. They're credited in About, under «שלוש השנים בכותרות».
 - **Never copy outlets' screenshots, logos or photos.**
@@ -81,6 +88,7 @@ Content rules:
 - **What appears:** only headlines dated before today. On phones, only those marked `phone: true` (16). There are as many slots as headlines (`DESKTOP`, `PHONE` in `montage.tsx`), so a new headline needs a new slot.
 
 Smoothness is load-bearing:
+
 - The count is a `MotionValue`, so React state changes only when a clipping lands.
 - Clippings are memoized, and their depth is capped at 6.
 - No filters.
@@ -92,27 +100,33 @@ Smoothness is load-bearing:
 - The montage is lazy-loaded, and its photos are preloaded while the clock ticks, but not in data-saving mode or on 2G.
 
 ### The opening's sound (`src/lib/sound.ts`, `public/sound/`)
+
 The film waits at 06:28:57 for one click: «עם צליל» or «בלי צליל». Browsers play nothing before a click, and the first sounds matter most (the last ticks, then silence at 06:29). The choice is remembered (`makom-lizkor:sound` in localStorage) and is the one in focus next time. A speaker button stays in the corner during the film. Nothing is fetched until sound is on; a file that fails to load is left out silently.
 
 Two layers only, so it sounds like one film (a patchwork of separately prompted sounds was tried and rejected):
-- **The score** (`score.mp3`, 44.7 s): one piece for felt piano and string quartet, composed with Eleven Music as a composition plan whose sections are cut to the scenes in milliseconds: opening (3 s, from the line of what happened) · gathering (9.4 s, the count) · arrival (6.3 s, the count landing, the rush, «מאז עברו» typed) · remembrance (6 s, «אנחנו זוכרים…» and «ולא נשכח…» typed) · dawn (20 s, the name and the sunrise, ending on a long held chord). The first 12.4 s are the original take; the rest was recomposed with inpainting when the typing lengthened those scenes. The light crossing the name is in the music itself: a harp arpeggio over a swell of high violins, composed apart in the score's key (B major, 60 BPM) and mixed in so the arpeggio starts as the light does (27.7 s: the name begins 26.4 s into the score). The score as composed holds B major throughout, not the minor-to-major asked for; check any new tonal sound against the score at its moment. Each scene knows where it begins in the music (`SCORE_AT` in `intro.tsx`, built from `HOLD_MS`); the engine moves the music there with a crossfade only when it has drifted more than 0.4 s (Enter, or sound turned on midway). **Change a scene's timing and the score must be composed again to match.**
-- **Real sound** under it: `night` air and `tick`s until 06:29 (cut dead at the freeze), a paper `rise` per clipping (three variants, pitch varied), pages fluttering for the `rush`, a typewriter `key` for every typed letter and a duller `space` for every space (five strokes cut from one continuous recording of one machine, so they all sound like it; pitch varied a hair), `dawn` birds from «ולא נשכח» through the sunrise, and a sparkling `sweep` that passes over the name with the light: it peaks as the band is mid-way (1.8 s into the name: the shine's easing puts the band mid-name 0.70 s into it) and flies right to left with it (the take flew left to right; its channels are swapped in mastering). Its timing is tied to `.title-shine` in `index.css`.
-- **The mix is in the files:** score -23 LUFS; night -26, dawn -27 (each bed two takes levelled and joined, about 9.4 s); tick peaking at -2 dBFS; rustles -32; rush -24; keys peaking at -17 dBFS (a typed line sits around -28 LUFS, under the score); sweep -20 (heard over the score on purpose). A limiter on the output keeps stacked rustles from clipping.
+
+- **The score** (`score.mp3`): one piece for felt piano and string quartet, composed with Eleven Music as a composition plan whose sections are cut to the scenes in milliseconds: opening (3 s, from the line of what happened) · gathering (9.4 s, the count) · arrival (the count landing, the rush, «מאז עברו» typed) · remembrance («אנחנו זוכרים…» and «ולא נשכח…» typed, the fall and the breath) · dawn (the name and the sunrise, ending on a long held chord). Later sections were recomposed with inpainting when the typing lengthened those scenes, and the opening was rebuilt the same way so the piano plays from the first beat (it began with 3.5 s of silence); inpainting re-synthesizes, so check a rebuilt part by loudness curve and chroma against the original, not by waveform. The light crossing the name is in the music itself: a harp arpeggio over a swell of high violins, composed apart in the score's key (B major, 60 BPM) and mixed in at 28.9 s (the name begins 27.6 s into the score). The chosen takes and the mastering script are in `../assets-src/sound/` (outside this repo, like the other source art): `python3 ../assets-src/sound/master.py` rebuilds every file in `public/sound/` byte for byte. The score as composed holds B major throughout, not the minor-to-major asked for; check any new tonal sound against the score at its moment. Each scene knows where it begins in the music (`SCORE_AT` in `intro.tsx`, built from `HOLD_MS`); the engine moves the music there with a crossfade only when it has drifted more than 0.4 s (Enter, or sound turned on midway). **Change a scene's timing and the score must be composed again to match.**
+- **Real sound** under it: `night` air and `tick`s until 06:29 (cut dead at the freeze), a paper `rise` per clipping (three variants, pitch varied), pages fluttering for the `rush`, a typewriter `key` for every typed letter and a duller `space` for every space (five strokes cut from one continuous recording of one machine, so they all sound like it; pitch varied a hair), `dawn` birds from «ולא נשכח» through the sunrise, and a harp shimmer (`sweep`) on exactly the notes the score holds there, as the light crosses the name: it rings from its first note, so it starts as the band enters the letters, 1.27 s into the name. Its timing is tied to `.title-shine` in `index.css` (a 2.2 s pass on an even ease, 0.7 s in: the band is in the letters from 1.27 s to 2.33 s). A whoosh was tried first and read as a blade being drawn.
+- **The mix is in the files:** score -23 LUFS; night and dawn -28 (each bed two takes high-passed at 90 Hz, levelled and joined, about 9.4 s; below 90 Hz the takes were mostly rumble no speaker plays); tick peaking around -6 dBFS; rustles -32; rush -24; keys peaking around -19 dBFS (a typed line sits around -30 LUFS, under the score); the harp sweep -23. A limiter on the output keeps stacked rustles from clipping.
 - **Beds are not looped by the browser.** MP3 pads both ends with silence, so `loop = true` would gap; each pass overlaps the next by 0.8 s with equal-power fades instead.
 - **What is never heard:** sounds of the attack, sirens, voices, synthetic tones, or anything that breathes or gasps (breathy air sounds read as a horror film).
 - **Making sounds:** follow ElevenLabs' guidance: short, concrete sound-effect prompts; for music, a composition plan with at least 6–7 styles in the first section (it sets the tone for all), liberal negative styles, and high context adherence for continuity. Check the result's key and loudness by analysis, not by assumption.
 - The e2e tests click «בלי צליל» to start the film; `e2e/sound.spec.ts` checks that the clock waits and that nothing is fetched without sound. ElevenLabs is on a paid plan (commercial license) and credited as elevenlabs.io in About.
 
 ### The typed words (`Typed` in `intro.tsx`)
+
 From the count to the name, the lines are typed: `TYPE_RATE` letters a second (16, a fast typist: each key is heard as a stroke; 28 was tried and merged into a rattle), each letter coming into focus over `LETTER_TIME` as its key lands (`.type-letter` in `index.css`), a thin caret before the next letter that blinks twice at the line's end and goes. Words are kept whole (a `whitespace-nowrap` span per word), and screen readers get the line whole (`sr-only`), not letter by letter. A line's length sets its scene's length (`typed()` feeds `HOLD_MS`, which feeds `SCORE_AT`), so changing the wording moves the score's sections: past the 0.4 s the engine tolerates, the score has to be cut again. The line before the count («בבוקר שמחת תורה…») keeps the word-by-word reveal.
 
 The words and the name sit above the montage (`relative z-10`): its dark pool is a positioned layer, and in-flow text under it turns grey. Old text escaped that only through a leftover `blur(0px)`.
 
 ### Code splitting (`App.tsx`)
+
 The opening paints from a small first bundle. `MapCanvas`, `Shell`, `Search`, `About` and `AddPlace` are `lazy()`. `Shell` is prefetched 2.5 seconds into the intro. The About and AddPlace dialogs mount on first open and then stay mounted, so they can animate closed. Keep heavy imports out of `intro.tsx`, `celebration.tsx` and `store.ts`.
 
 ### Data pipeline (`scripts/build-data.mjs`)
+
 `data-src/` (research files) → `src/data/places.json`, `context.json`, `landscapes.json`. **Those three outputs are generated, so never edit them by hand.** The pipeline works like this:
+
 - Inputs are `oct7.json` and `extra.json`, which share one schema. Only records with `scope` of `oct7` or `mixed` pass. `war-later` records stay in the source file but never reach the map.
 - `exclude.txt` drops records by id.
 - An id prefix of `community-` makes the record `kind: "community"`, and the build strips `קיבוץ`/`מושב` from its name. `revival.json` is merged in by id without the prefix.
@@ -124,7 +138,9 @@ The opening paints from a small first bundle. `MapCanvas`, `Shell`, `Search`, `A
 The journey along Route 232 (`journeyStops`) and a community's "memory" section (`sitesNear`) are computed from coordinates in `store.ts`. They aren't stored data.
 
 ### Time since 7 October (`src/lib/since.ts`)
+
 The opening, its sunrise line and the panel all say how long it has been: "שלוש שנים", "1,093 ימים", "שלושה חורפים". `since()` computes this from today's date **in Israel**, whatever the visitor's time zone. The year count turns on **15 September**, ahead of the Hebrew-calendar memorial day (24 Tishrei), so the whole memorial season names the anniversary being marked. `e2e/three-years.spec.ts` pins the clock to check this. Never hard-code the count in components. There are two deliberate exceptions:
+
 - The About paragraph is dated text ("נכתב באוקטובר 2026"), because it states facts that will change.
 - The meta and OG tags in `index.html`, plus the cover in `../launch/v2/cover.html`, are rendered into `public/og.png` by `../launch/tools/cover-v2.mjs`. Link previews can't run code, so update them each September.
 
@@ -145,7 +161,7 @@ The full rules are in `../docs/design-system.md`. The ones code changes most oft
 
 ## Code conventions
 
-- Comments explain *why*, in plain prose, in the same voice as the existing code (for example, "Back closes the card and returns to the list"). Match that density and tone.
+- Comments explain _why_, in plain prose, in the same voice as the existing code (for example, "Back closes the card and returns to the list"). Match that density and tone.
 - The import alias is `@/` → `src/`. TypeScript is strict, with `noUnusedLocals`/`noUnusedParameters` and `verbatimModuleSyntax` (use `import type`).
 
 ## Dev aids

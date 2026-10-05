@@ -17,7 +17,9 @@ function useHashRoute() {
   const selectedId = useStore((s) => s.selectedId)
   const phase = useStore((s) => s.phase)
   useEffect(() => {
-    const apply = () => {
+    // `entering`: the day has just begun. A place chosen during the sunrise isn't in the address yet; that is not the
+    // visitor going Back, so it stays chosen (the effect below writes it into the address).
+    const apply = (entering = false) => {
       const [, route, id] = location.hash.split("/")
       const s = useStore.getState()
       if (route === "place" && id) {
@@ -30,15 +32,16 @@ function useHashRoute() {
         }
       }
       // Back (the browser button, or the swipe on a phone) closes the card and returns to the list.
-      else if (s.selectedId) {
+      else if (s.selectedId && !entering) {
         if (s.journeyIndex >= 0) s.setJourney(-1, false)
         s.select(null)
         void import("@/map/controller").then((m) => m.flyToEnvelope(2200))
       }
     }
-    if (phase === "day") apply()
-    window.addEventListener("hashchange", apply)
-    return () => window.removeEventListener("hashchange", apply)
+    if (phase === "day") apply(true)
+    const onHash = () => apply()
+    window.addEventListener("hashchange", onHash)
+    return () => window.removeEventListener("hashchange", onHash)
   }, [phase])
   useEffect(() => {
     if (phase !== "day") return

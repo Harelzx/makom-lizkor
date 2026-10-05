@@ -67,7 +67,18 @@ const ENTER = 0.5
 const COUNT_ENTER = 0.6
 
 /** The count starts after the clock has stepped back, and races to today in a few seconds (see montage.tsx). */
-const COUNT: CountTiming = { enter: COUNT_ENTER, delay: COUNT_ENTER + 0.3, seconds: 8.5 }
+const COUNT: CountTiming = { enter: COUNT_ENTER, delay: COUNT_ENTER + 0.3, seconds: 8.0 }
+/** Today, held: long enough to read the number before the camera moves (and the score's arrival lands on it). */
+const LANDED_HOLD = 1.9
+/** When the last typed line is complete: the words leave first, then the papers fall, so one thing moves at a time. */
+const WORDS_LEAVE = 0.3
+const FALL_AFTER = 0.9
+/** After the fall, a breath: only the lights glow on the sites, before the name. The score waits with it. */
+const BREATH = 1.2
+/** The camera drifts again only once the lights of the fall have faded into the sites' own glow (montage.tsx). */
+const ORBIT_AFTER = 5.4
+/** The sunrise, as one move: its length, its first-light step, when the place names fade in, and its line. */
+const SUNRISE = { seconds: 7, first: 2.2, labels: 5.5, line: { delay: 1.0, seconds: 5.6 } }
 
 /** The second line waits a beat after the first, like a carriage return. */
 const REMEMBER_SECOND = typed(REMEMBER_LINES[0], ENTER) + 0.3
@@ -82,10 +93,10 @@ const HOLD_MS = [
   // after the freeze, a second of stillness, the date and what happened
   (FREEZE + 4.5) * 1000,
   // after the count lands, a moment of stillness
-  (COUNT.delay + COUNT.seconds + 1.4) * 1000,
+  (COUNT.delay + COUNT.seconds + LANDED_HOLD) * 1000,
   (typed(SINCE_LINE, ENTER) + 1.4) * 1000,
-  // the headlines begin to fall; the name comes in while their lights are still landing
-  (typed(REMEMBER_LINES[1], REMEMBER_SECOND) + 1.7) * 1000,
+  // the words leave, the headlines fall, and after a breath with only their lights on the sites, the name comes in
+  (typed(REMEMBER_LINES[1], REMEMBER_SECOND) + 1.7 + BREATH) * 1000,
 ]
 
 /**
@@ -351,11 +362,14 @@ function Lines({
   delays,
   approach,
   onLanded,
+  leaving = false,
 }: {
   sentences: string[]
   delays: number[]
   approach: Approach
   onLanded?: () => void
+  /** the words fade before the scene ends, so what follows has the screen to itself */
+  leaving?: boolean
 }) {
   useEffect(() => {
     if (!onLanded) return
@@ -369,8 +383,8 @@ function Lines({
       // Above the montage on purpose: its dark pool is a positioned layer, and in-flow text would sit under it, dimmed.
       className="pointer-events-none relative z-10 col-start-1 row-start-1 max-w-2xl text-statement text-balance"
       initial={{ scale: approach.from }}
-      animate={{ scale: 1 }}
-      transition={{ duration: approach.seconds, ease: approach.ease }}
+      animate={{ scale: 1, opacity: leaving ? 0 : 1 }}
+      transition={{ duration: approach.seconds, ease: approach.ease, opacity: { duration: 0.5, ease } }}
       exit={{ opacity: 0, y: -8, transition: { duration: 0.6, ease } }}
     >
       {sentences.map((s, i) => (
@@ -404,10 +418,9 @@ function Name({
   useEffect(() => {
     if (quick) return
     const t = setTimeout(() => setOpen(true), 700)
-    // The light is heard passing over the name. The shine starts 1.1 s in and, on its easing (index.css, .title-shine),
-    // the band enters the letters at 0.53 s, is mid-way at 0.70 s and leaves at 0.93 s, right to left. The whoosh flies
-    // right to left too and is mid-way 0.6 s into itself, so it starts at 1.1 + 0.70 - 0.6 = 1.2 s.
-    const light = setTimeout(() => cue("sweep"), 1200)
+    // The light is heard passing over the name: a harp shimmer in the score's key, which rings from its first note, so
+    // it starts as the band of light enters the letters, 1.27 s into the name (index.css, .title-shine).
+    const light = setTimeout(() => cue("sweep"), 1270)
     return () => {
       clearTimeout(t)
       clearTimeout(light)
@@ -425,10 +438,10 @@ function Name({
         animate={{ opacity: 1, scale: 1 }}
         transition={{ delay: quick ? 0 : 0.2, type: "spring", stiffness: 180, damping: 18 }}
       >
-        <Anemone state={open ? "open" : "bud"} size={60} />
+        <Anemone state={open ? "open" : "bud"} size={96} />
       </motion.div>
       <motion.p
-        className="-mb-3 text-headline font-medium text-dawn"
+        className="-mb-3 text-title-2 font-medium text-dawn"
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: after(0), duration: 0.8, ease }}
@@ -443,17 +456,12 @@ function Name({
         transition={{ duration: 0.5 }}
       >
         {/* while the light crosses, the mask is padded wide enough to hold the glow */}
-        <span
-          className={lit ? "inline-block" : "title-sweep -m-[64px] inline-block p-[64px]"}
-          style={lit ? undefined : { animationDelay: "1.1s" }}
-          onAnimationEnd={() => setLit(true)}
-        >
+        <span className={lit ? "inline-block" : "title-sweep -m-[64px] inline-block p-[64px]"} onAnimationEnd={() => setLit(true)}>
           מקום לזכור
         </span>
         {!shone && (
           <span
             className="title-shine pointer-events-none absolute inset-0 [text-shadow:none]"
-            style={{ animationDelay: "1.1s, 2.8s" }}
             onAnimationEnd={(e) => e.animationName === "title-shine-out" && setShone(true)}
             aria-hidden="true"
           >
@@ -524,7 +532,21 @@ export function Intro() {
   const cta = useRef<HTMLButtonElement>(null)
   const stop = useCallback(() => setStopped(true), [])
   const resume = useCallback(() => setResumed(true), [])
-  const montage: MontageMode = stage === TIME ? "count" : back ? "fall" : "float"
+  // once the words are complete they leave, and only then do the papers fall
+  const [leaving, setLeaving] = useState(false)
+  const [falling, setFalling] = useState(false)
+  useEffect(() => {
+    if (!resumed) return
+    const leave = setTimeout(() => setLeaving(true), WORDS_LEAVE * 1000)
+    const fall = setTimeout(() => setFalling(true), FALL_AFTER * 1000)
+    return () => {
+      clearTimeout(leave)
+      clearTimeout(fall)
+    }
+  }, [resumed])
+  // The montage is there from the start of the film, resting, so the count starts on the scene's clock and not late
+  // by whatever mounting it would cost.
+  const montage: MontageMode = stage === MOMENT ? "rest" : stage === TIME ? "count" : back && (falling || stage >= NAME) ? "fall" : "float"
 
   // The real sound follows time: night air until 06:29, cut dead when the clock stops, birds when time comes back.
   useEffect(() => {
@@ -557,7 +579,7 @@ export function Intro() {
     void import("@/map/controller").then((m) => {
       if (!live) return
       m.setTimeHeld(held)
-      if (!held) drift = window.setTimeout(() => m.startOrbit(), 2600)
+      if (!held) drift = window.setTimeout(() => m.startOrbit(), ORBIT_AFTER * 1000)
     })
     return () => {
       live = false
@@ -571,7 +593,7 @@ export function Intro() {
     } catch {
       /* private mode */
     }
-    const { flyToEnvelope, setLabels, setTimeHeld, shiftLight, stopOrbit } = await import("@/map/controller")
+    const { fadeInLabels, flyToEnvelope, setTimeHeld, shiftLight, stopOrbit } = await import("@/map/controller")
     // the morning is heard coming, then the day is quiet; the score plays on into the sunrise only from the name,
     // where it has reached its dawn, and leaves with anyone who skips the film
     setBed("dawn", 1.5)
@@ -582,9 +604,13 @@ export function Intro() {
     setTimeHeld(false)
     stopOrbit()
     setPhase("dawn")
-    flyToEnvelope(reducedMotion() ? 0 : 5600)
-    setTimeout(() => setLabels(true), reducedMotion() ? 0 : 2600)
-    await shiftLight("morning", reducedMotion() ? 0 : 5200)
+    // One move of SUNRISE seconds: night warms to first light, then opens into morning; the camera flies to the envelope
+    // over the same span, and the place names fade in once the line has been read.
+    const ms = reducedMotion() ? 0 : 1000
+    flyToEnvelope((SUNRISE.seconds - 0.2) * ms)
+    setTimeout(() => fadeInLabels(1.2 * ms), SUNRISE.labels * ms)
+    await shiftLight("first", SUNRISE.first * ms)
+    await shiftLight("morning", (SUNRISE.seconds - SUNRISE.first) * ms)
     setPhase("day")
     setBed(null, 14)
     stopScore(8)
@@ -650,13 +676,14 @@ export function Intro() {
 
           <Atmosphere mode={inIntro ? "embers" : "petals"} frozen={held} />
 
-          {/* Sunrise: a warm light rises from the horizon and spreads, then gives way to the day. */}
+          {/* Sunrise: a warm light rises from behind the horizon (near the top of the frame, the camera looking low across
+              the land) as a wide, flat glow, and gives way to the day. */}
           {phase === "dawn" && !reducedMotion() && (
             <motion.div
-              className="absolute inset-x-[-20%] top-[8%] h-[90%] rounded-[50%] bg-[radial-gradient(closest-side,color-mix(in_oklab,var(--p-sun-200)_70%,transparent),color-mix(in_oklab,var(--p-sun-300)_30%,transparent)_45%,transparent_75%)] will-change-[transform,opacity]"
-              initial={{ y: 320, scale: 0.55, opacity: 0 }}
-              animate={{ y: -40, scale: 1.25, opacity: [0, 0.95, 0.75, 0] }}
-              transition={{ duration: 5.2, ease: [0.3, 0, 0.2, 1], times: [0, 0.35, 0.7, 1] }}
+              className="absolute inset-x-[-30%] top-[-4%] h-[48%] rounded-[50%] bg-[radial-gradient(closest-side,color-mix(in_oklab,var(--p-sun-200)_70%,transparent),color-mix(in_oklab,var(--p-sun-300)_30%,transparent)_45%,transparent_75%)] will-change-[transform,opacity]"
+              initial={{ y: 90, scaleY: 0.6, opacity: 0 }}
+              animate={{ y: 0, scaleY: 1, opacity: [0, 0.9, 0.7, 0] }}
+              transition={{ duration: SUNRISE.seconds, ease: [0.3, 0, 0.2, 1], times: [0, 0.35, 0.75, 1] }}
               aria-hidden="true"
             />
           )}
@@ -687,7 +714,7 @@ export function Intro() {
 
           {/* Every scene shares one stage; each waits for the last to leave before it enters. */}
           <div className="absolute inset-0 grid place-items-center px-6 text-white">
-            {inIntro && !quick && stage >= TIME && (
+            {inIntro && !quick && started && (
               <Suspense fallback={null}>
                 <Montage mode={montage} days={days} count={COUNT} />
               </Suspense>
@@ -698,7 +725,14 @@ export function Intro() {
               {inIntro && started && stage === MOMENT && <Moment key="moment" />}
               {inIntro && stage === SINCE && <Lines key="since" sentences={SINCE_LINES} delays={SINCE_DELAYS} approach={SINCE_APPROACH} />}
               {inIntro && stage === REMEMBER && (
-                <Lines key="remember" sentences={REMEMBER_LINES} delays={REMEMBER_DELAYS} approach={REMEMBER_APPROACH} onLanded={resume} />
+                <Lines
+                  key="remember"
+                  sentences={REMEMBER_LINES}
+                  delays={REMEMBER_DELAYS}
+                  approach={REMEMBER_APPROACH}
+                  onLanded={resume}
+                  leaving={leaving}
+                />
               )}
               {inIntro && stage === NAME && <Name key="name" quick={quick} count={count} cta={cta} onMorning={toMorning} />}
               {phase === "dawn" && (
@@ -706,7 +740,12 @@ export function Intro() {
                   key="dawn"
                   className="col-start-1 row-start-1 max-w-2xl text-statement text-balance text-white [text-shadow:0_2px_28px_color-mix(in_oklab,var(--p-ink-950)_70%,transparent),0_1px_3px_color-mix(in_oklab,var(--p-ink-950)_55%,transparent)]"
                   initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: [0, 1, 1, 0], y: 0, transition: { duration: 5, times: [0, 0.25, 0.75, 1], delay: 0.6 } }}
+                  // after the name has gone (its exit takes 0.9 s), and long enough to be read: 3.9 s at full strength
+                  animate={{
+                    opacity: [0, 1, 1, 0],
+                    y: 0,
+                    transition: { duration: SUNRISE.line.seconds, times: [0, 0.15, 0.85, 1], delay: SUNRISE.line.delay },
+                  }}
                 >
                   {/* a sentence to a row, so neither breaks in the middle */}
                   <span className="block">{wintersHe(years)} עברו מאז.</span>{" "}

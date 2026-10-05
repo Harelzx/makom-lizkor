@@ -49,6 +49,31 @@ export const NIGHT: Palette = {
   fog: "#262844",
 }
 
+// First light: the few minutes between, warm and golden-rose. The sunrise passes through it on its way to morning, so
+// the map never goes through grey (night and morning mixed straight meet at a dull grey half way).
+export const FIRST_LIGHT: Palette = {
+  land: "#7d5f52",
+  farmland: "#836451",
+  wood: "#6f5a4f",
+  park: "#7a5f52",
+  water: "#6b6487",
+  urban: "#8a6a5e",
+  building: "#9a786a",
+  roadMinor: "#a07c6c",
+  roadMajor: "#c39478",
+  roadCasing: "#4a3a3c",
+  border: "#b08a86",
+  label: "#e3c2b0",
+  labelStrong: "#fff0e2",
+  halo: "#4a3a3c",
+  hillShadow: "#3a2a2e",
+  hillHighlight: "#f0b48a",
+  hillAccent: "#5e4a48",
+  sky: "#6f5a8a",
+  horizon: "#ffb878",
+  fog: "#c99a8a",
+}
+
 // Morning: the western Negev in winter, when the anemones bloom: green fields, pale sky-blue water, white roads.
 export const MORNING: Palette = {
   land: "#e5eedb",

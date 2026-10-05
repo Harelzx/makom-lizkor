@@ -72,6 +72,7 @@ test.describe("desktop details", () => {
     await expect(flower).toBeAttached({ timeout: 15000 })
     const name = await flower.getAttribute("aria-label")
     await flower.dispatchEvent("click")
-    await expect(page.getByRole("heading", { name: name! })).toBeVisible()
+    // clicked during the sunrise, the place opens when the day view arrives (the sunrise takes 7 s)
+    await expect(page.getByRole("heading", { name: name! })).toBeVisible({ timeout: 10_000 })
   })
 })

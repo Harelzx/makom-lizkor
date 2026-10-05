@@ -686,22 +686,24 @@
 /*
  * The name is revealed by a band of morning light crossing it in the reading direction, right to left.
  * The mask uncovers the letters; a copy of them, filled with the light, rides the uncovering edge and then goes out.
+ * On an even ease the band takes about 1.1 s across the letters: it enters them 1.27 s into the name, is mid-name at
+ * 1.80 s and leaves at 2.33 s (the harp in intro.tsx rings from the moment it enters).
  */
 .title-sweep {
   mask-image: linear-gradient(to left, #000 42%, transparent 58%);
-  mask-size: 300% 100%;
+  mask-size: 240% 100%;
   mask-repeat: no-repeat;
-  animation: title-sweep 1.9s cubic-bezier(0.45, 0, 0.2, 1) both;
+  animation: title-sweep 2.2s cubic-bezier(0.4, 0, 0.6, 1) 0.7s both;
 }
 .title-shine {
   background: linear-gradient(to left, transparent 38%, var(--p-sun-100) 48%, #fff 50%, var(--p-sun-200) 53%, transparent 62%);
-  background-size: 300% 100%;
+  background-size: 240% 100%;
   background-repeat: no-repeat;
   background-clip: text;
   color: transparent;
   animation:
-    title-shine 1.9s cubic-bezier(0.45, 0, 0.2, 1) both,
-    title-shine-out 0.8s ease-out 1.7s both;
+    title-shine 2.2s cubic-bezier(0.4, 0, 0.6, 1) 0.7s both,
+    title-shine-out 0.8s ease-out 2.4s both;
 }
 /* The words from the count to the name are typed: each letter comes into focus as its key lands, and the caret that
    led the typing blinks twice at the end of the line and goes. */

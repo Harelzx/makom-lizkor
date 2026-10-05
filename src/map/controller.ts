@@ -1,6 +1,6 @@
 import * as maplibregl from "maplibre-gl"
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url"
-import { MORNING, NIGHT, type Palette } from "./palette"
+import { FIRST_LIGHT, MORNING, NIGHT, type Palette } from "./palette"
 import { applyPalette, buildStyle } from "./style"
 
 // MapLibre's own relative worker lookup doesn't survive a production build.
@@ -72,18 +72,55 @@ const LABEL_LAYERS = ["road-label", "place-small", "place-town"]
 /** The opening is wordless on the map: labels stay hidden until the sun is up. */
 export function setLabels(visible: boolean) {
   if (!map) return
-  for (const id of LABEL_LAYERS) if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", visible ? "visible" : "none")
+  for (const id of LABEL_LAYERS) {
+    if (!map.getLayer(id)) continue
+    map.setPaintProperty(id, "text-opacity-transition", { duration: 0, delay: 0 })
+    map.setPaintProperty(id, "text-opacity", 1)
+    map.setLayoutProperty(id, "visibility", visible ? "visible" : "none")
+  }
 }
 
-/** Change the light. MapLibre interpolates every color and the sky over `duration`. */
-export function shiftLight(target: "night" | "morning", duration = 1600): Promise<void> {
-  const to = target === "night" ? NIGHT : MORNING
-  if (!map) return Promise.resolve()
+/** The place names come in with the morning: faded in over `duration` ms, never popping on all at once. */
+export function fadeInLabels(duration: number) {
+  if (!map) return
+  const m = map
+  for (const id of LABEL_LAYERS) {
+    if (!m.getLayer(id)) continue
+    m.setPaintProperty(id, "text-opacity-transition", { duration: 0, delay: 0 })
+    m.setPaintProperty(id, "text-opacity", 0)
+    m.setLayoutProperty(id, "visibility", "visible")
+  }
+  // the transparent start has to be drawn once before the fade has something to fade from
+  requestAnimationFrame(() => {
+    for (const id of LABEL_LAYERS) {
+      if (!m.getLayer(id)) continue
+      m.setPaintProperty(id, "text-opacity-transition", { duration, delay: 0 })
+      m.setPaintProperty(id, "text-opacity", 1)
+    }
+  })
+}
+
+/**
+ * Change the light. MapLibre interpolates every color and the sky over `duration`. Asked for before the map has its
+ * style (a visitor skipping the film the moment the page opens), MapLibre refuses: the change then waits for the style
+ * and runs in full.
+ */
+export async function shiftLight(target: "night" | "first" | "morning", duration = 1600): Promise<void> {
+  const to = target === "night" ? NIGHT : target === "first" ? FIRST_LIGHT : MORNING
+  const m = map
+  if (!m) return
   const d = reducedMotion() ? 0 : duration
-  applyPalette(map, to, d)
+  try {
+    applyPalette(m, to, d)
+  } catch (error) {
+    if (!String(error).includes("Style is not done loading")) throw error
+    await new Promise((done) => m.once("style.load", done))
+    if (map !== m) return
+    applyPalette(m, to, d)
+  }
   current = to
-  map.triggerRepaint()
-  return new Promise((resolve) => setTimeout(resolve, d))
+  m.triggerRepaint()
+  await new Promise((resolve) => setTimeout(resolve, d))
 }
 
 let timeHeld = false

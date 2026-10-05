@@ -14,12 +14,13 @@ import { cue } from "@/lib/sound"
  * Then the camera rushes in through the pile toward the words: the clippings sweep past it to the edges and beyond,
  * dimmed and drifting, and the words come forward in the middle. When they say we won't forget, each clipping falls onto a memorial site on the map and lights up there.
  *
- * count: the days run and the clippings land · float: the pile waits behind the words · fall: onto the map
+ * rest: mounted from the start of the film, nothing shown, so the count starts on time · count: the days run and the
+ * clippings land · float: the pile waits behind the words · fall: onto the map
  *
  * Smoothness: only transform and opacity move (the darkening is a layer, never a filter), the photos are small
  * and decoded before the count starts, and the map underneath is held still the whole time, so it draws nothing.
  */
-export type MontageMode = "count" | "float" | "fall"
+export type MontageMode = "rest" | "count" | "float" | "fall"
 export interface CountTiming {
   /** when the number fades in */
   enter: number
@@ -67,19 +68,20 @@ const DESKTOP = [
   { x: 81, y: 6, r: -3.5 },
   { x: 22, y: 10, r: 2 },
 ]
-// On a phone the count holds the middle; the clippings fill above and below it, clear of the dots and the map credits.
+// On a phone the count holds the middle; the clippings fill above and below it, clear of the dots and the map credits,
+// and the top row starts below the skip and sound buttons (centres at 14% and lower: about 118 px down).
 const PHONE = [
-  { x: 33, y: 13, r: -3 },
+  { x: 33, y: 16, r: -3 },
   { x: 67, y: 22, r: 3 },
   { x: 34, y: 70, r: 2 },
   { x: 66, y: 79, r: -2 },
-  { x: 50, y: 7, r: -1 },
+  { x: 50, y: 14, r: -1 },
   { x: 64, y: 66, r: -4 },
   { x: 36, y: 26, r: 4 },
   { x: 44, y: 82, r: 2 },
   { x: 38, y: 17, r: 5 },
   { x: 60, y: 74, r: -3 },
-  { x: 70, y: 9, r: 3 },
+  { x: 70, y: 15, r: 3 },
   { x: 30, y: 31, r: -3 },
   { x: 68, y: 34, r: 2 },
   { x: 30, y: 78, r: 3 },
@@ -98,10 +100,21 @@ const RISE = [0.2, 0.65, 0.25, 1] as const
 
 const formatDate = (iso: string) => iso.split("-").reverse().join(".")
 
+/** Which of the three depth layers clipping `i` of `n` sits in: by arrival, so the newest are on top (and nearest the
+ * camera, so they sweep past it first in the rush). */
+const layerOf = (i: number, n: number) => Math.min(2, Math.floor((i * 3) / n))
+
+/** The fall: a cascade, each paper shrinking to an ember on its site, then a light that stays a while and fades into the
+ * site's own glow on the map before the camera moves again (intro.tsx, ORBIT_AFTER). */
+const FALL = { step: 0.02, seconds: 1.2, light: 2.8 }
+/** A card mostly out of the frame when the fall begins never comes back across the screen: it fades where it is, and
+ * only its light appears, on its site. */
+const MIN_IN_VIEW = 0.3
+
 type Slot = { x: number; y: number; r: number }
 
 /** How far clipping `i` travels to its site, measured inside its layer, zoomed by `z`. */
-function fallOf(i: number, targets: { x: number; y: number }[] | null, slots: Slot[], z: number) {
+function fallOf(i: number, targets: ({ x: number; y: number } | null)[] | null, slots: Slot[], z: number) {
   const t = targets?.[i]
   if (!t) return null
   const cx = window.innerWidth / 2
@@ -178,7 +191,7 @@ export function Montage({ mode, days, count }: { mode: MontageMode; days: number
   const z2 = useMotionValue(1)
   const zooms = useMemo(() => [z0, z1, z2], [z0, z1, z2])
   useEffect(() => {
-    if (mode === "fall") return
+    if (mode === "fall" || mode === "rest") return
     const to = mode === "count" ? LAYER_ZOOM : RUSH_ZOOM
     const how =
       mode === "count" ? { duration: count.delay + count.seconds, ease: "linear" as const } : { duration: rush.seconds, ease: rush.ease }
@@ -186,52 +199,6 @@ export function Montage({ mode, days, count }: { mode: MontageMode; days: number
     return () => moves.forEach((m) => m.stop())
   }, [mode, zooms, count])
 
-  // When time comes back, each clipping is given a memorial site in view to fall onto, spread left to right.
-  const [targets, setTargets] = useState<{ x: number; y: number }[] | null>(null)
-  useEffect(() => {
-    if (mode !== "fall") return
-    let live = true
-    void import("@/map/controller").then((m) => {
-      const w = window.innerWidth
-      const h = window.innerHeight
-      const sites = useStore
-        .getState()
-        .seed.filter((p) => p.kind !== "community")
-        .map((p) => [p.lng, p.lat] as [number, number])
-      const inView = m
-        .screenPoints(sites)
-        .filter((p) => p.x > 24 && p.x < w - 24 && p.y > 90 && p.y < h - 90)
-        .sort((a, b) => a.x - b.x)
-      const byX = items.map((_, i) => i).sort((a, b) => slots[a].x - slots[b].x)
-      const out: { x: number; y: number }[] = []
-      const used = new Map<number, number>()
-      byX.forEach((i, k) => {
-        const at = inView.length ? Math.floor(((k + 0.5) / byX.length) * inView.length) : -1
-        const p = at >= 0 ? inView[at] : { x: w / 2, y: h * 0.72 }
-        // when there are fewer places in view than headlines, the extra ones settle around the place, not on top of it
-        const n = used.get(at) ?? 0
-        used.set(at, n + 1)
-        const angle = n * 2.4
-        out[i] = { x: p.x + Math.cos(angle) * 16 * Math.sqrt(n), y: p.y + Math.sin(angle) * 16 * Math.sqrt(n) }
-      })
-      if (live) setTargets(out)
-    })
-    return () => {
-      live = false
-    }
-  }, [mode, items, slots])
-
-  /** How far each clipping travels to its site, measured inside its zoomed layer, and that layer's zoom undone (`lens`),
-   * so the ember and its light come out the same size whatever the zoom was. */
-  const falls = useMemo(
-    () =>
-      items.map((_, i) => {
-        const z = zooms[i % 3].get()
-        const to = fallOf(i, targets, slots, z)
-        return to && { to, lens: 1 / z }
-      }),
-    [items, targets, slots, zooms],
-  )
   /** Where each clipping rises from: the middle of the screen, behind the number, measured from its own place. */
   const rises = useMemo(
     () => slots.map((s) => ({ x: ((50 - s.x) / 100) * window.innerWidth, y: ((50 - s.y) / 100) * window.innerHeight })),
@@ -243,13 +210,81 @@ export function Montage({ mode, days, count }: { mode: MontageMode; days: number
     [slots],
   )
 
+  // When time comes back, every clipping is given a memorial site in view, spread left to right, at most two a site.
+  // One still in view falls onto it; one the rush carried out of the frame sends only its light there (ghost). With no
+  // site left, a clipping just fades where it is (null).
+  const [targets, setTargets] = useState<({ x: number; y: number; ghost: boolean } | null)[] | null>(null)
+  useEffect(() => {
+    if (mode !== "fall") return
+    let live = true
+    void import("@/map/controller").then((m) => {
+      const w = window.innerWidth
+      const h = window.innerHeight
+      const cardW = phone ? 196 : 330
+      const cardH = phone ? 90 : 100
+      // how much of a card is on screen now: its place, pushed out by the recede and zoomed by its layer
+      const inFrame = (i: number) => {
+        const z = zooms[layerOf(i, items.length)].get()
+        const cx = w / 2 + ((slots[i].x / 100) * w + recedes[i].x - w / 2) * z
+        const cy = h / 2 + ((slots[i].y / 100) * h + recedes[i].y - h / 2) * z
+        const hw = (cardW * 0.9 * z) / 2
+        const hh = (cardH * 0.9 * z) / 2
+        const vis = Math.max(0, Math.min(w, cx + hw) - Math.max(0, cx - hw)) * Math.max(0, Math.min(h, cy + hh) - Math.max(0, cy - hh))
+        return vis / (4 * hw * hh)
+      }
+      const sites = useStore
+        .getState()
+        .seed.filter((p) => p.kind !== "community")
+        .map((p) => [p.lng, p.lat] as [number, number])
+      const inView = m
+        .screenPoints(sites)
+        .filter((p) => p.x > 24 && p.x < w - 24 && p.y > 90 && p.y < h - 90)
+        .sort((a, b) => a.x - b.x)
+      const out: ({ x: number; y: number; ghost: boolean } | null)[] = items.map(() => null)
+      const byX = items.map((_, i) => i).sort((a, b) => slots[a].x - slots[b].x)
+      const used = new Map<number, number>()
+      const ring = phone ? 28 : 16
+      byX.forEach((i, k) => {
+        if (!inView.length) return
+        const at = Math.floor(((k + 0.5) / byX.length) * inView.length)
+        const n = used.get(at) ?? 0
+        if (n >= 2) return
+        used.set(at, n + 1)
+        // the second on a site settles beside it, not on top of it
+        const p = inView[at]
+        out[i] = {
+          x: p.x + Math.cos(n * 2.4) * ring * Math.sqrt(n),
+          y: p.y + Math.sin(n * 2.4) * ring * Math.sqrt(n),
+          ghost: inFrame(i) < MIN_IN_VIEW,
+        }
+      })
+      if (live) setTargets(out)
+    })
+    return () => {
+      live = false
+    }
+  }, [mode, items, slots, phone, zooms, recedes])
+
+  /** How far each clipping travels to its site, measured inside its zoomed layer, and that layer's zoom undone (`lens`),
+   * so the ember and its light come out the same size whatever the zoom was. */
+  const falls = useMemo(
+    () =>
+      items.map((_, i) => {
+        if (!targets) return null
+        const z = zooms[layerOf(i, items.length)].get()
+        const to = fallOf(i, targets, slots, z)
+        // a site: the paper falls to it, or (a ghost) only its light goes; no site: the paper fades where it is
+        return to ? { to, lens: 1 / z, fade: !!targets[i]?.ghost } : { to: null, lens: 1, fade: true }
+      }),
+    [items, targets, slots, zooms],
+  )
   return (
     <div className="pointer-events-none absolute inset-0" aria-hidden="true">
       {zooms.map((zoom, layer) => (
         <motion.div key={layer} className="absolute inset-0 will-change-transform" style={{ scale: zoom }}>
           {items.map(
             (it, i) =>
-              i % 3 === layer &&
+              layerOf(i, items.length) === layer &&
               i < landed && (
                 <Clipping
                   key={it.h.text}
@@ -258,11 +293,12 @@ export function Montage({ mode, days, count }: { mode: MontageMode; days: number
                   depth={Math.min(landed - 1 - i, 6)}
                   mode={mode}
                   fall={mode === "fall" ? (falls[i]?.to ?? null) : null}
+                  fade={mode === "fall" && !!falls[i]?.fade}
                   lens={falls[i]?.lens ?? 1}
                   rise={rises[i]}
                   recede={recedes[i]}
                   first={i === 0}
-                  delay={i * 0.035}
+                  delay={i * FALL.step}
                   photo={!!it.h.photo && decoded.has(it.h.photo.file)}
                   phone={phone}
                 />
@@ -318,8 +354,8 @@ export function Montage({ mode, days, count }: { mode: MontageMode; days: number
 
 /**
  * One clipping: it rises from the depth to its place, sinks under the ones that land after it, recedes behind the words,
- * and falls to its site. Position (recede, fall) and drift each have a layer; the paper itself carries the rise, the sink,
- * the tilt and the shrink.
+ * and falls to its site (or, if the rush carried it out of the frame, fades where it is). Position (recede, fall) and
+ * drift each have a layer; the paper itself carries the rise, the sink, the tilt and the shrink.
  */
 const Clipping = memo(function Clipping({
   h,
@@ -327,6 +363,7 @@ const Clipping = memo(function Clipping({
   depth,
   mode,
   fall,
+  fade,
   lens,
   rise,
   recede,
@@ -340,6 +377,8 @@ const Clipping = memo(function Clipping({
   depth: number
   mode: MontageMode
   fall: { x: number; y: number } | null
+  /** the paper fades where it is: it has no site, or the rush carried it out of the frame (then only its light goes) */
+  fade: boolean
   /** undoes the layer's zoom, for what must keep its size on screen */
   lens: number
   rise: { x: number; y: number }
@@ -362,7 +401,7 @@ const Clipping = memo(function Clipping({
       className={cn("absolute -translate-x-1/2 -translate-y-1/2", !counting && "will-change-transform")}
       style={{ left: `${slot.x}%`, top: `${slot.y}%` }}
       animate={fall ?? (float ? recede : { x: 0, y: 0 })}
-      transition={fall ? { delay, duration: 1.5, ease: [0.55, 0, 0.3, 1] } : { duration: 2.4, ease, delay: float ? delay * 2 : 0 }}
+      transition={fall ? { delay, duration: FALL.seconds, ease: [0.55, 0, 0.3, 1] } : { duration: 2.4, ease, delay: float ? delay * 2 : 0 }}
     >
       <div
         className={float ? "clip-float" : undefined}
@@ -378,24 +417,44 @@ const Clipping = memo(function Clipping({
           )}
           initial={{ opacity: 0, scale: 0.42, x: rise.x, y: rise.y, rotate: 0 }}
           animate={
-            fall
-              ? { scale: 0.065 * lens, rotate: 0, x: 0, y: 0, opacity: [1, 1, 0] }
-              : { opacity: 1, scale: 1 - sink, rotate: slot.r, x: 0, y: 0 }
+            fade
+              ? { opacity: 0 }
+              : fall
+                ? // it shrinks first, to a third by half way, warming as it goes, then collapses into its light
+                  { scale: [null, 0.3 * lens, 0.065 * lens], rotate: 0, x: 0, y: 0, opacity: [1, 1, 0] }
+                : { opacity: 1, scale: 1 - sink, rotate: slot.r, x: 0, y: 0 }
           }
           transition={
-            fall
-              ? { delay, duration: 1.45, ease: [0.55, 0, 0.3, 1], opacity: { delay, duration: 1.45, times: [0, 0.86, 1] } }
-              : { duration: time, ease: RISE, delay: float ? delay * 2 : 0, opacity: { duration: time * 0.4 } }
+            fade
+              ? { opacity: { delay, duration: 0.35 } }
+              : fall
+                ? {
+                    delay,
+                    duration: FALL.seconds,
+                    ease: [0.55, 0, 0.3, 1],
+                    scale: { delay, duration: FALL.seconds, times: [0, 0.5, 1], ease: "easeInOut" },
+                    opacity: { delay, duration: FALL.seconds, times: [0, 0.86, 1] },
+                  }
+                : // unseen while it passes behind the number, it shows only as it comes out to its place
+                  { duration: time, ease: RISE, delay: float ? delay * 2 : 0, opacity: { delay: time * 0.3, duration: time * 0.5 } }
           }
         >
           <div className="min-w-0">
             <p dir="ltr" className={cn("text-right text-micro font-bold tabular-nums", h.mourning ? "text-white/60" : "text-brand")}>
               {h.when ?? formatDate(h.date)}
             </p>
-            <h3 className={cn("mt-0.5 font-black text-balance", phone ? "text-[13.5px] leading-[1.2]" : "text-title-3 leading-[1.15]")}>
+            {/* set right, as a Hebrew paper sets its headlines (the intro around it centres everything) */}
+            <h3
+              className={cn(
+                "mt-0.5 text-right font-black text-balance",
+                phone ? "text-[13.5px] leading-[1.2]" : "text-title-3 leading-[1.15]",
+              )}
+            >
               {h.text}
             </h3>
-            {!phone && <p className={cn("mt-1 text-micro", h.mourning ? "text-white/45" : "text-clipping-ink/55")}>{h.source.label}</p>}
+            {!phone && (
+              <p className={cn("mt-1 text-right text-micro", h.mourning ? "text-white/45" : "text-clipping-ink/55")}>{h.source.label}</p>
+            )}
           </div>
           {h.photo && photo && (
             <img
@@ -414,22 +473,22 @@ const Clipping = memo(function Clipping({
             // behind the words it darkens with the rush itself, so the eye is left with the words
             transition={{ duration: float ? rush.seconds * 0.7 : 0.4, delay: float ? delay : 0 }}
           />
-          {/* falling, the paper turns to an ember: the flower's red */}
+          {/* falling, the paper warms into an ember: amber at its heart, the flower's red at its edges, never a flat fill */}
           <motion.div
-            className="pointer-events-none absolute inset-0 rounded-[3px] bg-[var(--p-anemone-500)]"
+            className="pointer-events-none absolute inset-0 rounded-[3px] bg-[radial-gradient(closest-side,var(--p-sun-200),var(--p-anemone-500))]"
             initial={{ opacity: 0 }}
-            animate={{ opacity: fall ? 1 : 0 }}
-            transition={{ delay: delay + 0.4, duration: 0.9 }}
+            animate={{ opacity: fall && !fade ? 0.6 : 0 }}
+            transition={{ delay: delay + 0.25, duration: 0.6 }}
           />
         </motion.article>
       </div>
-      {/* where it lands, the ember lights up as a flower's light */}
+      {/* where it lands, the ember lights up as a flower's light, stays a while, and fades into the site's own glow */}
       {fall && (
         <motion.span
           className="absolute top-1/2 left-1/2 size-5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(closest-side,var(--p-anemone-400),var(--p-anemone-600)_55%,transparent)] shadow-[0_0_24px_8px_color-mix(in_oklab,var(--p-anemone-500)_45%,transparent)]"
           initial={{ opacity: 0, scale: 0.3 * lens }}
-          animate={{ opacity: [0, 1, 1, 0], scale: [0.3, 1.25, 1, 2.2].map((k) => k * lens) }}
-          transition={{ delay: delay + 1.3, duration: 1.8, times: [0, 0.15, 0.5, 1] }}
+          animate={{ opacity: [0, 1, 0.8, 0.8, 0], scale: [0.3, 1.25, 1, 1, 1].map((k) => k * lens) }}
+          transition={{ delay: delay + FALL.seconds * 0.85, duration: FALL.light, times: [0, 0.1, 0.25, 0.65, 1] }}
         />
       )}
     </motion.div>
