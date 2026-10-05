@@ -25,12 +25,20 @@ export const trackingMail = (to: string, link: string): Mail => ({
 
 const DECISION: Record<string, (name: string, note?: string) => string> = {
   approve: (name) => `ההצעה "${name}" אושרה ומופיעה עכשיו באתר.`,
-  reject: (name) => `ההצעה "${name}" לא אושרה. אם יש לכם שאלה, אפשר לענות למייל הזה.`,
+  reject: (name) => `ההצעה "${name}" לא אושרה.`,
   return: (name, note) => `החזרנו אליכם את ההצעה "${name}" לתיקון.\n\nהערת המאשרים:\n${note ?? ""}\n\nאת התיקון שולחים מקישור המעקב.`,
 }
 
-export const decisionMail = (to: string, action: string, name: string, note?: string): Mail => ({
+// A correction of a place already published: the place itself stays as it was approved, whatever is decided.
+const CORRECTION: Record<string, (name: string, note?: string) => string> = {
+  approve: (name) => `התיקון ל"${name}" אושר, והוא מופיע עכשיו באתר.`,
+  reject: (name) => `התיקון ל"${name}" לא אושר. המקום נשאר באתר כפי שאושר קודם.`,
+  return: (name, note) =>
+    `החזרנו אליכם את התיקון ל"${name}" לתיקון נוסף. המקום נשאר באתר כפי שאושר קודם.\n\nהערת המאשרים:\n${note ?? ""}\n\nאת התיקון שולחים מקישור המעקב.`,
+}
+
+export const decisionMail = (to: string, action: string, name: string, note?: string, correction = false): Mail => ({
   to,
   subject: "עדכון על ההצעה שלכם · מקום לזכור",
-  text: (DECISION[action]?.(name, note) ?? "") + SIGN,
+  text: ((correction ? CORRECTION : DECISION)[action]?.(name, note) ?? "") + SIGN,
 })

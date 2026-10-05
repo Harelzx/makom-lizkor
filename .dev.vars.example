@@ -7,3 +7,5 @@ DEV_ACCESS_SECRET=development-only-not-a-secret
 # Cloudflare's published Turnstile test secret (always passes); its test tokens come back for example.com.
 TURNSTILE_SECRET=1x0000000000000000000000000000000AA
 TURNSTILE_HOSTNAMES=example.com
+# Derives each submission's tracking token from its key (HMAC); a real secret in production, set with wrangler secret.
+TRACKING_SECRET=development-tracking-secret-not-a-secret

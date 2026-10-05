@@ -13,12 +13,31 @@ export type Inserted =
 
 const VERIFY_DAYS = 7
 
-export async function insertSubmission(db: D1Database, input: SubmissionInput, key: string, now: Date): Promise<Inserted> {
+/**
+ * The tracking token for a submission key: HMAC(secret, key). A re-sent submission gets the very token its first try
+ * got, so two tabs re-sending at once, or a lost answer, never leave a device holding a token that stopped working.
+ * Holding it still takes both the device's random key and the server's secret.
+ */
+export async function trackingTokenFor(secret: string, key: string): Promise<string> {
+  const k = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"])
+  const mac = new Uint8Array(await crypto.subtle.sign("HMAC", k, new TextEncoder().encode(`track:${key}`)))
+  return btoa(String.fromCharCode(...mac.subarray(0, 16)))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "")
+}
+
+export async function insertSubmission(
+  db: D1Database,
+  input: SubmissionInput,
+  key: string,
+  trackingToken: string,
+  now: Date,
+): Promise<Inserted> {
   const keyHash = await sha256Hex(key)
   // The input after Zod, so the same request always gives the same fingerprint.
   const bodyHash = await sha256Hex(JSON.stringify(input))
   const id = placeId(now.getTime())
-  const trackingToken = newToken()
   const at = now.toISOString()
   // On private property without the owner's permission, only a point rounded to about a kilometre is ever stored
   // (spec 4): the exact one never reaches the database, the moderators or a backup.
@@ -95,14 +114,12 @@ export async function insertSubmission(db: D1Database, input: SubmissionInput, k
     .bind(keyHash)
     .first<{ id: string; body: string }>()
   if (!prior || prior.body !== bodyHash) return { kind: "mismatch" }
-  // Only the hash of the first token exists, so the retry gets a fresh one; the first never reached the browser.
-  const fresh = newToken()
-  await db
-    .prepare("UPDATE places SET tracking_token_hash = ? WHERE id = ?")
-    .bind(await sha256Hex(fresh), prior.id)
-    .run()
-  return { kind: "replayed", id: prior.id, trackingToken: fresh }
+  // The same key derives the same token: the answer the first try lost is given again, unchanged.
+  return { kind: "replayed", id: prior.id, trackingToken }
 }
+
+/** Whether `token` opens this place: checked before a request's body is even read. */
+export const canTrack = async (db: D1Database, id: string, token: string) => !!(await tracked(db, id, token))
 
 /** The place, if `token` is its tracking capability; null for an unknown id and a wrong token alike. */
 async function tracked(db: D1Database, id: string, token: string) {
@@ -226,7 +243,7 @@ export async function withdraw(db: D1Database, id: string, token: string, now: D
         .prepare(
           `UPDATE revisions SET state = 'withdrawn', kind = NULL, name_he = NULL, lat = NULL, lng = NULL, location_precision = NULL,
              on_private_property = 0, location_permission_at = NULL, access_note_he = NULL, place_he = NULL, in_memory_of = NULL,
-             story_he = NULL, link_url = NULL, decision_note = NULL, decided_at = ?3
+             story_he = NULL, link_url = NULL, decision_note = NULL, photo_key = NULL, photo_alt = NULL, photo_credit = NULL, decided_at = ?3
            WHERE place_id = ?1 AND ${happened}`,
         )
         .bind(id, tid, at),
@@ -252,7 +269,8 @@ export async function listQueue(db: D1Database) {
     .prepare(
       `SELECT p.id, p.rev, r.id AS revisionId, r.kind, r.name_he, r.lat, r.lng, r.location_precision, r.place_he, r.in_memory_of, r.story_he,
          r.link_url, p.created_at, p.status = 'published' AS correction,
-         CASE WHEN r.photo_key IS NOT NULL THEN '/api/admin/media/' || r.photo_key END AS photo_url, r.photo_alt, r.photo_credit
+         CASE WHEN r.photo_key IS NOT NULL THEN '/api/admin/media/' || r.photo_key END AS photo_url, r.photo_alt, r.photo_credit,
+         r.access_note_he, r.on_private_property, r.location_permission_at IS NOT NULL AS location_permission
        FROM places p JOIN revisions r ON r.place_id = p.id AND r.state = 'pending'
        WHERE p.status IN ('pending', 'published') ORDER BY r.created_at`,
     )
@@ -271,7 +289,16 @@ export async function listQueue(db: D1Database) {
  */
 export async function transition(
   db: D1Database,
-  t: { placeId: string; revisionId: string; action: "approve" | "reject" | "return"; expectedRev: number; actor: string; note?: string },
+  t: {
+    placeId: string
+    revisionId: string
+    action: "approve" | "reject" | "return"
+    expectedRev: number
+    actor: string
+    note?: string
+    /** For an approval: the key its photo will be served from (preparePhoto), set in the same step. */
+    photoKey?: string | null
+  },
   now: Date,
 ): Promise<"ok" | "conflict"> {
   const tid = `t_${ulid(now.getTime())}`
@@ -297,8 +324,14 @@ export async function transition(
       )
       .bind(t.placeId, tid, t.action, t.revisionId),
     db
-      .prepare(`UPDATE revisions SET state = ?3, decided_at = ?4, decision_note = ?6 WHERE id = ?5 AND ${happened}`)
-      .bind(t.placeId, tid, state, at, t.revisionId, t.note ?? null),
+      .prepare(
+        `UPDATE revisions SET state = ?3, decided_at = ?4, decision_note = ?6,
+           photo_key = CASE WHEN ?7 = 1 THEN ?8 ELSE photo_key END,
+           photo_alt = CASE WHEN ?7 = 1 AND ?8 IS NULL THEN NULL ELSE photo_alt END,
+           photo_credit = CASE WHEN ?7 = 1 AND ?8 IS NULL THEN NULL ELSE photo_credit END
+         WHERE id = ?5 AND ${happened}`,
+      )
+      .bind(t.placeId, tid, state, at, t.revisionId, t.note ?? null, t.action === "approve" ? 1 : 0, t.photoKey ?? null),
     db
       .prepare(`UPDATE feed_state SET n = n + 1, changed_at = ?3 WHERE id = 1 AND ?4 = 'approve' AND ${happened}`)
       .bind(t.placeId, tid, at, t.action),
@@ -322,7 +355,18 @@ export async function revise(
   expectedRev: number,
   now: Date,
 ): Promise<"ok" | "conflict" | "not_found"> {
-  if (!(await tracked(db, id, token))) return "not_found"
+  const place = await tracked(db, id, token)
+  if (!place) return "not_found"
+  // The photo a correction carries over: the published one while the place is live (a refused correction's photo is
+  // gone), otherwise the newest revision's.
+  const photo = await db
+    .prepare(
+      place.status === "published"
+        ? "SELECT r.photo_key, r.photo_alt, r.photo_credit FROM places p JOIN revisions r ON r.id = p.published_revision_id WHERE p.id = ?"
+        : "SELECT photo_key, photo_alt, photo_credit FROM revisions WHERE place_id = ? ORDER BY n DESC LIMIT 1",
+    )
+    .bind(id)
+    .first<{ photo_key: string | null; photo_alt: string | null; photo_credit: string | null }>()
   const tid = `t_${ulid(now.getTime())}`
   const at = now.toISOString()
   const happened = "EXISTS (SELECT 1 FROM places WHERE id = ?1 AND last_transition_id = ?2)"
@@ -342,7 +386,7 @@ export async function revise(
            location_permission_at, access_note_he, place_he, in_memory_of, story_he, link_url, consent_version, created_at,
            photo_key, photo_alt, photo_credit)
          SELECT ?3, ?1, last.n + 1, 'pending', last.kind, ?4, last.lat, last.lng, last.location_precision, last.on_private_property,
-           last.location_permission_at, last.access_note_he, ?5, ?6, ?7, ?8, ?9, ?10, last.photo_key, last.photo_alt, last.photo_credit
+           last.location_permission_at, last.access_note_he, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13
          FROM (SELECT * FROM revisions WHERE place_id = ?1 ORDER BY n DESC LIMIT 1) AS last
          WHERE ${happened}`,
       )
@@ -357,6 +401,9 @@ export async function revise(
         r.link_url ?? null,
         r.consent_version,
         at,
+        photo?.photo_key ?? null,
+        photo?.photo_alt ?? null,
+        photo?.photo_credit ?? null,
       ),
     db
       .prepare(
@@ -437,43 +484,59 @@ export async function attachPhoto(
   if (!rev) return "closed"
   const key = `quarantine/${id}/${rev.id}-${ulid()}.jpg`
   await media.put(key, clean, { httpMetadata: { contentType: "image/jpeg" } })
-  await db
-    .prepare("UPDATE revisions SET photo_key = ?, photo_alt = ?, photo_credit = ? WHERE id = ?")
-    .bind(key, alt, credit ?? null, rev.id)
-    .run()
+  // The rev moves with the photo: a moderator's decision made on what they saw before conflicts instead of approving
+  // a picture nobody looked at.
+  await db.batch([
+    db.prepare("UPDATE revisions SET photo_key = ?, photo_alt = ?, photo_credit = ? WHERE id = ?").bind(key, alt, credit ?? null, rev.id),
+    db.prepare("UPDATE places SET rev = rev + 1 WHERE id = ?").bind(id),
+  ])
   // A replaced photo that was never approved goes at once.
   if (rev.photo_key?.startsWith("quarantine/")) await media.delete(rev.photo_key)
   return "ok"
 }
 
 /**
- * The files follow a moderator's decision. Approving moves the revision's photo from quarantine/ to public/ and removes
- * the photos of revisions it retires; rejecting deletes the photo at once (spec 3.3). A returned revision keeps its photo
- * for the sender's correction. Runs after the decision is stored, so a failure here leaves files for the sweep, never a
- * decision half made.
+ * Before an approval: the revision's photo copied from quarantine/ to public/, so the decision can publish the place and
+ * its photo in one step (the feed never names a photo that isn't there). Returns the key the approved revision will
+ * hold: the new public one, the public one a correction inherited, or null when the photo was lost (published without
+ * it rather than with a key that serves nothing). A copy that fails throws, and nothing is decided.
+ */
+export async function preparePhoto(db: D1Database, media: R2Bucket, placeId: string, revisionId: string): Promise<string | null> {
+  const rev = await db.prepare("SELECT photo_key FROM revisions WHERE id = ?").bind(revisionId).first<{ photo_key: string | null }>()
+  const key = rev?.photo_key ?? null
+  if (!key || key.startsWith("public/")) return key
+  const object = await media.get(key)
+  if (!object) return null
+  const published = `public/${placeId}/${revisionId}.jpg`
+  await media.put(published, await object.arrayBuffer(), { httpMetadata: { contentType: "image/jpeg" } })
+  return published
+}
+
+/**
+ * After a decision is stored, the files left behind: an approval removes the place's quarantine and the public photos
+ * of revisions it retired; a rejection deletes everything the place has in quarantine at once (spec 3.3). A returned
+ * revision keeps its photo for the correction. Never throws: a file that can't go now is left for the sweep.
  */
 export async function photosAfterDecision(db: D1Database, media: R2Bucket, placeId: string, revisionId: string, action: string) {
-  const rev = await db.prepare("SELECT photo_key FROM revisions WHERE id = ?").bind(revisionId).first<{ photo_key: string | null }>()
-  if (action === "reject" && rev?.photo_key?.startsWith("quarantine/")) {
-    await media.delete(rev.photo_key)
-    await db.prepare("UPDATE revisions SET photo_key = NULL, photo_alt = NULL, photo_credit = NULL WHERE id = ?").bind(revisionId).run()
-    return
-  }
-  if (action !== "approve") return
-  let live = rev?.photo_key ?? null
-  if (live?.startsWith("quarantine/")) {
-    const object = await media.get(live)
-    if (object) {
-      const published = `public/${placeId}/${revisionId}.jpg`
-      await media.put(published, await object.arrayBuffer(), { httpMetadata: { contentType: "image/jpeg" } })
-      await db.prepare("UPDATE revisions SET photo_key = ? WHERE id = ?").bind(published, revisionId).run()
-      await media.delete(live)
-      live = published
+  try {
+    if (action === "return") return
+    const quarantined = (await media.list({ prefix: `quarantine/${placeId}/` })).objects.map((o) => o.key)
+    if (quarantined.length) await media.delete(quarantined)
+    if (action === "reject") {
+      await db
+        .prepare(
+          "UPDATE revisions SET photo_key = NULL, photo_alt = NULL, photo_credit = NULL WHERE id = ? AND photo_key LIKE 'quarantine/%'",
+        )
+        .bind(revisionId)
+        .run()
+      return
     }
+    const live = await db.prepare("SELECT photo_key FROM revisions WHERE id = ?").bind(revisionId).first<string | null>("photo_key")
+    const others = (await media.list({ prefix: `public/${placeId}/` })).objects.map((o) => o.key).filter((k) => k !== live)
+    if (others.length) await media.delete(others)
+  } catch (err) {
+    console.error(JSON.stringify({ level: "error", event: "photo_cleanup", error: (err as Error).name }))
   }
-  // Whatever else this place holds in public/ belonged to revisions that are no longer published.
-  const others = (await media.list({ prefix: `public/${placeId}/` })).objects.map((o) => o.key).filter((k) => k !== live)
-  if (others.length) await media.delete(others)
 }
 
 /** Every file of a place, in quarantine and public alike: a withdrawal erases them all at once. */

@@ -27,6 +27,7 @@ email.post(
         .get("sendMail")(c.env, trackingMail(r.to, link))
         .catch(() => false)
     }
-    return c.json({ ok: true }, 200, PRIVATE)
+    // `first`: whether this click verified the address (and sent the tracking link), or it was verified before.
+    return c.json({ ok: true, first: r.first }, 200, PRIVATE)
   },
 )

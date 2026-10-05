@@ -33,7 +33,12 @@ export function createApp(deps: Deps) {
     const object = await c.env.MEDIA.get(key)
     if (!object) return problem(c, 404, "not_found")
     // Short-lived: a photo taken down later (phase 4) must not live on in caches for long.
-    return c.body(object.body, 200, { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=300" })
+    return c.body(object.body, 200, {
+      "Content-Type": "image/jpeg",
+      "Cache-Control": "public, max-age=300",
+      "X-Content-Type-Options": "nosniff",
+      "Content-Security-Policy": "sandbox; default-src 'none'",
+    })
   })
 
   // Only /api/* and /__dev/* reach the Worker, so anything unmatched here is an API mistake, not a page.

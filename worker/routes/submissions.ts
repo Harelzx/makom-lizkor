@@ -2,7 +2,18 @@ import { zValidator } from "@hono/zod-validator"
 import { Hono, type Context } from "hono"
 import { z } from "zod"
 import { RevisionInput, SubmissionInput, text } from "@/shared/contract"
-import { attachPhoto, erasePhotos, insertSubmission, pendingCount, revise, submissionKnown, submissionStatus, withdraw } from "../db/places"
+import {
+  attachPhoto,
+  canTrack,
+  erasePhotos,
+  insertSubmission,
+  trackingTokenFor,
+  pendingCount,
+  revise,
+  submissionKnown,
+  submissionStatus,
+  withdraw,
+} from "../db/places"
 import { clock } from "../lib/clock"
 import { PRIVATE, problem } from "../lib/http"
 import { verificationMail } from "../lib/messages"
@@ -43,7 +54,10 @@ submissions.post(
       const refused = await guard(c, "submit", true)
       if (refused) return refused
     }
-    const r = await insertSubmission(c.env.DB, c.req.valid("json"), key, clock(c.req.raw, c.env))
+    // Without the server's secret there is no tracking token to give: refuse rather than hand out a weak one.
+    if (!c.env.TRACKING_SECRET) return problem(c, 503, "not_configured")
+    const token = await trackingTokenFor(c.env.TRACKING_SECRET, key)
+    const r = await insertSubmission(c.env.DB, c.req.valid("json"), key, token, clock(c.req.raw, c.env))
     if (r.kind === "mismatch") return problem(c, 409, "idempotency_key_reused")
     // 200 for the same submission sent again, so the browser can tell, though it treats both alike.
     // An address was given: the verification mail goes first, and says nothing about the place.
@@ -95,8 +109,11 @@ const PhotoFields = z.object({ alt: text({ max: 140 }), credit: text({ max: 60 }
 /** The photo for the sender's open revision, after the submission itself: a second request, so the submission's retry stays exact. */
 submissions.put("/:id/photo", async (c) => {
   const token = bearer(c.req.header("Authorization"))
-  if (!token) return problem(c, 404, "not_found")
-  if (Number(c.req.header("Content-Length") ?? 0) > 5 * 1024 * 1024) return problem(c, 413, "too_large")
+  // The token first, then the declared size, and only then the body: nothing large is read for a stranger.
+  if (!token || !(await canTrack(c.env.DB, c.req.param("id"), token))) return problem(c, 404, "not_found")
+  const length = Number(c.req.header("Content-Length"))
+  if (!c.req.header("Content-Length") || !Number.isFinite(length)) return problem(c, 411, "length_required")
+  if (length > 5 * 1024 * 1024) return problem(c, 413, "too_large")
   const body = await c.req.parseBody().catch(() => null)
   const file = body?.photo
   if (!(file instanceof File)) return problem(c, 400, "invalid_input")

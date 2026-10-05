@@ -78,3 +78,16 @@ test("a link to a newly approved place opens it even when this browser holds an 
   await expect(page.getByRole("heading", { name })).toBeVisible(DAY)
   await expect(page).toHaveURL(new RegExp(`#/place/${id}$`))
 })
+
+test("a link to a place that isn't published falls back even when the offline copy is already current", async ({ browser }) => {
+  const page = await (await browser.newContext()).newPage()
+  const fed = page.waitForResponse((r) => r.url().includes("/api/v1/feed?") && r.status() === 200)
+  await page.goto("/")
+  await page.getByRole("button", { name: "דילוג", exact: true }).click()
+  await fed
+  await page.waitForTimeout(500)
+  // Same version on the server as in the snapshot: the live check finds nothing newer to fetch.
+  await page.goto("/#/place/p_01ZZZZZZZZZZZZZZZZZZZZZZZZ")
+  await page.reload()
+  await expect(page).toHaveURL(/#\/$/, DAY)
+})

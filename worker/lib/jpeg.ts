@@ -16,7 +16,10 @@ export function stripJpeg(bytes: Uint8Array): Uint8Array | null {
     if (marker === 0xda) {
       const rest = bytes.subarray(i)
       if (rest.length < 2 || rest[rest.length - 2] !== 0xff || rest[rest.length - 1] !== 0xd9) return null
-      return Uint8Array.from([...out, ...rest])
+      const result = new Uint8Array(out.length + rest.length)
+      result.set(out)
+      result.set(rest, out.length)
+      return result
     }
     // APP0 (JFIF) stays; APP1–APP15 and comments go.
     const metadata = (marker >= 0xe1 && marker <= 0xef) || marker === 0xfe

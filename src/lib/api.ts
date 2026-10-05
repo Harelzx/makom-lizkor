@@ -104,7 +104,7 @@ export async function reviseSubmission(id: string, token: string, body: Revision
 }
 
 /** "ok", "expired" when the link is wrong or older than its seven days, or "failed" when the server can't be reached. */
-export async function confirmEmail(token: string): Promise<"ok" | "expired" | "failed"> {
+export async function confirmEmail(token: string): Promise<"ok" | "again" | "expired" | "failed"> {
   try {
     const res = await fetch("/api/v1/email/verify", {
       method: "POST",
@@ -112,7 +112,8 @@ export async function confirmEmail(token: string): Promise<"ok" | "expired" | "f
       body: JSON.stringify({ token }),
       signal: AbortSignal.timeout(8000),
     })
-    return res.ok ? "ok" : res.status === 404 ? "expired" : "failed"
+    if (res.ok) return ((await res.json()) as { first?: boolean }).first === false ? "again" : "ok"
+    return res.status === 404 ? "expired" : "failed"
   } catch {
     return "failed"
   }
@@ -140,7 +141,8 @@ export async function uploadPhoto(
       body: form,
       signal: AbortSignal.timeout(30_000),
     })
-    return res.ok ? "ok" : REJECTED.has(res.status) ? "rejected" : "temporary"
+    // A 404: the place is gone or the token no longer opens it; sending again can't help.
+    return res.ok ? "ok" : REJECTED.has(res.status) || res.status === 404 ? "rejected" : "temporary"
   } catch {
     return "temporary"
   }

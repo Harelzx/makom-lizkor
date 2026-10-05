@@ -38,7 +38,7 @@ const upload = (
   const form = new FormData()
   form.append("photo", new File([bytes], "photo.jpg", { type }))
   for (const [k, v] of Object.entries(fields)) form.append(k, v)
-  return call(`http://local/api/v1/submissions/${id}/photo`, { method: "PUT", headers: { Authorization: `Bearer ${token}` }, body: form })
+  return sendForm(`http://local/api/v1/submissions/${id}/photo`, token, form)
 }
 const decide = async (id: string, action: string) => {
   const { items } = await (
@@ -120,3 +120,19 @@ describe("a photo with a submission", () => {
     expect(await objects(b.id)).toHaveLength(0)
   })
 })
+
+/** A form sent as a browser sends it: serialised, with its Content-Length. */
+async function sendForm(url: string, token: string, form: FormData, headers: Record<string, string> = {}) {
+  const encoded = new Request(url, { method: "PUT", body: form })
+  const body = await encoded.arrayBuffer()
+  return call(url, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": encoded.headers.get("Content-Type")!,
+      "Content-Length": String(body.byteLength),
+      ...headers,
+    },
+    body,
+  })
+}
