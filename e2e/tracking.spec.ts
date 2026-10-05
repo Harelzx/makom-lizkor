@@ -59,3 +59,35 @@ test("a tracking link with a wrong token says nothing about the place", async ({
   await page.goto("/#/track/p_01ZZZZZZZZZZZZZZZZZZZZZZZZ/AAAAAAAAAAAAAAAAAAAAAA")
   await expect(page.getByRole("dialog", { name: "מצב ההצעה" }).getByText("לא מצאנו הצעה בקישור הזה")).toBeVisible(DAY)
 })
+
+test("a moderator returns a place with a note, the sender corrects it, and it comes back for review", async ({ browser }) => {
+  test.setTimeout(120_000)
+  const name = `ספסל דמו מוחזר ${Date.now()}`
+  const page = await submit(browser, name)
+
+  const modCtx = await browser.newContext()
+  await modCtx.request.post("/__dev/login", { data: { email: "dev@example.test" } })
+  const mod = await modCtx.newPage()
+  await mod.goto("/admin/")
+  const item = mod.getByRole("article", { name })
+  await item.getByRole("button", { name: "החזרה לתיקון" }).click()
+  await item.getByLabel("הערה למגיש").fill("נא לציין את שם היישוב")
+  await item.getByRole("button", { name: "שליחת ההחזרה" }).click()
+  await expect(item).toHaveCount(0)
+
+  await page.getByRole("button", { name: "מעקב אחרי ההצעה" }).click()
+  const view = page.getByRole("dialog", { name: "מצב ההצעה" })
+  await expect(view.getByText("הוחזרה אליכם לתיקון")).toBeVisible()
+  await expect(view.getByText("נא לציין את שם היישוב")).toBeVisible()
+  await view.getByRole("button", { name: "תיקון ההצעה" }).click()
+  await view.getByLabel("יישוב או אזור").fill("בארי")
+  await view.getByLabel("שם המקום").fill(`${name} מתוקן`)
+  await view.getByRole("checkbox").check()
+  await view.getByRole("button", { name: "שליחה מחדש לבדיקה" }).click()
+  await expect(view.getByText("ממתינה לבדיקה")).toBeVisible()
+
+  await mod.reload()
+  const corrected = mod.getByRole("article", { name: `${name} מתוקן` })
+  await expect(corrected).toBeVisible()
+  await expect(corrected.getByText("בארי", { exact: false })).toBeVisible()
+})

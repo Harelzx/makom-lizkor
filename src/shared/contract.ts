@@ -13,7 +13,12 @@ export const SUBMITTABLE_KINDS = ["bench", "lookout", "grove", "garden", "plaque
  * one (same body, same Idempotency-Key), and its consent record has to point to a text that exists. A wording change
  * is a new key in NOTICES, never an edit of an old one.
  */
-export const SUBMISSION_NOTICES = ["notice.submission@2026-10-2", "notice.submission@2026-10-3", "notice.submission@2026-10-4"] as const
+export const SUBMISSION_NOTICES = [
+  "notice.submission@2026-10-2",
+  "notice.submission@2026-10-3",
+  "notice.submission@2026-10-4",
+  "notice.submission@2026-10-5",
+] as const
 export const CURRENT_SUBMISSION_NOTICE = SUBMISSION_NOTICES[SUBMISSION_NOTICES.length - 1]
 
 export const text = ({ max, multiline = false }: { max: number; multiline?: boolean }) =>

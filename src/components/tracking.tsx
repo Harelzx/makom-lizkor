@@ -15,7 +15,12 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group"
-import { trackSubmission, withdrawSubmission, type Tracked } from "@/lib/api"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { CONSENT_TEXT, noticeHtml } from "@/data/legal"
+import { reviseSubmission, trackSubmission, withdrawSubmission, type Draft, type Tracked } from "@/lib/api"
+import { CURRENT_SUBMISSION_NOTICE } from "@/shared/contract"
 import { useStore } from "@/store"
 
 /** What each state means to the person who sent the place. */
@@ -36,6 +41,74 @@ const FINAL = new Set(["withdrawn", "erased"])
  * A submission's status, opened from its private tracking link or from the sender's own card. The link is the only
  * key to it: whoever holds it can see the status and withdraw the place, so the view says to keep it private.
  */
+/** A correction can be sent for a place returned to its sender, or for one already published with nothing waiting. */
+const correctable = (t: Tracked) => t.status === "returned" || (t.status === "published" && t.revision_state !== "pending")
+
+const stripScheme = (v: string) => v.trim().replace(/^https?:\/\//i, "")
+
+/**
+ * The sender's correction: the text again, whole, as they want it to appear. The kind and the point stay as they were.
+ * It is a new submission of text, so it shows the same notice and asks for the same agreement as the add form.
+ */
+function Correction({ draft, onSend }: { draft: Draft; onSend: (d: Draft) => Promise<void> }) {
+  const [d, setD] = useState({ ...draft, link_url: draft.link_url ? stripScheme(draft.link_url) : "" })
+  const [agreed, setAgreed] = useState(false)
+  const [sending, setSending] = useState(false)
+  const field = (k: keyof Draft) => ({
+    value: d[k] ?? "",
+    onChange: (e: { target: { value: string } }) => setD({ ...d, [k]: e.target.value }),
+  })
+  return (
+    <form
+      className="flex flex-col gap-3"
+      onSubmit={async (e) => {
+        e.preventDefault()
+        if (!d.name_he.trim() || !agreed || sending) return
+        setSending(true)
+        await onSend({ ...d, link_url: d.link_url ? `https://${stripScheme(d.link_url)}` : null })
+        setSending(false)
+      }}
+    >
+      <Field>
+        <FieldLabel htmlFor="fix-name">שם המקום</FieldLabel>
+        <Input id="fix-name" required maxLength={80} {...field("name_he")} />
+      </Field>
+      <Field>
+        <FieldLabel htmlFor="fix-place">יישוב או אזור</FieldLabel>
+        <Input id="fix-place" maxLength={80} {...field("place_he")} />
+      </Field>
+      <Field>
+        <FieldLabel htmlFor="fix-mem">לזכר (לא חובה)</FieldLabel>
+        <Input id="fix-mem" maxLength={120} {...field("in_memory_of")} />
+      </Field>
+      <Field>
+        <FieldLabel htmlFor="fix-story">כמה מילים על המקום (לא חובה)</FieldLabel>
+        <Textarea id="fix-story" maxLength={2000} {...field("story_he")} />
+      </Field>
+      <Field>
+        <FieldLabel htmlFor="fix-link">קישור לאתר הנצחה (לא חובה)</FieldLabel>
+        <Input id="fix-link" dir="ltr" maxLength={300} {...field("link_url")} />
+      </Field>
+      <details className="rounded-2xl border border-line px-4 py-3 text-caption text-ink-2">
+        <summary className="pressable cursor-pointer text-label text-ink-1">הודעת הפרטיות ותנאי השליחה</summary>
+        <div
+          className="mt-2 flex flex-col gap-2 [&_a]:text-ink-1 [&_a]:underline [&_a]:underline-offset-2"
+          dangerouslySetInnerHTML={{ __html: noticeHtml(CURRENT_SUBMISSION_NOTICE) }}
+        />
+      </details>
+      <Field orientation="horizontal">
+        <Checkbox id="fix-consent" checked={agreed} onCheckedChange={(v) => setAgreed(v === true)} />
+        <FieldLabel htmlFor="fix-consent" className="leading-snug font-normal">
+          {CONSENT_TEXT}
+        </FieldLabel>
+      </Field>
+      <Button type="submit" className="pressable self-start" disabled={!agreed || !d.name_he.trim() || sending}>
+        שליחה מחדש לבדיקה
+      </Button>
+    </form>
+  )
+}
+
 export function Tracking() {
   const tracking = useStore((s) => s.tracking)
   const setTracking = useStore((s) => s.setTracking)
@@ -43,6 +116,7 @@ export function Tracking() {
   const [state, setState] = useState<{ key: string; result: Tracked | null | undefined; failed: boolean } | null>(null)
   const [confirming, setConfirming] = useState(false)
   const [working, setWorking] = useState(false)
+  const [fixing, setFixing] = useState(false)
   const key = tracking ? `${tracking.id}/${tracking.token}` : ""
 
   useEffect(() => {
@@ -57,6 +131,28 @@ export function Tracking() {
   }, [tracking])
 
   const current = state?.key === key ? state : null
+  const reload = async () => {
+    if (!tracking) return
+    const result = await trackSubmission(tracking.id, tracking.token)
+    setState({ key: `${tracking.id}/${tracking.token}`, result, failed: result === undefined })
+  }
+
+  const sendCorrection = async (d: Draft) => {
+    if (!tracking || current?.result?.rev === undefined) return
+    const r = await reviseSubmission(tracking.id, tracking.token, {
+      expectedRev: current.result.rev,
+      name_he: d.name_he.trim(),
+      place_he: d.place_he?.trim() || undefined,
+      in_memory_of: d.in_memory_of?.trim() || undefined,
+      story_he: d.story_he?.trim() || undefined,
+      link_url: d.link_url || undefined,
+      consent_version: CURRENT_SUBMISSION_NOTICE,
+    })
+    if (r === "failed") return void toast("לא הצלחנו לשלוח את התיקון", { description: "התיקון לא נשמר. נסו שוב בעוד רגע." })
+    if (r === "conflict") toast("ההצעה השתנתה בינתיים", { description: "הנה המצב העדכני." })
+    setFixing(false)
+    await reload()
+  }
   const link = tracking ? `${location.origin}/#/track/${encodeURIComponent(tracking.id)}/${encodeURIComponent(tracking.token)}` : ""
 
   const withdraw = async () => {
@@ -74,7 +170,7 @@ export function Tracking() {
 
   return (
     <Dialog open={!!tracking} onOpenChange={(v) => !v && setTracking(null)}>
-      <DialogContent dir="rtl" className="sm:max-w-[480px]">
+      <DialogContent dir="rtl" className="max-h-[92dvh] overflow-y-auto sm:max-w-[480px]">
         <DialogHeader>
           <DialogTitle>מצב ההצעה</DialogTitle>
           <DialogDescription>מה קרה עם המקום ששלחתם לבדיקה.</DialogDescription>
@@ -87,6 +183,24 @@ export function Tracking() {
             <>
               {current.result.name_he && <p className="text-title-3 text-ink-1">{current.result.name_he}</p>}
               <p className="text-label text-ink-1">{STATUS[current.result.status] ?? current.result.status}</p>
+              {current.result.status === "published" && current.result.revision_state === "pending" && (
+                <p className="text-caption text-ink-2">התיקון ששלחתם ממתין לבדיקה. עד אז מופיעה הגרסה הקודמת.</p>
+              )}
+              {current.result.status === "published" && current.result.revision_state === "rejected" && (
+                <p className="text-caption text-ink-2">התיקון האחרון לא אושר. באתר מופיעה הגרסה שאושרה.</p>
+              )}
+              {current.result.note && (
+                <div className="rounded-2xl border border-line p-3">
+                  <p className="text-caption text-ink-2">הערת המאשרים</p>
+                  <p className="whitespace-pre-line text-ink-1">{current.result.note}</p>
+                </div>
+              )}
+              {correctable(current.result) && current.result.draft && !fixing && (
+                <Button variant="outline" className="pressable self-start" onClick={() => setFixing(true)}>
+                  תיקון ההצעה
+                </Button>
+              )}
+              {fixing && current.result.draft && <Correction draft={current.result.draft} onSend={sendCorrection} />}
             </>
           )}
           {current?.result && !FINAL.has(current.result.status) && (

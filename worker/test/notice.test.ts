@@ -25,6 +25,9 @@ it("describes the flow that exists: a tracking link to follow and withdraw, and 
   expect(text).toContain("קישור המעקב")
   expect(text).toContain("למשוך אותה")
   expect(text).not.toContain("אין עדיין דף")
+  expect(text).toContain("לתקן אותה")
+  expect(text).not.toContain("כדי לתקן אותה, כתבו לנו")
+  expect(text).toContain("לחזור אליי לתיקון")
   expect(text).toContain("תנאי השליחה")
   expect(text).toContain("התמונה")
   expect(text).toContain("נשארת במכשיר")
@@ -33,7 +36,7 @@ it("describes the flow that exists: a tracking link to follow and withdraw, and 
 
 // Every version a form has ever shown. A device may still retry a queued submission under one of them, and its consent
 // record points to that text: removing a version would refuse the retry and orphan the record. Only append here.
-const SHOWN = ["notice.submission@2026-10-2", "notice.submission@2026-10-3", "notice.submission@2026-10-4"]
+const SHOWN = ["notice.submission@2026-10-2", "notice.submission@2026-10-3", "notice.submission@2026-10-4", "notice.submission@2026-10-5"]
 
 it("never drops a version a form has shown, and keeps each one's text", () => {
   for (const v of SHOWN) {
