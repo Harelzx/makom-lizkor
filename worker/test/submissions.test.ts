@@ -5,7 +5,7 @@ const valid = { kind: "bench", name_he: "ספסל דמו", lat: 31.42, lng: 34.4
 const post = (body: unknown) =>
   exports.default.fetch("http://local/api/v1/submissions", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID().replaceAll("-", "") },
     body: JSON.stringify(body),
   })
 

@@ -7,12 +7,19 @@ import { PRIVATE, problem } from "../lib/http"
 
 export const submissions = new Hono<{ Bindings: Env }>()
 
+// One key per place, made by the browser before its first try; 128 random bits in base64url, or a hex UUID.
+const KEY = /^[A-Za-z0-9_-]{22,64}$/
+
 submissions.post(
   "/",
   zValidator("json", SubmissionInput, (r, c) => (r.success ? undefined : problem(c, 400, "invalid_input"))),
   async (c) => {
-    const created = await insertSubmission(c.env.DB, c.req.valid("json"), clock(c.req.raw, c.env))
-    return c.json(created, 201, PRIVATE)
+    const key = c.req.header("Idempotency-Key") ?? ""
+    if (!KEY.test(key)) return problem(c, 400, "idempotency_key_required")
+    const r = await insertSubmission(c.env.DB, c.req.valid("json"), key, clock(c.req.raw, c.env))
+    if (r.kind === "mismatch") return problem(c, 409, "idempotency_key_reused")
+    // 200 for the same submission sent again, so the browser can tell, though it treats both alike.
+    return c.json({ id: r.id, trackingToken: r.trackingToken }, r.kind === "created" ? 201 : 200, PRIVATE)
   },
 )
 

@@ -4,7 +4,12 @@ import { newToken, placeId, sameHash, sha256Hex, ulid } from "../lib/ids"
 // An approximation of a month; phase 5 replaces it with calendar months read from RETENTION (src/config.ts).
 const MONTH_MS = 30 * 24 * 3600 * 1000
 
-export async function insertSubmission(db: D1Database, input: SubmissionInput, now: Date) {
+export type Inserted = { kind: "created" | "replayed"; id: string; trackingToken: string } | { kind: "mismatch" }
+
+export async function insertSubmission(db: D1Database, input: SubmissionInput, key: string, now: Date): Promise<Inserted> {
+  const keyHash = await sha256Hex(key)
+  // The input after Zod, so the same request always gives the same fingerprint.
+  const bodyHash = await sha256Hex(JSON.stringify(input))
   const id = placeId(now.getTime())
   const trackingToken = newToken()
   const at = now.toISOString()
@@ -12,9 +17,10 @@ export async function insertSubmission(db: D1Database, input: SubmissionInput, n
   const stmts = [
     db
       .prepare(
-        "INSERT INTO places (id, origin, status, rev, tracking_token_hash, created_at, status_changed_at) VALUES (?, 'contribution', 'pending', 1, ?, ?, ?)",
+        `INSERT INTO places (id, origin, status, rev, tracking_token_hash, submit_key_hash, submit_body_hash, created_at, status_changed_at)
+         VALUES (?, 'contribution', 'pending', 1, ?, ?, ?, ?, ?)`,
       )
-      .bind(id, await sha256Hex(trackingToken), at, at),
+      .bind(id, await sha256Hex(trackingToken), keyHash, bodyHash, at, at),
     db
       .prepare(
         `INSERT INTO revisions (id, place_id, n, state, kind, name_he, lat, lng, location_precision, on_private_property, place_he, in_memory_of, story_he, link_url, consent_version, created_at)
@@ -48,9 +54,26 @@ export async function insertSubmission(db: D1Database, input: SubmissionInput, n
         .bind(`c_${ulid(now.getTime())}`, id, input.submitter_name, input.consent_version, at, ceiling, ceiling),
     )
   }
-  // One batch is one transaction: a place never exists without its first revision.
-  await db.batch(stmts)
-  return { id, trackingToken }
+  // One batch is one transaction: a place never exists without its first revision, and a used key adds nothing.
+  try {
+    await db.batch(stmts)
+    return { kind: "created", id, trackingToken }
+  } catch (err) {
+    if (!String(err).includes("places.submit_key_hash")) throw err
+  }
+  // The key was used before: the same submission sent again (its answer was lost), or a different one reusing it.
+  const prior = await db
+    .prepare("SELECT id, submit_body_hash AS body FROM places WHERE submit_key_hash = ?")
+    .bind(keyHash)
+    .first<{ id: string; body: string }>()
+  if (!prior || prior.body !== bodyHash) return { kind: "mismatch" }
+  // Only the hash of the first token exists, so the retry gets a fresh one; the first never reached the browser.
+  const fresh = newToken()
+  await db
+    .prepare("UPDATE places SET tracking_token_hash = ? WHERE id = ?")
+    .bind(await sha256Hex(fresh), prior.id)
+    .run()
+  return { kind: "replayed", id: prior.id, trackingToken: fresh }
 }
 
 export async function submissionStatus(db: D1Database, id: string, token: string) {

@@ -31,7 +31,7 @@ describe("admin", () => {
   it("shows the moderator every field that would be published", async () => {
     const res = await exports.default.fetch("http://local/api/v1/submissions", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID().replaceAll("-", "") },
       body: JSON.stringify({
         kind: "lookout",
         name_he: "מצפור דמו לבדיקה",
@@ -84,7 +84,7 @@ describe("dev login", () => {
   it("sets the stand-in Access cookie, which the admin accepts", async () => {
     const res = await exports.default.fetch("http://local/__dev/login", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID().replaceAll("-", "") },
       body: JSON.stringify({ email: "dev@example.test" }),
     })
     expect(res.status).toBe(204)

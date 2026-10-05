@@ -22,7 +22,11 @@ describe("in production", () => {
   it("the clock can't be set from outside", async () => {
     const res = await call("/api/v1/submissions", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-Test-Now": "2000-01-01T00:00:00Z" },
+      headers: {
+        "Content-Type": "application/json",
+        "Idempotency-Key": crypto.randomUUID().replaceAll("-", ""),
+        "X-Test-Now": "2000-01-01T00:00:00Z",
+      },
       body: JSON.stringify({ kind: "bench", name_he: "ספסל דמו", lat: 31.42, lng: 34.49, consent_version: "notice.submission@2026-10-2" }),
     })
     const { id } = await res.json<{ id: string }>()

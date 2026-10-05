@@ -30,7 +30,7 @@ it("publishes only approved places, under the version that was read with them", 
 it("never carries the submitter's name or the tracking hash", async () => {
   const res = await exports.default.fetch("http://local/api/v1/submissions", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID().replaceAll("-", "") },
     body: JSON.stringify({
       kind: "grove",
       name_he: "חורשת דמו",

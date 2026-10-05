@@ -14,7 +14,7 @@ export async function devToken(email: string) {
 export async function submit(name = "ספסל דמו") {
   const res = await exports.default.fetch("http://local/api/v1/submissions", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID().replaceAll("-", "") },
     body: JSON.stringify({ kind: "bench", name_he: name, lat: 31.42, lng: 34.49, consent_version: "notice.submission@2026-10-2" }),
   })
   return res.json<{ id: string; trackingToken: string }>()
@@ -26,6 +26,7 @@ export const admin = async (path: string, init: RequestInit = {}, email = "dev@e
     headers: {
       "Cf-Access-Jwt-Assertion": await devToken(email),
       "Content-Type": "application/json",
+      "Idempotency-Key": crypto.randomUUID().replaceAll("-", ""),
       "Sec-Fetch-Site": "same-origin",
       ...init.headers,
     },

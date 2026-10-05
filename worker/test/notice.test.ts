@@ -6,7 +6,7 @@ import { NOTICES } from "@/data/legal"
 const submit = (consent_version: string) =>
   exports.default.fetch("http://local/api/v1/submissions", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID().replaceAll("-", "") },
     body: JSON.stringify({ kind: "bench", name_he: "ספסל דמו", lat: 31.42, lng: 34.49, consent_version }),
   })
 
