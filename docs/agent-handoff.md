@@ -23,8 +23,18 @@ The backend session's working notes while Harel is away. Kept current after each
 | ------------------------- | ----------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | 20261005T182941Z-fdb8f8ac | setup smoke call (before this delegation) | proceed | Phase 2 finished and merged                                                                                                                                                                                                                                                                                                                                                                            |
 | 20261005T195531Z-a1310bb9 | Phase 3 approach                          | revise  | shared anemones only for published D1 places (curated stay local until Phase 7); no per-page device id (storage failure → local only); fresh server nonce per attempt; /place/:id + replaceState into the hash router accepted, 404/410 no-store noindex, bootstrap reconciled with the feed; generic /og.png accepted, per-place images unfinished; retrospective Phase 2 `--review-report` requested |
+| 20261005T200200Z-1838ed8c | Phase 2 retrospective report (`reports/phase2-retro.json`) | revise | items 1–5 implemented: 11fa1a9 (server, admin UI, release check), 1cb97e1 (two-tab storage); Worker 92/92, dev e2e 49/49, prod e2e 49/49 on 1cb97e1 (Worker suite on 11fa1a9; 1cb97e1 touches no Worker code); fresh reviewer running on 16439b7..1cb97e1; close-out report next |
 
 ## Outstanding
+
+Phase 2 close-out from 20261005T200200Z-1838ed8c (each with a test):
+
+1. #12 photo race: serve /media/public only for the currently published photo; losing approval/upload cleans up; recoverable cleanup; test an approval copy paused across a withdrawal. Plus a #10 failure-injection test (R2 fails after a committed decision).
+2. Two tabs must not overwrite each other's local records (submit keys, tracking tokens): merge writes; two-tab regression with lost responses and reload.
+3. #1: prove the moderator UI renders permission context and the access note (e2e).
+4. Revisions respect the queue cap (concurrency; valid replay still recovers); test a second correction while one is pending (#22).
+5. release:check: validate the effective production send_email binding (not a text match); negative cases.
+6. Report in smaller pinned batches: photo/moderation/withdrawal first, then storage/outbox and revision guards.
 
 - Phase 5 must ship the 30-day erase of returned, uncorrected places (promised since `notice.submission@2026-10-5`; launch blocker).
 - Deferred minors from the Phase 2 review: #12, #16–#22 (see the Phase 2 plan's backlog).
