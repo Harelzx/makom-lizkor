@@ -14,7 +14,7 @@ if (!config.RETENTION.verified)
   blockers.push("RETENTION.verified is false: the deletion and backup periods haven't been tested end to end (restore drills included)")
 if (!config.MAILBOX.verified)
   blockers.push(
-    "MAILBOX.verified is false: the mailbox's deletion after closure and its trash tail haven't been measured on the real tenant",
+    "MAILBOX.verified is false: the 12-month per-message policy isn't configured and its trash tail measured on the real mailbox",
   )
 
 if (blockers.length) {
