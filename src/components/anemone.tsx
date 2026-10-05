@@ -44,7 +44,9 @@ export function Anemone({ state = "open", size = 32, delay = 0, className, varia
   const open = state !== "bud"
   const lift = state === "selected"
   const c = PALETTES[variant]
-  const spring = (d: number) => (reduce ? { duration: 0 } : { type: "spring" as const, stiffness: 110, damping: 13, mass: 0.9, delay: d })
+  // The bloom unfurls slowly enough to be watched: the opening's flower opens as the light crosses the name (intro.tsx).
+  // A spring snapped it from bud to open in a fifth of a second, which read as a jump.
+  const bloom = (d: number) => (reduce ? { duration: 0 } : { duration: 1.1, ease: [0.4, 0, 0.2, 1] as const, delay: d })
 
   // Back ring sits between the front tepals and is a shade darker, which gives the flower its depth.
   const rings = [
@@ -123,7 +125,7 @@ export function Anemone({ state = "open", size = 32, delay = 0, className, varia
                 scaleX: open ? ring.scale : 0.26,
                 scaleY: open ? ring.scale : 0.42,
               }}
-              transition={spring(delay + (open ? ring.d + i * 0.05 : 0))}
+              transition={bloom(delay + (open ? ring.d + i * 0.05 : 0))}
             >
               <path d={TEPAL} fill={ring.fill} />
               <path d={TEPAL} fill={`url(#s${id})`} />
@@ -142,7 +144,7 @@ export function Anemone({ state = "open", size = 32, delay = 0, className, varia
         style={{ transformBox: "fill-box", originX: "50%", originY: "100%" }}
         initial={false}
         animate={{ opacity: open ? 0 : 1, scale: open ? 0.6 : 1 }}
-        transition={reduce ? { duration: 0 } : { duration: 0.35, delay: open ? delay : 0 }}
+        transition={reduce ? { duration: 0 } : { duration: 0.6, delay: open ? delay + 0.1 : 0 }}
       >
         <ellipse cx="0" cy="-6" rx="9" ry="15" fill={`url(#b${id})`} />
         <path d="M-7 -8 C -6 -16 -3 -21 0 -22 C 3 -21 6 -16 7 -8" fill="none" stroke={c.tip} strokeOpacity="0.5" strokeWidth="1" />
@@ -153,7 +155,7 @@ export function Anemone({ state = "open", size = 32, delay = 0, className, varia
         style={{ transformBox: "fill-box", originX: "50%", originY: "50%" }}
         initial={false}
         animate={{ scale: open ? 1 : 0.2, opacity: open ? 1 : 0 }}
-        transition={reduce ? { duration: 0 } : { delay: delay + 0.28, type: "spring", stiffness: 160, damping: 15 }}
+        transition={reduce ? { duration: 0 } : { delay: delay + 0.45, duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
       >
         <circle r="17" fill={`url(#r${id})`} />
         {stamens.map((s, k) => (

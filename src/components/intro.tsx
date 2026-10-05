@@ -417,9 +417,10 @@ function Name({
   const [shone, setShone] = useState(quick)
   useEffect(() => {
     if (quick) return
-    const t = setTimeout(() => setOpen(true), 700)
-    // The light is heard passing over the name: a harp shimmer in the score's key, which rings from its first note, so
-    // it starts as the band of light enters the letters, 1.27 s into the name (index.css, .title-shine).
+    // Light, flower and sound are one gesture: the band of light enters the letters 1.27 s into the name (index.css,
+    // .title-shine), the anemone unfurls with it and is open as the light leaves, and the harp shimmer in the score's
+    // key rings from its first note as the light comes in.
+    const t = setTimeout(() => setOpen(true), 1200)
     const light = setTimeout(() => cue("sweep"), 1270)
     return () => {
       clearTimeout(t)
@@ -434,9 +435,10 @@ function Name({
       exit={{ opacity: 0, y: -10, transition: { duration: 0.9 } }}
     >
       <motion.div
-        initial={{ opacity: 0, scale: 0.6 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ delay: quick ? 0 : 0.2, type: "spring", stiffness: 180, damping: 18 }}
+        // the bud rises softly into its place, and waits for the light
+        initial={{ opacity: 0, scale: 0.85, y: 8 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        transition={{ delay: quick ? 0 : 0.2, duration: quick ? 0.5 : 0.9, ease }}
       >
         <Anemone state={open ? "open" : "bud"} size={96} />
       </motion.div>
