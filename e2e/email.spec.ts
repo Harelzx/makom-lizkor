@@ -19,6 +19,9 @@ test("an optional email is verified from the site, then receives a tracking link
   await dialog.getByLabel("שם המקום").fill(name)
   await dialog.getByRole("button", { name: "המשך" }).click()
   await dialog.getByLabel("מייל (לא חובה)").fill(to)
+  // The last step has two boxes (family, consent); wait for the step before it to finish leaving, or a box of
+  // the leaving step is collected and never comes back.
+  await expect(dialog.getByRole("checkbox")).toHaveCount(2)
   for (const box of await dialog.getByRole("checkbox").all()) await box.check()
   await dialog.getByRole("button", { name: "שמירה והנחת כלנית" }).click()
   await expect(dialog).toBeHidden({ timeout: 15_000 })

@@ -99,17 +99,19 @@ export async function withdrawSubmission(id: string, token: string): Promise<"wi
 
 /**
  * "ok"; "conflict" when the place changed since the sender looked; "queue_full"; "refused" when the server didn't accept
- * it (invalid); "failed" when it was turned away before anything was saved (the check failed, too many at once);
+ * it (invalid); "gone" when the link no longer opens the submission; "failed" when it was turned away before anything was saved (the check failed, too many at once);
  * "uncertain" when no answer came or the server failed midway, so the correction may have been saved.
  */
 export async function reviseSubmission(
   id: string,
   token: string,
   body: RevisionInput,
-): Promise<"ok" | "conflict" | "queue_full" | "refused" | "failed" | "uncertain"> {
+): Promise<"ok" | "conflict" | "queue_full" | "refused" | "gone" | "failed" | "uncertain"> {
+  // No check token: nothing was sent, so nothing was saved.
+  const check = await turnstileToken("revise").catch(() => undefined)
+  if (check === undefined) return "failed"
   let res: Response
   try {
-    const check = await turnstileToken("revise")
     res = await fetch(`/api/v1/submissions/${encodeURIComponent(id)}/revisions`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(check ? { "Turnstile-Token": check } : {}) },
@@ -123,7 +125,8 @@ export async function reviseSubmission(
   if (res.status === 409) return "conflict"
   const code = ((await res.json().catch(() => ({}))) as { code?: string }).code
   if (code === "queue_full") return "queue_full"
-  if (res.status === 400 || res.status === 404) return "refused"
+  if (res.status === 404) return "gone"
+  if (res.status === 400) return "refused"
   if (res.status === 403 || res.status === 429 || code === "turnstile_unavailable") return "failed"
   return "uncertain"
 }

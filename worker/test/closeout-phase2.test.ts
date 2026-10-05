@@ -481,3 +481,25 @@ describe("the review queue's capacity", () => {
     expect((await feed()).find((p) => p.id === id)).toMatchObject({ name_he: "ספסל דמו שני תיקונים" })
   })
 })
+
+describe("what a submission's fingerprint keeps", () => {
+  const sha = async (s: string) =>
+    [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)))]
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("")
+
+  it("can't be matched against a guessed email without the server's secret, and is gone with a withdrawal", async () => {
+    const key = crypto.randomUUID().replaceAll("-", "")
+    const extra = { email: `fp${Date.now()}@example.test`, submitter_name: "דמו" }
+    const { id, trackingToken } = await send("ספסל דמו טביעה", extra, key)
+    const stored = await env.DB.prepare("SELECT submit_body_hash FROM places WHERE id = ?").bind(id).first<string>("submit_body_hash")
+    const body = { kind: "bench", name_he: "ספסל דמו טביעה", lat: 31.42, lng: 34.49, consent_version: CURRENT_SUBMISSION_NOTICE, ...extra }
+    expect(stored).not.toBe(await sha(JSON.stringify(body)))
+    await withdraw(id, trackingToken)
+    expect(await env.DB.prepare("SELECT submit_body_hash FROM places WHERE id = ?").bind(id).first("submit_body_hash")).toBeNull()
+    // The same submission sent again after the withdrawal still gets its first answer, by its key.
+    const again = await send("ספסל דמו טביעה", extra, key)
+    expect(again.status).toBe(200)
+    expect(again.id).toBe(id)
+  })
+})

@@ -36,7 +36,7 @@ node scripts/build-data.mjs                      # regenerate src/data/*.json fr
 npm test                   # the Worker's tests (Vitest inside workerd, fresh local D1 per run); heavy: scripts/heavy npm test
 npm run test:client        # the browser code's own logic (the store) in Node, storage stood in for; heavy: scripts/heavy npm run test:client
 npm run test:scripts       # node:test for scripts/ (the release check's mail rules)
-npm run db:migrate:local   # apply migrations/ to the local D1 the dev server uses (Playwright's webServer runs it first)
+npm run db:migrate:local   # apply migrations/ to the local D1 the dev server uses (e2e runs migrate their own fresh copy)
 npm run cf-typegen         # regenerate worker-configuration.d.ts after changing wrangler.jsonc or .dev.vars
 ```
 
@@ -84,7 +84,7 @@ The only route is `#/place/<id>`, kept in sync with `selectedId`. Opening a card
 
 ### Backend, phase 1 (`worker/`, `migrations/`, `src/shared/`)
 
-- One Hono Worker runs inside `npm run dev` through `@cloudflare/vite-plugin`. Only `/api/*` and `/__dev/*` reach it (`run_worker_first` in `wrangler.jsonc`); everything else is the static site. The local D1 lives in `.wrangler/` (git-ignored) and is shared by dev and e2e runs, so demo places from e2e accumulate there.
+- One Hono Worker runs inside `npm run dev` through `@cloudflare/vite-plugin`. Only `/api/*`, `/__dev/*` and `/media/*` reach it (`run_worker_first` in `wrangler.jsonc`); everything else is the static site. The dev server's local D1 and R2 live in `.wrangler/state` (git-ignored); each e2e run uses its own fresh copy (`.wrangler/e2e-state-*`), so demo places never accumulate in the dev server's.
 - **The vars in `wrangler.jsonc` are what a deploy ships, and they are production.** Development (the stand-in Access sign-in at `/__dev/login`, the `X-Test-Now` clock) is switched on only by `.dev.vars`: untracked, created from the committed template `.dev.vars.example` (synthetic values only) by `npm run dev` and the e2e servers when missing, and never deployed. The Worker tests read the template itself, not a local `.dev.vars`. A test fails if the deploy vars stop being production.
 - `src/shared/contract.ts` holds the Zod schemas both sides use; `src/shared/text.ts` strips bidi controls from anything stored. The client reads approved places through `src/lib/feed.ts` (loaded once the day begins, never in the opening's bundle) into `remote` in the store. `allPlaces()` takes `seed`, `remote` and `local`, and hides a local copy once its `remoteId` is published. Ids that start with `p_` are contributions; the router trusts them until the feed has come.
 - The moderators' queue is `/admin/` (`admin/index.html`, outside `src/`, with its code in `src/admin/`). Locally, sign in with `POST /__dev/login {"email":"dev@example.test"}`.

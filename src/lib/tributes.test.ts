@@ -7,6 +7,7 @@ vi.mock("@/lib/storage", () => {
   const change = (name: string) => async (fn: (v: never) => unknown) => (disk.keys[name] = fn((disk.keys[name] ?? {}) as never))
   return {
     deviceId: async () => "0123456789abcdef0123456789abcdef",
+    storageWorks: async () => true,
     changeTributeOutbox: change("tributeOutbox"),
     loadLocal: async () => [],
     loadTributes: async () => ({}),

@@ -36,6 +36,9 @@ test("a place submitted without email is moderated, published, and seen in anoth
   await dialog.getByRole("button", { name: "המשך" }).click()
   await dialog.getByText("הודעת הפרטיות", { exact: true }).click()
   await expect(dialog.getByText("מתפרסמת רק אם המקום אושר", { exact: false })).toBeVisible()
+  // The last step has two boxes (family, consent); wait for the step before it to finish leaving, or a box of
+  // the leaving step is collected and never comes back.
+  await expect(dialog.getByRole("checkbox")).toHaveCount(2)
   for (const box of await dialog.getByRole("checkbox").all()) await box.check()
   const sent = visitor.waitForResponse((r) => r.url().endsWith("/api/v1/submissions") && r.status() === 201)
   await dialog.getByRole("button", { name: "שמירה והנחת כלנית" }).click()
@@ -43,7 +46,7 @@ test("a place submitted without email is moderated, published, and seen in anoth
   const body = (await sent).request().postDataJSON() as Record<string, unknown>
   expect(Object.keys(body)).not.toContain("email")
   // The version recorded is the notice the form showed.
-  expect(body.consent_version).toBe("notice.submission@2026-10-10")
+  expect(body.consent_version).toBe("notice.submission@2026-10-11")
   // The browser check ran, and its single-use token went with the place.
   expect((await sent).request().headers()["turnstile-token"]).toBeTruthy()
   // The submitter's own card says where the place went; it doesn't promise it stays only in this browser.
@@ -97,6 +100,9 @@ test("saving twice while the first send is slow sends the place once", async ({ 
   await dialog.getByRole("button", { name: "המשך" }).click()
   await dialog.getByLabel("שם המקום").fill(`ספסל דמו כפול ${Date.now()}`)
   await dialog.getByRole("button", { name: "המשך" }).click()
+  // The last step has two boxes (family, consent); wait for the step before it to finish leaving, or a box of
+  // the leaving step is collected and never comes back.
+  await expect(dialog.getByRole("checkbox")).toHaveCount(2)
   for (const box of await dialog.getByRole("checkbox").all()) await box.check()
   const save = dialog.getByRole("button", { name: "שמירה והנחת כלנית" })
   await save.click()

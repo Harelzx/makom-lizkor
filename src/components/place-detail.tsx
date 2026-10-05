@@ -213,16 +213,22 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
               size="xs"
               onClick={async () => {
                 const sentCopy = local.remoteId && local.send !== "withdrawn"
+                // Still being sent: a try may have reached the server before its answer was lost; that submission stands.
+                const inFlight = !!local.submitKey && (local.send === "waiting" || local.send === "sending")
+                const whatStands = sentCopy
+                  ? "ההצעה שנשלחה לבדיקה לא נמשכה, וקישור המעקב נמחק עם העותק. כדי למשוך אותה עכשיו, כתבו לנו."
+                  : inFlight
+                    ? "ייתכן שההצעה כבר הגיעה אלינו לפני שנמחקה מכאן. אם כך, היא תיבדק כרגיל; כדי לבקש שנסיר אותה, כתבו לנו."
+                    : undefined
                 // One message, once the device has answered: removed, still kept there, or not known.
                 const outcome = await removeLocal(place.id)
                 if (outcome === "kept")
-                  return void toast("המקום הוסר מהרשימה, אבל לא מהמכשיר", { description: "הוא יחזור בביקור הבא. נסו שוב אז." })
-                if (outcome === "unknown") return void toast("המקום הוסר מהרשימה")
-                toast("המקום נמחק מהמכשיר", {
-                  description: sentCopy
-                    ? "ההצעה שנשלחה לבדיקה לא נמשכה, וקישור המעקב נמחק עם העותק. כדי למשוך אותה עכשיו, כתבו לנו."
-                    : undefined,
-                })
+                  return void toast("המקום הוסר מהרשימה, אבל לא מהמכשיר", {
+                    description: inFlight
+                      ? "בביקור הבא הוא יחזור, ואם עדיין לא נשלח, יישלח לבדיקה. כדי לעצור אותו, מחקו אותו שוב אז."
+                      : "הוא יחזור בביקור הבא. נסו שוב אז.",
+                  })
+                toast(outcome === "unknown" ? "המקום הוסר מהרשימה" : "המקום נמחק מהמכשיר", { description: whatStands })
               }}
             >
               <Trash2Icon data-icon="inline-start" />

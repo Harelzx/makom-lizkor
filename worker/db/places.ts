@@ -19,6 +19,12 @@ const VERIFY_DAYS = 7
  * got, so two tabs re-sending at once, or a lost answer, never leave a device holding a token that stopped working.
  * Holding it still takes both the device's random key and the server's secret.
  */
+async function hmacHex(secret: string, message: string): Promise<string> {
+  const k = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"])
+  const mac = new Uint8Array(await crypto.subtle.sign("HMAC", k, new TextEncoder().encode(message)))
+  return [...mac].map((b) => b.toString(16).padStart(2, "0")).join("")
+}
+
 export async function trackingTokenFor(secret: string, key: string): Promise<string> {
   const k = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"])
   const mac = new Uint8Array(await crypto.subtle.sign("HMAC", k, new TextEncoder().encode(`track:${key}`)))
@@ -36,10 +42,12 @@ export async function insertSubmission(
   now: Date,
   /** The most revisions that may wait for a moderator: checked in the insert itself, so requests at once can't pass it together. */
   queueLimit: number,
+  /** Keys the body's fingerprint: without it, a stored fingerprint can't be tested against a guessed name or email. */
+  secret: string,
 ): Promise<Inserted> {
   const keyHash = await sha256Hex(key)
-  // The input after Zod, so the same request always gives the same fingerprint.
-  const bodyHash = await sha256Hex(JSON.stringify(input))
+  // The input after Zod, so the same request always gives the same fingerprint; keyed, and erased with a withdrawal.
+  const bodyHash = await hmacHex(secret, `body:${JSON.stringify(input)}`)
   const id = placeId(now.getTime())
   const at = now.toISOString()
   // On private property without the owner's permission, only a point rounded to about a kilometre is ever stored
@@ -120,10 +128,11 @@ export async function insertSubmission(
   const prior = await db
     .prepare("SELECT id, submit_body_hash AS body FROM places WHERE submit_key_hash = ?")
     .bind(keyHash)
-    .first<{ id: string; body: string }>()
+    .first<{ id: string; body: string | null }>()
   // Nothing was inserted and the key is new: the queue was full when it arrived.
   if (!prior) return { kind: "queue_full" }
-  if (prior.body !== bodyHash) return { kind: "mismatch" }
+  // A withdrawn submission kept no fingerprint: its key alone answers a retry, with the same id and token.
+  if (prior.body !== null && prior.body !== bodyHash) return { kind: "mismatch" }
   // The same key derives the same token: the answer the first try lost is given again, unchanged.
   return { kind: "replayed", id: prior.id, trackingToken }
 }
@@ -245,7 +254,8 @@ export async function withdraw(db: D1Database, id: string, token: string, now: D
     const [placeUpdate] = await db.batch([
       db
         .prepare(
-          `UPDATE places SET status = 'withdrawn', rev = rev + 1, last_transition_id = ?2, status_changed_at = ?3, published_revision_id = NULL
+          `UPDATE places SET status = 'withdrawn', rev = rev + 1, last_transition_id = ?2, status_changed_at = ?3, published_revision_id = NULL,
+             submit_body_hash = NULL
            WHERE id = ?1 AND rev = ?4`,
         )
         .bind(id, tid, at, row.rev),

@@ -1,6 +1,7 @@
 import { create } from "zustand"
 import seed from "@/data/places.json"
 import type { LocalFields, Place } from "@/types"
+import { importable } from "@/lib/export"
 import { changeLocal, loadLocal, loadTributes, saveTributes } from "@/lib/storage"
 
 /** intro: 06:29, the dark map and the opening words · dawn: the sunrise is playing · day: the site itself */
@@ -217,7 +218,7 @@ export const useStore = create<State>((set, get) => ({
     const valid = incoming.filter(
       (p) => p && typeof p.id === "string" && !known.has(p.id) && Number.isFinite(p.lat) && Number.isFinite(p.lng) && p.name_he,
     )
-    const added = valid.map((p) => ({ ...p, coord_source: "community" as const }))
+    const added = importable(valid).map((p) => ({ ...p, coord_source: "community" as const }))
     for (const p of added) held.add(p.id)
     set({ local: [...get().local, ...added] })
     const saved = await persist((stored) => [...stored, ...added.filter((p) => !stored.some((s) => s.id === p.id))])

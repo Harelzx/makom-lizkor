@@ -15,6 +15,7 @@ import { Anemone } from "@/components/anemone"
 import { ADDABLE_KINDS, KINDS } from "@/data/taxonomy"
 import { CONSENT_TEXT, FAMILY_CONSENT_TEXT, noticeHtml, PHOTO_RIGHTS_TEXT } from "@/data/legal"
 import { newSubmitKey, submitPlace, uploadPhoto } from "@/lib/api"
+import { exportable } from "@/lib/export"
 import { downloadJSON, resizeImage } from "@/lib/storage"
 import { getMap, reducedMotion } from "@/map/controller"
 import { useStore } from "@/store"
@@ -276,7 +277,8 @@ export function AddPlace() {
       const stored = await addLocal(place)
       const r = await submitPlace(submission, place.local!.submitKey!)
       if (r.ok) {
-        await updateLocal(place.id, { send: "sent", remoteId: r.id, trackingToken: r.trackingToken })
+        // Sent: the body (with any email and name) isn't needed for a retry any more, so the device stops keeping it.
+        await updateLocal(place.id, { send: "sent", remoteId: r.id, trackingToken: r.trackingToken, submission: undefined })
         // The photo follows the place; if it can't go now, the outbox sends it later.
         if (photo) {
           const sent = await uploadPhoto(r.id, r.trackingToken, photo, photoAlt.trim() || place.name_he, photoCredit.trim() || undefined)
@@ -544,7 +546,7 @@ export function AddPlace() {
                               variant="outline"
                               size="sm"
                               disabled={!local.length}
-                              onClick={() => downloadJSON("makom-lizkor-places.json", local)}
+                              onClick={() => downloadJSON("makom-lizkor-places.json", exportable(local))}
                             >
                               <DownloadIcon data-icon="inline-start" />
                               ייצוא

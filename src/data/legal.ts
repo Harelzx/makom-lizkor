@@ -255,6 +255,15 @@ const SUBMISSION_EXACT = amend("2026-10-10", SUBMISSION_PRIVATE, [
   ["משיכה מוחקת מיד מהשרת את ההצעה ואת השם שלכם;", "משיכה מוחקת מיד מהשרת את ההצעה, את השם והמייל שלכם ואת התמונה;"],
 ])
 
+// Version 10 with what a withdrawal does to a photo when the file can't be deleted at once: it leaves the site at once
+// (only published photos are served), and the file goes later (worker/routes/submissions.ts withdraw, files: pending).
+const SUBMISSION_PHOTO_LATER = amend("2026-10-11", SUBMISSION_EXACT, [
+  [
+    "משיכה מוחקת מיד מהשרת את ההצעה, את השם והמייל שלכם ואת התמונה;",
+    "משיכה מוחקת מיד מהשרת את ההצעה ואת השם והמייל שלכם, ומורידה מיד את התמונה מהאתר; קובץ התמונה נמחק מהאחסון מיד, ואם המחיקה נכשלת, הוא נמחק בהמשך;",
+  ],
+])
+
 export const NOTICES = {
   // Drafted for the full flow (email, tracking link, photo upload) that later phases build; the form no longer shows it.
   "notice.submission@2026-10-1": `
@@ -297,6 +306,9 @@ ${RIGHTS}
 
   // Version 9 without the repeated sentence, and with everything a withdrawal deletes.
   "notice.submission@2026-10-10": `${SUBMISSION_EXACT}${SUBMISSION_TERMS_PHOTO}`,
+
+  // Version 10 with a photo file that may be deleted later than the rest.
+  "notice.submission@2026-10-11": `${SUBMISSION_PHOTO_LATER}${SUBMISSION_TERMS_PHOTO}`,
 
   "notice.report@2026-10-1": `
 ${WHO}

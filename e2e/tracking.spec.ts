@@ -14,6 +14,9 @@ async function submit(b: Browser, name: string): Promise<Page> {
   await dialog.getByRole("button", { name: "המשך" }).click()
   await dialog.getByLabel("שם המקום").fill(name)
   await dialog.getByRole("button", { name: "המשך" }).click()
+  // The last step has two boxes (family, consent); wait for the step before it to finish leaving, or a box of
+  // the leaving step is collected and never comes back.
+  await expect(dialog.getByRole("checkbox")).toHaveCount(2)
   for (const box of await dialog.getByRole("checkbox").all()) await box.check()
   await dialog.getByRole("button", { name: "שמירה והנחת כלנית" }).click()
   await expect(dialog).toBeHidden({ timeout: 15_000 })
@@ -206,4 +209,18 @@ test("a correction approved before its lost answer was checked is found saved", 
   await view.getByRole("button", { name: "שליחה מחדש לבדיקה" }).click()
   await expect(view.getByText("אושרה ומופיעה באתר")).toBeVisible()
   await expect(page.getByText("לא מופיע בשרת", { exact: false })).toHaveCount(0)
+})
+
+test("a correction with doubled spaces, saved but unanswered, is still recognised as this one", async ({ browser }) => {
+  test.setTimeout(120_000)
+  const { page, view } = await returnedAndFixing(browser, `ספסל דמו רווחים ${Date.now()}`)
+  await view.getByLabel("כמה מילים על המקום (לא חובה)").fill("שורה  עם רווח כפול\n\n\n\nושורה אחרי שורות ריקות")
+  await page.route("**/api/v1/submissions/*/revisions", async (route) => {
+    await route.fetch()
+    await route.abort("failed")
+  })
+  await view.getByRole("button", { name: "שליחה מחדש לבדיקה" }).click()
+  // Recognised as this correction, the form closes; unrecognised, it stays open with the text.
+  await expect(view.getByRole("button", { name: "שליחה מחדש לבדיקה" })).toHaveCount(0)
+  await expect(view.getByText("ממתינה לבדיקה")).toBeVisible()
 })

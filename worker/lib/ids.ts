@@ -28,3 +28,13 @@ export async function sameHash(a: string, b: string): Promise<boolean> {
   const y = new TextEncoder().encode(b)
   return x.byteLength === y.byteLength && crypto.subtle.timingSafeEqual(x, y)
 }
+
+/**
+ * What the rate limiters count a visitor's address under: HMAC(secret, "rate:" + address), so Cloudflare's limiter
+ * store never holds the address itself (its counters live per Cloudflare location, for an unpublished time).
+ */
+export async function rateKey(secret: string, address: string): Promise<string> {
+  const k = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"])
+  const mac = new Uint8Array(await crypto.subtle.sign("HMAC", k, new TextEncoder().encode(`rate:${address}`)))
+  return [...mac].map((b) => b.toString(16).padStart(2, "0")).join("")
+}

@@ -52,6 +52,7 @@ const SHOWN = [
   "notice.submission@2026-10-8",
   "notice.submission@2026-10-9",
   "notice.submission@2026-10-10",
+  "notice.submission@2026-10-11",
 ]
 
 it("never drops a version a form has shown, and keeps each one's text", () => {

@@ -6,6 +6,7 @@ import { leaveTribute, tributeTotals } from "../db/tributes"
 import { clock } from "../lib/clock"
 import { jerusalemDay } from "../lib/day"
 import { problem } from "../lib/http"
+import { rateKey } from "../lib/ids"
 
 export const tributes = new Hono<AppEnv>()
 
@@ -19,9 +20,9 @@ tributes.post(
     if (!KEY.test(key)) return problem(c, 400, "idempotency_key_required")
     // Without the secret a device can't be kept apart from day to day: count nothing rather than count it loosely.
     if (!c.env.TRIBUTE_SECRET) return problem(c, 503, "not_configured")
-    // A coarse ceiling per address, counted at Cloudflare's edge; our code stores nothing about the address.
+    // A coarse ceiling per address, counted at Cloudflare's edge under a keyed code, never the address itself.
     const address = c.req.header("CF-Connecting-IP")
-    if (address && !(await c.env.TRIBUTE_LIMIT.limit({ key: address })).success)
+    if (address && !(await c.env.TRIBUTE_LIMIT.limit({ key: await rateKey(c.env.TRIBUTE_SECRET, address) })).success)
       return problem(c, 429, "rate_limited", {}, { "Retry-After": "60" })
     const now = clock(c.req.raw, c.env)
     const r = await leaveTribute(c.env.DB, c.env.TRIBUTE_SECRET, { key, ...c.req.valid("json") }, jerusalemDay(now), now)

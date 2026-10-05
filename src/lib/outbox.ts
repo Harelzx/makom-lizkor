@@ -27,7 +27,8 @@ export async function retryWaiting(): Promise<void> {
       // The list was read before the first send; a place removed since (here, or in another tab) isn't sent.
       if (!(await useStore.getState().stillLocal(p.id))) continue
       const r = await submitPlace(l.submission, l.submitKey)
-      if (r.ok) await useStore.getState().updateLocal(p.id, { send: "sent", remoteId: r.id, trackingToken: r.trackingToken })
+      if (r.ok)
+        await useStore.getState().updateLocal(p.id, { send: "sent", remoteId: r.id, trackingToken: r.trackingToken, submission: undefined })
       else if (r.kind === "rejected") await useStore.getState().updateLocal(p.id, { send: "rejected", sendError: r.code })
       else {
         // Still unreachable, or asked to wait: the next wake tries again, not before the server's time.

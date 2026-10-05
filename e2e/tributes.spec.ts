@@ -110,3 +110,20 @@ test("an anemone that waited more than seven days unsent is dropped, not counted
   expect(posts).toHaveLength(0)
   expect(await total(page, id)).toBe(0)
 })
+
+test("opening a published place's card, without leaving an anemone, keeps no device id", async ({ browser }) => {
+  const id = await published(browser, `גינת דמו בלי מזהה ${Date.now()}`)
+  const { page } = await open(browser, id)
+  await page.waitForTimeout(1500)
+  const stored = await page.evaluate(
+    () =>
+      new Promise<unknown>((resolve) => {
+        const req = indexedDB.open("makom-lizkor-v2")
+        req.onsuccess = () => {
+          const get = req.result.transaction("v1").objectStore("v1").get("device")
+          get.onsuccess = () => resolve(get.result)
+        }
+      }),
+  )
+  expect(stored).toBeUndefined()
+})

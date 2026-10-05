@@ -21,6 +21,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { CONSENT_TEXT, noticeHtml } from "@/data/legal"
 import { reviseSubmission, trackSubmission, withdrawSubmission, type Draft, type Tracked } from "@/lib/api"
 import { CURRENT_SUBMISSION_NOTICE } from "@/shared/contract"
+import { cleanText } from "@/shared/text"
 import { useStore } from "@/store"
 
 /** What each state means to the person who sent the place. */
@@ -152,6 +153,7 @@ export function Tracking() {
       consent_version: CURRENT_SUBMISSION_NOTICE,
     })
     if (r === "refused") return void toast("התיקון לא התקבל", { description: "התיקון נשאר כאן. בדקו אותו ונסו לשלוח שוב." })
+    if (r === "gone") return void toast("הקישור כבר לא פותח את ההצעה", { description: "ייתכן שהיא נמשכה או נמחקה. התיקון לא נשמר." })
     if (r === "failed") return void toast("לא הצלחנו לשלוח את התיקון", { description: "התיקון לא נשמר ונשאר כאן. נסו שוב בעוד רגע." })
     if (r === "queue_full")
       return void toast("יש עכשיו יותר הצעות ממה שאפשר לבדוק", { description: "התיקון לא נשמר. נסו שוב בעוד כמה שעות." })
@@ -159,11 +161,12 @@ export function Tracking() {
       // No clear answer: the correction may have been saved. It counts as saved only if the newest text on the server
       // is the very text sent from here (another tab may have sent a different one); otherwise it stays in the form.
       const now = await trackSubmission(tracking.id, tracking.token)
-      const same = (a?: string | null, b?: string | null) => (a ?? "") === (b ?? "")
+      // Compared as the server stores text (cleanText: normalized, spaces folded), not as typed.
+      const same = (a?: string | null, b?: string | null, multiline = false) => (a ?? "") === (b ? (cleanText(b, { multiline }) ?? b) : "")
       const mine =
         !!now?.draft &&
         now.rev !== current.result.rev &&
-        (Object.keys(sent) as (keyof typeof sent)[]).every((k) => same(now.draft![k], sent[k]))
+        (Object.keys(sent) as (keyof typeof sent)[]).every((k) => same(now.draft![k], sent[k], k === "story_he"))
       if (!mine) {
         if (now) setState({ key, result: now, failed: false })
         return void toast(now ? "התיקון שלכם לא מופיע בשרת" : "לא ברור אם התיקון נשמר", {
@@ -227,6 +230,12 @@ export function Tracking() {
               )}
               {current.result.status === "published" && current.result.revision_state === "rejected" && (
                 <p className="text-caption text-ink-2">התיקון האחרון לא אושר. באתר מופיעה הגרסה שאושרה.</p>
+              )}
+              {current.result.status === "withdrawn" && current.result.files === "pending" && (
+                // The same request again finishes what the first couldn't erase.
+                <Button variant="outline" className="pressable self-start" disabled={working} onClick={() => void withdraw()}>
+                  להשלים את מחיקת התמונה
+                </Button>
               )}
               {current.result.note && (
                 <div className="rounded-2xl border border-line p-3">

@@ -63,22 +63,40 @@ let device: Promise<string | null> | undefined
 /**
  * This device's random id for the shared anemone count, kept in IndexedDB and read back before it is trusted. Null
  * when the browser won't keep it: then nothing is sent, since a new id each visit would count one device many times.
+ * Made only when asked to (`create`, when an anemone is left at a counted place), never just by opening the site.
  */
-export function deviceId(): Promise<string | null> {
-  device ??= (async () => {
-    try {
-      const s = db()
-      if (!s) return null
-      const known = await get<string>("device", s)
-      if (known && /^[0-9a-f]{32}$/.test(known)) return known
-      const id = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, "0")).join("")
-      await set("device", id, s)
-      return (await get<string>("device", s)) === id ? id : null
-    } catch {
-      return null
-    }
-  })()
-  return device
+export function deviceId(create = false): Promise<string | null> {
+  if (device) return device.then((id) => id ?? (create ? (device = makeDevice()) : null))
+  const found = makeDevice(create)
+  if (create) device = found
+  return found
+}
+
+async function makeDevice(create = true): Promise<string | null> {
+  try {
+    const s = db()
+    if (!s) return null
+    const known = await get<string>("device", s)
+    if (known && /^[0-9a-f]{32}$/.test(known)) return known
+    if (!create) return null
+    const id = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, "0")).join("")
+    await set("device", id, s)
+    return (await get<string>("device", s)) === id ? id : null
+  } catch {
+    return null
+  }
+}
+
+/** Whether this browser keeps what the site stores (so a device id could be kept), without storing anything. */
+export async function storageWorks(): Promise<boolean> {
+  try {
+    const s = db()
+    if (!s) return false
+    await get("device", s)
+    return true
+  } catch {
+    return false
+  }
 }
 
 /**

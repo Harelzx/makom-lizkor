@@ -17,6 +17,7 @@ import {
 } from "../db/places"
 import { clock } from "../lib/clock"
 import { PRIVATE, problem } from "../lib/http"
+import { rateKey } from "../lib/ids"
 import { verificationMail } from "../lib/messages"
 import { checkTurnstile } from "../lib/turnstile"
 import type { AppEnv } from "../index"
@@ -41,7 +42,7 @@ const queueFull = (c: Context<AppEnv>) => problem(c, 503, "queue_full", {}, { "R
 async function guard(c: Context<AppEnv>, action: "submit" | "revise"): Promise<Response | null> {
   if (action === "submit" && (await pendingCount(c.env.DB)) >= queueLimit(c)) return queueFull(c)
   const address = c.req.header("CF-Connecting-IP")
-  if (address && !(await c.env.SUBMIT_LIMIT.limit({ key: address })).success)
+  if (address && !(await c.env.SUBMIT_LIMIT.limit({ key: await rateKey(c.env.TRACKING_SECRET, address) })).success)
     return problem(c, 429, "rate_limited", {}, { "Retry-After": "60" })
   const outcome = await checkTurnstile(c.env, c.get("verifyTurnstile"), c.req.header("Turnstile-Token"), action, address)
   if (outcome === "required") return problem(c, 403, "turnstile_required")
@@ -56,15 +57,24 @@ submissions.post(
   async (c) => {
     const key = c.req.header("Idempotency-Key") ?? ""
     if (!KEY.test(key)) return problem(c, 400, "idempotency_key_required")
+    // Without the server's secret there is no tracking token to give, nor a way to count an address without keeping
+    // it: refuse rather than hand out a weak one.
+    if (!c.env.TRACKING_SECRET) return problem(c, 503, "not_configured")
     // The same submission sent again (its answer was lost) was checked on its first try; Turnstile tokens are single-use.
     if (!(await submissionKnown(c.env.DB, key))) {
       const refused = await guard(c, "submit")
       if (refused) return refused
     }
-    // Without the server's secret there is no tracking token to give: refuse rather than hand out a weak one.
-    if (!c.env.TRACKING_SECRET) return problem(c, 503, "not_configured")
     const token = await trackingTokenFor(c.env.TRACKING_SECRET, key)
-    const r = await insertSubmission(c.env.DB, c.req.valid("json"), key, token, clock(c.req.raw, c.env), queueLimit(c))
+    const r = await insertSubmission(
+      c.env.DB,
+      c.req.valid("json"),
+      key,
+      token,
+      clock(c.req.raw, c.env),
+      queueLimit(c),
+      c.env.TRACKING_SECRET,
+    )
     if (r.kind === "mismatch") return problem(c, 409, "idempotency_key_reused")
     if (r.kind === "queue_full") return queueFull(c)
     // 200 for the same submission sent again, so the browser can tell, though it treats both alike.
@@ -111,6 +121,7 @@ submissions.post(
   async (c) => {
     const token = bearer(c.req.header("Authorization"))
     if (!token) return problem(c, 404, "not_found")
+    if (!c.env.TRACKING_SECRET) return problem(c, 503, "not_configured")
     const refused = await guard(c, "revise")
     if (refused) return refused
     const { expectedRev, ...r } = c.req.valid("json")
