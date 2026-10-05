@@ -30,7 +30,7 @@ const STATUS: Record<string, string> = {
   published: "אושרה ומופיעה באתר",
   rejected: "לא אושרה",
   hidden: "מוסתרת עד שתסתיים בדיקה",
-  withdrawn: "נמשכה. ההצעה והשם שלכם נמחקו מהשרת",
+  withdrawn: "נמשכה. ההצעה, השם והמייל שלכם והתמונה נמחקו מהשרת",
   erased: "נמחקה",
 }
 
@@ -231,7 +231,7 @@ export function Tracking() {
             <AlertDialogHeader>
               <AlertDialogTitle>למשוך את ההצעה?</AlertDialogTitle>
               <AlertDialogDescription>
-                המקום, הסיפור והשם שלכם יימחקו מהשרת מיד, וגם אם המקום כבר פורסם הוא ירד מהאתר. אי אפשר לבטל את זה.
+                המקום, הסיפור, השם והמייל שלכם והתמונה יימחקו מהשרת מיד, וגם אם המקום כבר פורסם הוא ירד מהאתר. אי אפשר לבטל את זה.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
