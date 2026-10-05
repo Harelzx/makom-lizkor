@@ -72,6 +72,7 @@ const LABEL_LAYERS = ["road-label", "place-small", "place-town"]
 /** The opening is wordless on the map: labels stay hidden until the sun is up. */
 export function setLabels(visible: boolean) {
   if (!map) return
+  map.getContainer().classList.toggle("is-named", visible)
   for (const id of LABEL_LAYERS) {
     if (!map.getLayer(id)) continue
     map.setPaintProperty(id, "text-opacity-transition", { duration: 0, delay: 0 })
@@ -84,6 +85,8 @@ export function setLabels(visible: boolean) {
 export function fadeInLabels(duration: number) {
   if (!map) return
   const m = map
+  // the communities' own names come in with them (index.css, .is-named)
+  m.getContainer().classList.add("is-named")
   for (const id of LABEL_LAYERS) {
     if (!m.getLayer(id)) continue
     m.setPaintProperty(id, "text-opacity-transition", { duration: 0, delay: 0 })

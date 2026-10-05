@@ -106,7 +106,16 @@ const layerOf = (i: number, n: number) => Math.min(2, Math.floor((i * 3) / n))
 
 /** The fall: a cascade, each paper shrinking to an ember on its site, then a light that stays a while and fades into the
  * site's own glow on the map before the camera moves again (intro.tsx, ORBIT_AFTER). */
-const FALL = { step: 0.02, seconds: 1.2, light: 2.8 }
+const FALL = { step: 0.02, seconds: 1.2 }
+/** The light on a site, in seconds from 85% of the way down: it flares as it lands, settles, stays, and fades. */
+const LIGHT = { at: [0, 0.28, 0.7, 1.82, 2.8], opacity: [0, 1, 0.8, 0.8, 0], scale: [0.3, 1.25, 1, 1, 1] }
+/** A falling paper hands over to its ember halfway down: the paper goes as a round glow comes up at its heart, so it is
+ * never seen as a small red rectangle, and the glow is the light that lands. */
+const EMBER = {
+  at: [-0.42, 0, ...LIGHT.at.slice(1)],
+  opacity: [0, 0.7, ...LIGHT.opacity.slice(1)],
+  scale: [0.15, 0.4, ...LIGHT.scale.slice(1)],
+}
 /** A card mostly out of the frame when the fall begins never comes back across the screen: it fades where it is, and
  * only its light appears, on its site. */
 const MIN_IN_VIEW = 0.3
@@ -420,8 +429,8 @@ const Clipping = memo(function Clipping({
             fade
               ? { opacity: 0 }
               : fall
-                ? // it shrinks first, to a third by half way, warming as it goes, then collapses into its light
-                  { scale: [null, 0.3 * lens, 0.065 * lens], rotate: 0, x: 0, y: 0, opacity: [1, 1, 0] }
+                ? // it shrinks first, to a third by half way, warming as it goes, then goes as its ember comes up
+                  { scale: [null, 0.3 * lens, 0.065 * lens], rotate: 0, x: 0, y: 0, opacity: [1, 1, 0, 0] }
                 : { opacity: 1, scale: 1 - sink, rotate: slot.r, x: 0, y: 0 }
           }
           transition={
@@ -433,7 +442,7 @@ const Clipping = memo(function Clipping({
                     duration: FALL.seconds,
                     ease: [0.55, 0, 0.3, 1],
                     scale: { delay, duration: FALL.seconds, times: [0, 0.5, 1], ease: "easeInOut" },
-                    opacity: { delay, duration: FALL.seconds, times: [0, 0.86, 1] },
+                    opacity: { delay, duration: FALL.seconds, times: [0, 0.5, 0.8, 1] },
                   }
                 : // unseen while it passes behind the number, it shows only as it comes out to its place
                   { duration: time, ease: RISE, delay: float ? delay * 2 : 0, opacity: { delay: time * 0.3, duration: time * 0.5 } }
@@ -473,24 +482,32 @@ const Clipping = memo(function Clipping({
             // behind the words it darkens with the rush itself, so the eye is left with the words
             transition={{ duration: float ? rush.seconds * 0.7 : 0.4, delay: float ? delay : 0 }}
           />
-          {/* falling, the paper warms into an ember: amber at its heart, the flower's red at its edges, never a flat fill */}
+          {/* falling, the paper catches at its heart: a round glow, amber in the middle and the flower's red around it, that
+              the ember takes over from; never a fill to the paper's edges, which read as a small red rectangle */}
           <motion.div
-            className="pointer-events-none absolute inset-0 rounded-[3px] bg-[radial-gradient(closest-side,var(--p-sun-200),var(--p-anemone-500))]"
+            className="pointer-events-none absolute inset-0 rounded-[3px] bg-[radial-gradient(circle_closest-side,var(--p-sun-200),var(--p-anemone-500)_55%,transparent)]"
             initial={{ opacity: 0 }}
             animate={{ opacity: fall && !fade ? 0.6 : 0 }}
             transition={{ delay: delay + 0.25, duration: 0.6 }}
           />
         </motion.article>
       </div>
-      {/* where it lands, the ember lights up as a flower's light, stays a while, and fades into the site's own glow */}
-      {fall && (
-        <motion.span
-          className="absolute top-1/2 left-1/2 size-5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(closest-side,var(--p-anemone-400),var(--p-anemone-600)_55%,transparent)] shadow-[0_0_24px_8px_color-mix(in_oklab,var(--p-anemone-500)_45%,transparent)]"
-          initial={{ opacity: 0, scale: 0.3 * lens }}
-          animate={{ opacity: [0, 1, 0.8, 0.8, 0], scale: [0.3, 1.25, 1, 1, 1].map((k) => k * lens) }}
-          transition={{ delay: delay + FALL.seconds * 0.85, duration: FALL.light, times: [0, 0.1, 0.25, 0.65, 1] }}
-        />
-      )}
+      {/* the ember: it glows up as the paper goes, lights up as a flower's light where it lands, stays a while, and fades
+          into the site's own glow (a paper that faded off-frame sends only the light, on its site) */}
+      {fall && <Light beats={fade ? LIGHT : EMBER} delay={delay + FALL.seconds * 0.85} lens={lens} />}
     </motion.div>
   )
 })
+
+function Light({ beats, delay, lens }: { beats: typeof LIGHT; delay: number; lens: number }) {
+  const from = beats.at[0]
+  const span = beats.at[beats.at.length - 1] - from
+  return (
+    <motion.span
+      className="absolute top-1/2 left-1/2 size-5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(closest-side,var(--p-anemone-400),var(--p-anemone-600)_55%,transparent)] shadow-[0_0_24px_8px_color-mix(in_oklab,var(--p-anemone-500)_45%,transparent)]"
+      initial={{ opacity: 0, scale: beats.scale[0] * lens }}
+      animate={{ opacity: beats.opacity, scale: beats.scale.map((k) => k * lens) }}
+      transition={{ delay: delay + from, duration: span, times: beats.at.map((t) => (t - from) / span) }}
+    />
+  )
+}

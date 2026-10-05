@@ -589,6 +589,12 @@
   color: var(--ink-1);
   -webkit-text-stroke: 3px var(--surface);
   paint-order: stroke fill;
+  transition: opacity 1.2s ease;
+}
+/* The communities' names come in with the other place names once the sun is up (fadeInLabels): until then the map is
+   wordless, and on a phone the names sat right under the sunrise's line. */
+.is-opening:not(.is-named) .mk-community-name {
+  opacity: 0;
 }
 /* The dot carries the return: filled when the community is home, half while it returns. */
 .mk-community.rv-full .mk-community-dot {
