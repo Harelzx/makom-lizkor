@@ -19,9 +19,10 @@ The backend session's working notes while Harel is away. Kept current after each
 
 ## Adviser consultations
 
-| id                        | about                                     | verdict | what I did after            |
-| ------------------------- | ----------------------------------------- | ------- | --------------------------- |
-| 20261005T182941Z-fdb8f8ac | setup smoke call (before this delegation) | proceed | Phase 2 finished and merged |
+| id                        | about                                     | verdict | what I did after                                                                                                                                                                                                                                                                                                                                                                                       |
+| ------------------------- | ----------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 20261005T182941Z-fdb8f8ac | setup smoke call (before this delegation) | proceed | Phase 2 finished and merged                                                                                                                                                                                                                                                                                                                                                                            |
+| 20261005T195531Z-a1310bb9 | Phase 3 approach                          | revise  | shared anemones only for published D1 places (curated stay local until Phase 7); no per-page device id (storage failure → local only); fresh server nonce per attempt; /place/:id + replaceState into the hash router accepted, 404/410 no-store noindex, bootstrap reconciled with the feed; generic /og.png accepted, per-place images unfinished; retrospective Phase 2 `--review-report` requested |
 
 ## Outstanding
 
@@ -34,4 +35,5 @@ The backend session's working notes while Harel is away. Kept current after each
 
 ## Next action
 
-Write the Phase 3 detailed plan (`docs/superpowers/plans/2026-10-05-backend-phase-3.md`), consult the adviser on it, then implement.
+1. Submit the retrospective Phase 2 implementation report (asked in 20261005T195531Z-a1310bb9).
+2. Write the Phase 3 detailed plan (`docs/superpowers/plans/2026-10-05-backend-phase-3.md`) following that reply, then implement.
