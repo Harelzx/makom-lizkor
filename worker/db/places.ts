@@ -76,13 +76,68 @@ export async function insertSubmission(db: D1Database, input: SubmissionInput, k
   return { kind: "replayed", id: prior.id, trackingToken: fresh }
 }
 
-export async function submissionStatus(db: D1Database, id: string, token: string) {
+/** The place, if `token` is its tracking capability; null for an unknown id and a wrong token alike. */
+async function tracked(db: D1Database, id: string, token: string) {
   const row = await db
-    .prepare("SELECT status, tracking_token_hash AS h FROM places WHERE id = ?")
+    .prepare("SELECT status, rev, tracking_token_hash AS h FROM places WHERE id = ?")
     .bind(id)
-    .first<{ status: string; h: string | null }>()
-  if (!row?.h || !(await sameHash(row.h, await sha256Hex(token)))) return null
-  return { status: row.status }
+    .first<{ status: string; rev: number; h: string | null }>()
+  return row?.h && (await sameHash(row.h, await sha256Hex(token))) ? row : null
+}
+
+export async function submissionStatus(db: D1Database, id: string, token: string) {
+  const row = await tracked(db, id, token)
+  if (!row) return null
+  // The newest revision's name: what the sender wrote last. A withdrawn place has none left.
+  const name = await db
+    .prepare("SELECT name_he FROM revisions WHERE place_id = ? ORDER BY n DESC LIMIT 1")
+    .bind(id)
+    .first<string | null>("name_he")
+  return { status: row.status, name_he: name ?? null }
+}
+
+/**
+ * The sender takes the place back, from any state: its content, its photo and the sender's name go at once, and a
+ * tombstone with the status stays (spec 3.3). The same compare-and-set as a moderator's decision; a published place
+ * also leaves the feed. Sending it again is harmless.
+ */
+export async function withdraw(db: D1Database, id: string, token: string, now: Date): Promise<boolean> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const row = await tracked(db, id, token)
+    if (!row) return false
+    if (row.status === "withdrawn" || row.status === "erased") return true
+    const tid = `t_${ulid(now.getTime())}`
+    const at = now.toISOString()
+    const happened = "EXISTS (SELECT 1 FROM places WHERE id = ?1 AND last_transition_id = ?2)"
+    const [placeUpdate] = await db.batch([
+      db
+        .prepare(
+          `UPDATE places SET status = 'withdrawn', rev = rev + 1, last_transition_id = ?2, status_changed_at = ?3, published_revision_id = NULL
+           WHERE id = ?1 AND rev = ?4`,
+        )
+        .bind(id, tid, at, row.rev),
+      db
+        .prepare(
+          `UPDATE revisions SET state = 'withdrawn', kind = NULL, name_he = NULL, lat = NULL, lng = NULL, location_precision = NULL,
+             on_private_property = 0, location_permission_at = NULL, access_note_he = NULL, place_he = NULL, in_memory_of = NULL,
+             story_he = NULL, link_url = NULL, decision_note = NULL, decided_at = ?3
+           WHERE place_id = ?1 AND ${happened}`,
+        )
+        .bind(id, tid, at),
+      db.prepare(`DELETE FROM contacts WHERE place_id = ?1 AND ${happened}`).bind(id, tid),
+      db
+        .prepare(`UPDATE feed_state SET n = n + 1, changed_at = ?3 WHERE id = 1 AND ?4 = 'published' AND ${happened}`)
+        .bind(id, tid, at, row.status),
+      db
+        .prepare(
+          `INSERT INTO audit_log (id, at, actor, action, entity_id, fields) SELECT ?3, ?4, 'submitter', 'withdraw', ?1, 'status' WHERE ${happened}`,
+        )
+        .bind(id, tid, `a_${ulid(now.getTime())}`, at),
+    ])
+    if (placeUpdate.meta.changes === 1) return true
+    // A moderator decided at the same moment: read the place again and withdraw what it is now.
+  }
+  return false
 }
 
 /** Everything a moderator approves is on screen: every field the feed would publish. */

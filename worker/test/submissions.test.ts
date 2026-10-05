@@ -48,7 +48,7 @@ describe("GET /api/v1/submissions/:id", () => {
     })
     expect(ok.status).toBe(200)
     expect(ok.headers.get("Cache-Control")).toBe("private, no-store")
-    expect(await ok.json()).toEqual({ status: "pending" })
+    expect(await ok.json()).toEqual({ status: "pending", name_he: "ספסל דמו" })
     const wrong = await exports.default.fetch(`http://local/api/v1/submissions/${id}`, { headers: { Authorization: "Bearer nope" } })
     expect(wrong.status).toBe(404)
     expect(wrong.headers.get("Cache-Control")).toBe("private, no-store")

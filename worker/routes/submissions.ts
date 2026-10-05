@@ -1,7 +1,7 @@
 import { zValidator } from "@hono/zod-validator"
 import { Hono } from "hono"
 import { SubmissionInput } from "@/shared/contract"
-import { insertSubmission, submissionStatus } from "../db/places"
+import { insertSubmission, submissionStatus, withdraw } from "../db/places"
 import { clock } from "../lib/clock"
 import { PRIVATE, problem } from "../lib/http"
 
@@ -23,9 +23,17 @@ submissions.post(
   },
 )
 
+const bearer = (header: string | undefined) => /^Bearer (.+)$/.exec(header ?? "")?.[1]
+
 submissions.get("/:id", async (c) => {
-  const token = /^Bearer (.+)$/.exec(c.req.header("Authorization") ?? "")?.[1]
+  const token = bearer(c.req.header("Authorization"))
   // An unknown id and a wrong token look the same, so the endpoint reveals nothing about which ids exist.
   const status = token ? await submissionStatus(c.env.DB, c.req.param("id"), token) : null
   return status ? c.json(status, 200, PRIVATE) : problem(c, 404, "not_found")
+})
+
+submissions.post("/:id/withdraw", async (c) => {
+  const token = bearer(c.req.header("Authorization"))
+  const done = token ? await withdraw(c.env.DB, c.req.param("id"), token, clock(c.req.raw, c.env)) : false
+  return done ? c.json({ status: "withdrawn" }, 200, PRIVATE) : problem(c, 404, "not_found")
 })
