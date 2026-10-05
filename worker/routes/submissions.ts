@@ -1,7 +1,8 @@
 import { zValidator } from "@hono/zod-validator"
 import { Hono, type Context } from "hono"
-import { RevisionInput, SubmissionInput } from "@/shared/contract"
-import { insertSubmission, pendingCount, revise, submissionKnown, submissionStatus, withdraw } from "../db/places"
+import { z } from "zod"
+import { RevisionInput, SubmissionInput, text } from "@/shared/contract"
+import { attachPhoto, erasePhotos, insertSubmission, pendingCount, revise, submissionKnown, submissionStatus, withdraw } from "../db/places"
 import { clock } from "../lib/clock"
 import { PRIVATE, problem } from "../lib/http"
 import { verificationMail } from "../lib/messages"
@@ -69,7 +70,9 @@ submissions.get("/:id", async (c) => {
 submissions.post("/:id/withdraw", async (c) => {
   const token = bearer(c.req.header("Authorization"))
   const done = token ? await withdraw(c.env.DB, c.req.param("id"), token, clock(c.req.raw, c.env)) : false
-  return done ? c.json({ status: "withdrawn" }, 200, PRIVATE) : problem(c, 404, "not_found")
+  if (!done) return problem(c, 404, "not_found")
+  await erasePhotos(c.env.MEDIA, c.req.param("id"))
+  return c.json({ status: "withdrawn" }, 200, PRIVATE)
 })
 
 submissions.post(
@@ -86,3 +89,31 @@ submissions.post(
     return result === "ok" ? c.json({ ok: true }, 200, PRIVATE) : problem(c, 409, "changed_meanwhile")
   },
 )
+
+const PhotoFields = z.object({ alt: text({ max: 140 }), credit: text({ max: 60 }).optional() })
+
+/** The photo for the sender's open revision, after the submission itself: a second request, so the submission's retry stays exact. */
+submissions.put("/:id/photo", async (c) => {
+  const token = bearer(c.req.header("Authorization"))
+  if (!token) return problem(c, 404, "not_found")
+  if (Number(c.req.header("Content-Length") ?? 0) > 5 * 1024 * 1024) return problem(c, 413, "too_large")
+  const body = await c.req.parseBody().catch(() => null)
+  const file = body?.photo
+  if (!(file instanceof File)) return problem(c, 400, "invalid_input")
+  const fields = PhotoFields.safeParse({ alt: body?.alt, credit: body?.credit || undefined })
+  if (!fields.success) return problem(c, 400, "invalid_input")
+  const r = await attachPhoto(
+    c.env.DB,
+    c.env.MEDIA,
+    c.req.param("id"),
+    token,
+    new Uint8Array(await file.arrayBuffer()),
+    fields.data.alt,
+    fields.data.credit,
+  )
+  if (r === "not_found") return problem(c, 404, "not_found")
+  if (r === "too_large") return problem(c, 413, "too_large")
+  if (r === "not_jpeg") return problem(c, 415, "not_jpeg")
+  if (r === "closed") return problem(c, 409, "not_open")
+  return c.json({ ok: true }, 200, PRIVATE)
+})

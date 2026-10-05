@@ -83,6 +83,8 @@ export const PublicPlace = z.object({
   summary_he: z.string(),
   in_memory_of: z.string().optional(),
   link_url: z.string().optional(),
+  /** Approved with its place; served by the Worker from public/. */
+  photo: z.object({ url: z.string(), alt: z.string(), credit: z.string().optional() }).optional(),
 })
 export type PublicPlace = z.infer<typeof PublicPlace>
 

@@ -2,7 +2,7 @@ import { zValidator } from "@hono/zod-validator"
 import { Hono } from "hono"
 import { z } from "zod"
 import { text } from "@/shared/contract"
-import { listQueue, transition, verifiedContact } from "../db/places"
+import { listQueue, photosAfterDecision, transition, verifiedContact } from "../db/places"
 import { decisionMail } from "../lib/messages"
 import type { AppEnv } from "../index"
 import { moderator } from "../lib/access"
@@ -42,6 +42,7 @@ admin.post(
     const body = c.req.valid("json")
     const result = await transition(c.env.DB, { placeId: c.req.param("id"), ...body, actor: c.get("actor") }, clock(c.req.raw, c.env))
     if (result !== "ok") return problem(c, 409, "changed_meanwhile")
+    await photosAfterDecision(c.env.DB, c.env.MEDIA, c.req.param("id"), body.revisionId, body.action)
     // A verified address hears about the decision; a mail that can't go now never undoes the decision.
     const contact = await verifiedContact(c.env.DB, c.req.param("id"))
     if (contact)
@@ -51,3 +52,12 @@ admin.post(
     return c.json({ ok: true })
   },
 )
+
+/** A photo as the moderator must see it before deciding: in quarantine, or already public. */
+admin.get("/media/*", async (c) => {
+  const key = c.req.path.replace(/^.*\/api\/admin\/media\//, "")
+  if (!/^(quarantine|public)\//.test(key)) return problem(c, 404, "not_found")
+  const object = await c.env.MEDIA.get(key)
+  if (!object) return problem(c, 404, "not_found")
+  return c.body(object.body, 200, { "Content-Type": "image/jpeg" })
+})

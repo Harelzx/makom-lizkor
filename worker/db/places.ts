@@ -1,5 +1,6 @@
 import type { Feed, PublicPlace, RevisionInput, SubmissionInput } from "@/shared/contract"
 import { newToken, placeId, sameHash, sha256Hex, ulid } from "../lib/ids"
+import { stripJpeg } from "../lib/jpeg"
 
 // An approximation of a month; phase 5 replaces it with calendar months read from RETENTION (src/config.ts).
 const MONTH_MS = 30 * 24 * 3600 * 1000
@@ -243,7 +244,8 @@ export async function listQueue(db: D1Database) {
   const { results } = await db
     .prepare(
       `SELECT p.id, p.rev, r.id AS revisionId, r.kind, r.name_he, r.lat, r.lng, r.location_precision, r.place_he, r.in_memory_of, r.story_he,
-         r.link_url, p.created_at, p.status = 'published' AS correction
+         r.link_url, p.created_at, p.status = 'published' AS correction,
+         CASE WHEN r.photo_key IS NOT NULL THEN '/api/admin/media/' || r.photo_key END AS photo_url, r.photo_alt, r.photo_credit
        FROM places p JOIN revisions r ON r.place_id = p.id AND r.state = 'pending'
        WHERE p.status IN ('pending', 'published') ORDER BY r.created_at`,
     )
@@ -330,9 +332,10 @@ export async function revise(
     db
       .prepare(
         `INSERT INTO revisions (id, place_id, n, state, kind, name_he, lat, lng, location_precision, on_private_property,
-           location_permission_at, access_note_he, place_he, in_memory_of, story_he, link_url, consent_version, created_at)
+           location_permission_at, access_note_he, place_he, in_memory_of, story_he, link_url, consent_version, created_at,
+           photo_key, photo_alt, photo_credit)
          SELECT ?3, ?1, last.n + 1, 'pending', last.kind, ?4, last.lat, last.lng, last.location_precision, last.on_private_property,
-           last.location_permission_at, last.access_note_he, ?5, ?6, ?7, ?8, ?9, ?10
+           last.location_permission_at, last.access_note_he, ?5, ?6, ?7, ?8, ?9, ?10, last.photo_key, last.photo_alt, last.photo_credit
          FROM (SELECT * FROM revisions WHERE place_id = ?1 ORDER BY n DESC LIMIT 1) AS last
          WHERE ${happened}`,
       )
@@ -362,7 +365,8 @@ export async function readFeed(db: D1Database, epoch: string): Promise<Feed> {
   const [state, rows] = await db.batch([
     db.prepare("SELECT n FROM feed_state WHERE id = 1"),
     db.prepare(
-      `SELECT p.id, r.kind, r.name_he, r.lat, r.lng, r.location_precision, r.place_he, r.story_he, r.in_memory_of, r.link_url
+      `SELECT p.id, r.kind, r.name_he, r.lat, r.lng, r.location_precision, r.place_he, r.story_he, r.in_memory_of, r.link_url,
+         r.photo_key, r.photo_alt, r.photo_credit
        FROM places p JOIN revisions r ON r.id = p.published_revision_id WHERE p.status = 'published'`,
     ),
   ])
@@ -378,6 +382,10 @@ export async function readFeed(db: D1Database, epoch: string): Promise<Feed> {
     summary_he: (r.story_he as string | null) ?? "",
     in_memory_of: (r.in_memory_of as string | null) ?? undefined,
     link_url: (r.link_url as string | null) ?? undefined,
+    // Only a photo that reached public/ (approved with its place) is ever named in the feed.
+    ...(typeof r.photo_key === "string" && r.photo_key.startsWith("public/")
+      ? { photo: { url: `/media/${r.photo_key}`, alt: r.photo_alt as string, credit: (r.photo_credit as string | null) ?? undefined } }
+      : {}),
   }))
   return { v: `${epoch}.${n}`, places }
 }
@@ -393,4 +401,77 @@ export async function submissionKnown(db: D1Database, key: string) {
 /** Revisions waiting for a moderator: first submissions and corrections alike. */
 export async function pendingCount(db: D1Database) {
   return (await db.prepare("SELECT COUNT(*) AS n FROM revisions WHERE state = 'pending'").first<number>("n")) ?? 0
+}
+
+const MAX_PHOTO = 4 * 1024 * 1024
+
+/**
+ * The sender's photo for their newest revision that is still open (pending, or returned for a change). It waits in
+ * quarantine/ until a moderator approves the place; the metadata a camera writes is stripped first.
+ */
+export async function attachPhoto(
+  db: D1Database,
+  media: R2Bucket,
+  id: string,
+  token: string,
+  bytes: Uint8Array,
+  alt: string,
+  credit: string | undefined,
+): Promise<"ok" | "not_found" | "too_large" | "not_jpeg" | "closed"> {
+  if (!(await tracked(db, id, token))) return "not_found"
+  if (bytes.length > MAX_PHOTO) return "too_large"
+  const clean = stripJpeg(bytes)
+  if (!clean) return "not_jpeg"
+  const rev = await db
+    .prepare("SELECT id, photo_key FROM revisions WHERE place_id = ? AND state IN ('pending', 'returned') ORDER BY n DESC LIMIT 1")
+    .bind(id)
+    .first<{ id: string; photo_key: string | null }>()
+  if (!rev) return "closed"
+  const key = `quarantine/${id}/${rev.id}-${ulid()}.jpg`
+  await media.put(key, clean, { httpMetadata: { contentType: "image/jpeg" } })
+  await db
+    .prepare("UPDATE revisions SET photo_key = ?, photo_alt = ?, photo_credit = ? WHERE id = ?")
+    .bind(key, alt, credit ?? null, rev.id)
+    .run()
+  // A replaced photo that was never approved goes at once.
+  if (rev.photo_key?.startsWith("quarantine/")) await media.delete(rev.photo_key)
+  return "ok"
+}
+
+/**
+ * The files follow a moderator's decision. Approving moves the revision's photo from quarantine/ to public/ and removes
+ * the photos of revisions it retires; rejecting deletes the photo at once (spec 3.3). A returned revision keeps its photo
+ * for the sender's correction. Runs after the decision is stored, so a failure here leaves files for the sweep, never a
+ * decision half made.
+ */
+export async function photosAfterDecision(db: D1Database, media: R2Bucket, placeId: string, revisionId: string, action: string) {
+  const rev = await db.prepare("SELECT photo_key FROM revisions WHERE id = ?").bind(revisionId).first<{ photo_key: string | null }>()
+  if (action === "reject" && rev?.photo_key?.startsWith("quarantine/")) {
+    await media.delete(rev.photo_key)
+    await db.prepare("UPDATE revisions SET photo_key = NULL, photo_alt = NULL, photo_credit = NULL WHERE id = ?").bind(revisionId).run()
+    return
+  }
+  if (action !== "approve") return
+  let live = rev?.photo_key ?? null
+  if (live?.startsWith("quarantine/")) {
+    const object = await media.get(live)
+    if (object) {
+      const published = `public/${placeId}/${revisionId}.jpg`
+      await media.put(published, await object.arrayBuffer(), { httpMetadata: { contentType: "image/jpeg" } })
+      await db.prepare("UPDATE revisions SET photo_key = ? WHERE id = ?").bind(published, revisionId).run()
+      await media.delete(live)
+      live = published
+    }
+  }
+  // Whatever else this place holds in public/ belonged to revisions that are no longer published.
+  const others = (await media.list({ prefix: `public/${placeId}/` })).objects.map((o) => o.key).filter((k) => k !== live)
+  if (others.length) await media.delete(others)
+}
+
+/** Every file of a place, in quarantine and public alike: a withdrawal erases them all at once. */
+export async function erasePhotos(media: R2Bucket, placeId: string) {
+  for (const prefix of [`quarantine/${placeId}/`, `public/${placeId}/`]) {
+    const keys = (await media.list({ prefix })).objects.map((o) => o.key)
+    if (keys.length) await media.delete(keys)
+  }
 }

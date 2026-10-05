@@ -27,6 +27,15 @@ export function createApp(deps: Deps) {
   app.route("/api/admin", admin)
   app.route("/__dev", dev)
 
+  // Approved photos only: the Worker is the one door to the bucket, and it opens public/ alone (spec 5).
+  app.get("/media/public/*", async (c) => {
+    const key = c.req.path.replace(/^\/media\//, "")
+    const object = await c.env.MEDIA.get(key)
+    if (!object) return problem(c, 404, "not_found")
+    // Short-lived: a photo taken down later (phase 4) must not live on in caches for long.
+    return c.body(object.body, 200, { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=300" })
+  })
+
   // Only /api/* and /__dev/* reach the Worker, so anything unmatched here is an API mistake, not a page.
   app.notFound((c) => problem(c, 404, "not_found"))
   // One JSON line with the route and the error's name only: never a body, a token, an address or a header.
