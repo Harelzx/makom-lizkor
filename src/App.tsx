@@ -129,12 +129,17 @@ export default function App() {
     if (phase !== "day") return
     let stop: (() => void) | undefined
     let cancelled = false
+    let stopTributes: (() => void) | undefined
     void import("@/lib/feed").then((m) => {
       if (!cancelled) stop = m.startFeedSync()
+    })
+    void import("@/lib/tributes").then((m) => {
+      if (!cancelled) stopTributes = m.startTributeSync()
     })
     return () => {
       cancelled = true
       stop?.()
+      stopTributes?.()
     }
   }, [phase])
 

@@ -1,5 +1,5 @@
 import { turnstileToken } from "@/lib/turnstile"
-import type { RevisionInput, SubmissionInput } from "@/shared/contract"
+import type { RevisionInput, SubmissionInput, TributeResult, TributeTotals } from "@/shared/contract"
 
 export type SendResult =
   | { ok: true; id: string; trackingToken: string }
@@ -145,5 +145,35 @@ export async function uploadPhoto(
     return res.ok ? "ok" : REJECTED.has(res.status) || res.status === 404 ? "rejected" : "temporary"
   } catch {
     return "temporary"
+  }
+}
+
+/** One anemone for the shared count: the server's answer, refused (don't send it again), or unreachable (later). */
+export async function sendTribute(
+  placeId: string,
+  deviceId: string,
+  key: string,
+): Promise<{ ok: true; result: TributeResult } | { ok: false; kind: "rejected" | "temporary" }> {
+  try {
+    const res = await fetch("/api/v1/tributes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Idempotency-Key": key },
+      body: JSON.stringify({ placeId, deviceId }),
+      signal: AbortSignal.timeout(8000),
+    })
+    if (res.ok) return { ok: true, result: (await res.json()) as TributeResult }
+    return { ok: false, kind: REJECTED.has(res.status) ? "rejected" : "temporary" }
+  } catch {
+    return { ok: false, kind: "temporary" }
+  }
+}
+
+/** The shared counts; null when the server can't be reached (the card then shows only this visitor's own flowers). */
+export async function getTributeTotals(): Promise<Record<string, number> | null> {
+  try {
+    const res = await fetch("/api/v1/tributes", { cache: "no-store", signal: AbortSignal.timeout(8000) })
+    return res.ok ? ((await res.json()) as TributeTotals).totals : null
+  } catch {
+    return null
   }
 }

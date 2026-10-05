@@ -32,6 +32,8 @@ interface State {
   feedLive: boolean
   local: Place[]
   tributes: Record<string, number>
+  /** The shared anemone counts of published places, from the server (kept here; fetched by src/lib/tributes.ts). */
+  tributeTotals: Record<string, number>
   selectedId: string | null
   hoveredId: string | null
   tab: Tab
@@ -76,6 +78,7 @@ interface State {
   removeLocal: (id: string) => Promise<void>
   importLocal: (places: Place[]) => Promise<number>
   leaveAnemone: (id: string) => void
+  setTributeTotals: (t: Record<string, number>) => void
   setJourney: (i: number, playing?: boolean) => void
   celebrate: () => void
   replayIntro: () => void
@@ -107,6 +110,7 @@ export const useStore = create<State>((set, get) => ({
   feedLive: false,
   local: [],
   tributes: {},
+  tributeTotals: {},
   selectedId: linkedPlaceId(),
   hoveredId: null,
   tab: "places",
@@ -174,6 +178,7 @@ export const useStore = create<State>((set, get) => ({
     set({ tributes })
     void saveTributes(tributes)
   },
+  setTributeTotals: (tributeTotals) => set({ tributeTotals }),
   celebrate: () => set({ celebration: get().celebration + 1 }),
   replayIntro: () => {
     try {

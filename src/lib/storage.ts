@@ -57,6 +57,51 @@ export async function saveTributes(t: Record<string, number>): Promise<void> {
   }
 }
 
+let device: Promise<string | null> | undefined
+/**
+ * This device's random id for the shared anemone count, kept in IndexedDB and read back before it is trusted. Null
+ * when the browser won't keep it: then nothing is sent, since a new id each visit would count one device many times.
+ */
+export function deviceId(): Promise<string | null> {
+  device ??= (async () => {
+    try {
+      const s = db()
+      if (!s) return null
+      const known = await get<string>("device", s)
+      if (known && /^[0-9a-f]{32}$/.test(known)) return known
+      const id = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, "0")).join("")
+      await set("device", id, s)
+      return (await get<string>("device", s)) === id ? id : null
+    } catch {
+      return null
+    }
+  })()
+  return device
+}
+
+/** An anemone waiting to be counted: its key (kept through every retry) and when it was left. */
+export type PendingTribute = { key: string; at: number }
+
+/** Changes the anemones waiting to be sent, one per place, in one transaction (another tab may be sending too). */
+export async function changeTributeOutbox(
+  change: (stored: Record<string, PendingTribute>) => Record<string, PendingTribute>,
+): Promise<Record<string, PendingTribute>> {
+  const s = db()
+  if (!s) throw new Error("storage_unavailable")
+  let next: Record<string, PendingTribute> = {}
+  await update<Record<string, PendingTribute>>("tributeOutbox", (stored) => (next = change(stored ?? {})), s)
+  return next
+}
+
+/** The places an anemone was already sent for, by the Jerusalem day it was sent: more taps that day send nothing. */
+export async function changeTributeSent(change: (sent: Record<string, string>) => Record<string, string>): Promise<Record<string, string>> {
+  const s = db()
+  if (!s) throw new Error("storage_unavailable")
+  let next: Record<string, string> = {}
+  await update<Record<string, string>>("tributeSent", (stored) => (next = change(stored ?? {})), s)
+  return next
+}
+
 /** The last feed this browser received, kept whole: what the map shows with no connection (spec 5). */
 export async function loadSnapshot(): Promise<unknown> {
   try {
