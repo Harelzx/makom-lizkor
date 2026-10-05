@@ -4,3 +4,6 @@
 ENVIRONMENT=development
 MODERATORS=dev@example.test
 DEV_ACCESS_SECRET=development-only-not-a-secret
+# Cloudflare's published Turnstile test secret (always passes); its test tokens come back for example.com.
+TURNSTILE_SECRET=1x0000000000000000000000000000000AA
+TURNSTILE_HOSTNAMES=example.com

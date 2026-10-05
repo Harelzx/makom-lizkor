@@ -1,4 +1,5 @@
-import { env, exports } from "cloudflare:workers"
+import { env } from "cloudflare:workers"
+import { call } from "./app"
 import { describe, expect, it } from "vitest"
 import { CURRENT_SUBMISSION_NOTICE } from "@/shared/contract"
 import { admin } from "./helpers"
@@ -6,9 +7,9 @@ import { admin } from "./helpers"
 type Item = { id: string; rev: number; revisionId: string; name_he: string; correction: number }
 
 const send = async (name: string) => {
-  const res = await exports.default.fetch("http://local/api/v1/submissions", {
+  const res = await call("http://local/api/v1/submissions", {
     method: "POST",
-    headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID().replaceAll("-", "") },
+    headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID().replaceAll("-", ""), "Turnstile-Token": "pass" },
     body: JSON.stringify({ kind: "bench", name_he: name, lat: 31.42, lng: 34.49, consent_version: CURRENT_SUBMISSION_NOTICE }),
   })
   return res.json<{ id: string; trackingToken: string }>()
@@ -23,7 +24,7 @@ const decide = async (id: string, action: string, note?: string) => {
   })
 }
 const tracked = async (id: string, token: string) =>
-  (await exports.default.fetch(`http://local/api/v1/submissions/${id}`, { headers: { Authorization: `Bearer ${token}` } })).json<{
+  (await call(`http://local/api/v1/submissions/${id}`, { headers: { Authorization: `Bearer ${token}` } })).json<{
     status: string
     rev: number
     name_he: string | null
@@ -31,15 +32,14 @@ const tracked = async (id: string, token: string) =>
     revision_state?: string
   }>()
 const revise = (id: string, token: string, body: Record<string, unknown>) =>
-  exports.default.fetch(`http://local/api/v1/submissions/${id}/revisions`, {
+  call(`http://local/api/v1/submissions/${id}/revisions`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, "Turnstile-Token": "pass-revise" },
     body: JSON.stringify({ consent_version: CURRENT_SUBMISSION_NOTICE, ...body }),
   })
 const feed = async () => {
-  const v = (await (await exports.default.fetch("http://local/api/v1/version")).json<{ v: string }>()).v
-  return (await (await exports.default.fetch(`http://local/api/v1/feed?v=${v}`)).json<{ places: { id: string; name_he: string }[] }>())
-    .places
+  const v = (await (await call("http://local/api/v1/version")).json<{ v: string }>()).v
+  return (await (await call(`http://local/api/v1/feed?v=${v}`)).json<{ places: { id: string; name_he: string }[] }>()).places
 }
 
 describe("returning a submission", () => {

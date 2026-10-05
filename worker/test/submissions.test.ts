@@ -1,11 +1,12 @@
-import { env, exports } from "cloudflare:workers"
+import { env } from "cloudflare:workers"
+import { call } from "./app"
 import { describe, expect, it } from "vitest"
 
 const valid = { kind: "bench", name_he: "ספסל דמו", lat: 31.42, lng: 34.49, consent_version: "notice.submission@2026-10-2" }
 const post = (body: unknown) =>
-  exports.default.fetch("http://local/api/v1/submissions", {
+  call("http://local/api/v1/submissions", {
     method: "POST",
-    headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID().replaceAll("-", "") },
+    headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID().replaceAll("-", ""), "Turnstile-Token": "pass" },
     body: JSON.stringify(body),
   })
 
@@ -43,13 +44,13 @@ describe("POST /api/v1/submissions", () => {
 describe("GET /api/v1/submissions/:id", () => {
   it("shows the status only to the holder of the tracking token", async () => {
     const { id, trackingToken } = await (await post(valid)).json<{ id: string; trackingToken: string }>()
-    const ok = await exports.default.fetch(`http://local/api/v1/submissions/${id}`, {
+    const ok = await call(`http://local/api/v1/submissions/${id}`, {
       headers: { Authorization: `Bearer ${trackingToken}` },
     })
     expect(ok.status).toBe(200)
     expect(ok.headers.get("Cache-Control")).toBe("private, no-store")
     expect(await ok.json()).toMatchObject({ status: "pending", name_he: "ספסל דמו" })
-    const wrong = await exports.default.fetch(`http://local/api/v1/submissions/${id}`, { headers: { Authorization: "Bearer nope" } })
+    const wrong = await call(`http://local/api/v1/submissions/${id}`, { headers: { Authorization: "Bearer nope" } })
     expect(wrong.status).toBe(404)
     expect(wrong.headers.get("Cache-Control")).toBe("private, no-store")
   })

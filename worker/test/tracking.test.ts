@@ -1,20 +1,21 @@
-import { env, exports } from "cloudflare:workers"
+import { env } from "cloudflare:workers"
+import { call } from "./app"
 import { describe, expect, it } from "vitest"
 import { CURRENT_SUBMISSION_NOTICE } from "@/shared/contract"
 import { approve } from "./helpers"
 
 const send = async (name: string, extra: Record<string, unknown> = {}) => {
-  const res = await exports.default.fetch("http://local/api/v1/submissions", {
+  const res = await call("http://local/api/v1/submissions", {
     method: "POST",
-    headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID().replaceAll("-", "") },
+    headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID().replaceAll("-", ""), "Turnstile-Token": "pass" },
     body: JSON.stringify({ kind: "bench", name_he: name, lat: 31.42, lng: 34.49, consent_version: CURRENT_SUBMISSION_NOTICE, ...extra }),
   })
   return res.json<{ id: string; trackingToken: string }>()
 }
 const as = (token: string) => ({ Authorization: `Bearer ${token}` })
-const status = (id: string, token: string) => exports.default.fetch(`http://local/api/v1/submissions/${id}`, { headers: as(token) })
+const status = (id: string, token: string) => call(`http://local/api/v1/submissions/${id}`, { headers: as(token) })
 const withdraw = (id: string, token: string) =>
-  exports.default.fetch(`http://local/api/v1/submissions/${id}/withdraw`, { method: "POST", headers: as(token) })
+  call(`http://local/api/v1/submissions/${id}/withdraw`, { method: "POST", headers: as(token) })
 const feedVersion = () => env.DB.prepare("SELECT n FROM feed_state WHERE id = 1").first<number>("n")
 
 describe("tracking a submission", () => {
@@ -46,8 +47,8 @@ describe("withdrawing", () => {
     const before = await feedVersion()
     await withdraw(id, trackingToken)
     expect(await feedVersion()).toBe((before ?? 0) + 1)
-    const v = (await (await exports.default.fetch("http://local/api/v1/version")).json<{ v: string }>()).v
-    const feed = await (await exports.default.fetch(`http://local/api/v1/feed?v=${v}`)).json<{ places: { id: string }[] }>()
+    const v = (await (await call("http://local/api/v1/version")).json<{ v: string }>()).v
+    const feed = await (await call(`http://local/api/v1/feed?v=${v}`)).json<{ places: { id: string }[] }>()
     expect(feed.places.some((p) => p.id === id)).toBe(false)
   })
   it("is safe to send twice, and moves the feed only for a published place", async () => {

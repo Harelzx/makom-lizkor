@@ -1,13 +1,14 @@
-import { env, exports } from "cloudflare:workers"
+import { env } from "cloudflare:workers"
+import { call } from "./app"
 import { describe, expect, it } from "vitest"
 import { CURRENT_SUBMISSION_NOTICE } from "@/shared/contract"
 
 const body = (name: string) => ({ kind: "bench", name_he: name, lat: 31.42, lng: 34.49, consent_version: CURRENT_SUBMISSION_NOTICE })
 const key = () => crypto.randomUUID().replaceAll("-", "")
 const post = (b: unknown, k?: string) =>
-  exports.default.fetch("http://local/api/v1/submissions", {
+  call("http://local/api/v1/submissions", {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...(k ? { "Idempotency-Key": k } : {}) },
+    headers: { "Content-Type": "application/json", "Turnstile-Token": "pass", ...(k ? { "Idempotency-Key": k } : {}) },
     body: JSON.stringify(b),
   })
 const count = (name: string) => env.DB.prepare("SELECT COUNT(*) AS n FROM revisions WHERE name_he = ?").bind(name).first<number>("n")
@@ -24,7 +25,7 @@ describe("a retried submission", () => {
     expect(b.id).toBe(a.id)
     expect(await count("ספסל דמו אבוד")).toBe(1)
     // the token from the retry is the one that works now
-    const status = await exports.default.fetch(`http://local/api/v1/submissions/${b.id}`, {
+    const status = await call(`http://local/api/v1/submissions/${b.id}`, {
       headers: { Authorization: `Bearer ${b.trackingToken}` },
     })
     expect(status.status).toBe(200)

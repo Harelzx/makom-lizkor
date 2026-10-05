@@ -1,11 +1,13 @@
 import { env } from "cloudflare:workers"
 import { createExecutionContext } from "cloudflare:test"
 import { describe, expect, it } from "vitest"
-import app from "../index"
+import { createApp } from "../index"
+import { fakeSiteverify } from "./app"
 import { devToken } from "./helpers"
 
 // What a deploy gets: the top-level vars of wrangler.jsonc, without the development values from .dev.vars.
 const production = { ...env, ENVIRONMENT: "production", DEV_ACCESS_SECRET: "", MODERATORS: "", ACCESS_TEAM_DOMAIN: "", ACCESS_AUD: "" }
+const app = createApp({ verifyTurnstile: fakeSiteverify })
 const call = (path: string, init: RequestInit = {}, e: Env = production) =>
   app.fetch(new Request(`http://local${path}`, init), e, createExecutionContext())
 
@@ -25,6 +27,7 @@ describe("in production", () => {
       headers: {
         "Content-Type": "application/json",
         "Idempotency-Key": crypto.randomUUID().replaceAll("-", ""),
+        "Turnstile-Token": "pass",
         "X-Test-Now": "2000-01-01T00:00:00Z",
       },
       body: JSON.stringify({ kind: "bench", name_he: "ספסל דמו", lat: 31.42, lng: 34.49, consent_version: "notice.submission@2026-10-2" }),

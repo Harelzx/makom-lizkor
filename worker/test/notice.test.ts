@@ -1,12 +1,12 @@
-import { exports } from "cloudflare:workers"
+import { call } from "./app"
 import { expect, it } from "vitest"
 import { CURRENT_SUBMISSION_NOTICE, SUBMISSION_NOTICES } from "@/shared/contract"
 import { NOTICES } from "@/data/legal"
 
 const submit = (consent_version: string) =>
-  exports.default.fetch("http://local/api/v1/submissions", {
+  call("http://local/api/v1/submissions", {
     method: "POST",
-    headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID().replaceAll("-", "") },
+    headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID().replaceAll("-", ""), "Turnstile-Token": "pass" },
     body: JSON.stringify({ kind: "bench", name_he: "ספסל דמו", lat: 31.42, lng: 34.49, consent_version }),
   })
 

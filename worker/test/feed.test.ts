@@ -1,8 +1,8 @@
-import { exports } from "cloudflare:workers"
+import { call } from "./app"
 import { expect, it } from "vitest"
 import { approve, submit } from "./helpers"
 
-const get = (path: string) => exports.default.fetch(`http://local${path}`)
+const get = (path: string) => call(`http://local${path}`)
 const version = async () => (await (await get("/api/v1/version")).json<{ v: string }>()).v
 
 it("publishes only approved places, under the version that was read with them", async () => {
@@ -28,9 +28,9 @@ it("publishes only approved places, under the version that was read with them", 
 })
 
 it("never carries the submitter's name or the tracking hash", async () => {
-  const res = await exports.default.fetch("http://local/api/v1/submissions", {
+  const res = await call("http://local/api/v1/submissions", {
     method: "POST",
-    headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID().replaceAll("-", "") },
+    headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID().replaceAll("-", ""), "Turnstile-Token": "pass" },
     body: JSON.stringify({
       kind: "grove",
       name_he: "חורשת דמו",
@@ -55,7 +55,7 @@ it("answers an unknown API path with a problem, not the site's page", async () =
 })
 
 it("turns an unexpected failure into a problem without details", async () => {
-  const res = await exports.default.fetch("http://local/__dev/login", { method: "POST", body: "{not json" })
+  const res = await call("http://local/__dev/login", { method: "POST", body: "{not json" })
   expect(res.status).toBe(500)
   expect(await res.json()).toEqual({ type: "about:blank", status: 500, code: "internal" })
 })

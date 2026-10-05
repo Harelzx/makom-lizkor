@@ -318,3 +318,16 @@ export async function readFeed(db: D1Database, epoch: string): Promise<Feed> {
   }))
   return { v: `${epoch}.${n}`, places }
 }
+
+/** Whether this key already made a submission: its retry is answered from what is stored. */
+export async function submissionKnown(db: D1Database, key: string) {
+  return !!(await db
+    .prepare("SELECT 1 FROM places WHERE submit_key_hash = ?")
+    .bind(await sha256Hex(key))
+    .first())
+}
+
+/** Revisions waiting for a moderator: first submissions and corrections alike. */
+export async function pendingCount(db: D1Database) {
+  return (await db.prepare("SELECT COUNT(*) AS n FROM revisions WHERE state = 'pending'").first<number>("n")) ?? 0
+}
