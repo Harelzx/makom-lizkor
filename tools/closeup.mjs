@@ -1,0 +1,15 @@
+import { chromium } from "playwright"
+const S = process.argv[2]
+const b = await chromium.launch({ args: ["--enable-gpu", "--use-angle=metal"] })
+const p = await (await b.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 })).newPage()
+await p.goto("http://localhost:5191/")
+await p.waitForTimeout(3500)
+await p.screenshot({ path: `${S}/c-night.png`, clip: { x: 200, y: 300, width: 900, height: 500 } })
+await p.evaluate(() => [...document.querySelectorAll("button")].find((x) => x.textContent.trim() === "דילוג")?.click())
+await p.waitForTimeout(2500)
+await p.screenshot({ path: `${S}/c-bloom.png`, clip: { x: 200, y: 150, width: 900, height: 600 } })
+await p.waitForTimeout(7000)
+await p.evaluate(() => (location.hash = "#/place/nova-memorial-reim"))
+await p.waitForTimeout(4500)
+await p.screenshot({ path: `${S}/c-day.png`, clip: { x: 300, y: 200, width: 700, height: 450 } })
+await b.close()

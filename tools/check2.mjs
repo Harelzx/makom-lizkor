@@ -1,0 +1,87 @@
+import { chromium } from "playwright"
+const S = process.argv[2]
+const b = await chromium.launch({ args: ["--enable-gpu", "--use-angle=metal"] })
+const errs = []
+const p = await (await b.newContext({ viewport: { width: 1440, height: 900 } })).newPage()
+p.on("pageerror", (e) => errs.push(String(e)))
+await p.goto("http://localhost:5191/")
+await p.evaluate(() => localStorage.setItem("makom-lizkor:v2-seen", "1"))
+await p.reload()
+await p.waitForTimeout(2000)
+await p.keyboard.press("Enter")
+await p.waitForTimeout(8500)
+await p.keyboard.press("/")
+await p.waitForTimeout(400)
+await p.keyboard.type("בארי")
+await p.waitForTimeout(400)
+console.log(
+  "search items:",
+  await p
+    .locator("[cmdk-item]")
+    .allInnerTexts()
+    .then((a) => a.map((x) => x.split("\n")[0])),
+)
+await p.screenshot({ path: `${S}/c-search.png` })
+await p.keyboard.press("Escape")
+await p.waitForTimeout(400)
+await p.getByRole("button", { name: "הוספת מקום" }).first().click()
+await p.waitForTimeout(800)
+await p.getByRole("button", { name: "סימון על המפה" }).click()
+await p.waitForTimeout(600)
+await p.mouse.click(520, 620)
+await p.waitForTimeout(400)
+await p.getByRole("button", { name: "זה המקום" }).click()
+await p.waitForTimeout(700)
+await p.getByRole("button", { name: "המשך" }).click()
+await p.waitForTimeout(700)
+await p.getByLabel("שם המקום").fill("הספסל של נועה")
+await p.locator("input[type=file]").scrollIntoViewIfNeeded()
+await p.screenshot({ path: `${S}/c-tile.png` })
+await p
+  .locator("input[type=file]")
+  .setInputFiles(
+    "/Users/harel/Desktop/remember_07102026/web/public/photos/thumb/" +
+      (await import("node:fs")).readdirSync("/Users/harel/Desktop/remember_07102026/web/public/photos/thumb")[0],
+  )
+await p.waitForTimeout(800)
+await p.getByRole("button", { name: "הסרה" }).scrollIntoViewIfNeeded()
+await p.screenshot({ path: `${S}/c-photo.png` })
+await p.getByRole("button", { name: "המשך" }).click()
+await p.waitForTimeout(400)
+console.log(
+  "alert:",
+  await p
+    .locator("[role=alert]")
+    .innerText()
+    .catch(() => "-"),
+)
+await p.getByRole("button", { name: "הסרה" }).click()
+await p.waitForTimeout(300)
+await p.getByRole("button", { name: "המשך" }).click()
+await p.waitForTimeout(800)
+await p.screenshot({ path: `${S}/c-step3.png` })
+const m = await (
+  await b.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true })
+).newPage()
+m.on("pageerror", (e) => errs.push("m " + e))
+await m.goto("http://localhost:5191/")
+await m.evaluate(() => localStorage.setItem("makom-lizkor:v2-seen", "1"))
+await m.reload()
+await m.waitForTimeout(2000)
+await m.getByRole("button", { name: "אל הבוקר" }).tap()
+await m.waitForTimeout(8500)
+await m.locator("button[aria-label='הוספת מקום']:visible").tap()
+await m.waitForTimeout(1000)
+await m.screenshot({ path: `${S}/c-m-add.png` })
+await m.getByRole("button", { name: "סימון על המפה" }).tap()
+await m.waitForTimeout(700)
+await m.touchscreen.tap(200, 300)
+await m.waitForTimeout(500)
+await m.screenshot({ path: `${S}/c-m-pick.png` })
+await m.getByRole("button", { name: "זה המקום" }).tap()
+await m.waitForTimeout(700)
+await m.getByRole("button", { name: "המשך" }).tap()
+await m.waitForTimeout(800)
+await m.screenshot({ path: `${S}/c-m-step2.png` })
+console.log("errors:", errs)
+await b.close()
