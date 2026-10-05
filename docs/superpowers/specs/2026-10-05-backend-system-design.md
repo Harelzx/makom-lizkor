@@ -143,7 +143,7 @@ CHECK (lifted_at IS NULL OR (basis_code IS NOT NULL AND basis_note IS NOT NULL))
 - הסתרות של אלמנטים חלות על ה־revision המפורסם כפי שהוא מוצג, ונשארות בתוקף גם כשמגיעים תיקונים.
 - **רשומות curated** הן התוכן של המפעיל, ומודרטורים רשאים לערוך אותן. כדי לפרסם רשומה כזו צריך שיהיו לה שורות ב־`place_sources`.
 
-**מיקום במקום פרטי:** המיקום מוצג כ«מיקום משוער», בלי כפתור ניווט. מיקום מדויק מחייב הרשאה מתועדת ומידע על הגישה. משמירת המיקום נשמרת רק הנקודה שנבחרה, בלי דיוק ובלי חותמת זמן של ה־GPS.
+**מיקום:** לפני השליחה, הטופס מציג את הנקודה שתפורסם בפועל. נשמרת רק נקודת המקום, בלי דיוק ובלי חותמת זמן של ה־GPS. במקום פרטי, המיקום מוצג כ«מיקום משוער», בלי כפתור ניווט, ומיקום מדויק מחייב הרשאה מתועדת ומידע על הגישה.
 
 **שם מוסתר:** המקום מוצג כ"‎<סוג> · <יישוב>‎", בלי שום פרט אישי.
 
@@ -326,6 +326,8 @@ purge_after  TEXT NOT NULL,   -- starts equal to ceiling_at; only ever lowered
 -- on close:   UPDATE … SET purge_after = MIN(purge_after, :closed_at + 90 days)
 -- on reopen:  nothing touches purge_after or ceiling_at
 ```
+
+**מקור אחד לערכים:** `RETENTION` ב־`src/config.ts`. הוא מוגדר בענף של סשן הפרטיות וממתין למיזוג. עבודות המחיקה, הייצוא והבדיקות קוראות ממנו, וההודעות ממלאות ממנו את המספרים, כך שהודעה ועבודה לא יכולות לסתור זו את זו. `verified: true` נקבע רק אחרי בדיקה מקצה לקצה של מחיקה, ייצוא ותרגיל שחזור. `restoreDrillCopyDays` = 30, לפי היסטוריית Time Travel של מסד התרגיל, כפי שהספק מתעד אותה.
 
 **חסם מחיקה מהגיבויים ב־D1, ב־R2 ובייצוא: לכל המאוחר 37 יום מהמועד.**
 
@@ -742,11 +744,12 @@ purge_after  TEXT NOT NULL,   -- starts equal to ceiling_at; only ever lowered
 3. **הבעלים** קורא עמוד אחד ולוחץ **Run workflow** על `release.yml`, עם מזהה השחרור. זה הצעד הידני היחיד.
 4. **האוטומציה:**
    1. מוודאת שה־SHA נמצא ב־`main`, שה־CI ירוק ושה־staging עבר.
-   2. שומרת bookmark של Time Travel.
-   3. מריצה את המיגרציות (expand/contract).
-   4. פורסת.
-   5. מריצה בדיקות ייצור.
-   6. מודיעה לבעלים.
+   2. מריצה `npm run release:check` (מסשן הפרטיות), שנכשל על כל placeholder, על ערך `RETENTION` חסר ועל `verified: false`.
+   3. שומרת bookmark של Time Travel.
+   4. מריצה את המיגרציות (expand/contract).
+   5. פורסת.
+   6. מריצה בדיקות ייצור.
+   7. מודיעה לבעלים.
 5. **rollback:**
    - הסוכן מכין, והבעלים לוחץ על `rollback.yml`.
    - במקרה חירום, הבעלים יכול לבצע אותו גם בדשבורד.
@@ -891,7 +894,7 @@ purge_after  TEXT NOT NULL,   -- starts equal to ceiling_at; only ever lowered
   - כלנית אחת ליום לכל מכשיר ומקום.
   - מיקום משוער למקומות פרטיים.
   - בדיקות ותרגילים.
-- **שער:** placeholders מכשילים את ה־build של הייצור. ה־notices נשארים בטיוטה עד ש־`MAIL_PROVIDER` ו־`MAIL_DELETION_TAIL` מאומתים.
+- **שער:** placeholders מכשילים את ה־build של הייצור, ו־`npm run release:check` הוא צעד חובה ב־workflow השחרור. ה־notices נשארים בטיוטה עד ש־`MAIL_PROVIDER` ו־`MAIL_DELETION_TAIL` מאומתים.
 
 **המלצות אופציונליות:**
 
