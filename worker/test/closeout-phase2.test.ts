@@ -41,6 +41,49 @@ function failingCleanup(media: R2Bucket) {
   })
 }
 
+/** A bucket whose listing and deleting wait until released: a decision's cleanup, held after the decision is stored. */
+function heldCleanup(media: R2Bucket) {
+  let release!: () => void
+  let reached!: () => void
+  const gate = new Promise<void>((r) => (release = r))
+  const atCleanup = new Promise<void>((r) => (reached = r))
+  const bucket = new Proxy(media, {
+    get(target, prop) {
+      if (prop === "list" || prop === "delete")
+        return async (...args: unknown[]) => {
+          reached()
+          await gate
+          return (Reflect.get(target, prop) as (...a: unknown[]) => unknown).apply(target, args)
+        }
+      const value = Reflect.get(target, prop)
+      return typeof value === "function" ? value.bind(target) : value
+    },
+  })
+  return { bucket, release, atCleanup }
+}
+
+/** A bucket that writes at once, then waits before answering: an approval's copy made, its decision not yet stored. */
+function heldAfterPut(media: R2Bucket) {
+  let release!: () => void
+  let reached!: () => void
+  const gate = new Promise<void>((r) => (release = r))
+  const copied = new Promise<void>((r) => (reached = r))
+  const bucket = new Proxy(media, {
+    get(target, prop) {
+      if (prop === "put")
+        return async (...args: Parameters<R2Bucket["put"]>) => {
+          const done = await target.put(...args)
+          reached()
+          await gate
+          return done
+        }
+      const value = Reflect.get(target, prop)
+      return typeof value === "function" ? value.bind(target) : value
+    },
+  })
+  return { bucket, release, copied }
+}
+
 const withdraw = (id: string, token: string) =>
   call(`http://local/api/v1/submissions/${id}/withdraw`, { method: "POST", headers: { Authorization: `Bearer ${token}` } })
 const publicKeys = async (id: string) => (await objects(id)).filter((k) => k.startsWith("public/"))
@@ -189,6 +232,83 @@ describe("phase 2 close-out", () => {
       `http://local/api/v1/submissions/${id}/withdraw`,
       { method: "POST", headers: { Authorization: `Bearer ${trackingToken}` } },
       { ...env, MEDIA: paged },
+    )
+    expect(res.status).toBe(200)
+    expect(await objects(id)).toHaveLength(0)
+  })
+
+  it("an older approval's cleanup leaves a newer correction's photo, waiting in quarantine, alone", async () => {
+    const { id, trackingToken } = await send("ספסל דמו ניקוי ותיקון ממתין")
+    await upload(id, trackingToken, jpeg(0x11))
+    const held = heldCleanup(env.MEDIA)
+    const approving = decide(id, await queued(id), "approve", undefined, { ...env, MEDIA: held.bucket })
+    await held.atCleanup
+    // The approval is stored; before its cleanup runs, the sender corrects the place with a new photo.
+    expect((await revise(id, trackingToken, await rev(id, trackingToken), "ספסל דמו תיקון עם תמונה")).status).toBe(200)
+    const earlier = new Set(await objects(id))
+    expect((await upload(id, trackingToken, jpeg(0x22))).status).toBe(200)
+    // The correction's own photo only; the approval's original in quarantine is rightly its to remove.
+    const waiting = (await objects(id)).filter((k) => k.startsWith("quarantine/") && !earlier.has(k))
+    expect(waiting).toHaveLength(1)
+    held.release()
+    expect((await approving).status).toBe(200)
+    for (const key of waiting) expect(await objects(id)).toContain(key)
+  })
+
+  it("an older approval's cleanup leaves a newer approval's copy, made but not yet recorded, alone", async () => {
+    const { id, trackingToken } = await send("ספסל דמו ניקוי והעתק בדרך")
+    await upload(id, trackingToken, jpeg(0x11))
+    const first = heldCleanup(env.MEDIA)
+    const approving = decide(id, await queued(id), "approve", undefined, { ...env, MEDIA: first.bucket })
+    await first.atCleanup
+    await revise(id, trackingToken, await rev(id, trackingToken), "ספסל דמו תיקון שני")
+    await upload(id, trackingToken, jpeg(0x22))
+    const second = heldAfterPut(env.MEDIA)
+    const approvingAgain = decide(id, await queued(id), "approve", undefined, { ...env, MEDIA: second.bucket })
+    await second.copied
+    // The second approval's copy is in public/; now the first approval's cleanup runs, then the second decides.
+    first.release()
+    await approving
+    second.release()
+    expect((await approvingAgain).status).toBe(200)
+    const url = ((await feed()).find((p) => p.id === id)!.photo as { url: string }).url
+    expect((await call(`http://local${url}`)).status).toBe(200)
+  })
+
+  it("an older approval's cleanup leaves a newer published photo alone", async () => {
+    const { id, trackingToken } = await send("ספסל דמו ניקוי ותמונה חדשה")
+    await upload(id, trackingToken, jpeg(0x11))
+    const held = heldCleanup(env.MEDIA)
+    const approving = decide(id, await queued(id), "approve", undefined, { ...env, MEDIA: held.bucket })
+    await held.atCleanup
+    await revise(id, trackingToken, await rev(id, trackingToken), "ספסל דמו תיקון מאושר")
+    await upload(id, trackingToken, jpeg(0x22))
+    expect((await decide(id, await queued(id), "approve")).status).toBe(200)
+    held.release()
+    await approving
+    const url = ((await feed()).find((p) => p.id === id)!.photo as { url: string }).url
+    expect((await call(`http://local${url}`)).status).toBe(200)
+  })
+
+  it("an erasure with more files than one delete may name deletes them all, a thousand at a time", async () => {
+    const { id, trackingToken } = await send("ספסל דמו אלף קבצים")
+    await Promise.all(Array.from({ length: 1005 }, (_, i) => env.MEDIA.put(`quarantine/${id}/many-${i}.jpg`, "x")))
+    // R2 deletes at most 1000 keys per call (Workers API reference); the stand-in refuses more, as R2 would.
+    const strict = new Proxy(env.MEDIA, {
+      get(target, prop) {
+        if (prop === "delete")
+          return async (keys: string | string[]) => {
+            if (Array.isArray(keys) && keys.length > 1000) throw new Error("too many keys")
+            return target.delete(keys)
+          }
+        const value = Reflect.get(target, prop)
+        return typeof value === "function" ? value.bind(target) : value
+      },
+    })
+    const res = await call(
+      `http://local/api/v1/submissions/${id}/withdraw`,
+      { method: "POST", headers: { Authorization: `Bearer ${trackingToken}` } },
+      { ...env, MEDIA: strict },
     )
     expect(res.status).toBe(200)
     expect(await objects(id)).toHaveLength(0)

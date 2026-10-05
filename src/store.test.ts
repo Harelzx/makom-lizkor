@@ -72,4 +72,11 @@ describe("the visitor's places in the store", () => {
     useStore.setState({ local: [place("local-z")] })
     expect(await useStore.getState().removeLocal("local-z")).toBe(true)
   })
+
+  it("a place read from the device isn't counted as removed when the device can no longer be reached", async () => {
+    disk.stored = [place("local-kept")]
+    await useStore.getState().init()
+    disk.fail = new Error("storage_unavailable")
+    expect(await useStore.getState().removeLocal("local-kept")).toBe(false)
+  })
 })

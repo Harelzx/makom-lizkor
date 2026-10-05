@@ -91,3 +91,33 @@ test("a moderator returns a place with a note, the sender corrects it, and it co
   await expect(corrected).toBeVisible()
   await expect(corrected.getByText("בארי", { exact: false })).toBeVisible()
 })
+
+test("a correction whose answer was lost is found saved, not reported as unsent", async ({ browser }) => {
+  test.setTimeout(120_000)
+  const name = `ספסל דמו תיקון שאבד ${Date.now()}`
+  const page = await submit(browser, name)
+  const modCtx = await browser.newContext()
+  await modCtx.request.post("/__dev/login", { data: { email: "dev@example.test" } })
+  const mod = await modCtx.newPage()
+  await mod.goto("/admin/")
+  const item = mod.getByRole("article", { name })
+  await item.getByRole("button", { name: "החזרה לתיקון" }).click()
+  await item.getByLabel("הערה למגיש").fill("נא לציין את שם היישוב")
+  await item.getByRole("button", { name: "שליחת ההחזרה" }).click()
+  await expect(item).toHaveCount(0)
+
+  // The server saves the correction; its answer never reaches the browser.
+  await page.route("**/api/v1/submissions/*/revisions", async (route) => {
+    await route.fetch()
+    await route.abort("failed")
+  })
+  await page.getByRole("button", { name: "מעקב אחרי ההצעה" }).click()
+  const view = page.getByRole("dialog", { name: "מצב ההצעה" })
+  await view.getByRole("button", { name: "תיקון ההצעה" }).click()
+  await view.getByLabel("יישוב או אזור").fill("בארי")
+  await view.getByRole("checkbox").check()
+  await view.getByRole("button", { name: "שליחה מחדש לבדיקה" }).click()
+  await expect(view.getByText("ממתינה לבדיקה")).toBeVisible()
+  await expect(page.getByText("לא קיבלנו תשובה מהשרת")).toHaveCount(0)
+  await expect(page.getByText("לא הצלחנו לשלוח את התיקון")).toHaveCount(0)
+})

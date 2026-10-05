@@ -1,6 +1,7 @@
 // Regression tests for the phase 2 review's findings, one per finding.
 import { env } from "cloudflare:workers"
 import { describe, expect, it } from "vitest"
+import { sweepPhotos } from "../db/places"
 import { call } from "./app"
 import { admin } from "./helpers"
 import { decide, feed, jpeg, objects, queued, rev, revise, send, upload } from "./submission-helpers"
@@ -100,11 +101,15 @@ describe("phase 2 review", () => {
     expect(published.photo).toBeTruthy()
     expect((await objects(id)).filter((k) => k.startsWith("public/"))).toHaveLength(1)
   })
-  it("#11 a rejection deletes every photo the place has in quarantine", async () => {
+  // Revised after the adviser's close-out (20261005T212614Z-78a1ea11): a decision removes exactly the files it made
+  // obsolete, since a newer correction may own others; anything left that no revision names goes with the sweep.
+  it("#11 a rejection deletes the refused photo at once, and the sweep takes any other leftover", async () => {
     const { id, trackingToken } = await send("ספסל דמו שאריות בהסגר")
     await upload(id, trackingToken)
     await env.MEDIA.put(`quarantine/${id}/stray.jpg`, jpeg())
     await decide(id, await queued(id), "reject")
+    expect(await objects(id)).toEqual([`quarantine/${id}/stray.jpg`])
+    await sweepPhotos(env.DB, env.MEDIA, new Date(Date.now() + 2 * 3600 * 1000))
     expect(await objects(id)).toHaveLength(0)
   })
   it("#15 a refused correction is told as a correction, and the place stays", async () => {

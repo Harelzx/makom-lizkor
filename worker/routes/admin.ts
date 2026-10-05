@@ -2,7 +2,7 @@ import { zValidator } from "@hono/zod-validator"
 import { Hono } from "hono"
 import { z } from "zod"
 import { text } from "@/shared/contract"
-import { listQueue, photosAfterDecision, preparePhoto, transition, verifiedContact } from "../db/places"
+import { listQueue, photosBefore, preparePhoto, retirePhotos, transition, verifiedContact } from "../db/places"
 import { decisionMail } from "../lib/messages"
 import type { AppEnv } from "../index"
 import { moderator } from "../lib/access"
@@ -44,6 +44,8 @@ admin.post(
     // Whether this decides a correction of a place already published: the mail says so.
     const correction =
       (await c.env.DB.prepare("SELECT status FROM places WHERE id = ?").bind(placeId).first<string>("status")) === "published"
+    // The files this decision may make obsolete, as they are before it.
+    const before = await photosBefore(c.env.DB, placeId, body.revisionId)
     // An approval publishes the photo in the same step as the place; the copy is made first.
     const photo = body.action === "approve" ? await preparePhoto(c.env.DB, c.env.MEDIA, placeId, body.revisionId) : undefined
     const result = await transition(c.env.DB, { placeId, ...body, actor: c.get("actor"), photoKey: photo?.key }, clock(c.req.raw, c.env))
@@ -52,7 +54,13 @@ admin.post(
       if (photo?.fresh && photo.key) await c.env.MEDIA.delete(photo.key).catch(() => undefined)
       return problem(c, 409, "changed_meanwhile")
     }
-    await photosAfterDecision(c.env.DB, c.env.MEDIA, placeId, body.revisionId, body.action)
+    const obsolete =
+      body.action === "approve"
+        ? [before.source, before.published !== photo?.key ? before.published : null]
+        : body.action === "reject"
+          ? [before.source]
+          : []
+    await retirePhotos(c.env.DB, c.env.MEDIA, obsolete)
     // A verified address hears about the decision; a mail that can't go now never undoes the decision.
     const contact = await verifiedContact(c.env.DB, c.req.param("id"))
     if (contact)

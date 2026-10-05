@@ -148,7 +148,17 @@ export function Tracking() {
       link_url: d.link_url || undefined,
       consent_version: CURRENT_SUBMISSION_NOTICE,
     })
-    if (r === "failed") return void toast("לא הצלחנו לשלוח את התיקון", { description: "התיקון לא נשמר. נסו שוב בעוד רגע." })
+    if (r === "failed") {
+      // No answer is not a refusal: the correction may have been saved and its answer lost. The status says which.
+      const now = await trackSubmission(tracking.id, tracking.token)
+      const saved = !!now && now.rev !== current.result.rev && (now.status === "pending" || now.revision_state === "pending")
+      if (!saved)
+        return void toast("לא קיבלנו תשובה מהשרת", {
+          description: now
+            ? "התיקון לא מופיע כממתין. הוא נשאר כאן, ואפשר לשלוח שוב."
+            : "לא ברור אם התיקון נשמר. הוא נשאר כאן; בדקו שוב בעוד רגע.",
+        })
+    }
     if (r === "queue_full")
       return void toast("יש עכשיו יותר הצעות ממה שאפשר לבדוק", { description: "התיקון לא נשמר. נסו שוב בעוד כמה שעות." })
     if (r === "conflict") toast("ההצעה השתנתה בינתיים", { description: "הנה המצב העדכני." })

@@ -336,9 +336,9 @@ export async function transition(
     db
       .prepare(
         `UPDATE revisions SET state = ?3, decided_at = ?4, decision_note = ?6,
-           photo_key = CASE WHEN ?7 = 1 THEN ?8 ELSE photo_key END,
-           photo_alt = CASE WHEN ?7 = 1 AND ?8 IS NULL THEN NULL ELSE photo_alt END,
-           photo_credit = CASE WHEN ?7 = 1 AND ?8 IS NULL THEN NULL ELSE photo_credit END
+           photo_key = CASE WHEN ?7 = 1 THEN ?8 WHEN ?3 = 'rejected' AND photo_key LIKE 'quarantine/%' THEN NULL ELSE photo_key END,
+           photo_alt = CASE WHEN (?7 = 1 AND ?8 IS NULL) OR (?3 = 'rejected' AND photo_key LIKE 'quarantine/%') THEN NULL ELSE photo_alt END,
+           photo_credit = CASE WHEN (?7 = 1 AND ?8 IS NULL) OR (?3 = 'rejected' AND photo_key LIKE 'quarantine/%') THEN NULL ELSE photo_credit END
          WHERE id = ?5 AND ${happened}`,
       )
       .bind(t.placeId, tid, state, at, t.revisionId, t.note ?? null, t.action === "approve" ? 1 : 0, t.photoKey ?? null),
@@ -553,30 +553,51 @@ export async function preparePhoto(
 }
 
 /**
- * After a decision is stored, the files left behind: an approval removes the place's quarantine and the public photos
- * of revisions it retired; a rejection deletes everything the place has in quarantine at once (spec 3.3). A returned
- * revision keeps its photo for the correction. Never throws: a file that can't go now is left for the sweep.
+ * The files a decision on a revision may make obsolete, read before it is made: the revision's own photo while it
+ * waits in quarantine, and the photo of the revision published until now.
  */
-export async function photosAfterDecision(db: D1Database, media: R2Bucket, placeId: string, revisionId: string, action: string) {
+export async function photosBefore(db: D1Database, placeId: string, revisionId: string) {
+  const row = await db
+    .prepare(
+      `SELECT r.photo_key AS source, pub.photo_key AS published
+       FROM revisions r JOIN places p ON p.id = r.place_id LEFT JOIN revisions pub ON pub.id = p.published_revision_id
+       WHERE r.id = ? AND p.id = ?`,
+    )
+    .bind(revisionId, placeId)
+    .first<{ source: string | null; published: string | null }>()
+  return { source: row?.source?.startsWith("quarantine/") ? row.source : null, published: row?.published ?? null }
+}
+
+/**
+ * After a decision is stored, exactly the files it made obsolete, and only if no open or published revision names
+ * them now: an approval retires the quarantined original it copied and the photo published until now (unless the
+ * revision kept it); a rejection, the refused photo (spec 3.3). A returned revision keeps its photo. Anything else a
+ * place has (a newer correction's photo, another approval's copy in flight) is not this decision's to remove; what
+ * nothing names is left to the sweep. Never throws: a file that can't go now is left for the sweep too.
+ */
+export async function retirePhotos(db: D1Database, media: R2Bucket, keys: (string | null | undefined)[]) {
   try {
-    if (action === "return") return
-    const quarantined = await keysUnder(media, `quarantine/${placeId}/`)
-    if (quarantined.length) await media.delete(quarantined)
-    if (action === "reject") {
-      await db
+    const obsolete: string[] = []
+    for (const key of new Set(keys)) {
+      if (!key) continue
+      const named = await db
         .prepare(
-          "UPDATE revisions SET photo_key = NULL, photo_alt = NULL, photo_credit = NULL WHERE id = ? AND photo_key LIKE 'quarantine/%'",
+          `SELECT 1 FROM revisions r JOIN places p ON p.id = r.place_id
+           WHERE r.photo_key = ? AND r.state IN ('pending', 'returned', 'approved') AND p.status NOT IN ('withdrawn', 'erased')`,
         )
-        .bind(revisionId)
-        .run()
-      return
+        .bind(key)
+        .first()
+      if (!named) obsolete.push(key)
     }
-    const live = await db.prepare("SELECT photo_key FROM revisions WHERE id = ?").bind(revisionId).first<string | null>("photo_key")
-    const others = (await keysUnder(media, `public/${placeId}/`)).filter((k) => k !== live)
-    if (others.length) await media.delete(others)
+    await deleteKeys(media, obsolete)
   } catch (err) {
     console.error(JSON.stringify({ level: "error", event: "photo_cleanup", error: (err as Error).name }))
   }
+}
+
+/** R2 deletes at most 1000 keys per call (Workers API reference), so a long list goes in parts. */
+async function deleteKeys(media: R2Bucket, keys: string[]) {
+  for (let i = 0; i < keys.length; i += 1000) await media.delete(keys.slice(i, i + 1000))
 }
 
 /** Every key under a prefix, page after page: R2 cuts a long listing short and says where to go on. */
@@ -594,8 +615,7 @@ async function keysUnder(media: R2Bucket, prefix: string): Promise<string[]> {
 /** Every file of a place, in quarantine and public alike: a withdrawal erases them all at once. */
 export async function erasePhotos(media: R2Bucket, placeId: string) {
   for (const prefix of [`quarantine/${placeId}/`, `public/${placeId}/`]) {
-    const keys = await keysUnder(media, prefix)
-    if (keys.length) await media.delete(keys)
+    await deleteKeys(media, await keysUnder(media, prefix))
   }
 }
 
@@ -617,8 +637,10 @@ export async function sweepPhotos(db: D1Database, media: R2Bucket, now: Date) {
     let cursor: string | undefined
     do {
       const page = await media.list({ prefix, cursor })
-      const stray = page.objects.filter((o) => !named.has(o.key) && o.uploaded.getTime() < settled).map((o) => o.key)
-      if (stray.length) await media.delete(stray)
+      await deleteKeys(
+        media,
+        page.objects.filter((o) => !named.has(o.key) && o.uploaded.getTime() < settled).map((o) => o.key),
+      )
       cursor = page.truncated ? page.cursor : undefined
     } while (cursor)
   }

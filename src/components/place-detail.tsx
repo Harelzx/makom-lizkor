@@ -211,15 +211,15 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
             <Button
               variant="ghost"
               size="xs"
-              onClick={() => {
-                void removeLocal(place.id).then(
-                  (ok) => ok || toast("המקום הוסר מהרשימה, אבל לא מהמכשיר", { description: "הוא יחזור בביקור הבא. נסו שוב אז." }),
-                )
+              onClick={async () => {
+                const sentCopy = local.remoteId && local.send !== "withdrawn"
+                // One message, once the device has answered: removed, or still kept there.
+                if (!(await removeLocal(place.id)))
+                  return void toast("המקום הוסר מהרשימה, אבל לא מהמכשיר", { description: "הוא יחזור בביקור הבא. נסו שוב אז." })
                 toast("המקום נמחק מהמכשיר", {
-                  description:
-                    local.remoteId && local.send !== "withdrawn"
-                      ? "ההצעה שנשלחה לבדיקה לא נמשכה, וקישור המעקב נמחק עם העותק. כדי למשוך אותה עכשיו, כתבו לנו."
-                      : undefined,
+                  description: sentCopy
+                    ? "ההצעה שנשלחה לבדיקה לא נמשכה, וקישור המעקב נמחק עם העותק. כדי למשוך אותה עכשיו, כתבו לנו."
+                    : undefined,
                 })
               }}
             >
