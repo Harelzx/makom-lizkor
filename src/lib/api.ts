@@ -102,3 +102,18 @@ export async function reviseSubmission(id: string, token: string, body: Revision
     return "failed"
   }
 }
+
+/** "ok", "expired" when the link is wrong or older than its seven days, or "failed" when the server can't be reached. */
+export async function confirmEmail(token: string): Promise<"ok" | "expired" | "failed"> {
+  try {
+    const res = await fetch("/api/v1/email/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token }),
+      signal: AbortSignal.timeout(8000),
+    })
+    return res.ok ? "ok" : res.status === 404 ? "expired" : "failed"
+  } catch {
+    return "failed"
+  }
+}

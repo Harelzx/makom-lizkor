@@ -117,6 +117,7 @@ export function AddPlace() {
   const [photoCredit, setPhotoCredit] = useState("")
   const [photoRights, setPhotoRights] = useState(false)
   const [submitter, setSubmitter] = useState("")
+  const [email, setEmail] = useState("")
   const [family, setFamily] = useState(false)
   const [consent, setConsent] = useState(false)
   const [error, setError] = useState("")
@@ -168,6 +169,7 @@ export function AddPlace() {
     setPhotoCredit("")
     setPhotoRights(false)
     setSubmitter("")
+    setEmail("")
     setFamily(false)
     setConsent(false)
     setError("")
@@ -213,6 +215,7 @@ export function AddPlace() {
     if (!draft) return setStep(0)
     if (!family || !consent) return fail("כדי לשמור צריך לסמן את שתי ההצהרות.")
     if (saved || sending.current) return
+    if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return fail("כתובת המייל לא נראית תקינה.")
     sending.current = true
     setBusy(true)
     const now = new Date().toISOString()
@@ -251,6 +254,7 @@ export function AddPlace() {
       story_he: story.trim() || undefined,
       link_url: link ? `https://${link}` : undefined,
       submitter_name: submitter.trim() || undefined,
+      email: email.trim() || undefined,
       on_private_property: false,
       consent_version: CURRENT_SUBMISSION_NOTICE,
     }
@@ -702,6 +706,22 @@ export function AddPlace() {
                             maxLength={60}
                             placeholder="למשל: המשפחה, חברים מהקיבוץ"
                           />
+                        </Field>
+                        <Field>
+                          <FieldLabel htmlFor={`${uid}-email`}>מייל (לא חובה)</FieldLabel>
+                          <Input
+                            id={`${uid}-email`}
+                            type="email"
+                            dir="ltr"
+                            autoComplete="email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            maxLength={254}
+                          />
+                          <FieldDescription>
+                            נשלח אליו קודם מייל אימות, בלי פרטים על המקום. אחרי האימות נשלח את קישור המעקב ועדכון כשתתקבל החלטה. המייל לא
+                            יתפרסם.
+                          </FieldDescription>
                         </Field>
                         <Field orientation="horizontal">
                           <Checkbox id={`${uid}-family`} checked={family} onCheckedChange={(v) => setFamily(v === true)} />

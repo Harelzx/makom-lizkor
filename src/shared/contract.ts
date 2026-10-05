@@ -19,6 +19,7 @@ export const SUBMISSION_NOTICES = [
   "notice.submission@2026-10-4",
   "notice.submission@2026-10-5",
   "notice.submission@2026-10-6",
+  "notice.submission@2026-10-7",
 ] as const
 export const CURRENT_SUBMISSION_NOTICE = SUBMISSION_NOTICES[SUBMISSION_NOTICES.length - 1]
 

@@ -12,6 +12,7 @@ const Search = lazy(() => import("@/components/search").then((m) => ({ default: 
 const About = lazy(() => import("@/components/about").then((m) => ({ default: m.About })))
 const AddPlace = lazy(() => import("@/components/add-place").then((m) => ({ default: m.AddPlace })))
 const Tracking = lazy(() => import("@/components/tracking").then((m) => ({ default: m.Tracking })))
+const VerifyEmail = lazy(() => import("@/components/verify-email").then((m) => ({ default: m.VerifyEmail })))
 
 /** Keep the URL and the selection in step, so a place can be linked and shared. */
 function useHashRoute() {
@@ -25,7 +26,12 @@ function useHashRoute() {
       const s = useStore.getState()
       // A tracking link opens the submission's status. The token is a private capability, so it leaves the address at
       // once: it stays out of the history, a screen share and a copied address.
-      if (route === "track" && id) {
+      // An email verification link opens a page that asks for a click (a mail scanner following the link confirms
+      // nothing); its secret leaves the address the same way.
+      if (route === "verify" && id) {
+        s.setVerifying(decodeURIComponent(id))
+        history.replaceState(null, "", "#/")
+      } else if (route === "track" && id) {
         const token = location.hash.split("/")[3]
         if (token) s.setTracking({ id: decodeURIComponent(id), token: decodeURIComponent(token) })
         history.replaceState(null, "", "#/")
@@ -87,6 +93,7 @@ export default function App() {
   const tracking = useStore((s) => s.tracking)
   const [trackingLoaded, setTrackingLoaded] = useState(false)
   if (tracking && !trackingLoaded) setTrackingLoaded(true)
+  const verifying = useStore((s) => s.verifying)
   if (aboutOpen && !aboutLoaded) setAboutLoaded(true)
   if (addOpen && !addLoaded) setAddLoaded(true)
   useHashRoute()
@@ -161,6 +168,7 @@ export default function App() {
         {aboutLoaded && <About />}
         {addLoaded && <AddPlace />}
         {trackingLoaded && <Tracking />}
+        {verifying && <VerifyEmail />}
       </Suspense>
       <Celebration />
       <Toaster position="top-center" />

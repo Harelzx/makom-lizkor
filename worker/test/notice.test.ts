@@ -33,6 +33,8 @@ it("describes the flow that exists: a tracking link to follow and withdraw, and 
   expect(text).toContain("נשארת במכשיר")
   // The browser check runs now, so Cloudflare is named for it among the processors.
   expect(text).toContain("Turnstile")
+  expect(text).toContain("מייל אימות")
+  expect(text).not.toContain("אין שדה למייל")
 })
 
 // Every version a form has ever shown. A device may still retry a queued submission under one of them, and its consent

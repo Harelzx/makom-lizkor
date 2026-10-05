@@ -12,7 +12,7 @@ export type Light = "morning" | "night"
 export const INTRO_SEEN = "makom-lizkor:v2-seen"
 /** A shared link to a place lands on that place: the opening is for those who come in through the front door. */
 // A tracking link (#/track/<id>/<token>) is opened for its status, so it skips the opening too.
-const linkedToPlace = () => typeof location !== "undefined" && /^#\/(place|track)\/[^/]+/.test(location.hash)
+const linkedToPlace = () => typeof location !== "undefined" && /^#\/(place|track|verify)\/[^/]+/.test(location.hash)
 /** The place a shared link names, chosen before the first render so the address is never rewritten under it. */
 const linkedPlaceId = () => {
   if (!linkedToPlace() || !location.hash.startsWith("#/place/")) return null
@@ -40,6 +40,8 @@ interface State {
   aboutSection: string | null
   /** The submission whose status is open, from its private tracking link. Kept here, never in the address. */
   tracking: { id: string; token: string } | null
+  /** An email verification link's secret, while its confirmation page is open. Never kept in the address. */
+  verifying: string | null
   searchOpen: boolean
   picking: boolean
   draft: { lat: number; lng: number } | null
@@ -61,6 +63,7 @@ interface State {
   setAboutOpen: (v: boolean) => void
   openAbout: (section: string) => void
   setTracking: (t: { id: string; token: string } | null) => void
+  setVerifying: (token: string | null) => void
   setSearchOpen: (v: boolean) => void
   setPicking: (v: boolean) => void
   setDraft: (p: { lat: number; lng: number } | null) => void
@@ -99,6 +102,7 @@ export const useStore = create<State>((set, get) => ({
   aboutOpen: false,
   aboutSection: null,
   tracking: null,
+  verifying: null,
   searchOpen: false,
   picking: false,
   draft: null,
@@ -123,6 +127,7 @@ export const useStore = create<State>((set, get) => ({
   setAboutOpen: (aboutOpen) => set({ aboutOpen, aboutSection: null }),
   openAbout: (aboutSection) => set({ aboutOpen: true, aboutSection, searchOpen: false }),
   setTracking: (tracking) => set({ tracking, searchOpen: false }),
+  setVerifying: (verifying) => set({ verifying, searchOpen: false }),
   setSearchOpen: (searchOpen) => set({ searchOpen }),
   setPicking: (picking) => set({ picking }),
   setDraft: (draft) => set({ draft }),
