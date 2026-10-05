@@ -1,4 +1,5 @@
 import { Feed, isNewer, type PublicPlace } from "@/shared/contract"
+import { retryWaiting } from "@/lib/outbox"
 import { useStore } from "@/store"
 import type { Place } from "@/types"
 
@@ -49,12 +50,16 @@ export function startFeedSync(): () => void {
       busy = false
     }
   }
-  const onWake = () => void check()
+  // The same wakes send again any place of the visitor's that couldn't reach the server.
+  const onWake = () => {
+    void check()
+    void retryWaiting()
+  }
   const timer = setInterval(onWake, EVERY_MS)
   document.addEventListener("visibilitychange", onWake)
   window.addEventListener("focus", onWake)
   window.addEventListener("online", onWake)
-  void check()
+  onWake()
   return () => {
     clearInterval(timer)
     document.removeEventListener("visibilitychange", onWake)

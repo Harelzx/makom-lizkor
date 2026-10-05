@@ -1,17 +1,35 @@
 import type { SubmissionInput } from "@/shared/contract"
 
-/** Null when the server can't be reached: the place is still kept on this device, and the visitor is told so. */
-export async function submitPlace(input: SubmissionInput): Promise<{ id: string; trackingToken: string } | null> {
+export type SendResult =
+  { ok: true; id: string; trackingToken: string } | { ok: false; kind: "rejected"; code: string } | { ok: false; kind: "temporary" }
+
+/** One key per place, made before the first try and kept with the place, so every retry is the same submission. */
+export function newSubmitKey(): string {
+  const b = crypto.getRandomValues(new Uint8Array(16))
+  return btoa(String.fromCharCode(...b))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "")
+}
+
+const REJECTED = new Set([400, 409, 413, 415, 422])
+
+/** The server either took the place, refused it (don't send it again), or couldn't be reached (send it again later). */
+export async function submitPlace(input: SubmissionInput, key: string): Promise<SendResult> {
   try {
     const res = await fetch("/api/v1/submissions", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "Idempotency-Key": key },
       body: JSON.stringify(input),
-      // The save button waits on this; a server that hangs mustn't hold the visitor's place hostage.
       signal: AbortSignal.timeout(8000),
     })
-    return res.status === 201 ? await res.json() : null
+    if (res.status === 201 || res.status === 200) return { ok: true, ...((await res.json()) as { id: string; trackingToken: string }) }
+    if (REJECTED.has(res.status)) {
+      const code = ((await res.json().catch(() => ({}))) as { code?: string }).code ?? `http_${res.status}`
+      return { ok: false, kind: "rejected", code }
+    }
+    return { ok: false, kind: "temporary" }
   } catch {
-    return null
+    return { ok: false, kind: "temporary" }
   }
 }

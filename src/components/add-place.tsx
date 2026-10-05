@@ -14,7 +14,7 @@ import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "@/
 import { Anemone } from "@/components/anemone"
 import { ADDABLE_KINDS, KINDS } from "@/data/taxonomy"
 import { CONSENT_TEXT, FAMILY_CONSENT_TEXT, noticeHtml, PHOTO_RIGHTS_TEXT } from "@/data/legal"
-import { submitPlace } from "@/lib/api"
+import { newSubmitKey, submitPlace } from "@/lib/api"
 import { downloadJSON, resizeImage } from "@/lib/storage"
 import { getMap, reducedMotion } from "@/map/controller"
 import { useStore } from "@/store"
@@ -24,6 +24,22 @@ import { CURRENT_SUBMISSION_NOTICE, type SubmissionInput } from "@/shared/contra
 import type { Kind, Place } from "@/types"
 
 type Step = 0 | 1 | 2
+
+/** What the visitor is told after saving: whether the server took the place, and whether this device kept a copy. */
+const SAVE_MESSAGE = {
+  sent: {
+    stored: "ההצעה נשלחה לבדיקה. היא תופיע לכולם אחרי אישור.",
+    unstored: "ההצעה נשלחה לבדיקה. לא הצלחנו לשמור עותק במכשיר הזה.",
+  },
+  temporary: {
+    stored: "לא הצלחנו לשלוח כרגע. ננסה שוב לבד כשהחיבור יחזור.",
+    unstored: "לא הצלחנו לשלוח כרגע, וגם לא לשמור עותק במכשיר הזה. ננסה שוב לבד כל עוד הדף פתוח.",
+  },
+  rejected: {
+    stored: "ההצעה לא התקבלה. המקום נשמר במכשיר הזה, ואפשר לכתוב לנו.",
+    unstored: "ההצעה לא התקבלה, ולא הצלחנו לשמור אותה במכשיר הזה. אפשר לכתוב לנו.",
+  },
+} as const
 
 // The form sends the place for review, so it shows the notice for submissions: the same version each submission records.
 const NOTICE_HTML = noticeHtml(CURRENT_SUBMISSION_NOTICE)
@@ -71,6 +87,7 @@ export function AddPlace() {
   const draft = useStore((s) => s.draft)
   const setDraft = useStore((s) => s.setDraft)
   const addLocal = useStore((s) => s.addLocal)
+  const updateLocal = useStore((s) => s.updateLocal)
   const select = useStore((s) => s.select)
   const local = useStore((s) => s.local)
   const importLocal = useStore((s) => s.importLocal)
@@ -219,9 +236,9 @@ export function AddPlace() {
         photoCredit: photo ? photoCredit.trim() || undefined : undefined,
       },
     }
-    // Sent for review first; the local copy is kept either way, and steps aside once the approved place reaches the feed.
-    // The photo stays on this device until uploads arrive (phase 2).
-    const sent = await submitPlace({
+    // The copy on this device comes first, with the key and the exact body, so a send cut off by a closed tab or a lost
+    // answer is sent again as the same submission. The photo stays on this device until uploads arrive.
+    const submission: SubmissionInput = {
       kind: kind as SubmissionInput["kind"],
       name_he: place.name_he,
       lat: place.lat,
@@ -233,12 +250,22 @@ export function AddPlace() {
       submitter_name: submitter.trim() || undefined,
       on_private_property: false,
       consent_version: CURRENT_SUBMISSION_NOTICE,
-    })
-    if (sent && place.local) {
-      place.local.remoteId = sent.id
-      place.local.trackingToken = sent.trackingToken
     }
-    await addLocal(place)
+    let message: string
+    try {
+      Object.assign(place.local!, { submitKey: newSubmitKey(), submission, send: "sending" })
+      const stored = await addLocal(place)
+      const r = await submitPlace(submission, place.local!.submitKey!)
+      if (r.ok) await updateLocal(place.id, { send: "sent", remoteId: r.id, trackingToken: r.trackingToken })
+      else if (r.kind === "rejected") await updateLocal(place.id, { send: "rejected", sendError: r.code })
+      else await updateLocal(place.id, { send: "waiting" })
+      message = SAVE_MESSAGE[r.ok ? "sent" : r.kind][stored ? "stored" : "unstored"]
+    } catch {
+      // Nothing above should throw; if something does, the form stays usable rather than stuck on its button.
+      sending.current = false
+      setBusy(false)
+      return fail("משהו השתבש בשמירה. נסו שוב.")
+    }
     // The button confirms first; then the dialog steps aside and the map flies to the new flower.
     setSaved(true)
     navigator.vibrate?.([20, 40, 20])
@@ -256,10 +283,7 @@ export function AddPlace() {
         useStore.getState().setTab("places")
         select(place.id)
         useStore.getState().celebrate()
-        toast("הכלנית במקומה", {
-          description: sent ? "ההצעה נשלחה לבדיקה. היא תופיע לכולם אחרי אישור." : "לא הצלחנו לשלוח כרגע. המקום נשמר במכשיר הזה.",
-          duration: 6000,
-        })
+        toast("הכלנית במקומה", { description: message, duration: 8000 })
       },
       reducedMotion() ? 0 : 650,
     )

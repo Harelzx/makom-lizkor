@@ -12,7 +12,17 @@ import { KINDS } from "@/data/taxonomy"
 import { CONTACT_EMAIL } from "@/config"
 import { useStore } from "@/store"
 import { spring } from "@/lib/motion"
-import type { Place } from "@/types"
+import type { LocalFields, Place } from "@/types"
+
+/** Where the visitor's own place stands with the server. An older place sent before states existed counts as sent. */
+const sendState = (l: LocalFields) => l.send ?? (l.remoteId ? "sent" : "local")
+const SEND_STATE: Record<ReturnType<typeof sendState>, string> = {
+  sent: "נשלח לבדיקה, ויופיע לכולם אחרי אישור.",
+  sending: "נשלח לבדיקה…",
+  waiting: "ממתין לשליחה. ננסה שוב לבד.",
+  rejected: "ההצעה לא התקבלה, ולכן לא נשלחה לבדיקה. המקום נשמר רק במכשיר הזה.",
+  local: "נשמר רק בדפדפן הזה.",
+}
 
 const SOURCE: Record<Place["coord_source"], string> = {
   osm: "OpenStreetMap",
@@ -171,7 +181,7 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
         {local ? (
           <div className="flex items-center justify-between gap-2">
             {/* A place sent for review is on the server too; deleting this copy doesn't withdraw it (withdrawal comes with the tracking link). */}
-            <span>{local.remoteId ? "נשלח לבדיקה, ויופיע לכולם אחרי אישור." : "נשמר רק בדפדפן הזה."}</span>
+            <span>{SEND_STATE[sendState(local)]}</span>
             <Button
               variant="ghost"
               size="xs"

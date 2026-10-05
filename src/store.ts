@@ -1,6 +1,6 @@
 import { create } from "zustand"
 import seed from "@/data/places.json"
-import type { Place } from "@/types"
+import type { LocalFields, Place } from "@/types"
 import { loadLocal, loadTributes, saveLocal, saveTributes } from "@/lib/storage"
 
 /** intro: 06:29, the dark map and the opening words · dawn: the sunrise is playing · day: the site itself */
@@ -61,7 +61,9 @@ interface State {
   setPicking: (v: boolean) => void
   setDraft: (p: { lat: number; lng: number } | null) => void
   setRemote: (v: string, places: Place[]) => void
-  addLocal: (p: Place) => Promise<void>
+  /** Both keep the change in memory and say whether it was also saved on the device; they never throw. */
+  addLocal: (p: Place) => Promise<boolean>
+  updateLocal: (id: string, patch: Partial<LocalFields>) => Promise<boolean>
   removeLocal: (id: string) => Promise<void>
   importLocal: (places: Place[]) => Promise<number>
   leaveAnemone: (id: string) => void
@@ -69,6 +71,13 @@ interface State {
   celebrate: () => void
   replayIntro: () => void
 }
+
+/** Saves the visitor's places on the device; false when the browser won't keep them (a private window, a full disk). */
+const persist = (local: Place[]) =>
+  saveLocal(local).then(
+    () => true,
+    () => false,
+  )
 
 export const useStore = create<State>((set, get) => ({
   phase: linkedToPlace() ? "day" : "intro",
@@ -94,7 +103,9 @@ export const useStore = create<State>((set, get) => ({
   introRun: 0,
 
   init: async () => {
-    const [local, tributes] = await Promise.all([loadLocal(), loadTributes()])
+    const [stored, tributes] = await Promise.all([loadLocal(), loadTributes()])
+    // A place still "sending" is from a visit that closed mid-send; nothing is sending it now, so it waits for a retry.
+    const local = stored.map((p) => (p.local?.send === "sending" ? { ...p, local: { ...p.local, send: "waiting" as const } } : p))
     set({ local, tributes })
   },
   setPhase: (phase) => set({ phase }),
@@ -113,7 +124,12 @@ export const useStore = create<State>((set, get) => ({
   addLocal: async (p) => {
     const local = [...get().local, p]
     set({ local })
-    await saveLocal(local)
+    return persist(local)
+  },
+  updateLocal: async (id, patch) => {
+    const local = get().local.map((p) => (p.id === id && p.local ? { ...p, local: { ...p.local, ...patch } } : p))
+    set({ local })
+    return persist(local)
   },
   removeLocal: async (id) => {
     const local = get().local.filter((p) => p.id !== id)

@@ -1,3 +1,5 @@
+import type { SubmissionInput } from "@/shared/contract"
+
 export type Kind = "community" | "monument" | "bench" | "lookout" | "grove" | "garden" | "plaque" | "shelter" | "site" | "museum" | "other"
 
 export interface Link {
@@ -62,4 +64,12 @@ export interface LocalFields {
   remoteId?: string
   /** The private capability to follow the submission's status; only its hash is on the server. */
   trackingToken?: string
+  /** One key per place, made before the first try: every retry is the same submission (Idempotency-Key). */
+  submitKey?: string
+  /** Exactly what was sent, so a retry sends the same body. */
+  submission?: SubmissionInput
+  /** sending: on its way (or cut off by a closed tab) · waiting: unreachable, retried on its own · sent · rejected: never resent */
+  send?: "sending" | "waiting" | "sent" | "rejected"
+  /** The server's reason, when it refused the place. */
+  sendError?: string
 }
