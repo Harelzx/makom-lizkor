@@ -149,6 +149,8 @@ const stored = (page: Page) =>
   )
 
 test("two tabs adding places at once keep each other's places, keys and tracking links", async ({ browser }) => {
+  // Two visits, two forms and four Turnstile runs: measured 28.6–32.3 s on the production build, past the 30 s default.
+  test.setTimeout(90_000)
   const stamp = Date.now()
   const [x, y] = [`ספסל דמו לשונית א ${stamp}`, `ספסל דמו לשונית ב ${stamp}`]
   const ctx = await browser.newContext(GEO)
