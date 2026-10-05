@@ -21,6 +21,7 @@ const SEND_STATE: Record<ReturnType<typeof sendState>, string> = {
   sending: "נשלח לבדיקה…",
   waiting: "ממתין לשליחה. ננסה שוב לבד.",
   rejected: "ההצעה לא התקבלה, ולכן לא נשלחה לבדיקה. המקום נשמר רק במכשיר הזה.",
+  withdrawn: "ההצעה נמשכה ונמחקה מהשרת. העותק הזה נשמר רק במכשיר.",
   local: "נשמר רק בדפדפן הזה.",
 }
 
@@ -35,6 +36,7 @@ const SOURCE: Record<Place["coord_source"], string> = {
 // `ref` lets AnimatePresence (popLayout) lift the leaving card out of the flow, so the list can take its place at once.
 export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () => void; ref?: React.Ref<HTMLElement> }) {
   const removeLocal = useStore((s) => s.removeLocal)
+  const setTracking = useStore((s) => s.setTracking)
   const [copied, setCopied] = useState(false)
   const photos = place.photos ?? []
   const local = place.local
@@ -179,16 +181,24 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
         </p>
         {place.precision === "approx" && <p>המיקום משוער: הוא מצביע על האזור, לא על הנקודה המדויקת.</p>}
         {local ? (
-          <div className="flex items-center justify-between gap-2">
-            {/* A place sent for review is on the server too; deleting this copy doesn't withdraw it (withdrawal comes with the tracking link). */}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            {/* A place sent for review is on the server too; deleting this copy doesn't withdraw it, the tracking view does. */}
             <span>{SEND_STATE[sendState(local)]}</span>
+            {local.remoteId && local.trackingToken && local.send !== "withdrawn" && (
+              <Button variant="ghost" size="xs" onClick={() => setTracking({ id: local.remoteId!, token: local.trackingToken! })}>
+                מעקב אחרי ההצעה
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="xs"
               onClick={() => {
                 void removeLocal(place.id)
                 toast("המקום נמחק מהמכשיר", {
-                  description: local.remoteId ? "ההצעה שנשלחה לבדיקה לא נמשכה. כדי למשוך אותה, כתבו לנו." : undefined,
+                  description:
+                    local.remoteId && local.send !== "withdrawn"
+                      ? "ההצעה שנשלחה לבדיקה לא נמשכה, וקישור המעקב נמחק עם העותק. כדי למשוך אותה עכשיו, כתבו לנו."
+                      : undefined,
                 })
               }}
             >

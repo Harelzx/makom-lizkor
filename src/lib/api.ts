@@ -33,3 +33,34 @@ export async function submitPlace(input: SubmissionInput, key: string): Promise<
     return { ok: false, kind: "temporary" }
   }
 }
+
+export type Tracked = { status: string; name_he: string | null }
+
+/** The status the server holds for a submission; null when the link is wrong, undefined when the server can't be reached. */
+export async function trackSubmission(id: string, token: string): Promise<Tracked | null | undefined> {
+  try {
+    const res = await fetch(`/api/v1/submissions/${encodeURIComponent(id)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+      signal: AbortSignal.timeout(8000),
+    })
+    if (res.status === 404) return null
+    return res.ok ? ((await res.json()) as Tracked) : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** True once the server has erased it; false when it couldn't be done now (the visitor may try again). */
+export async function withdrawSubmission(id: string, token: string): Promise<boolean> {
+  try {
+    const res = await fetch(`/api/v1/submissions/${encodeURIComponent(id)}/withdraw`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(8000),
+    })
+    return res.ok
+  } catch {
+    return false
+  }
+}

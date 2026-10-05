@@ -68,8 +68,9 @@ export interface LocalFields {
   submitKey?: string
   /** Exactly what was sent, so a retry sends the same body. */
   submission?: SubmissionInput
-  /** sending: on its way (or cut off by a closed tab) · waiting: unreachable, retried on its own · sent · rejected: never resent */
-  send?: "sending" | "waiting" | "sent" | "rejected"
+  /** sending: on its way (or cut off by a closed tab) · waiting: unreachable, retried on its own · sent · rejected: never
+   *  resent · withdrawn: taken back by the sender, erased on the server */
+  send?: "sending" | "waiting" | "sent" | "rejected" | "withdrawn"
   /** The server's reason, when it refused the place. */
   sendError?: string
 }

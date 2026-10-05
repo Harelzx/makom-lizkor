@@ -20,9 +20,12 @@ it("refuses a submission that names a notice the site never showed", async () =>
   expect((await submit(CURRENT_SUBMISSION_NOTICE)).status).toBe(201)
 })
 
-it("describes the flow that exists: no tracking link to follow yet, and the photo stays on the device", () => {
+it("describes the flow that exists: a tracking link to follow and withdraw, and the photo stays on the device", () => {
   const text = NOTICES[CURRENT_SUBMISSION_NOTICE]
-  expect(text).not.toContain("קישור המעקב")
+  expect(text).toContain("קישור המעקב")
+  expect(text).toContain("למשוך אותה")
+  expect(text).not.toContain("אין עדיין דף")
+  expect(text).toContain("תנאי השליחה")
   expect(text).toContain("התמונה")
   expect(text).toContain("נשארת במכשיר")
   expect(text).not.toContain("Turnstile")
@@ -30,7 +33,7 @@ it("describes the flow that exists: no tracking link to follow yet, and the phot
 
 // Every version a form has ever shown. A device may still retry a queued submission under one of them, and its consent
 // record points to that text: removing a version would refuse the retry and orphan the record. Only append here.
-const SHOWN = ["notice.submission@2026-10-2", "notice.submission@2026-10-3"]
+const SHOWN = ["notice.submission@2026-10-2", "notice.submission@2026-10-3", "notice.submission@2026-10-4"]
 
 it("never drops a version a form has shown, and keeps each one's text", () => {
   for (const v of SHOWN) {

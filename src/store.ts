@@ -11,10 +11,11 @@ export type Light = "morning" | "night"
 /** Set once the opening has been seen through; later visits go straight to the name. */
 export const INTRO_SEEN = "makom-lizkor:v2-seen"
 /** A shared link to a place lands on that place: the opening is for those who come in through the front door. */
-const linkedToPlace = () => typeof location !== "undefined" && /^#\/place\/[^/]+/.test(location.hash)
+// A tracking link (#/track/<id>/<token>) is opened for its status, so it skips the opening too.
+const linkedToPlace = () => typeof location !== "undefined" && /^#\/(place|track)\/[^/]+/.test(location.hash)
 /** The place a shared link names, chosen before the first render so the address is never rewritten under it. */
 const linkedPlaceId = () => {
-  if (!linkedToPlace()) return null
+  if (!linkedToPlace() || !location.hash.startsWith("#/place/")) return null
   const id = decodeURIComponent(location.hash.split("/")[2])
   // Local places and approved contributions (p_…) load after the first render, so their ids are trusted.
   return id.startsWith("local-") || id.startsWith("p_") || (seed as Place[]).some((p) => p.id === id) ? id : null
@@ -37,6 +38,8 @@ interface State {
   aboutOpen: boolean
   /** About can open straight at one of its sections: the statement, the privacy notice, the terms. */
   aboutSection: string | null
+  /** The submission whose status is open, from its private tracking link. Kept here, never in the address. */
+  tracking: { id: string; token: string } | null
   searchOpen: boolean
   picking: boolean
   draft: { lat: number; lng: number } | null
@@ -57,6 +60,7 @@ interface State {
   setAddOpen: (v: boolean) => void
   setAboutOpen: (v: boolean) => void
   openAbout: (section: string) => void
+  setTracking: (t: { id: string; token: string } | null) => void
   setSearchOpen: (v: boolean) => void
   setPicking: (v: boolean) => void
   setDraft: (p: { lat: number; lng: number } | null) => void
@@ -94,6 +98,7 @@ export const useStore = create<State>((set, get) => ({
   addOpen: false,
   aboutOpen: false,
   aboutSection: null,
+  tracking: null,
   searchOpen: false,
   picking: false,
   draft: null,
@@ -117,6 +122,7 @@ export const useStore = create<State>((set, get) => ({
   setAddOpen: (addOpen) => set({ addOpen, picking: addOpen ? get().picking : false, draft: addOpen ? get().draft : null }),
   setAboutOpen: (aboutOpen) => set({ aboutOpen, aboutSection: null }),
   openAbout: (aboutSection) => set({ aboutOpen: true, aboutSection, searchOpen: false }),
+  setTracking: (tracking) => set({ tracking, searchOpen: false }),
   setSearchOpen: (searchOpen) => set({ searchOpen }),
   setPicking: (picking) => set({ picking }),
   setDraft: (draft) => set({ draft }),

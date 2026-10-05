@@ -43,7 +43,7 @@ test("a place submitted without email is moderated, published, and seen in anoth
   const body = (await sent).request().postDataJSON() as Record<string, unknown>
   expect(Object.keys(body)).not.toContain("email")
   // The version recorded is the notice the form showed.
-  expect(body.consent_version).toBe("notice.submission@2026-10-3")
+  expect(body.consent_version).toBe("notice.submission@2026-10-4")
   // The submitter's own card says where the place went; it doesn't promise it stays only in this browser.
   await expect(visitor.getByText("נשלח לבדיקה", { exact: false }).first()).toBeVisible(DAY)
   await expect(visitor.getByText("נשמר רק בדפדפן הזה")).toHaveCount(0)
