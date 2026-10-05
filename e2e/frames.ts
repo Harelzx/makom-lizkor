@@ -53,11 +53,36 @@ export async function record(page: Page, selector: string, act: () => Promise<un
   return page.evaluate(() => (window as unknown as { __frames: Frame[] }).__frames)
 }
 
-/** Lands straight in the day view on one place, skipping the opening. */
+/**
+ * Waits until the page renders quietly: `run` frames in a row, each under `ms`. The camera's flight to a place lasts
+ * 2.8 s and tiles keep arriving after it; a panel recorded while the map still repaints every frame measured the
+ * machine's load, not the panel's motion. Gives up after `timeout` and lets the measurement speak for itself.
+ */
+export async function settle(page: Page, { run = 20, ms = 25, timeout = 12_000 } = {}) {
+  await page.evaluate(
+    ([run, ms, timeout]) =>
+      new Promise<void>((done) => {
+        const start = performance.now()
+        let last = start
+        let quiet = 0
+        const tick = (now: number) => {
+          quiet = now - last < ms ? quiet + 1 : 0
+          last = now
+          if (quiet >= run || now - start > timeout) done()
+          else requestAnimationFrame(tick)
+        }
+        requestAnimationFrame(tick)
+      }),
+    [run, ms, timeout] as const,
+  )
+}
+
+/** Lands straight in the day view on one place, skipping the opening, once the map has stopped moving. */
 export async function openPlace(page: Page, id = "car-wall-tkuma") {
   await page.goto(`/#/place/${id}`)
   await page.getByRole("button", { name: "כל המקומות" }).waitFor()
   await page.waitForTimeout(1500)
+  await settle(page)
 }
 
 export const visible = async (l: Locator) => (await l.count()) > 0 && l.first().isVisible()
