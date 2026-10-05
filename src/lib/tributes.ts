@@ -1,5 +1,5 @@
 import { getTributeTotals, sendTribute } from "@/lib/api"
-import { changeTributeOutbox, changeTributeSent, deviceId, type PendingTribute } from "@/lib/storage"
+import { changeTributeOutbox, deviceId, type PendingTribute, type TributeEntry } from "@/lib/storage"
 import { useStore } from "@/store"
 
 /** An anemone not sent within a week is dropped; the visitor's own flowers stay (spec 4). */
@@ -21,22 +21,31 @@ export const canShare = () => deviceId().then((id) => id !== null)
  */
 export async function queueTribute(placeId: string) {
   if (!shared(placeId) || !(await deviceId())) return
-  const sent = await changeTributeSent((s) => s).catch(() => ({}) as Record<string, string>)
-  if (sent[placeId] === today()) return
   const key = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, "0")).join("")
+  const day = today()
   try {
-    await changeTributeOutbox((o) => (o[placeId] ? o : { ...o, [placeId]: { key, at: Date.now() } }))
+    // Waiting already, or answered today: nothing more to send. Otherwise a new anemone, in the same transaction.
+    await changeTributeOutbox((o) => {
+      const e = o[placeId]
+      return e && ("key" in e || e.day === day) ? o : { ...o, [placeId]: { key, at: Date.now() } }
+    })
   } catch {
     return
   }
   await drainTributes()
 }
 
-/** Removes one waiting anemone, but only if it is still the one sent: another tab may have replaced it meanwhile. */
-const settle = (placeId: string, sent: PendingTribute) =>
+/**
+ * The answer for one waiting anemone, recorded as the day it was answered, but only if it is still the one sent
+ * (another tab may have replaced it). Answers from earlier days are dropped as they are no longer needed.
+ */
+const settle = (placeId: string, sent: PendingTribute, answered: boolean) =>
   changeTributeOutbox((o) => {
-    if (o[placeId]?.key !== sent.key) return o
-    const rest = { ...o }
+    const day = today()
+    const kept = Object.fromEntries(Object.entries(o).filter(([, e]) => "key" in e || e.day === day))
+    if ((o[placeId] as PendingTribute | undefined)?.key !== sent.key) return kept
+    if (answered) return { ...kept, [placeId]: { day } }
+    const rest = { ...kept }
     delete rest[placeId]
     return rest
   }).catch(() => undefined)
@@ -49,21 +58,17 @@ export async function drainTributes() {
   try {
     const id = await deviceId()
     if (!id) return
-    const waiting = await changeTributeOutbox((o) => o).catch(() => ({}) as Record<string, PendingTribute>)
-    for (const [placeId, entry] of Object.entries(waiting)) {
+    const queue = await changeTributeOutbox((o) => o).catch(() => ({}) as Record<string, TributeEntry>)
+    for (const [placeId, entry] of Object.entries(queue)) {
+      if (!("key" in entry)) continue
       if (Date.now() - entry.at > WEEK) {
-        await settle(placeId, entry)
+        await settle(placeId, entry, false)
         continue
       }
       const r = await sendTribute(placeId, id, entry.key)
       if (!r.ok && r.kind === "temporary") break
-      await settle(placeId, entry)
-      // Answered: the server has this device's anemone for today (or refused it); later taps today stay local. Only
-      // today's entries are kept.
-      const day = today()
-      await changeTributeSent((s) => ({ ...Object.fromEntries(Object.entries(s).filter(([, d]) => d === day)), [placeId]: day })).catch(
-        () => undefined,
-      )
+      // Answered: the server has this device's anemone for today (or refused it); later taps today stay local.
+      await settle(placeId, entry, true)
       // Counted just now: the shared count shows it at once, before the next refresh.
       if (r.ok && r.result.counted && !r.result.reason) {
         const totals = useStore.getState().tributeTotals

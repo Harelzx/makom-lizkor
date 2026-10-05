@@ -79,26 +79,22 @@ export function deviceId(): Promise<string | null> {
   return device
 }
 
-/** An anemone waiting to be counted: its key (kept through every retry) and when it was left. */
+/**
+ * An anemone's place in the queue: waiting to be counted (its key, kept through every retry, and when it was left), or
+ * answered on a Jerusalem day (more taps that day send nothing). One record per place, so a tap and an answer can't
+ * slip between two writes.
+ */
 export type PendingTribute = { key: string; at: number }
+export type TributeEntry = PendingTribute | { day: string }
 
-/** Changes the anemones waiting to be sent, one per place, in one transaction (another tab may be sending too). */
+/** Changes the anemones' queue in one transaction (another tab may be sending too). */
 export async function changeTributeOutbox(
-  change: (stored: Record<string, PendingTribute>) => Record<string, PendingTribute>,
-): Promise<Record<string, PendingTribute>> {
+  change: (stored: Record<string, TributeEntry>) => Record<string, TributeEntry>,
+): Promise<Record<string, TributeEntry>> {
   const s = db()
   if (!s) throw new Error("storage_unavailable")
-  let next: Record<string, PendingTribute> = {}
-  await update<Record<string, PendingTribute>>("tributeOutbox", (stored) => (next = change(stored ?? {})), s)
-  return next
-}
-
-/** The places an anemone was already sent for, by the Jerusalem day it was sent: more taps that day send nothing. */
-export async function changeTributeSent(change: (sent: Record<string, string>) => Record<string, string>): Promise<Record<string, string>> {
-  const s = db()
-  if (!s) throw new Error("storage_unavailable")
-  let next: Record<string, string> = {}
-  await update<Record<string, string>>("tributeSent", (stored) => (next = change(stored ?? {})), s)
+  let next: Record<string, TributeEntry> = {}
+  await update<Record<string, TributeEntry>>("tributeOutbox", (stored) => (next = change(stored ?? {})), s)
   return next
 }
 
