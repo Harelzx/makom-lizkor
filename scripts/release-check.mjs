@@ -12,6 +12,7 @@ for (const [group, values] of Object.entries({ OPERATOR: config.OPERATOR, MAILBO
 for (const [key, value] of Object.entries(config.RETENTION)) if (value === null) blockers.push(`RETENTION.${key} is not set`)
 if (!config.RETENTION.verified)
   blockers.push("RETENTION.verified is false: the deletion and backup periods haven't been tested end to end (restore drills included)")
+for (const promise of config.PENDING_PROMISES) blockers.push(`promised but not built: ${promise}`)
 if (!config.MAILBOX.verified)
   blockers.push(
     "MAILBOX.verified is false: the 12-month per-message policy isn't configured and its trash tail measured on the real mailbox",
