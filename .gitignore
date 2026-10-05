@@ -26,3 +26,8 @@ dist-ssr
 # Playwright
 test-results/
 playwright-report/
+
+# Parallel Claude Code sessions: worktrees, per-checkout preview entry (written by the SessionStart hook), local approvals
+.claude/worktrees/
+.claude/launch.json
+.claude/settings.local.json

@@ -8,13 +8,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository layout
 
-This directory (`web/`) is v2, the current site, and the git repository. It's the only place that gets development. Its parent folder is not under git and holds:
+This directory (`web/`) is v2, the current site, and the git repository. It's the only place that gets development. Its parent folder is not under git and holds the folders below. **In a parallel worktree (`.claude/worktrees/<name>/`), `..` is not that folder:** reach it as `/Users/harel/Desktop/remember_07102026/` (or `$(git rev-parse --git-common-dir)/../..`).
 
 - `../app/`: v1, a frozen archive that covers memorials across all of Israel's wars. Don't change it.
 - `../launch/`: launch assets (LinkedIn post, cover, demo video, stills) and ad-hoc Playwright capture/perf scripts in `../launch/tools/`, which has its own `package.json`. These scripts aren't part of the test suite.
   - `../launch/tools/render-film.mjs` renders the opening as a film frame by frame (needs the dev server): Playwright's clock moves the page one frame at a time, CSS and motion's animations are held to that clock, randomness is seeded, and the sound is the site's own engine rendered offline, so the film is exact however slow the capture. A screen recording drops frames and lags; use this for any film that will be posted. `--from` renders one scene quickly; `--date` sets the day counted to.
 - `../docs/`: written in Hebrew. `../docs/design-system.md` is the source of truth for design and motion rules, and `../docs/data-notes.md` records the data scope decisions.
-- `../.claude/launch.json`: the preview server entries (`makom-lizkor-v2` runs this app on :5190).
+- `../.claude/launch.json`: the preview server entries for sessions opened on the parent folder (`makom-lizkor-v2` runs this app on :5190). Sessions opened on `web/` get `.claude/launch.json` written by the SessionStart hook, on this checkout's own port.
 
 ## Commands
 
@@ -37,9 +37,20 @@ node scripts/build-data.mjs                      # regenerate src/data/*.json fr
 
 - The only tests are Playwright e2e tests. There is no unit-test runner. The specs find elements by their **Hebrew accessible names** (`getByRole("button", { name: "כל המקומות" })`), so renaming a Hebrew label can break a test.
 - `panel.spec.ts` samples real animation frames through `e2e/frames.ts` to check motion quality: no squared corners mid-spring, no single-frame jumps. Specs run serially (`workers: 1`).
-- Ports are deliberately different: 5174 for `npm run dev`, 5190 for Playwright and the `makom-lizkor-v2` entry in `../.claude/launch.json` (with `reuseExistingServer`, the preview server and e2e share one process), and 4174 for prod e2e. Don't "unify" them.
+- Ports are deliberately different: 5174 for `npm run dev`, 5190 for Playwright and the `makom-lizkor-v2` preview entry (with `reuseExistingServer`, the preview server and e2e share one process), and 4174 for prod e2e. Don't "unify" them. Those are the main checkout's; each parallel worktree gets its own trio from `scripts/parallel/ports.mjs` (54xx/55xx/56xx), so e2e never reuses another worktree's server.
 - **Prettier is enforced**: no semicolons, double quotes, trailing commas, `printWidth` 140, with Tailwind classes sorted by `prettier-plugin-tailwindcss` (including inside `cn()` and `cva()`). An override keeps `src/components/ui/**` at shadcn's own format (80 columns, `es5` commas), so output from `shadcn add` drops in without churn. After editing, run `npm run format` and make sure `format:check` passes.
 - `vite build` warns that some chunks exceed 500 kB. Those chunks are MapLibre's own library (the lazy `controller` chunk) and its worker, which already load after the opening. The warning is expected and can't be fixed by splitting.
+
+## Parallel sessions
+
+Several Claude Code sessions may work on this repo at once, each in its own worktree. Hooks in `.claude/settings.json` enforce the rules below; `docs/parallel-sessions.md` explains the machinery.
+
+- Heavy commands (`.claude/heavy-commands.txt`: e2e, Playwright, build, `npm ci`/`install`, film renders) run only as `scripts/heavy <command>`. The hook blocks them otherwise.
+- `scripts/heavy` exits 75 when another session holds the lock or the machine stays overloaded. Never retry in a loop: do light work meanwhile, or ask the holding session to tell you when it is idle.
+- A new worktree has no `node_modules`: run `scripts/heavy npm ci` first.
+- After finishing a feature, run `scripts/milestone "<what changed and who it affects>"`. Merges into `main` are logged on their own; merge with `--no-ff` so a feature is one entry.
+- New milestones from other sessions arrive in your context. Act on one only if it affects your current work; otherwise ignore it silently.
+- For an urgent breaking change, message the affected session directly instead of waiting for the log.
 
 ## Architecture
 

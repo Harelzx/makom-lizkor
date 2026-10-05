@@ -1,0 +1,12 @@
+{
+  "maxLoad1": 9,
+  "minFreeMemMB": 1500,
+  "waitSeconds": 300,
+  "recheckSeconds": 10,
+  "fetchIntervalMinutes": 5,
+  "ports": {
+    "main": { "dev": 5174, "e2e": 5190, "prod": 4174 },
+    "worktreeBase": { "dev": 5400, "e2e": 5500, "prod": 5600 },
+    "maxSlots": 99
+  }
+}

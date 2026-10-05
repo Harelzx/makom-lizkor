@@ -1,0 +1,25 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PROJECT_DIR}/scripts/parallel/hook.mjs\" pretool", "timeout": 10 }]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PROJECT_DIR}/scripts/parallel/hook.mjs\" session", "timeout": 15 }]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PROJECT_DIR}/scripts/parallel/hook.mjs\" prompt", "timeout": 10 }]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PROJECT_DIR}/scripts/parallel/hook.mjs\" posttool", "timeout": 10 }]
+      }
+    ]
+  }
+}

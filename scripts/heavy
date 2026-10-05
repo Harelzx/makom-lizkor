@@ -1,0 +1,3 @@
+#!/bin/sh
+# Run a heavy command under the shared lock. See docs/parallel-sessions.md.
+exec node "$(dirname "$0")/parallel/heavy.mjs" "$@"
