@@ -15,11 +15,17 @@ function readToken(req: Request): string | null {
 export async function moderator(req: Request, env: Env): Promise<{ ok: true; email: string } | { ok: false; status: 401 | 403 }> {
   const token = readToken(req)
   if (!token) return { ok: false, status: 401 }
+  const dev = env.ENVIRONMENT === "development" && env.DEV_ACCESS_SECRET
+  // Without an Access team and audience there is nothing to verify against: refuse rather than guess.
+  if (!dev && (!env.ACCESS_TEAM_DOMAIN || !env.ACCESS_AUD)) return { ok: false, status: 401 }
   try {
-    const dev = env.ENVIRONMENT === "development" && env.DEV_ACCESS_SECRET
     const { payload } = dev
       ? await jwtVerify(token, new TextEncoder().encode(env.DEV_ACCESS_SECRET), { issuer: "dev-access", audience: "makom-dev" })
-      : await jwtVerify(token, keysFor(env.ACCESS_TEAM_DOMAIN), { issuer: `https://${env.ACCESS_TEAM_DOMAIN}`, audience: env.ACCESS_AUD })
+      : await jwtVerify(token, keysFor(env.ACCESS_TEAM_DOMAIN), {
+          issuer: `https://${env.ACCESS_TEAM_DOMAIN}`,
+          audience: env.ACCESS_AUD,
+          algorithms: ["RS256"],
+        })
     const email = typeof payload.email === "string" ? payload.email.toLowerCase() : ""
     const allowed = env.MODERATORS.split(",").map((e) => e.trim().toLowerCase())
     return email && allowed.includes(email) ? { ok: true, email } : { ok: false, status: 403 }

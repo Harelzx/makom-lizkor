@@ -8,12 +8,12 @@
   "d1_databases": [
     { "binding": "DB", "database_name": "makom-dev", "database_id": "00000000-0000-0000-0000-000000000000", "migrations_dir": "migrations" },
   ],
-  // Development values only. The production config (phase 6) sets ENVIRONMENT=production and has no DEV_ACCESS_SECRET.
+  // What a deploy ships: production, with no moderators until the deploy names them and no development secret.
+  // Locally, .dev.vars (read by the dev server and the tests, never deployed) turns development on.
   "vars": {
-    "ENVIRONMENT": "development",
+    "ENVIRONMENT": "production",
     "EPOCH": "0",
-    "MODERATORS": "dev@example.test",
-    "DEV_ACCESS_SECRET": "development-only-not-a-secret",
+    "MODERATORS": "",
     "ACCESS_TEAM_DOMAIN": "",
     "ACCESS_AUD": "",
   },
