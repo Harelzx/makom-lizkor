@@ -27,3 +27,16 @@ it("describes the flow that exists: no tracking link to follow yet, and the phot
   expect(text).toContain("נשארת במכשיר")
   expect(text).not.toContain("Turnstile")
 })
+
+// Every version a form has ever shown. A device may still retry a queued submission under one of them, and its consent
+// record points to that text: removing a version would refuse the retry and orphan the record. Only append here.
+const SHOWN = ["notice.submission@2026-10-2", "notice.submission@2026-10-3"]
+
+it("never drops a version a form has shown, and keeps each one's text", () => {
+  for (const v of SHOWN) {
+    expect(SUBMISSION_NOTICES).toContain(v)
+    expect(Object.keys(NOTICES)).toContain(v)
+  }
+  // New versions go at the end: the order is the order they were shown.
+  expect(SUBMISSION_NOTICES.slice(0, SHOWN.length)).toEqual(SHOWN)
+})

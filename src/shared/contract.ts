@@ -8,6 +8,10 @@ export const SUBMITTABLE_KINDS = ["bench", "lookout", "grove", "garden", "plaque
  * The submission notices a form may record. Each is a key in NOTICES (src/data/legal.ts), with its own text; the last
  * is the one the add form shows now. A submission that names any other version is refused, so what is stored is
  * always a notice the site actually showed. A test keeps this list and the texts in step.
+ *
+ * Never remove a version, and add new ones at the end. A device may still retry a queued submission under an older
+ * one (same body, same Idempotency-Key), and its consent record has to point to a text that exists. A wording change
+ * is a new key in NOTICES, never an edit of an old one.
  */
 export const SUBMISSION_NOTICES = ["notice.submission@2026-10-2", "notice.submission@2026-10-3"] as const
 export const CURRENT_SUBMISSION_NOTICE = SUBMISSION_NOTICES[SUBMISSION_NOTICES.length - 1]
