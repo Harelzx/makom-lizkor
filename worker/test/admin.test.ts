@@ -1,4 +1,5 @@
-import { env, exports } from "cloudflare:workers"
+import { env } from "cloudflare:workers"
+import { call } from "./app"
 import { describe, expect, it } from "vitest"
 import { admin, submit } from "./helpers"
 
@@ -9,7 +10,7 @@ const queued = async (id: string) => {
 
 describe("admin", () => {
   it("refuses without a token, refuses someone not on the list, and never caches", async () => {
-    const anonymous = await exports.default.fetch("http://local/api/admin/queue")
+    const anonymous = await call("http://local/api/admin/queue")
     expect(anonymous.status).toBe(401)
     expect(anonymous.headers.get("Cache-Control")).toBe("private, no-store")
     const outsider = await admin("/api/admin/queue", {}, "someone@example.test")
@@ -17,7 +18,7 @@ describe("admin", () => {
     expect(outsider.headers.get("Cache-Control")).toBe("private, no-store")
   })
   it("refuses a token signed with another key", async () => {
-    const res = await exports.default.fetch("http://local/api/admin/queue", { headers: { "Cf-Access-Jwt-Assertion": "e30.e30.c2ln" } })
+    const res = await call("http://local/api/admin/queue", { headers: { "Cf-Access-Jwt-Assertion": "e30.e30.c2ln" } })
     expect(res.status).toBe(401)
   })
   it("refuses a cross-site change", async () => {
@@ -29,9 +30,13 @@ describe("admin", () => {
     expect(res.status).toBe(403)
   })
   it("shows the moderator every field that would be published", async () => {
-    const res = await exports.default.fetch("http://local/api/v1/submissions", {
+    const res = await call("http://local/api/v1/submissions", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Idempotency-Key": crypto.randomUUID().replaceAll("-", ""),
+        "Turnstile-Token": "pass",
+      },
       body: JSON.stringify({
         kind: "lookout",
         name_he: "מצפור דמו לבדיקה",
@@ -82,14 +87,18 @@ describe("admin", () => {
 
 describe("dev login", () => {
   it("sets the stand-in Access cookie, which the admin accepts", async () => {
-    const res = await exports.default.fetch("http://local/__dev/login", {
+    const res = await call("http://local/__dev/login", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Idempotency-Key": crypto.randomUUID().replaceAll("-", ""),
+        "Turnstile-Token": "pass",
+      },
       body: JSON.stringify({ email: "dev@example.test" }),
     })
     expect(res.status).toBe(204)
     const cookie = res.headers.get("Set-Cookie")!.split(";")[0]
-    const queue = await exports.default.fetch("http://local/api/admin/queue", { headers: { Cookie: cookie } })
+    const queue = await call("http://local/api/admin/queue", { headers: { Cookie: cookie } })
     expect(queue.status).toBe(200)
   })
 })

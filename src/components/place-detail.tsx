@@ -12,7 +12,18 @@ import { KINDS } from "@/data/taxonomy"
 import { CONTACT_EMAIL } from "@/config"
 import { useStore } from "@/store"
 import { spring } from "@/lib/motion"
-import type { Place } from "@/types"
+import type { LocalFields, Place } from "@/types"
+
+/** Where the visitor's own place stands with the server. An older place sent before states existed counts as sent. */
+const sendState = (l: LocalFields) => l.send ?? (l.remoteId ? "sent" : "local")
+const SEND_STATE: Record<ReturnType<typeof sendState>, string> = {
+  sent: "נשלח לבדיקה, ויופיע לכולם אחרי אישור.",
+  sending: "נשלח לבדיקה…",
+  waiting: "ממתין לשליחה. ננסה שוב לבד.",
+  rejected: "ההצעה לא התקבלה, ולכן לא נשלחה לבדיקה. המקום נשמר רק במכשיר הזה.",
+  withdrawn: "ההצעה נמשכה ונמחקה מהשרת. העותק הזה נשמר רק במכשיר.",
+  local: "נשמר רק בדפדפן הזה.",
+}
 
 const SOURCE: Record<Place["coord_source"], string> = {
   osm: "OpenStreetMap",
@@ -25,9 +36,12 @@ const SOURCE: Record<Place["coord_source"], string> = {
 // `ref` lets AnimatePresence (popLayout) lift the leaving card out of the flow, so the list can take its place at once.
 export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () => void; ref?: React.Ref<HTMLElement> }) {
   const removeLocal = useStore((s) => s.removeLocal)
+  const setTracking = useStore((s) => s.setTracking)
   const [copied, setCopied] = useState(false)
   const photos = place.photos ?? []
   const local = place.local
+  // Contributions (a visitor's own or approved ones) are where private property comes up; curated places are public sites.
+  const inPrivate = !!local || place.coord_source === "contribution"
   const titleRef = useFocusOnOpen<HTMLHeadingElement>()
 
   const share = async () => {
@@ -72,12 +86,17 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
         >
           <PhotoGallery photos={photos} />
         </motion.div>
-      ) : local?.photo ? (
+      ) : local?.photo || place.contributedPhoto ? (
+        // The visitor's own photo on this device, or a contributed one approved with its place.
         <figure className="-mx-1">
-          <img src={local.photo} alt={local.photoAlt || place.name_he} className="aspect-[4/3] w-full rounded-3xl object-cover" />
-          {local.photoCredit && (
+          <img
+            src={local?.photo ?? place.contributedPhoto!.url}
+            alt={(local ? local.photoAlt : place.contributedPhoto?.alt) || place.name_he}
+            className="aspect-[4/3] w-full rounded-3xl object-cover"
+          />
+          {(local ? local.photoCredit : place.contributedPhoto?.credit) && (
             <figcaption className="px-1 pt-2 text-micro text-ink-3">
-              צילום: <bdi>{local.photoCredit}</bdi>
+              צילום: <bdi>{local ? local.photoCredit : place.contributedPhoto?.credit}</bdi>
             </figcaption>
           )}
         </figure>
@@ -119,18 +138,30 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
 
       <Tribute placeId={place.id} />
 
+      {place.accessNote && (
+        <p className="text-body text-ink-1">
+          <span className="text-ink-2">איך מגיעים: </span>
+          {place.accessNote}
+        </p>
+      )}
+
       <div className="-mx-2.5 flex flex-wrap gap-x-1 gap-y-1">
-        <Button variant="ghost" className="h-9 rounded-full px-2.5 text-label text-ink-1 hover:bg-surface-2" asChild>
-          <a href={`https://waze.com/ul?ll=${place.lat},${place.lng}&navigate=yes`} target="_blank" rel="noopener">
-            <NavigationIcon data-icon="inline-start" />
-            ניווט ב־Waze
-          </a>
-        </Button>
-        <Button variant="ghost" className="h-9 rounded-full px-2.5 text-label text-ink-1 hover:bg-surface-2" asChild>
-          <a href={`https://www.google.com/maps/search/?api=1&query=${place.lat},${place.lng}`} target="_blank" rel="noopener">
-            Google Maps
-          </a>
-        </Button>
+        {/* A family's place on private property shown approximately leads nobody to it: no navigation (spec 4). */}
+        {!(inPrivate && place.precision === "approx") && (
+          <>
+            <Button variant="ghost" className="h-9 rounded-full px-2.5 text-label text-ink-1 hover:bg-surface-2" asChild>
+              <a href={`https://waze.com/ul?ll=${place.lat},${place.lng}&navigate=yes`} target="_blank" rel="noopener">
+                <NavigationIcon data-icon="inline-start" />
+                ניווט ב־Waze
+              </a>
+            </Button>
+            <Button variant="ghost" className="h-9 rounded-full px-2.5 text-label text-ink-1 hover:bg-surface-2" asChild>
+              <a href={`https://www.google.com/maps/search/?api=1&query=${place.lat},${place.lng}`} target="_blank" rel="noopener">
+                Google Maps
+              </a>
+            </Button>
+          </>
+        )}
         <Button variant="ghost" className="h-9 rounded-full px-2.5 text-label text-ink-1 hover:bg-surface-2" onClick={share}>
           {copied ? <CheckIcon data-icon="inline-start" /> : <Share2Icon data-icon="inline-start" />}
           שיתוף
@@ -169,16 +200,24 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
         </p>
         {place.precision === "approx" && <p>המיקום משוער: הוא מצביע על האזור, לא על הנקודה המדויקת.</p>}
         {local ? (
-          <div className="flex items-center justify-between gap-2">
-            {/* A place sent for review is on the server too; deleting this copy doesn't withdraw it (withdrawal comes with the tracking link). */}
-            <span>{local.remoteId ? "נשלח לבדיקה, ויופיע לכולם אחרי אישור." : "נשמר רק בדפדפן הזה."}</span>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            {/* A place sent for review is on the server too; deleting this copy doesn't withdraw it, the tracking view does. */}
+            <span>{SEND_STATE[sendState(local)]}</span>
+            {local.remoteId && local.trackingToken && local.send !== "withdrawn" && (
+              <Button variant="ghost" size="xs" onClick={() => setTracking({ id: local.remoteId!, token: local.trackingToken! })}>
+                מעקב אחרי ההצעה
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="xs"
               onClick={() => {
                 void removeLocal(place.id)
                 toast("המקום נמחק מהמכשיר", {
-                  description: local.remoteId ? "ההצעה שנשלחה לבדיקה לא נמשכה. כדי למשוך אותה, כתבו לנו." : undefined,
+                  description:
+                    local.remoteId && local.send !== "withdrawn"
+                      ? "ההצעה שנשלחה לבדיקה לא נמשכה, וקישור המעקב נמחק עם העותק. כדי למשוך אותה עכשיו, כתבו לנו."
+                      : undefined,
                 })
               }}
             >

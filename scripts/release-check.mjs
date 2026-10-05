@@ -17,6 +17,21 @@ if (!config.MAILBOX.verified)
     "MAILBOX.verified is false: the 12-month per-message policy isn't configured and its trash tail measured on the real mailbox",
   )
 
+// The browser check: a public build needs the site's own Turnstile sitekey, not Cloudflare's test key from .env.
+const sitekey = process.env.VITE_TURNSTILE_SITEKEY ?? ""
+if (!sitekey || /^[123]x0+/.test(sitekey))
+  blockers.push(
+    "VITE_TURNSTILE_SITEKEY is unset or Cloudflare's test key: a public build needs the site's own (the secret goes to the Worker)",
+  )
+
+// Mail: the form offers an email and the notice promises a verification mail, so a public build needs mail that is
+// actually sent (Cloudflare Email Service bound to the Worker), not the development outbox.
+const wrangler = (await import("node:fs")).readFileSync(new URL("../wrangler.jsonc", import.meta.url), "utf8")
+if (!/"send_email"\s*:/.test(wrangler))
+  blockers.push(
+    "No send_email binding in wrangler.jsonc: verification and tracking mails wouldn't be sent, though the form offers an email",
+  )
+
 if (blockers.length) {
   console.error("Not ready to publish the notices:\n" + blockers.map((b) => `  - ${b}`).join("\n"))
   process.exit(1)

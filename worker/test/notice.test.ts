@@ -1,12 +1,12 @@
-import { exports } from "cloudflare:workers"
+import { call } from "./app"
 import { expect, it } from "vitest"
 import { CURRENT_SUBMISSION_NOTICE, SUBMISSION_NOTICES } from "@/shared/contract"
 import { NOTICES } from "@/data/legal"
 
 const submit = (consent_version: string) =>
-  exports.default.fetch("http://local/api/v1/submissions", {
+  call("http://local/api/v1/submissions", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID().replaceAll("-", ""), "Turnstile-Token": "pass" },
     body: JSON.stringify({ kind: "bench", name_he: "ספסל דמו", lat: 31.42, lng: 34.49, consent_version }),
   })
 
@@ -20,10 +20,41 @@ it("refuses a submission that names a notice the site never showed", async () =>
   expect((await submit(CURRENT_SUBMISSION_NOTICE)).status).toBe(201)
 })
 
-it("describes the flow that exists: no tracking link to follow yet, and the photo stays on the device", () => {
+it("describes the flow that exists: a tracking link to follow and withdraw, and a photo sent for review", () => {
   const text = NOTICES[CURRENT_SUBMISSION_NOTICE]
-  expect(text).not.toContain("קישור המעקב")
+  expect(text).toContain("קישור המעקב")
+  expect(text).toContain("למשוך אותה")
+  expect(text).not.toContain("אין עדיין דף")
+  expect(text).toContain("לתקן אותה")
+  expect(text).not.toContain("כדי לתקן אותה, כתבו לנו")
+  expect(text).toContain("לחזור אליי לתיקון")
+  expect(text).toContain("תנאי השליחה")
   expect(text).toContain("התמונה")
-  expect(text).toContain("נשארת במכשיר")
-  expect(text).not.toContain("Turnstile")
+  expect(text).not.toContain("התמונה לא נשלחת")
+  expect(text).toContain("מתפרסמת רק אם המקום אושר")
+  expect(text).toContain("את התמונה צילמתי בעצמי")
+  expect(text).toContain("סימנתם שהמקום בשטח פרטי")
+  // The browser check runs now, so Cloudflare is named for it among the processors.
+  expect(text).toContain("Turnstile")
+  expect(text).toContain("מייל אימות")
+  expect(text).not.toContain("אין שדה למייל")
+})
+
+// Every version a form has ever shown. A device may still retry a queued submission under one of them, and its consent
+// record points to that text: removing a version would refuse the retry and orphan the record. Only append here.
+const SHOWN = [
+  "notice.submission@2026-10-2",
+  "notice.submission@2026-10-3",
+  "notice.submission@2026-10-4",
+  "notice.submission@2026-10-5",
+  "notice.submission@2026-10-6",
+]
+
+it("never drops a version a form has shown, and keeps each one's text", () => {
+  for (const v of SHOWN) {
+    expect(SUBMISSION_NOTICES).toContain(v)
+    expect(Object.keys(NOTICES)).toContain(v)
+  }
+  // New versions go at the end: the order is the order they were shown.
+  expect(SUBMISSION_NOTICES.slice(0, SHOWN.length)).toEqual(SHOWN)
 })

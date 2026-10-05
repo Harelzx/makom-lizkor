@@ -35,7 +35,7 @@ test("a place submitted without email is moderated, published, and seen in anoth
   await dialog.getByLabel("לזכר (לא חובה)").fill("נועה דמו")
   await dialog.getByRole("button", { name: "המשך" }).click()
   await dialog.getByText("הודעת הפרטיות", { exact: true }).click()
-  await expect(dialog.getByText("התמונה נשארת במכשיר שלכם", { exact: false })).toBeVisible()
+  await expect(dialog.getByText("מתפרסמת רק אם המקום אושר", { exact: false })).toBeVisible()
   for (const box of await dialog.getByRole("checkbox").all()) await box.check()
   const sent = visitor.waitForResponse((r) => r.url().endsWith("/api/v1/submissions") && r.status() === 201)
   await dialog.getByRole("button", { name: "שמירה והנחת כלנית" }).click()
@@ -43,7 +43,9 @@ test("a place submitted without email is moderated, published, and seen in anoth
   const body = (await sent).request().postDataJSON() as Record<string, unknown>
   expect(Object.keys(body)).not.toContain("email")
   // The version recorded is the notice the form showed.
-  expect(body.consent_version).toBe("notice.submission@2026-10-2")
+  expect(body.consent_version).toBe("notice.submission@2026-10-9")
+  // The browser check ran, and its single-use token went with the place.
+  expect((await sent).request().headers()["turnstile-token"]).toBeTruthy()
   // The submitter's own card says where the place went; it doesn't promise it stays only in this browser.
   await expect(visitor.getByText("נשלח לבדיקה", { exact: false }).first()).toBeVisible(DAY)
   await expect(visitor.getByText("נשמר רק בדפדפן הזה")).toHaveCount(0)

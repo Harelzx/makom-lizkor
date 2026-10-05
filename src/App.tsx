@@ -11,6 +11,8 @@ const Shell = lazy(() => import("@/components/shell").then((m) => ({ default: m.
 const Search = lazy(() => import("@/components/search").then((m) => ({ default: m.Search })))
 const About = lazy(() => import("@/components/about").then((m) => ({ default: m.About })))
 const AddPlace = lazy(() => import("@/components/add-place").then((m) => ({ default: m.AddPlace })))
+const Tracking = lazy(() => import("@/components/tracking").then((m) => ({ default: m.Tracking })))
+const VerifyEmail = lazy(() => import("@/components/verify-email").then((m) => ({ default: m.VerifyEmail })))
 
 /** Keep the URL and the selection in step, so a place can be linked and shared. */
 function useHashRoute() {
@@ -22,7 +24,18 @@ function useHashRoute() {
     const apply = (entering = false) => {
       const [, route, id] = location.hash.split("/")
       const s = useStore.getState()
-      if (route === "place" && id) {
+      // A tracking link opens the submission's status. The token is a private capability, so it leaves the address at
+      // once: it stays out of the history, a screen share and a copied address.
+      // An email verification link opens a page that asks for a click (a mail scanner following the link confirms
+      // nothing); its secret leaves the address the same way.
+      if (route === "verify" && id) {
+        s.setVerifying(decodeURIComponent(id))
+        history.replaceState(null, "", "#/")
+      } else if (route === "track" && id) {
+        const token = location.hash.split("/")[3]
+        if (token) s.setTracking({ id: decodeURIComponent(id), token: decodeURIComponent(token) })
+        history.replaceState(null, "", "#/")
+      } else if (route === "place" && id) {
         const pid = decodeURIComponent(id)
         // A link to a place that isn't here (a typo, an old link) opens the overview instead. Local places and approved
         // contributions (p_…) load later, so they're trusted.
@@ -44,17 +57,19 @@ function useHashRoute() {
     window.addEventListener("hashchange", onHash)
     return () => window.removeEventListener("hashchange", onHash)
   }, [phase])
-  // A contribution's link is trusted until the feed has come; if the feed doesn't have it (a typo, a rejected or hidden
-  // place), the link falls back to the overview, as any unknown link does.
+  // A contribution's link is trusted until the server's feed has come; if that feed doesn't have it (a typo, a rejected
+  // or hidden place), the link falls back to the overview, as any unknown link does. The offline copy doesn't count:
+  // a place approved since it was saved would fall back wrongly.
   const feedVersion = useStore((s) => s.feedVersion)
+  const feedLive = useStore((s) => s.feedLive)
   useEffect(() => {
     const s = useStore.getState()
     const id = s.selectedId
-    if (!feedVersion || !id?.startsWith("p_") || s.remote.some((p) => p.id === id)) return
+    if (!feedVersion || !feedLive || !id?.startsWith("p_") || s.remote.some((p) => p.id === id)) return
     history.replaceState(null, "", "#/")
     s.select(null)
     void import("@/map/controller").then((m) => m.flyToEnvelope(2400))
-  }, [feedVersion])
+  }, [feedVersion, feedLive])
   useEffect(() => {
     if (phase !== "day") return
     const next = selectedId ? `#/place/${encodeURIComponent(selectedId)}` : "#/"
@@ -77,6 +92,10 @@ export default function App() {
   // Dialogs load on first open and then stay mounted, so they can animate closed.
   const [aboutLoaded, setAboutLoaded] = useState(false)
   const [addLoaded, setAddLoaded] = useState(false)
+  const tracking = useStore((s) => s.tracking)
+  const [trackingLoaded, setTrackingLoaded] = useState(false)
+  if (tracking && !trackingLoaded) setTrackingLoaded(true)
+  const verifying = useStore((s) => s.verifying)
   if (aboutOpen && !aboutLoaded) setAboutLoaded(true)
   if (addOpen && !addLoaded) setAddLoaded(true)
   useHashRoute()
@@ -150,6 +169,8 @@ export default function App() {
         {(phase === "day" || searchOpen) && <Search />}
         {aboutLoaded && <About />}
         {addLoaded && <AddPlace />}
+        {trackingLoaded && <Tracking />}
+        {verifying && <VerifyEmail />}
       </Suspense>
       <Celebration />
       <Toaster position="top-center" />

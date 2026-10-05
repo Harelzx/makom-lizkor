@@ -14,7 +14,7 @@ import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "@/
 import { Anemone } from "@/components/anemone"
 import { ADDABLE_KINDS, KINDS } from "@/data/taxonomy"
 import { CONSENT_TEXT, FAMILY_CONSENT_TEXT, noticeHtml, PHOTO_RIGHTS_TEXT } from "@/data/legal"
-import { submitPlace } from "@/lib/api"
+import { newSubmitKey, submitPlace, uploadPhoto } from "@/lib/api"
 import { downloadJSON, resizeImage } from "@/lib/storage"
 import { getMap, reducedMotion } from "@/map/controller"
 import { useStore } from "@/store"
@@ -24,6 +24,25 @@ import { CURRENT_SUBMISSION_NOTICE, type SubmissionInput } from "@/shared/contra
 import type { Kind, Place } from "@/types"
 
 type Step = 0 | 1 | 2
+
+/** More places are waiting for review than the moderators can read: the form stops politely (spec 12). */
+const QUEUE_FULL = "אנחנו מקבלים עכשיו יותר הצעות ממה שאפשר לבדוק. ההצעה נשמרה במכשיר, ונשלח אותה לבד כשיתפנה מקום."
+
+/** What the visitor is told after saving: whether the server took the place, and whether this device kept a copy. */
+const SAVE_MESSAGE = {
+  sent: {
+    stored: "ההצעה נשלחה לבדיקה. היא תופיע לכולם אחרי אישור.",
+    unstored: "ההצעה נשלחה לבדיקה. לא הצלחנו לשמור עותק במכשיר הזה.",
+  },
+  temporary: {
+    stored: "לא הצלחנו לשלוח כרגע. ננסה שוב לבד כשהחיבור יחזור.",
+    unstored: "לא הצלחנו לשלוח כרגע, וגם לא לשמור עותק במכשיר הזה. ננסה שוב לבד כל עוד הדף פתוח.",
+  },
+  rejected: {
+    stored: "ההצעה לא התקבלה. המקום נשמר במכשיר הזה, ואפשר לכתוב לנו.",
+    unstored: "ההצעה לא התקבלה, ולא הצלחנו לשמור אותה במכשיר הזה. אפשר לכתוב לנו.",
+  },
+} as const
 
 // The form sends the place for review, so it shows the notice for submissions: the same version each submission records.
 const NOTICE_HTML = noticeHtml(CURRENT_SUBMISSION_NOTICE)
@@ -71,6 +90,7 @@ export function AddPlace() {
   const draft = useStore((s) => s.draft)
   const setDraft = useStore((s) => s.setDraft)
   const addLocal = useStore((s) => s.addLocal)
+  const updateLocal = useStore((s) => s.updateLocal)
   const select = useStore((s) => s.select)
   const local = useStore((s) => s.local)
   const importLocal = useStore((s) => s.importLocal)
@@ -97,6 +117,11 @@ export function AddPlace() {
   const [photoCredit, setPhotoCredit] = useState("")
   const [photoRights, setPhotoRights] = useState(false)
   const [submitter, setSubmitter] = useState("")
+  const [email, setEmail] = useState("")
+  // A place on private property: approximate unless the owner allowed the exact point, with a note on how to visit.
+  const [privateLand, setPrivateLand] = useState(false)
+  const [permission, setPermission] = useState(false)
+  const [accessNote, setAccessNote] = useState("")
   const [family, setFamily] = useState(false)
   const [consent, setConsent] = useState(false)
   const [error, setError] = useState("")
@@ -148,6 +173,10 @@ export function AddPlace() {
     setPhotoCredit("")
     setPhotoRights(false)
     setSubmitter("")
+    setEmail("")
+    setPrivateLand(false)
+    setPermission(false)
+    setAccessNote("")
     setFamily(false)
     setConsent(false)
     setError("")
@@ -178,6 +207,7 @@ export function AddPlace() {
       if (!draft) return fail("סמנו קודם את המקום על המפה.")
       if (draft.lat < 29.4 || draft.lat > 33.45 || draft.lng < 34.2 || draft.lng > 35.95)
         return fail("הנקודה מחוץ לאזור שהמפה מכסה. סמנו שוב.")
+      if (privateLand && permission && !accessNote.trim()) return fail("כדי להציג מיקום מדויק בשטח פרטי, כתבו איך מגיעים ומתי מותר לבקר.")
     }
     if (step === 1) {
       if (!name.trim()) return fail('כתבו איך נקרא המקום, למשל "הספסל של נועה".')
@@ -193,16 +223,19 @@ export function AddPlace() {
     if (!draft) return setStep(0)
     if (!family || !consent) return fail("כדי לשמור צריך לסמן את שתי ההצהרות.")
     if (saved || sending.current) return
+    if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return fail("כתובת המייל לא נראית תקינה.")
     sending.current = true
     setBusy(true)
     const now = new Date().toISOString()
+    const approximate = privateLand && !permission
     const place: Place = {
       id: `local-${Date.now().toString(36)}`,
       name_he: name.trim(),
       kind,
-      lat: +draft.lat.toFixed(6),
-      lng: +draft.lng.toFixed(6),
-      precision: "exact",
+      // Approximate on private property without permission: this device shows what will be published, not the exact pin.
+      lat: approximate ? +draft.lat.toFixed(2) : +draft.lat.toFixed(6),
+      lng: approximate ? +draft.lng.toFixed(2) : +draft.lng.toFixed(6),
+      precision: approximate ? "approx" : "exact",
       place_he: placeHe.trim() || "נוסף על ידי משפחה או חברים",
       summary_he: story.trim(),
       links: link ? [{ label_he: "קישור שצירפתם", url: `https://${link}` }] : [],
@@ -219,9 +252,9 @@ export function AddPlace() {
         photoCredit: photo ? photoCredit.trim() || undefined : undefined,
       },
     }
-    // Sent for review first; the local copy is kept either way, and steps aside once the approved place reaches the feed.
-    // The photo stays on this device until uploads arrive (phase 2).
-    const sent = await submitPlace({
+    // The copy on this device comes first, with the key and the exact body, so a send cut off by a closed tab or a lost
+    // answer is sent again as the same submission. The photo stays on this device until uploads arrive.
+    const submission: SubmissionInput = {
       kind: kind as SubmissionInput["kind"],
       name_he: place.name_he,
       lat: place.lat,
@@ -231,14 +264,38 @@ export function AddPlace() {
       story_he: story.trim() || undefined,
       link_url: link ? `https://${link}` : undefined,
       submitter_name: submitter.trim() || undefined,
-      on_private_property: false,
+      email: email.trim() || undefined,
+      on_private_property: privateLand,
+      location_permission: privateLand && permission,
+      access_note_he: privateLand && permission ? accessNote.trim() || undefined : undefined,
       consent_version: CURRENT_SUBMISSION_NOTICE,
-    })
-    if (sent && place.local) {
-      place.local.remoteId = sent.id
-      place.local.trackingToken = sent.trackingToken
     }
-    await addLocal(place)
+    let message: string
+    try {
+      Object.assign(place.local!, { submitKey: newSubmitKey(), submission, send: "sending" })
+      const stored = await addLocal(place)
+      const r = await submitPlace(submission, place.local!.submitKey!)
+      if (r.ok) {
+        await updateLocal(place.id, { send: "sent", remoteId: r.id, trackingToken: r.trackingToken })
+        // The photo follows the place; if it can't go now, the outbox sends it later.
+        if (photo) {
+          const sent = await uploadPhoto(r.id, r.trackingToken, photo, photoAlt.trim() || place.name_he, photoCredit.trim() || undefined)
+          if (sent !== "temporary") await updateLocal(place.id, sent === "ok" ? { photoSent: true } : { photoError: "refused" })
+        }
+      } else if (r.kind === "rejected") await updateLocal(place.id, { send: "rejected", sendError: r.code })
+      else
+        await updateLocal(place.id, {
+          send: "waiting",
+          sendError: r.code,
+          nextTryAt: r.retryAfter ? Date.now() + r.retryAfter * 1000 : undefined,
+        })
+      message = !r.ok && r.code === "queue_full" ? QUEUE_FULL : SAVE_MESSAGE[r.ok ? "sent" : r.kind][stored ? "stored" : "unstored"]
+    } catch {
+      // Nothing above should throw; if something does, the form stays usable rather than stuck on its button.
+      sending.current = false
+      setBusy(false)
+      return fail("משהו השתבש בשמירה. נסו שוב.")
+    }
     // The button confirms first; then the dialog steps aside and the map flies to the new flower.
     setSaved(true)
     navigator.vibrate?.([20, 40, 20])
@@ -256,10 +313,7 @@ export function AddPlace() {
         useStore.getState().setTab("places")
         select(place.id)
         useStore.getState().celebrate()
-        toast("הכלנית במקומה", {
-          description: sent ? "ההצעה נשלחה לבדיקה. היא תופיע לכולם אחרי אישור." : "לא הצלחנו לשלוח כרגע. המקום נשמר במכשיר הזה.",
-          duration: 6000,
-        })
+        toast("הכלנית במקומה", { description: message, duration: 8000 })
       },
       reducedMotion() ? 0 : 650,
     )
@@ -445,6 +499,37 @@ export function AddPlace() {
                             </AlertAction>
                           </Alert>
                         )}
+                        <Field orientation="horizontal">
+                          <Checkbox id={`${uid}-private`} checked={privateLand} onCheckedChange={(v) => setPrivateLand(v === true)} />
+                          <FieldLabel htmlFor={`${uid}-private`} className="leading-snug font-normal">
+                            המקום נמצא בשטח פרטי, למשל בחצר של בית
+                          </FieldLabel>
+                        </Field>
+                        {privateLand && (
+                          <FieldGroup className="gap-3 ps-7">
+                            <FieldDescription>
+                              נציג אותו במיקום משוער, ברמת היישוב, בלי ניווט אליו, ונשמור רק את הנקודה המעוגלת. מיקום מדויק יוצג רק ברשות
+                              הבעלים.
+                            </FieldDescription>
+                            <Field orientation="horizontal">
+                              <Checkbox id={`${uid}-permission`} checked={permission} onCheckedChange={(v) => setPermission(v === true)} />
+                              <FieldLabel htmlFor={`${uid}-permission`} className="leading-snug font-normal">
+                                בעלי השטח הסכימו שנציג את המיקום המדויק
+                              </FieldLabel>
+                            </Field>
+                            {permission && (
+                              <Field>
+                                <FieldLabel htmlFor={`${uid}-access`}>איך מגיעים ומתי מותר לבקר</FieldLabel>
+                                <Textarea
+                                  id={`${uid}-access`}
+                                  value={accessNote}
+                                  onChange={(e) => setAccessNote(e.target.value)}
+                                  maxLength={300}
+                                />
+                              </Field>
+                            )}
+                          </FieldGroup>
+                        )}
                         <div className="flex flex-col gap-2 rounded-2xl bg-surface-2 p-4">
                           <p className="text-label text-ink-1">המקומות שהוספתם</p>
                           <p className="text-caption text-ink-2">
@@ -620,7 +705,9 @@ export function AddPlace() {
                               בחירת תמונה
                             </label>
                           )}
-                          <FieldDescription>התמונה מוקטנת ונשמרת רק במכשיר הזה. נתוני המיקום שבקובץ נמחקים.</FieldDescription>
+                          <FieldDescription>
+                            התמונה מוקטנת, ונתוני המיקום שבקובץ נמחקים. היא נשלחת לבדיקה עם המקום, ומתפרסמת רק אם המקום אושר.
+                          </FieldDescription>
                         </Field>
                         {photo && (
                           <>
@@ -670,6 +757,22 @@ export function AddPlace() {
                             maxLength={60}
                             placeholder="למשל: המשפחה, חברים מהקיבוץ"
                           />
+                        </Field>
+                        <Field>
+                          <FieldLabel htmlFor={`${uid}-email`}>מייל (לא חובה)</FieldLabel>
+                          <Input
+                            id={`${uid}-email`}
+                            type="email"
+                            dir="ltr"
+                            autoComplete="email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            maxLength={254}
+                          />
+                          <FieldDescription>
+                            נשלח אליו קודם מייל אימות, בלי פרטים על המקום. אחרי האימות נשלח את קישור המעקב ועדכון כשתתקבל החלטה. המייל לא
+                            יתפרסם.
+                          </FieldDescription>
                         </Field>
                         <Field orientation="horizontal">
                           <Checkbox id={`${uid}-family`} checked={family} onCheckedChange={(v) => setFamily(v === true)} />

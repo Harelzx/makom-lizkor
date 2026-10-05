@@ -66,12 +66,12 @@ export const LEGAL_SECTIONS: { id: string; title: string; html: string }[] = [
     title: "פרטיות",
     html: `
 <p><strong>מי אחראי על המידע:</strong> {{OPERATOR}}, שמפעיל את האתר באופן פרטי והתנדבותי. ליצירת קשר: ${MAIL}.</p>
-<p><strong>מקום שאתם מוסיפים נשלח אלינו לבדיקה.</strong> סוג המקום, השם, הנקודה על המפה, היישוב, למי הוא מוקדש, הסיפור והקישור נשלחים לשרת של האתר. מאשר בודק אותם, והמקום יופיע לכל הגולשים רק אחרי שיאושר. אם כתבתם את השם שלכם, הוא נשמר בנפרד ולא מתפרסם. אין חובה לשלוח: בלי זה המקום פשוט לא יופיע אצל אחרים. ההודעה המלאה מוצגת בטופס ההוספה, לפני השליחה.</p>
-<p><strong>התמונה לא נשלחת בגרסה הזו.</strong> היא מוקטנת, נתוני המיקום שהמצלמה שומרת בקובץ (EXIF) נמחקים, והיא נשארת רק במכשיר שלכם. עותק של המקום נשמר גם בדפדפן; מחיקה שלו מהמכשיר לא מושכת את ההצעה. כדי לברר מה קרה עם הצעה, לתקן אותה או למשוך אותה, כתבו לנו.</p>
+<p><strong>מקום שאתם מוסיפים נשלח אלינו לבדיקה.</strong> סוג המקום, השם, הנקודה על המפה, היישוב, למי הוא מוקדש, הסיפור והקישור נשלחים לשרת של האתר. מאשר בודק אותם, והמקום יופיע לכל הגולשים רק אחרי שיאושר. אם כתבתם את השם שלכם או מייל, הם נשמרים בנפרד ולא מתפרסמים. למייל נשלח קודם מייל אימות, בלי פרטים על המקום, ורק אחרי שתאשרו אותו נשלח אליו את קישור המעקב ועדכון כשתתקבל החלטה. אין חובה לשלוח: בלי זה המקום פשוט לא יופיע אצל אחרים. ההודעה המלאה מוצגת בטופס ההוספה, לפני השליחה.</p>
+<p><strong>תמונה.</strong> היא מוקטנת, ונתוני המיקום ושאר הנתונים שהמצלמה שומרת בקובץ (EXIF) נמחקים, בדפדפן ושוב בשרת. היא נשלחת לבדיקה עם המקום, ומתפרסמת רק אם המקום אושר; תמונה שלא אושרה נמחקת. עותק של המקום נשמר גם בדפדפן; מחיקה שלו מהמכשיר לא מושכת את ההצעה. את מצב ההצעה רואים בקישור המעקב שמוצג אחרי השליחה, ושם אפשר גם לתקן אותה או למשוך אותה: המשיכה מוחקת אותה מהשרת מיד. אם החזרנו הצעה לתיקון, ההערה שלנו מופיעה שם, ושם שולחים אותה מחדש.</p>
 <p><strong>אם תכתבו לנו במייל.</strong> נשתמש במה שכתבתם רק כדי לטפל בפנייה ולחזור אליכם. המייל נשמר בתיבת הדואר של הפרויקט אצל {{MAIL_PROVIDER}}, שמאחסן אותו ב{{MAIL_STORED_IN}} ועשוי לעבד אותו גם במדינות אחרות. כל מייל נשמר בתיבה לכל היותר {{MAIL_MAX}} מהיום שהגיע, ונמחק קודם כשצריך, למשל אם תבקשו. אצל ספק הדואר הוא נמחק תוך {{MAIL_TAIL}} נוספים.</p>
-<p><strong>המיקום שלכם.</strong> הכפתור "המיקום הנוכחי שלי" מבקש מהדפדפן את המיקום שלכם רק כשלוחצים עליו, ורק כדי לסמן את המקום שאתם מוסיפים. נשמרת רק הנקודה של המקום, בלי השעה ובלי הדיוק של האיתור. הנקודה נשלחת עם המקום, ואם הוא יאושר, היא תוצג במדויק. אם המקום בשטח פרטי, אל תשלחו נקודה מדויקת בלי רשות הבעלים: כתבו לנו, ונציג אותו במיקום משוער, ברמת היישוב.</p>
-<p><strong>מה נשמר בדפדפן.</strong> אם כבר צפיתם בפתיחה, ואם בחרתם לצפות בה עם צליל, כדי שלא תצטרכו לבחור שוב; המקומות שהוספתם, עם המזהה של כל הצעה שנשלחה; והכלניות שהשארתם. אין באתר עוגיות, כלי מדידה או פרסום.</p>
-<p><strong>שירותים חיצוניים.</strong> האתר מוגש דרך {{HOSTING}}. המפה נטענת מהשרתים של OpenFreeMap, ונתוני הגובה מ־Amazon Web Services. כמו בכל טעינה של תוכן חיצוני, השרתים האלה מקבלים את כתובת ה־IP שלכם. כפתורי הניווט פותחים את Waze או את Google Maps, לפי התנאים שלהם.</p>
+<p><strong>המיקום שלכם.</strong> הכפתור "המיקום הנוכחי שלי" מבקש מהדפדפן את המיקום שלכם רק כשלוחצים עליו, ורק כדי לסמן את המקום שאתם מוסיפים. נשמרת רק הנקודה של המקום, בלי השעה ובלי הדיוק של האיתור. הנקודה נשלחת עם המקום, ואם הוא יאושר, היא תוצג במדויק. אם תסמנו בטופס שהמקום בשטח פרטי, נציג אותו במיקום משוער, ברמת היישוב, בלי ניווט אליו, ונשמור רק את הנקודה המעוגלת; מיקום מדויק יוצג רק ברשות הבעלים.</p>
+<p><strong>מה נשמר בדפדפן.</strong> אם כבר צפיתם בפתיחה, ואם בחרתם לצפות בה עם צליל, כדי שלא תצטרכו לבחור שוב; המקומות שהוספתם, עם המזהה של כל הצעה שנשלחה; הכלניות שהשארתם; ועותק של המקומות שאושרו, כדי שהמפה תעבוד גם בלי חיבור. אין באתר עוגיות, כלי מדידה או פרסום.</p>
+<p><strong>שירותים חיצוניים.</strong> האתר מוגש דרך {{HOSTING}}. כשאתם שולחים מקום או תיקון, בדיקת הבוטים של Cloudflare (Turnstile) רצה בדפדפן. המפה נטענת מהשרתים של OpenFreeMap, ונתוני הגובה מ־Amazon Web Services. כמו בכל טעינה של תוכן חיצוני, השרתים האלה מקבלים את כתובת ה־IP שלכם. כפתורי הניווט פותחים את Waze או את Google Maps, לפי התנאים שלהם.</p>
 <p><strong>הזכויות שלכם.</strong> לעיין במידע שלכם שנמצא אצלנו ולבקש לתקן אותו. נשיב תוך {{ACCESS_DAYS}}.</p>`,
   },
   {
@@ -159,6 +159,90 @@ ${SEEN_BY_NOW}
 <p><strong>כמה זמן:</strong> השם שלכם נמחק {{CONTACT_AFTER_CLOSE}} אחרי שהטיפול בהצעה הסתיים, ולכל המאוחר {{CONTACT_MAX}} אחרי השליחה. מהגיבויים שלנו הוא נמחק תוך {{BACKUP_TAIL}} נוספים. מיילים שהתכתבנו בהם נשמרים בתיבת הדואר לכל היותר {{MAIL_MAX}} מהיום שהתקבלו או נשלחו, ונמחקים קודם כשצריך. אצל ספק הדואר הם נמחקים תוך {{MAIL_TAIL}} נוספים.</p>
 ${RIGHTS}`
 
+// The terms of sending, as version 3 shows them; later versions repeat them word for word.
+const SUBMISSION_TERMS = `
+<p><strong>תנאי השליחה.</strong> בשליחת ההצעה אני מאשר או מאשרת:</p>
+<ul>
+<li>אני בן או בת 18 ומעלה, או שהורה או אפוטרופוס הסכים.</li>
+<li>הפרטים נכונים למיטב ידיעתי. אם הוספתי פרטים אישיים על מי שהמקום מנציח, אני בן משפחה או שקיבלתי את רשות המשפחה.</li>
+<li>אני נותן או נותנת למפעיל האתר רשות, לא בלעדית ובלי תמורה, להציג באתר ובתמונות השיתוף שלו את מה ששלחתי. הזכויות נשארות שלי, ואפשר לבקש להסיר את התוכן בכל עת.</li>
+<li>ההצעה תיבדק לפני שתתפרסם, ויכולה להתאשר או להידחות. איש לא ישכתב את מה שכתבתי.</li>
+<li>לא כללתי תיאור של נסיבות המוות מעבר למה שהמשפחה בחרה לשתף, פוליטיקה או האשמות, פרטים על אנשים חיים בלי הסכמתם, קישורי תרומה או פרסום, הזדהות עם טרור או הכחשה של הטבח.</li>
+</ul>`
+
+// Version 3 with the tracking page: the status and the withdrawal are now in the link, not by email to us.
+const SUBMISSION_TRACKED = SUBMISSION_NOW.replace(
+  "השם שלכם רשות. בגרסה הזו אין שדה למייל, ואין עדיין דף שבו רואים מה קרה עם ההצעה: כדי לברר, לתקן אותה או למשוך אותה, כתבו לנו.</p>",
+  "השם שלכם רשות. בגרסה הזו אין שדה למייל. את מצב ההצעה רואים בקישור המעקב, ושם אפשר גם למשוך אותה. כדי לתקן אותה, כתבו לנו.</p>",
+).replace(
+  SEEN_BY_NOW,
+  `${SEEN_BY_NOW}
+<p><strong>קישור המעקב</strong> מוצג לכם אחרי השליחה ונשמר במכשיר שלכם. מי שיש לו את הקישור יכול לראות את מצב ההצעה ולמשוך אותה, ולכן כדאי לא להעביר אותו הלאה. משיכה מוחקת מיד מהשרת את ההצעה ואת השם שלכם; מהגיבויים שלנו הם נמחקים תוך {{BACKUP_TAIL}} נוספים.</p>`,
+)
+
+// Version 4 with corrections: a returned or published place is corrected through the tracking link, and a returned one
+// that isn't corrected goes after 30 days.
+const SUBMISSION_CORRECTABLE = SUBMISSION_TRACKED.replace(
+  "את מצב ההצעה רואים בקישור המעקב, ושם אפשר גם למשוך אותה. כדי לתקן אותה, כתבו לנו.",
+  "את מצב ההצעה רואים בקישור המעקב, ושם אפשר גם לתקן אותה או למשוך אותה. אם החזרנו אותה אליכם לתיקון עם הערה, שם שולחים אותה מחדש. הצעה שהוחזרה ולא תוקנה תוך 30 יום נמחקת.",
+)
+const SUBMISSION_TERMS_RETURNS = SUBMISSION_TERMS.replace(
+  "ההצעה תיבדק לפני שתתפרסם, ויכולה להתאשר או להידחות.",
+  "ההצעה, וכל תיקון שלה, ייבדקו לפני שיתפרסמו, ויכולים להתאשר, להידחות או לחזור אליי לתיקון עם הערה.",
+)
+
+// Version 5 with the browser check live: Cloudflare's Turnstile is named among the processors again.
+const SUBMISSION_GUARDED = SUBMISSION_CORRECTABLE.replace(SEEN_BY_NOW, SEEN_BY)
+
+// Version 6 with the optional email: verified first, then the tracking link and decisions; kept and erased with the name.
+const SUBMISSION_WITH_EMAIL = [
+  ["השם שלכם רשות. בגרסה הזו אין שדה למייל.", "השם שלכם והמייל רשות. בלי מייל לא נוכל לעדכן אתכם, ואת מצב ההצעה תראו בקישור המעקב."],
+  [
+    "<strong>למה:</strong> כדי לבדוק את ההצעה ולפרסם אותה באתר אם תאושר.",
+    "<strong>למה:</strong> כדי לבדוק את ההצעה, לפרסם אותה באתר אם תאושר, ולעדכן אתכם אם השארתם מייל. אימות המייל רק מוודא שהכתובת שלכם; הוא לא מאמת קרבה משפחתית או בעלות על תמונה.",
+  ],
+  ["השם שלכם לא יתפרסם.", "השם שלכם והמייל לא יתפרסמו."],
+  ["<strong>כמה זמן:</strong> השם שלכם נמחק", "<strong>כמה זמן:</strong> השם והמייל שלכם נמחקים"],
+  ["מהגיבויים שלנו הוא נמחק", "מהגיבויים שלנו הם נמחקים"],
+  [
+    "<p><strong>קישור המעקב</strong>",
+    "<p><strong>מייל:</strong> אם השארתם כתובת, נשלח אליה קודם מייל אימות, בלי פרטים על המקום. רק אחרי שתאשרו אותה באתר נשלח אליה את קישור המעקב, ועדכון כשתתקבל החלטה, כולל הערת המאשרים אם החזרנו את ההצעה לתיקון. קישור האימות בתוקף 7 ימים.</p>\n<p><strong>קישור המעקב</strong>",
+  ],
+].reduce((text, [from, to]) => {
+  if (!text.includes(from)) throw new Error(`notice 2026-10-7: "${from}" not found`)
+  return text.replace(from, to)
+}, SUBMISSION_GUARDED)
+
+/** Applies exact replacements, and fails loudly if a phrase is missing: a later version is never a silent no-op. */
+const amend = (version: string, text: string, changes: [string, string][]) =>
+  changes.reduce((t, [from, to]) => {
+    if (!t.includes(from)) throw new Error(`notice ${version}: "${from}" not found`)
+    return t.replace(from, to)
+  }, text)
+
+// Version 7 with the photo sent for review: it is published only with an approved place, and the terms cover it.
+const SUBMISSION_WITH_PHOTO = amend("2026-10-8", SUBMISSION_WITH_EMAIL, [
+  [
+    "<p><strong>תמונה:</strong> בגרסה הזו התמונה לא נשלחת. התמונה נשארת במכשיר שלכם, מוקטנת ובלי נתוני המיקום שהמצלמה שומרת בקובץ.</p>",
+    "<p><strong>תמונה:</strong> אם צירפתם תמונה, היא נשלחת לבדיקה יחד עם המקום, מוקטנת ובלי נתוני המיקום ושאר הנתונים שהמצלמה שומרת בקובץ. היא מתפרסמת רק אם המקום אושר, עם התיאור ושם הצלם שכתבתם. תמונה שלא אושרה נמחקת תוך {{REJECTED_PHOTO}}.</p>",
+  ],
+  ["היישוב, למי הוא מוקדש, הסיפור והקישור.", "היישוב, למי הוא מוקדש, הסיפור, הקישור והתמונה עם התיאור ושם הצלם."],
+])
+const SUBMISSION_TERMS_PHOTO = amend("2026-10-8", SUBMISSION_TERMS_RETURNS, [
+  [
+    "<li>ההצעה, וכל תיקון שלה,",
+    "<li>את התמונה צילמתי בעצמי, או שקיבלתי רשות לפרסם אותה, ומי שמופיע בה הסכים. אין בה גופה או פצוע.</li>\n<li>ההצעה, וכל תיקון שלה,",
+  ],
+])
+
+// Version 8 with private property in the form: approximate by default, exact only with the owner's permission.
+const SUBMISSION_PRIVATE = amend("2026-10-9", SUBMISSION_WITH_PHOTO, [
+  [
+    "אם המקום בשטח פרטי, אל תשלחו נקודה מדויקת בלי רשות הבעלים: כתבו לנו, ונציג אותו במיקום משוער.",
+    "אם סימנתם שהמקום בשטח פרטי, נציג אותו במיקום משוער, ברמת היישוב, בלי ניווט אליו, ונשמור רק את הנקודה המעוגלת. מיקום מדויק בשטח פרטי יוצג רק אם סימנתם שהבעלים הסכימו, יחד עם מה שכתבתם על הדרך לבקר.",
+  ],
+])
+
 export const NOTICES = {
   // Drafted for the full flow (email, tracking link, photo upload) that later phases build; the form no longer shows it.
   "notice.submission@2026-10-1": `
@@ -179,15 +263,25 @@ ${RIGHTS}
 
   // Version 2 plus the terms of sending: once places are published, the sender's permission to show what they wrote,
   // their age and the content rules have to be agreed to, not only the privacy notice read.
-  "notice.submission@2026-10-3": `${SUBMISSION_NOW}
-<p><strong>תנאי השליחה.</strong> בשליחת ההצעה אני מאשר או מאשרת:</p>
-<ul>
-<li>אני בן או בת 18 ומעלה, או שהורה או אפוטרופוס הסכים.</li>
-<li>הפרטים נכונים למיטב ידיעתי. אם הוספתי פרטים אישיים על מי שהמקום מנציח, אני בן משפחה או שקיבלתי את רשות המשפחה.</li>
-<li>אני נותן או נותנת למפעיל האתר רשות, לא בלעדית ובלי תמורה, להציג באתר ובתמונות השיתוף שלו את מה ששלחתי. הזכויות נשארות שלי, ואפשר לבקש להסיר את התוכן בכל עת.</li>
-<li>ההצעה תיבדק לפני שתתפרסם, ויכולה להתאשר או להידחות. איש לא ישכתב את מה שכתבתי.</li>
-<li>לא כללתי תיאור של נסיבות המוות מעבר למה שהמשפחה בחרה לשתף, פוליטיקה או האשמות, פרטים על אנשים חיים בלי הסכמתם, קישורי תרומה או פרסום, הזדהות עם טרור או הכחשה של הטבח.</li>
-</ul>`,
+  "notice.submission@2026-10-3": `${SUBMISSION_NOW}${SUBMISSION_TERMS}`,
+
+  // Version 3 for the flow with a tracking page: the sender sees the status and withdraws by the link.
+  "notice.submission@2026-10-4": `${SUBMISSION_TRACKED}${SUBMISSION_TERMS}`,
+
+  // Version 4 with corrections and returns through the tracking link.
+  "notice.submission@2026-10-5": `${SUBMISSION_CORRECTABLE}${SUBMISSION_TERMS_RETURNS}`,
+
+  // Version 5 with Turnstile running before a place or a correction is sent.
+  "notice.submission@2026-10-6": `${SUBMISSION_GUARDED}${SUBMISSION_TERMS_RETURNS}`,
+
+  // Version 6 with the optional email.
+  "notice.submission@2026-10-7": `${SUBMISSION_WITH_EMAIL}${SUBMISSION_TERMS_RETURNS}`,
+
+  // Version 7 with the photo sent for review.
+  "notice.submission@2026-10-8": `${SUBMISSION_WITH_PHOTO}${SUBMISSION_TERMS_PHOTO}`,
+
+  // Version 8 with private property marked in the form.
+  "notice.submission@2026-10-9": `${SUBMISSION_PRIVATE}${SUBMISSION_TERMS_PHOTO}`,
 
   "notice.report@2026-10-1": `
 ${WHO}

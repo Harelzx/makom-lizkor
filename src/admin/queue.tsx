@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
+import { Textarea } from "@/components/ui/textarea"
 import { KINDS } from "@/data/taxonomy"
 import type { Kind } from "@/types"
 
@@ -13,6 +15,11 @@ interface Item {
   lng: number
   location_precision: "exact" | "approximate"
   link_url: string | null
+  /** 1 when this is a correction of a place that is already published (the published version stays live meanwhile). */
+  correction: number
+  photo_url: string | null
+  photo_alt: string | null
+  photo_credit: string | null
   place_he: string | null
   in_memory_of: string | null
   story_he: string | null
@@ -27,6 +34,62 @@ async function fetchQueue(): Promise<Item[] | string> {
   } catch {
     return "אין חיבור לשרת."
   }
+}
+
+type Action = "approve" | "reject" | "return"
+
+/**
+ * Approve, reject, or return to the sender with a note. The note is the only thing a moderator writes: a returned
+ * place comes back as the sender's own correction.
+ */
+function Decision({
+  item,
+  busy,
+  decide,
+}: {
+  item: Item
+  busy: boolean
+  decide: (item: Item, action: Action, note?: string) => Promise<void>
+}) {
+  const [returning, setReturning] = useState(false)
+  const [note, setNote] = useState("")
+  if (returning)
+    return (
+      <form
+        className="mt-3 flex flex-col gap-2"
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (note.trim()) void decide(item, "return", note.trim())
+        }}
+      >
+        <Field>
+          <FieldLabel htmlFor={`note-${item.id}`}>הערה למגיש</FieldLabel>
+          <Textarea id={`note-${item.id}`} value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} required />
+          <FieldDescription>מה צריך לתקן. ההערה מוצגת למי ששלח את ההצעה, בקישור המעקב שלו.</FieldDescription>
+        </Field>
+        <div className="flex gap-2">
+          <Button type="submit" className="pressable" disabled={busy || !note.trim()}>
+            שליחת ההחזרה
+          </Button>
+          <Button type="button" variant="ghost" className="pressable" onClick={() => setReturning(false)}>
+            ביטול
+          </Button>
+        </div>
+      </form>
+    )
+  return (
+    <div className="mt-3 flex flex-wrap gap-2">
+      <Button className="pressable" disabled={busy} onClick={() => decide(item, "approve")}>
+        אישור
+      </Button>
+      <Button className="pressable" variant="outline" disabled={busy} onClick={() => setReturning(true)}>
+        החזרה לתיקון
+      </Button>
+      <Button className="pressable" variant="ghost" disabled={busy} onClick={() => decide(item, "reject")}>
+        דחייה
+      </Button>
+    </div>
+  )
 }
 
 /** The moderation queue: read a submission, approve or reject it. Moderators never edit what a contributor wrote. */
@@ -51,14 +114,14 @@ export function Queue() {
     }
   }, [])
 
-  const decide = async (item: Item, action: "approve" | "reject") => {
+  const decide = async (item: Item, action: Action, note?: string) => {
     setBusy(item.id)
     setError("")
     try {
       const res = await fetch(`/api/admin/places/${item.id}/transitions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, revisionId: item.revisionId, expectedRev: item.rev }),
+        body: JSON.stringify({ action, revisionId: item.revisionId, expectedRev: item.rev, ...(note ? { note } : {}) }),
       })
       if (res.status === 409) setError("מישהו אחר כבר טיפל בהצעה הזו.")
       else if (!res.ok) setError("הפעולה לא נשמרה. נסו שוב.")
@@ -83,6 +146,7 @@ export function Queue() {
         <div className="mt-6 grid gap-4">
           {items?.map((item) => (
             <article key={item.id} aria-label={item.name_he} className="rounded-2xl border border-line p-4">
+              {!!item.correction && <p className="text-caption text-ink-2">תיקון למקום שכבר מופיע באתר</p>}
               <h2 className="text-label font-bold text-ink-1">{item.name_he}</h2>
               <p className="text-caption text-ink-2">
                 {[KINDS[item.kind].label, item.place_he, item.in_memory_of && `לזכר ${item.in_memory_of}`].filter(Boolean).join(" · ")}
@@ -105,15 +169,16 @@ export function Queue() {
                   {item.link_url}
                 </p>
               )}
+              {item.photo_url && (
+                <figure className="mt-2">
+                  <img src={item.photo_url} alt={item.photo_alt ?? ""} className="max-h-64 rounded-xl object-contain" />
+                  <figcaption className="text-caption text-ink-2">
+                    {[item.photo_alt, item.photo_credit && `צילום: ${item.photo_credit}`].filter(Boolean).join(" · ")}
+                  </figcaption>
+                </figure>
+              )}
               {item.story_he && <p className="mt-2 whitespace-pre-line text-ink-1">{item.story_he}</p>}
-              <div className="mt-3 flex gap-2">
-                <Button className="pressable" disabled={busy === item.id} onClick={() => decide(item, "approve")}>
-                  אישור
-                </Button>
-                <Button className="pressable" variant="ghost" disabled={busy === item.id} onClick={() => decide(item, "reject")}>
-                  דחייה
-                </Button>
-              </div>
+              <Decision item={item} busy={busy === item.id} decide={decide} />
             </article>
           ))}
         </div>

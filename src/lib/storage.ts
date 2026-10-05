@@ -1,25 +1,40 @@
-import { createStore, get, set } from "idb-keyval"
+import { createStore, get, set, type UseStore } from "idb-keyval"
 import type { Place } from "@/types"
 
 // The visitor's own copy of what they added, and their anemones, in this browser's IndexedDB. A place is also sent
 // for review (src/lib/api.ts); its photo and the anemones stay here.
-const store = createStore("makom-lizkor-v2", "v1")
+let store: UseStore | null | undefined
+/** Null when the browser won't give us IndexedDB (a private window, a blocked site): the site works without it. */
+function db(): UseStore | null {
+  if (store === undefined) {
+    try {
+      store = createStore("makom-lizkor-v2", "v1")
+    } catch {
+      store = null
+    }
+  }
+  return store
+}
 
 export async function loadLocal(): Promise<Place[]> {
   try {
-    return (await get<Place[]>("local", store)) ?? []
+    const s = db()
+    return (s && (await get<Place[]>("local", s))) ?? []
   } catch {
     return []
   }
 }
 
 export async function saveLocal(places: Place[]): Promise<void> {
-  await set("local", places, store)
+  const s = db()
+  if (!s) throw new Error("storage_unavailable")
+  await set("local", places, s)
 }
 
 export async function loadTributes(): Promise<Record<string, number>> {
   try {
-    return (await get<Record<string, number>>("tributes", store)) ?? {}
+    const s = db()
+    return (s && (await get<Record<string, number>>("tributes", s))) ?? {}
   } catch {
     return {}
   }
@@ -27,9 +42,29 @@ export async function loadTributes(): Promise<Record<string, number>> {
 
 export async function saveTributes(t: Record<string, number>): Promise<void> {
   try {
-    await set("tributes", t, store)
+    const s = db()
+    if (s) await set("tributes", t, s)
   } catch {
     /* a tribute that isn't saved is still a tribute */
+  }
+}
+
+/** The last feed this browser received, kept whole: what the map shows with no connection (spec 5). */
+export async function loadSnapshot(): Promise<unknown> {
+  try {
+    const s = db()
+    return s ? await get("feed", s) : undefined
+  } catch {
+    return undefined
+  }
+}
+
+export async function saveSnapshot(feed: unknown): Promise<void> {
+  try {
+    const s = db()
+    if (s) await set("feed", feed, s)
+  } catch {
+    /* without storage there is simply no offline copy */
   }
 }
 

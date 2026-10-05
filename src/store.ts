@@ -1,6 +1,6 @@
 import { create } from "zustand"
 import seed from "@/data/places.json"
-import type { Place } from "@/types"
+import type { LocalFields, Place } from "@/types"
 import { loadLocal, loadTributes, saveLocal, saveTributes } from "@/lib/storage"
 
 /** intro: 06:29, the dark map and the opening words · dawn: the sunrise is playing · day: the site itself */
@@ -11,10 +11,11 @@ export type Light = "morning" | "night"
 /** Set once the opening has been seen through; later visits go straight to the name. */
 export const INTRO_SEEN = "makom-lizkor:v2-seen"
 /** A shared link to a place lands on that place: the opening is for those who come in through the front door. */
-const linkedToPlace = () => typeof location !== "undefined" && /^#\/place\/[^/]+/.test(location.hash)
+// A tracking link (#/track/<id>/<token>) is opened for its status, so it skips the opening too.
+const linkedToPlace = () => typeof location !== "undefined" && /^#\/(place|track|verify)\/[^/]+/.test(location.hash)
 /** The place a shared link names, chosen before the first render so the address is never rewritten under it. */
 const linkedPlaceId = () => {
-  if (!linkedToPlace()) return null
+  if (!linkedToPlace() || !location.hash.startsWith("#/place/")) return null
   const id = decodeURIComponent(location.hash.split("/")[2])
   // Local places and approved contributions (p_…) load after the first render, so their ids are trusted.
   return id.startsWith("local-") || id.startsWith("p_") || (seed as Place[]).some((p) => p.id === id) ? id : null
@@ -27,6 +28,8 @@ interface State {
   /** Contributions a moderator approved, from the server's feed. */
   remote: Place[]
   feedVersion: string | null
+  /** True once a feed came from the server in this visit; false while only the offline copy is shown. */
+  feedLive: boolean
   local: Place[]
   tributes: Record<string, number>
   selectedId: string | null
@@ -37,6 +40,10 @@ interface State {
   aboutOpen: boolean
   /** About can open straight at one of its sections: the statement, the privacy notice, the terms. */
   aboutSection: string | null
+  /** The submission whose status is open, from its private tracking link. Kept here, never in the address. */
+  tracking: { id: string; token: string } | null
+  /** An email verification link's secret, while its confirmation page is open. Never kept in the address. */
+  verifying: string | null
   searchOpen: boolean
   picking: boolean
   draft: { lat: number; lng: number } | null
@@ -57,11 +64,15 @@ interface State {
   setAddOpen: (v: boolean) => void
   setAboutOpen: (v: boolean) => void
   openAbout: (section: string) => void
+  setTracking: (t: { id: string; token: string } | null) => void
+  setVerifying: (token: string | null) => void
   setSearchOpen: (v: boolean) => void
   setPicking: (v: boolean) => void
   setDraft: (p: { lat: number; lng: number } | null) => void
-  setRemote: (v: string, places: Place[]) => void
-  addLocal: (p: Place) => Promise<void>
+  setRemote: (v: string, places: Place[], live?: boolean) => void
+  /** Both keep the change in memory and say whether it was also saved on the device; they never throw. */
+  addLocal: (p: Place) => Promise<boolean>
+  updateLocal: (id: string, patch: Partial<LocalFields>) => Promise<boolean>
   removeLocal: (id: string) => Promise<void>
   importLocal: (places: Place[]) => Promise<number>
   leaveAnemone: (id: string) => void
@@ -70,12 +81,20 @@ interface State {
   replayIntro: () => void
 }
 
+/** Saves the visitor's places on the device; false when the browser won't keep them (a private window, a full disk). */
+const persist = (local: Place[]) =>
+  saveLocal(local).then(
+    () => true,
+    () => false,
+  )
+
 export const useStore = create<State>((set, get) => ({
   phase: linkedToPlace() ? "day" : "intro",
   light: "morning",
   seed: seed as Place[],
   remote: [],
   feedVersion: null,
+  feedLive: false,
   local: [],
   tributes: {},
   selectedId: linkedPlaceId(),
@@ -85,6 +104,8 @@ export const useStore = create<State>((set, get) => ({
   addOpen: false,
   aboutOpen: false,
   aboutSection: null,
+  tracking: null,
+  verifying: null,
   searchOpen: false,
   picking: false,
   draft: null,
@@ -94,7 +115,9 @@ export const useStore = create<State>((set, get) => ({
   introRun: 0,
 
   init: async () => {
-    const [local, tributes] = await Promise.all([loadLocal(), loadTributes()])
+    const [stored, tributes] = await Promise.all([loadLocal(), loadTributes()])
+    // A place still "sending" is from a visit that closed mid-send; nothing is sending it now, so it waits for a retry.
+    const local = stored.map((p) => (p.local?.send === "sending" ? { ...p, local: { ...p.local, send: "waiting" as const } } : p))
     set({ local, tributes })
   },
   setPhase: (phase) => set({ phase }),
@@ -106,14 +129,21 @@ export const useStore = create<State>((set, get) => ({
   setAddOpen: (addOpen) => set({ addOpen, picking: addOpen ? get().picking : false, draft: addOpen ? get().draft : null }),
   setAboutOpen: (aboutOpen) => set({ aboutOpen, aboutSection: null }),
   openAbout: (aboutSection) => set({ aboutOpen: true, aboutSection, searchOpen: false }),
+  setTracking: (tracking) => set({ tracking, searchOpen: false }),
+  setVerifying: (verifying) => set({ verifying, searchOpen: false }),
   setSearchOpen: (searchOpen) => set({ searchOpen }),
   setPicking: (picking) => set({ picking }),
   setDraft: (draft) => set({ draft }),
-  setRemote: (feedVersion, remote) => set({ feedVersion, remote }),
+  setRemote: (feedVersion, remote, live = true) => set({ feedVersion, remote, feedLive: live || get().feedLive }),
   addLocal: async (p) => {
     const local = [...get().local, p]
     set({ local })
-    await saveLocal(local)
+    return persist(local)
+  },
+  updateLocal: async (id, patch) => {
+    const local = get().local.map((p) => (p.id === id && p.local ? { ...p, local: { ...p.local, ...patch } } : p))
+    set({ local })
+    return persist(local)
   },
   removeLocal: async (id) => {
     const local = get().local.filter((p) => p.id !== id)
