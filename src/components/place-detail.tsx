@@ -7,7 +7,7 @@ import { Separator } from "@/components/ui/separator"
 import { KindIcon } from "@/components/kind-icon"
 import { Tribute } from "@/components/tribute"
 import { PhotoGallery } from "@/components/photo-figure"
-import { SafetyNote } from "@/components/kit"
+import { SafetyNote, useFocusOnOpen } from "@/components/kit"
 import { KINDS } from "@/data/taxonomy"
 import { CONTACT_EMAIL } from "@/config"
 import { useStore } from "@/store"
@@ -28,6 +28,7 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
   const [copied, setCopied] = useState(false)
   const photos = place.photos ?? []
   const local = place.local
+  const titleRef = useFocusOnOpen<HTMLHeadingElement>()
 
   const share = async () => {
     const url = `${location.origin}${location.pathname}#/place/${place.id}`
@@ -102,7 +103,9 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
             .filter(Boolean)
             .join(" · ")}
         </p>
-        <h2 className="text-title-2 text-balance text-ink-1">{place.name_he}</h2>
+        <h2 ref={titleRef} tabIndex={-1} className="text-title-2 text-balance text-ink-1 outline-none">
+          {place.name_he}
+        </h2>
         <p className="text-label font-normal text-ink-2">{place.place_he}</p>
       </header>
 

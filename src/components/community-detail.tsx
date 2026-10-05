@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Anemone } from "@/components/anemone"
 import { PhotoGallery } from "@/components/photo-figure"
 import { KINDS, formatMonth } from "@/data/taxonomy"
-import { SectionTitle, StatusText } from "@/components/kit"
+import { SectionTitle, StatusText, useFocusOnOpen } from "@/components/kit"
 import { ease, spring } from "@/lib/motion"
 import { allPlaces, sitesNear, useStore } from "@/store"
 import type { Place } from "@/types"
@@ -19,6 +19,7 @@ export function CommunityDetail({ place, onBack, ref }: { place: Place; onBack: 
   const r = place.revival
   const sites = sitesNear(place, allPlaces({ seed, remote, local }))
   const photos = place.photos ?? []
+  const titleRef = useFocusOnOpen<HTMLHeadingElement>()
 
   return (
     <motion.article
@@ -49,7 +50,9 @@ export function CommunityDetail({ place, onBack, ref }: { place: Place; onBack: 
       )}
 
       <header className="flex flex-col gap-2">
-        <h2 className="text-title-1 text-ink-1">{place.name_he}</h2>
+        <h2 ref={titleRef} tabIndex={-1} className="text-title-1 text-ink-1 outline-none">
+          {place.name_he}
+        </h2>
         <p className="text-label font-normal text-ink-2">{place.place_he}</p>
         {r && r.status !== "unknown" && <StatusText status={r.status} date={r.date ? formatMonth(r.date) : undefined} className="mt-1" />}
       </header>
