@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-"מקום לזכור" (Makom Lizkor) is a static, Hebrew, RTL memorial map for the people murdered and killed on 7 October 2023. It shows monuments, lookouts, benches, groves and gardens, plus a page for each of the 22 attacked communities with its return status. The site opens at 06:29 on a dark map, and a sunrise turns it to morning. There is no backend. All data ships in JSON, and anything a visitor adds stays in their browser's IndexedDB.
+"מקום לזכור" (Makom Lizkor) is a static, Hebrew, RTL memorial map for the people murdered and killed on 7 October 2023. It shows monuments, lookouts, benches, groves and gardens, plus a page for each of the 22 attacked communities with its return status. The site opens at 06:29 on a dark map, and a sunrise turns it to morning. The curated data ships in JSON. A backend is being built in phases (`docs/superpowers/specs/2026-10-05-backend-system-design.md`, plan in `docs/superpowers/plans/`): phase 1 runs locally only, with synthetic data, and nothing is deployed. A place a visitor adds is kept in their browser's IndexedDB and also sent to the local Worker for review; approved places reach every browser through a versioned feed.
 
 ## Repository layout
 
@@ -23,7 +23,7 @@ Run every command from this directory.
 ```bash
 npm install            # postinstall runs patch-package (patches/vaul+1.1.2.patch passes `modal` to the drawer context; re-check it before bumping vaul)
 npm run dev            # http://localhost:5174 (strictPort)
-npm run build          # tsc -b && vite build → dist/
+npm run build          # tsc -b && vite build → dist/client (the site and /admin/) and dist/makom_lizkor (the Worker)
 npm run typecheck      # tsc -b: src (tsconfig.app), vite.config (tsconfig.node), e2e + playwright.config (tsconfig.e2e)
 npm run lint           # eslint
 npm run format         # prettier --write over all ts/tsx/js/mjs
@@ -33,9 +33,12 @@ npm run e2e:prod       # builds, then runs the same specs against vite preview o
 npx playwright test e2e/routing.spec.ts          # one file
 npx playwright test -g "shared link to a place"  # one test by name
 node scripts/build-data.mjs                      # regenerate src/data/*.json from data-src/
+npm test                   # the Worker's tests (Vitest inside workerd, fresh local D1 per run); heavy: scripts/heavy npm test
+npm run db:migrate:local   # apply migrations/ to the local D1 the dev server uses (Playwright's webServer runs it first)
+npm run cf-typegen         # regenerate worker-configuration.d.ts after changing wrangler.jsonc or .dev.vars
 ```
 
-- The only tests are Playwright e2e tests. There is no unit-test runner. The specs find elements by their **Hebrew accessible names** (`getByRole("button", { name: "כל המקומות" })`), so renaming a Hebrew label can break a test.
+- Two kinds of tests: Playwright e2e specs in `e2e/`, and the Worker's tests in `worker/test/` (`npm test`). The e2e specs find elements by their **Hebrew accessible names** (`getByRole("button", { name: "כל המקומות" })`), so renaming a Hebrew label can break a test.
 - `panel.spec.ts` samples real animation frames through `e2e/frames.ts` to check motion quality: no squared corners mid-spring, no single-frame jumps. Specs run serially (`workers: 1`).
 - Ports are deliberately different: 5174 for `npm run dev`, 5190 for Playwright and the `makom-lizkor-v2` preview entry (with `reuseExistingServer`, the preview server and e2e share one process), and 4174 for prod e2e. Don't "unify" them. Those are the main checkout's; each parallel worktree gets its own trio from `scripts/parallel/ports.mjs` (54xx/55xx/56xx), so e2e never reuses another worktree's server.
 - **Prettier is enforced**: no semicolons, double quotes, trailing commas, `printWidth` 140, with Tailwind classes sorted by `prettier-plugin-tailwindcss` (including inside `cn()` and `cva()`). An override keeps `src/components/ui/**` at shadcn's own format (80 columns, `es5` commas), so output from `shadcn add` drops in without churn. After editing, run `npm run format` and make sure `format:check` passes.
@@ -66,9 +69,16 @@ A single Zustand store holds everything: the seed places, the visitor's local pl
 
 The only route is `#/place/<id>`, kept in sync with `selectedId`. Opening a card from the list pushes a history entry, so the browser Back button (or a swipe back on a phone) closes the card. Moving from one place to another replaces the entry instead. An unknown id falls back to `#/` and flies to the envelope view. Ids that start with `local-` are visitor-added places. They load asynchronously, so the router trusts them. When the day starts, the router reads the hash as an entrance (`apply(true)`), so a place opened during the sunrise stays open instead of being read as Back.
 
+### Backend, phase 1 (`worker/`, `migrations/`, `src/shared/`)
+
+- One Hono Worker runs inside `npm run dev` through `@cloudflare/vite-plugin`. Only `/api/*` and `/__dev/*` reach it (`run_worker_first` in `wrangler.jsonc`); everything else is the static site. The local D1 lives in `.wrangler/` (git-ignored) and is shared by dev and e2e runs, so demo places from e2e accumulate there.
+- **The vars in `wrangler.jsonc` are what a deploy ships, and they are production.** Development (the stand-in Access sign-in at `/__dev/login`, the `X-Test-Now` clock) is switched on only by `.dev.vars`, which the dev server, vite preview and the tests read and wrangler never deploys. A test fails if the deploy vars stop being production.
+- `src/shared/contract.ts` holds the Zod schemas both sides use; `src/shared/text.ts` strips bidi controls from anything stored. The client reads approved places through `src/lib/feed.ts` (loaded once the day begins, never in the opening's bundle) into `remote` in the store. `allPlaces()` takes `seed`, `remote` and `local`, and hides a local copy once its `remoteId` is published. Ids that start with `p_` are contributions; the router trusts them until the feed has come.
+- The moderators' queue is `/admin/` (`admin/index.html`, outside `src/`, with its code in `src/admin/`). Locally, sign in with `POST /__dev/login {"email":"dev@example.test"}`.
+
 ### Persistence (`src/lib/storage.ts`)
 
-Persistence uses an `idb-keyval` store named `makom-lizkor-v2`/`v1`, with the keys `local` (the visitor's places) and `tributes` (anemones left at each place). Uploaded photos are downscaled and re-encoded, which strips EXIF data, then stored as data URLs. Nothing is sent over the network.
+Persistence uses an `idb-keyval` store named `makom-lizkor-v2`/`v1`, with the keys `local` (the visitor's places) and `tributes` (anemones left at each place). Uploaded photos are downscaled and re-encoded, which strips EXIF data, then stored as data URLs. The photo stays on the device; the rest of a new place is also sent for review (phase 1, local only).
 
 ### Map (`src/map/`)
 
