@@ -1,9 +1,13 @@
 import { defineConfig, devices } from "@playwright/test"
+import { checkoutPorts } from "./scripts/parallel/ports.mjs"
 
 // UX motion checks: they sample real frames, so they run one at a time.
 // Against the dev server by default; `npm run e2e:prod` runs the same checks on the production build.
+// Ports per checkout: 5190 and 4174 in the main checkout, and a slot of its own in each parallel worktree, so
+// reuseExistingServer only ever reuses this checkout's own server, never another worktree's.
 const prod = !!process.env.E2E_PROD
-const port = prod ? 4174 : 5190
+const ports = checkoutPorts(import.meta.dirname)
+const port = prod ? ports.prod : ports.e2e
 
 export default defineConfig({
   testDir: "e2e",

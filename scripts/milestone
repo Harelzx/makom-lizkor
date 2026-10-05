@@ -1,0 +1,3 @@
+#!/bin/sh
+# Log a milestone for the other parallel sessions. See docs/parallel-sessions.md.
+exec node "$(dirname "$0")/parallel/milestone.mjs" "$@"

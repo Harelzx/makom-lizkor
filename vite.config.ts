@@ -2,6 +2,7 @@ import { resolve } from "node:path"
 import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
+import { checkoutPorts } from "./scripts/parallel/ports.mjs"
 
 // MapLibre v6 loads its worker via `new URL(..., import.meta.url)`; pre-bundling breaks that path.
 export default defineConfig({
@@ -14,7 +15,8 @@ export default defineConfig({
     ],
   },
   // A port of its own: 5173 is shared with other local projects, and two servers on it answer at random.
-  server: { port: 5174, strictPort: true },
+  // The main checkout keeps 5174; each parallel worktree gets its own, so their dev servers never collide.
+  server: { port: checkoutPorts(import.meta.dirname).dev, strictPort: true },
   optimizeDeps: { exclude: ["maplibre-gl"] },
   worker: { format: "es" },
 })

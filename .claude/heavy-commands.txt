@@ -1,0 +1,9 @@
+# Heavy commands: they must run through scripts/heavy (one at a time, only when the machine has room).
+# One JavaScript regex per line, tested against each command of a Bash line, after `cd x &&`, `FOO=1` and `time` are stripped.
+# Measured 2026-10-05 on 8 cores / 8 GB (see docs/parallel-sessions.md). typecheck, lint and format:check stay light.
+^(npm|pnpm|yarn)\s+(ci|install|i|add)(\s|$)
+^npm\s+(--prefix\s+\S+\s+)?(run(-script)?\s+)?(e2e|e2e:prod|build|start)(\s|$)
+^(npx\s+|\S*node_modules/\.bin/)?playwright\s+test(\s|$)
+^(npx\s+)?vite\s+build(\s|$)
+^node\s+\S*render-film\.mjs(\s|$)
+^(npx\s+)?remotion\s+render(\s|$)
