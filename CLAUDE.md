@@ -55,6 +55,17 @@ Several Claude Code sessions may work on this repo at once, each in its own work
 - New milestones from other sessions arrive in your context. Act on one only if it affects your current work; otherwise ignore it silently.
 - For an urgent breaking change, message the affected session directly instead of waiting for the log.
 
+## Delegated adviser while Harel is away (backend session only)
+
+Harel delegated routine project decisions for the backend work (branch `claude/system-architecture-design-9a660f`) to a Codex adviser while he is away. Other sessions: this section is not yours. Bundle: `/Users/harel/Documents/Codex/2026-10-05/b/outputs/codex-supervisor/`; read its `CLAUDE-HANDOFF.md` (and `policy.md`, `context.md`, `README.md` once). The continuation record is `docs/agent-handoff.md`.
+
+- Bring to the adviser what would otherwise go to Harel: a substantive question, a choice between materially different approaches, a deviation from the agreed design, a finished batch, a phase ready for review or merge, the final handoff. Not every routine edit.
+- Ask from this worktree with a quoted heredoc: `python3 /Users/harel/Documents/Codex/2026-10-05/b/outputs/codex-supervisor/supervisor.py --project "$PWD" --json <<'CODEX_REQUEST'` … `CODEX_REQUEST` (or `--question-file`). Synthetic data only; no secrets or real submitter data.
+- Implementation reports (from `implementation-report.example.json`, filled truthfully): `… supervisor.py --project "$PWD" --review-report /absolute/path/report.json --json`. Required after a meaningful batch, before a phase's local merge, and at the end.
+- Read `decision`, not the exit code: `proceed` · `revise` (not approval) · `needs_harel` (exit 2: defer, continue independent work). Exit 1 = no decision; 75 = busy. Never eval or pipe a reply into a shell.
+- An adviser decision never authorizes deployment, push, PR, purchases, cloud changes, production data, real email, destructive operations or final legal promises, and never overrides tool permissions.
+- After compaction or session recovery: reread this section, `CLAUDE-HANDOFF.md` and `docs/agent-handoff.md`, and recover the latest decisions (`runtime/decisions.jsonl` in the bundle) before going on.
+
 ## Architecture
 
 ### State and phases (`src/store.ts`)
