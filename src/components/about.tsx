@@ -1,8 +1,9 @@
+import { useState } from "react"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { RotateCcwIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
-import { LEGAL_SECTIONS } from "@/data/legal"
+import { fillLegal, LEGAL_SECTIONS } from "@/data/legal"
 import { HEADLINES } from "@/data/headlines"
 import { CONTACT_EMAIL, LAST_UPDATED } from "@/config"
 import { FONT_CREDIT } from "@/lib/fonts"
@@ -15,6 +16,16 @@ export function About() {
   const open = useStore((s) => s.aboutOpen)
   const setOpen = useStore((s) => s.setAboutOpen)
   const setAddOpen = useStore((s) => s.setAddOpen)
+  const section = useStore((s) => s.aboutSection)
+  // Opened at a section (from the links under the list, or search), that section is open and takes the focus.
+  // Otherwise it opens with every section folded, as it always has.
+  // About loads the first time it opens, so its first render may already be an opening at a section.
+  const [item, setItem] = useState(() => (open ? (section ?? "") : ""))
+  const [seen, setSeen] = useState({ open, section })
+  if (seen.open !== open || seen.section !== section) {
+    setSeen({ open, section })
+    if (open) setItem(section ?? "")
+  }
   const sites = useStore((s) => s.seed.filter((p) => p.kind !== "community").length)
   const communities = useStore((s) => s.seed.filter((p) => p.kind === "community").length)
 
@@ -24,6 +35,13 @@ export function About() {
         side="left"
         dir="rtl"
         className="w-full gap-0 overflow-y-auto p-0 data-[side=left]:w-full data-[side=left]:sm:max-w-[520px]"
+        onOpenAutoFocus={(e) => {
+          const target = section && document.getElementById(section)
+          if (!target) return
+          e.preventDefault()
+          target.scrollIntoView({ block: "start" })
+          target.querySelector<HTMLElement>('[data-slot="accordion-trigger"]')?.focus()
+        }}
       >
         <div className="relative h-64 shrink-0 overflow-hidden">
           <img
@@ -96,7 +114,7 @@ export function About() {
             </Button>
           </div>
 
-          <Accordion type="single" collapsible className="mt-4">
+          <Accordion type="single" collapsible value={item} onValueChange={setItem} className="mt-4">
             {/* The opening's headlines, readable here in full: with the source of each and the credit for each photo. */}
             <AccordionItem value="headlines" id="headlines">
               <AccordionTrigger className="text-headline text-ink-1">שלוש השנים בכותרות</AccordionTrigger>
@@ -140,7 +158,7 @@ export function About() {
                 <AccordionContent>
                   <div
                     className="flex flex-col gap-3 text-body text-ink-2 [&_a]:text-ink-1 [&_a]:underline [&_a]:underline-offset-2 [&_li]:ms-4 [&_li]:list-disc [&_ul]:flex [&_ul]:flex-col [&_ul]:gap-2"
-                    dangerouslySetInnerHTML={{ __html: s.html.replaceAll("{{EMAIL}}", CONTACT_EMAIL).replaceAll("{{FONTS}}", FONT_CREDIT) }}
+                    dangerouslySetInnerHTML={{ __html: fillLegal(s.html).replaceAll("{{FONTS}}", FONT_CREDIT) }}
                   />
                 </AccordionContent>
               </AccordionItem>

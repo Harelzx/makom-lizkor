@@ -106,3 +106,20 @@ export function GroupLabel({ children, count, id }: { children: ReactNode; count
     </h3>
   )
 }
+
+/**
+ * Before visiting near the Gaza border. Facts only: a place being listed says nothing about whether it is open, allowed
+ * or safe to reach, and the Home Front Command's instructions are the ones that count. One quiet line, like the rest of
+ * the site's metadata, not an alarm.
+ */
+export function SafetyNote({ lead, className }: { lead: string; className?: string }) {
+  return (
+    <p className={cn("text-caption text-pretty text-ink-2", className)}>
+      {lead} הופעה כאן אינה אומרת שהמקום פתוח לביקור או שמותר להגיע אליו. לפני יציאה בדקו את{" "}
+      <a className="text-ink-1 underline underline-offset-2" href="https://www.oref.org.il" target="_blank" rel="noopener">
+        ההנחיות של פיקוד העורף
+      </a>
+      , וביישובים תאמו ביקור מראש.
+    </p>
+  )
+}

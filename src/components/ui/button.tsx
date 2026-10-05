@@ -20,7 +20,7 @@ const buttonVariants = cva(
         link: "text-primary underline-offset-4 hover:underline",
         // The project's own: the anemone action, and round controls that float over the map.
         brand:
-          "bg-brand font-bold text-brand-ink shadow-brand hover:bg-brand-strong active:translate-y-0 active:scale-[0.97]",
+          "bg-brand font-bold text-brand-ink shadow-brand hover:bg-brand-strong active:translate-y-0 active:scale-[0.97] dark:bg-brand-strong dark:hover:bg-brand-strong/90",
         float:
           "bg-surface text-ink-1 shadow-chip ring-1 ring-line hover:bg-surface-2 active:translate-y-0 active:scale-[0.96]",
       },

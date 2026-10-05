@@ -13,7 +13,7 @@ import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert"
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "@/components/ui/input-group"
 import { Anemone } from "@/components/anemone"
 import { ADDABLE_KINDS, KINDS } from "@/data/taxonomy"
-import { CONSENT_TEXT, FAMILY_CONSENT_TEXT, PHOTO_RIGHTS_TEXT } from "@/data/legal"
+import { CONSENT_TEXT, FAMILY_CONSENT_TEXT, fillLegal, LEGAL_SECTIONS, PHOTO_RIGHTS_TEXT } from "@/data/legal"
 import { downloadJSON, resizeImage } from "@/lib/storage"
 import { getMap, reducedMotion } from "@/map/controller"
 import { useStore } from "@/store"
@@ -22,6 +22,8 @@ import { cn } from "@/lib/utils"
 import type { Kind, Place } from "@/types"
 
 type Step = 0 | 1 | 2
+
+const PRIVACY_HTML = LEGAL_SECTIONS.find((s) => s.id === "privacy")!.html
 
 /** People type "www.site.co.il" or paste a full address; either way we store a working https link. */
 const stripScheme = (v: string) =>
@@ -631,6 +633,14 @@ export function AddPlace() {
                             {FAMILY_CONSENT_TEXT}
                           </FieldLabel>
                         </Field>
+                        {/* The notice sits beside the form it is about, as the privacy law asks, and before the box that says it was read. */}
+                        <details className="group rounded-2xl border border-line px-4 py-3 text-caption text-ink-2">
+                          <summary className="pressable cursor-pointer text-label text-ink-1 marker:text-ink-3">הודעת הפרטיות</summary>
+                          <div
+                            className="mt-2 flex flex-col gap-2 [&_a]:text-ink-1 [&_a]:underline [&_a]:underline-offset-2"
+                            dangerouslySetInnerHTML={{ __html: fillLegal(PRIVACY_HTML) }}
+                          />
+                        </details>
                         <Field orientation="horizontal">
                           <Checkbox id={`${uid}-consent`} checked={consent} onCheckedChange={(v) => setConsent(v === true)} />
                           <FieldLabel htmlFor={`${uid}-consent`} className="leading-snug font-normal">

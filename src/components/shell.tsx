@@ -67,7 +67,7 @@ function Actions({ compact }: { compact?: boolean }) {
   const setAddOpen = useStore((s) => s.setAddOpen)
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center justify-end gap-2">
       {!compact && (
         <Button variant="float" className="h-11 rounded-full ps-4 pe-2 text-label text-ink-2" onClick={() => setSearchOpen(true)}>
           <SearchIcon data-icon="inline-start" />
@@ -182,10 +182,13 @@ export function Shell() {
           animate={{ opacity: picking ? 0 : 1, x: picking ? 40 : 0, height: collapsed && heights.closed ? heights.closed : heights.open }}
           transition={{ default: { duration: 0.7, ease }, height: spring.soft }}
           className={cn(
-            "fixed start-4 top-4 z-20 flex w-[424px] flex-col overflow-hidden rounded-[28px] bg-surface shadow-panel ring-1 ring-line",
+            "fixed start-4 top-4 z-20 flex w-[424px] flex-col overflow-hidden rounded-[28px] bg-surface shadow-panel ring-1 ring-line outline-none",
             picking && "pointer-events-none",
           )}
           aria-label="מקומות וקהילות"
+          // where the skip button lands; the panel's own controls are the next stops
+          id="places"
+          tabIndex={-1}
         >
           <div
             ref={headerRef}
@@ -238,7 +241,9 @@ export function Shell() {
           initial={{ opacity: 0, y: -12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, delay: 0.25, ease }}
-          className="fixed end-4 top-4 z-20"
+          // Never wider than the room beside the panel: with large text the buttons wrap onto a second row instead of
+          // running over the panel's top (WCAG 1.4.4, text alone at 200%).
+          className="fixed end-4 top-4 z-20 max-w-[calc(100vw-424px-3rem)]"
         >
           <Actions />
         </motion.div>
@@ -270,6 +275,8 @@ export function Shell() {
       >
         <Drawer.Portal>
           <Drawer.Content
+            id="places"
+            tabIndex={-1}
             dir="rtl"
             aria-describedby={undefined}
             className="fixed inset-x-0 bottom-0 z-30 flex h-[96dvh] flex-col rounded-t-[28px] bg-surface shadow-panel ring-1 ring-line outline-none"

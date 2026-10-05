@@ -7,6 +7,7 @@ import { Separator } from "@/components/ui/separator"
 import { KindIcon } from "@/components/kind-icon"
 import { Tribute } from "@/components/tribute"
 import { PhotoGallery } from "@/components/photo-figure"
+import { SafetyNote } from "@/components/kit"
 import { KINDS } from "@/data/taxonomy"
 import { CONTACT_EMAIL } from "@/config"
 import { useStore } from "@/store"
@@ -131,6 +132,7 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
           שיתוף
         </Button>
       </div>
+      {place.region === "envelope" && <SafetyNote lead="המקום קרוב לגבול עזה." className="-mt-3" />}
 
       {place.links.length > 0 && (
         <section className="flex flex-col gap-1" aria-labelledby={`links-${place.id}`}>

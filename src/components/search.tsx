@@ -1,18 +1,16 @@
 import { useEffect, useMemo } from "react"
-import { MoonIcon, PlusIcon, RouteIcon, SunIcon } from "lucide-react"
-import {
-  Command,
-  CommandDialog,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-  CommandSeparator,
-} from "@/components/ui/command"
+import { AccessibilityIcon, MoonIcon, PlusIcon, RouteIcon, SunIcon } from "lucide-react"
+import { Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
+import { useCommandState } from "cmdk"
 import { Anemone } from "@/components/anemone"
 import { KINDS } from "@/data/taxonomy"
 import { allPlaces, normalize, useStore } from "@/store"
+
+/** A line between the groups, for the eye only: inside a list box ARIA allows options and groups, not separators. */
+function Rule() {
+  const searching = useCommandState((s) => !!s.search)
+  return searching ? null : <div aria-hidden="true" className="my-1.5 h-px bg-border/50" />
+}
 
 /** ⌘K: every place and community, plus the few things you can do. */
 export function Search() {
@@ -52,9 +50,9 @@ export function Search() {
   return (
     <CommandDialog open={open} onOpenChange={setOpen} title="חיפוש" description="חיפוש מקום, קהילה או פעולה">
       {/* Plain substring matching: cmdk's fuzzy score lets "בארי" match places in Ashdod and Ness Ziona. */}
-      <Command filter={(value, search) => (value.includes(normalize(search)) ? 1 : 0)}>
+      <Command label="חיפוש מקום, יישוב או פעולה" filter={(value, search) => (value.includes(normalize(search)) ? 1 : 0)}>
         <CommandInput placeholder="מקום, יישוב, שם…" />
-        <CommandList className="max-h-[min(60vh,440px)]">
+        <CommandList label="תוצאות" className="max-h-[min(60vh,440px)]">
           <CommandEmpty>לא נמצא. נסו שם של יישוב.</CommandEmpty>
           <CommandGroup heading="קהילות">
             {communities.map((c) => (
@@ -64,7 +62,7 @@ export function Search() {
               </CommandItem>
             ))}
           </CommandGroup>
-          <CommandSeparator />
+          <Rule />
           <CommandGroup heading="מקומות">
             {sites.map((p) => (
               <CommandItem key={p.id} className="py-2" value={normalize(`${p.name_he} ${p.place_he} ${p.id}`)} onSelect={() => go(p.id)}>
@@ -78,7 +76,7 @@ export function Search() {
               </CommandItem>
             ))}
           </CommandGroup>
-          <CommandSeparator />
+          <Rule />
           <CommandGroup heading="פעולות">
             <CommandItem
               value="מסע 232 journey"
@@ -99,6 +97,13 @@ export function Search() {
             >
               <PlusIcon />
               הוספת מקום
+            </CommandItem>
+            <CommandItem
+              value="הצהרת נגישות פרטיות תנאי שימוש accessibility"
+              onSelect={() => useStore.getState().openAbout("accessibility")}
+            >
+              <AccessibilityIcon />
+              הצהרת נגישות
             </CommandItem>
             <CommandItem
               value="לילה בוקר theme"

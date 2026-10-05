@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react"
+import { lazy, Suspense, useEffect, useRef, useState } from "react"
 import { Toaster } from "@/components/ui/sonner"
 import { useStore } from "@/store"
 import { Intro } from "@/components/intro"
@@ -69,6 +69,19 @@ export default function App() {
   if (addOpen && !addLoaded) setAddLoaded(true)
   useHashRoute()
 
+  // When the opening ends, the button that ended it is gone and the focus with it. The focus goes to the skip button,
+  // the page's first stop, so a keyboard carries on from the top rather than from where the opening was; it shows
+  // only to a keyboard (focus-visible), and a page that opens straight at a place is left alone.
+  const skipRef = useRef<HTMLButtonElement>(null)
+  const prevPhase = useRef(phase)
+  useEffect(() => {
+    const at = document.activeElement
+    // focus already lost, or still on the opening as it fades out
+    const lost = !at || at === document.body || !!at.closest('[aria-labelledby="intro-title"]')
+    if (prevPhase.current !== "day" && phase === "day" && lost) skipRef.current?.focus({ preventScroll: true })
+    prevPhase.current = phase
+  }, [phase])
+
   useEffect(() => {
     void init()
   }, [init])
@@ -89,6 +102,18 @@ export default function App() {
 
   return (
     <main className="fixed inset-0">
+      {/* The map's flowers come first in the tab order, about ninety of them; this lets a keyboard go straight to the list.
+          A button rather than a link, because the address belongs to the router. */}
+      {phase === "day" && (
+        <button
+          ref={skipRef}
+          type="button"
+          className="pressable fixed start-4 top-4 z-50 -translate-y-24 rounded-full bg-surface px-5 py-2.5 text-label text-ink-1 shadow-panel ring-1 ring-line outline-none focus-visible:translate-y-0 focus-visible:ring-3 focus-visible:ring-ring/30"
+          onClick={() => document.getElementById("places")?.focus()}
+        >
+          דילוג לרשימת המקומות
+        </button>
+      )}
       <Suspense fallback={null}>
         <MapCanvas />
       </Suspense>
