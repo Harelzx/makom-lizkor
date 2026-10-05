@@ -39,6 +39,8 @@ export const RETENTION = {
   restoreDrillCopyDays: 30 as number | null,
   /** a photo that wasn't approved */
   rejectedPhotoDays: 30,
+  /** anemone count rows: the daily code, the place, the day and the time */
+  tributeDays: 8,
   verified: false,
 }
 

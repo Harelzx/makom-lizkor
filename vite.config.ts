@@ -7,7 +7,13 @@ import { checkoutPorts } from "./scripts/parallel/ports.mjs"
 
 // MapLibre v6 loads its worker via `new URL(..., import.meta.url)`; pre-bundling breaks that path.
 export default defineConfig({
-  plugins: [react(), tailwindcss(), cloudflare()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    // The e2e servers keep their local D1 and R2 apart (E2E_STATE, fresh each run), so demo submissions from earlier
+    // runs never fill the review queue; everything else uses .wrangler/state.
+    cloudflare({ persistState: process.env.E2E_STATE ? { path: process.env.E2E_STATE } : true }),
+  ],
   resolve: {
     alias: [
       { find: "@", replacement: resolve(import.meta.dirname, "./src") },

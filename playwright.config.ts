@@ -9,6 +9,10 @@ import { checkoutPorts } from "./scripts/parallel/ports.mjs"
 const prod = !!process.env.E2E_PROD
 const ports = checkoutPorts(import.meta.dirname)
 const port = prod ? ports.prod : ports.e2e
+// A fresh local D1 and R2 for every run, with every migration applied first: what earlier runs left (hundreds of demo
+// submissions) would otherwise fill the review queue.
+const state = `.wrangler/e2e-state-${prod ? "prod" : "dev"}`
+const fresh = `rm -rf ${state} && npx wrangler d1 migrations apply makom-dev --local --persist-to ${state}`
 
 export default defineConfig({
   testDir: "e2e",
@@ -18,8 +22,9 @@ export default defineConfig({
   use: { baseURL: `http://localhost:${port}`, ...devices["Desktop Chrome"], viewport: { width: 1280, height: 900 } },
   webServer: {
     command: prod
-      ? `node scripts/dev-vars.mjs && npm run db:migrate:local && npm run build && npx vite preview --port ${port} --strictPort`
-      : `npm run db:migrate:local && npm run dev -- --port ${port} --strictPort`,
+      ? `node scripts/dev-vars.mjs && ${fresh} && npm run build && npx vite preview --port ${port} --strictPort`
+      : `${fresh} && npm run dev -- --port ${port} --strictPort`,
+    env: { E2E_STATE: state },
     url: `http://localhost:${port}`,
     reuseExistingServer: !prod,
     timeout: 120_000,
