@@ -24,7 +24,7 @@ describe("POST /api/v1/submissions", () => {
     expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM contacts WHERE place_id = ?").bind(id).first("n")).toBe(0)
   })
   it("strips bidi controls from the name", async () => {
-    const { id } = await (await post({ ...valid, name_he: "ספסל‮ דמו" })).json<{ id: string }>()
+    const { id } = await (await post({ ...valid, name_he: "ספסל\u202E דמו" })).json<{ id: string }>()
     expect(await env.DB.prepare("SELECT name_he FROM revisions WHERE place_id = ?").bind(id).first("name_he")).toBe("ספסל דמו")
   })
   it("refuses unknown fields, a place outside Israel and a community", async () => {
