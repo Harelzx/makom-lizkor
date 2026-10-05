@@ -314,6 +314,22 @@ describe("phase 2 close-out", () => {
     expect(await objects(id)).toHaveLength(0)
   })
 
+  it("a withdrawal whose file erasure fails is still a withdrawal, says the files are pending, and a repeat finishes them", async () => {
+    const { id, trackingToken } = await send("ספסל דמו משיכה וקבצים תקועים")
+    await upload(id, trackingToken)
+    const res = await call(
+      `http://local/api/v1/submissions/${id}/withdraw`,
+      { method: "POST", headers: { Authorization: `Bearer ${trackingToken}` } },
+      { ...env, MEDIA: failingCleanup(env.MEDIA) },
+    )
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ status: "withdrawn", files: "pending" })
+    expect(await env.DB.prepare("SELECT status FROM places WHERE id = ?").bind(id).first("status")).toBe("withdrawn")
+    const again = await withdraw(id, trackingToken)
+    expect(await again.json()).toEqual({ status: "withdrawn" })
+    expect(await objects(id)).toHaveLength(0)
+  })
+
   it("the sweep leaves a copy younger than an hour alone: an approval may be about to record it", async () => {
     const { id } = await send("ספסל דמו העתק טרי")
     await env.MEDIA.put(`public/${id}/r_fresh.jpg`, jpeg())
@@ -401,6 +417,26 @@ describe("the review queue's capacity", () => {
       await pending(),
     )
     expect(r).toBe("conflict")
+  })
+
+  it("through the route too, a stale correction while the queue is full is told it's stale", async () => {
+    const { id, trackingToken } = await send("ספסל דמו תיקון ישן בנתיב")
+    await decide(id, await queued(id), "approve")
+    const e = { ...env, QUEUE_LIMIT: String(await pending()) }
+    const res = await call(
+      `http://local/api/v1/submissions/${id}/revisions`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${trackingToken}`, "Turnstile-Token": "pass-revise" },
+        body: JSON.stringify({
+          expectedRev: (await rev(id, trackingToken)) - 1,
+          name_he: "ספסל דמו ישן",
+          consent_version: CURRENT_SUBMISSION_NOTICE,
+        }),
+      },
+      e,
+    )
+    expect(res.status).toBe(409)
   })
 
   it("a correction and a new submission racing for the last place in the queue: one gets in", async () => {

@@ -117,6 +117,8 @@ export function Tracking() {
   const [confirming, setConfirming] = useState(false)
   const [working, setWorking] = useState(false)
   const [fixing, setFixing] = useState(false)
+  // Withdrawn, with its files still to be erased (no longer shown anywhere).
+  const [filesPending, setFilesPending] = useState(false)
   const key = tracking ? `${tracking.id}/${tracking.token}` : ""
 
   useEffect(() => {
@@ -148,7 +150,9 @@ export function Tracking() {
       link_url: d.link_url || undefined,
       consent_version: CURRENT_SUBMISSION_NOTICE,
     })
-    if (r === "failed") {
+    if (r === "refused") return void toast("התיקון לא התקבל", { description: "התיקון נשאר כאן. בדקו אותו ונסו לשלוח שוב." })
+    if (r === "failed") return void toast("לא הצלחנו לשלוח את התיקון", { description: "התיקון לא נשמר ונשאר כאן. נסו שוב בעוד רגע." })
+    if (r === "no_answer") {
       // No answer is not a refusal: the correction may have been saved and its answer lost. The status says which.
       const now = await trackSubmission(tracking.id, tracking.token)
       const saved = !!now && now.rev !== current.result.rev && (now.status === "pending" || now.revision_state === "pending")
@@ -170,10 +174,13 @@ export function Tracking() {
   const withdraw = async () => {
     if (!tracking) return
     setWorking(true)
-    const done = await withdrawSubmission(tracking.id, tracking.token)
+    let done = await withdrawSubmission(tracking.id, tracking.token)
+    // An error or no answer may hide a withdrawal that happened: the status says which.
+    if (done === "failed" && (await trackSubmission(tracking.id, tracking.token))?.status === "withdrawn") done = "withdrawn"
     setWorking(false)
     setConfirming(false)
-    if (!done) return void toast("לא הצלחנו למשוך כרגע", { description: "ההצעה לא השתנתה. נסו שוב בעוד רגע." })
+    if (done === "failed") return void toast("לא הצלחנו לוודא שההצעה נמשכה", { description: "נסו שוב בעוד רגע." })
+    setFilesPending(done === "files_pending")
     setState({ key, result: { status: "withdrawn", name_he: null }, failed: false })
     // The sender's own copy on this device, if it is here, says so too.
     const own = useStore.getState().local.find((p) => p.local?.remoteId === tracking.id)
@@ -194,7 +201,11 @@ export function Tracking() {
           {current?.result && (
             <>
               {current.result.name_he && <p className="text-title-3 text-ink-1">{current.result.name_he}</p>}
-              <p className="text-label text-ink-1">{STATUS[current.result.status] ?? current.result.status}</p>
+              <p className="text-label text-ink-1">
+                {current.result.status === "withdrawn" && filesPending
+                  ? "נמשכה. ההצעה, השם והמייל שלכם נמחקו מהשרת. התמונה כבר לא מוצגת, ותימחק מהשרת בהמשך"
+                  : (STATUS[current.result.status] ?? current.result.status)}
+              </p>
               {current.result.status === "published" && current.result.revision_state === "pending" && (
                 <p className="text-caption text-ink-2">התיקון ששלחתם ממתין לבדיקה. עד אז מופיעה הגרסה הקודמת.</p>
               )}

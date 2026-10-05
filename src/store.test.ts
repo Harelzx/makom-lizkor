@@ -63,20 +63,28 @@ describe("the visitor's places in the store", () => {
     expect(disk.stored.map((p) => p.id).sort()).toEqual(["local-mine", "local-other"])
   })
 
-  it("a removal the device couldn't save says so; with no storage at all there was nothing to remove", async () => {
+  it("a removal the device couldn't save says so, for a place read from it or written to it", async () => {
     disk.stored = [place("local-x")]
     await useStore.getState().init()
-    disk.fail = new Error("QuotaExceededError")
+    await useStore.getState().addLocal(place("local-w"))
+    disk.fail = new DOMException("full", "QuotaExceededError")
     expect(await useStore.getState().removeLocal("local-x")).toBe(false)
-    disk.fail = new Error("storage_unavailable")
-    useStore.setState({ local: [place("local-z")] })
-    expect(await useStore.getState().removeLocal("local-z")).toBe(true)
+    expect(await useStore.getState().removeLocal("local-w")).toBe(false)
   })
 
-  it("a place read from the device isn't counted as removed when the device can no longer be reached", async () => {
-    disk.stored = [place("local-kept")]
+  it("in a browser that keeps nothing, a place made here is simply gone when removed", async () => {
+    // What a blocked IndexedDB really throws: not a message of ours.
+    disk.fail = new DOMException("blocked", "SecurityError")
     await useStore.getState().init()
-    disk.fail = new Error("storage_unavailable")
-    expect(await useStore.getState().removeLocal("local-kept")).toBe(false)
+    expect(await useStore.getState().addLocal(place("local-z"))).toBe(false)
+    expect(await useStore.getState().removeLocal("local-z")).toBe(true)
+  })
+  it("a place another tab removed from the device isn't the visitor's to send any more", async () => {
+    disk.stored = [place("local-a"), place("local-b")]
+    await useStore.getState().init()
+    disk.stored = [place("local-a")]
+    expect(await useStore.getState().stillLocal("local-b")).toBe(false)
+    expect(useStore.getState().local.map((p) => p.id)).toEqual(["local-a"])
+    expect(await useStore.getState().stillLocal("local-a")).toBe(true)
   })
 })

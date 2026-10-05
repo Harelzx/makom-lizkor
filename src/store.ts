@@ -75,6 +75,8 @@ interface State {
   /** Both keep the change in memory and say whether it was also saved on the device; they never throw. */
   addLocal: (p: Place) => Promise<boolean>
   updateLocal: (id: string, patch: Partial<LocalFields>) => Promise<boolean>
+  /** Whether a place is still the visitor's to send: in this tab's list, and on the device if it was ever stored there. */
+  stillLocal: (id: string) => Promise<boolean>
   /** False when the place is gone from the screen but couldn't be removed from the device. */
   removeLocal: (id: string) => Promise<boolean>
   /** How many places were new, and whether they were also saved on the device. */
@@ -88,8 +90,11 @@ interface State {
 
 /** Every place this tab has had in its list, removed ones included. */
 const held = new Set<string>()
-/** The places this tab read from the device: removing one is done only once the device says so. */
-const fromDisk = new Set<string>()
+/**
+ * The places known to be on the device: read from it, or written to it by this tab. Removing one is done only once the
+ * device says so; a place the device never kept (it refused every write) is gone once it leaves the list.
+ */
+const onDevice = new Set<string>()
 /** A place stored as "sending" by a visit that closed mid-send, or by another tab: here it waits for a retry. */
 const waiting = (p: Place): Place => (p.local?.send === "sending" ? { ...p, local: { ...p.local, send: "waiting" as const } } : p)
 
@@ -98,23 +103,18 @@ const waiting = (p: Place): Place => (p.local?.send === "sending" ? { ...p, loca
  * full disk). Places another tab stored meanwhile come into this tab's list too; this tab's own copies stay as they are.
  */
 async function persist(change: (stored: Place[]) => Place[]): Promise<boolean> {
-  return (await persistOrWhy(change)) === "saved"
-}
-
-/** As persist, telling a browser that keeps nothing (nothing was ever stored) from a save that failed. */
-async function persistOrWhy(change: (stored: Place[]) => Place[]): Promise<"saved" | "unavailable" | "failed"> {
   try {
     const stored = await changeLocal(change)
     // Only places this tab has never held: one it removed is not brought back by a write that was still in flight.
     const theirs = stored.filter((p) => !held.has(p.id)).map(waiting)
     for (const p of theirs) {
       held.add(p.id)
-      fromDisk.add(p.id)
+      onDevice.add(p.id)
     }
     if (theirs.length) useStore.setState({ local: [...useStore.getState().local, ...theirs] })
-    return "saved"
-  } catch (err) {
-    return (err as Error).message === "storage_unavailable" ? "unavailable" : "failed"
+    return true
+  } catch {
+    return false
   }
 }
 
@@ -151,7 +151,7 @@ export const useStore = create<State>((set, get) => ({
     const local = stored.map(waiting)
     for (const p of local) {
       held.add(p.id)
-      fromDisk.add(p.id)
+      onDevice.add(p.id)
     }
     set({ local, tributes })
   },
@@ -173,7 +173,22 @@ export const useStore = create<State>((set, get) => ({
   addLocal: async (p) => {
     held.add(p.id)
     set({ local: [...get().local, p] })
-    return persist((stored) => [...stored.filter((s) => s.id !== p.id), p])
+    const saved = await persist((stored) => [...stored.filter((s) => s.id !== p.id), p])
+    if (saved) onDevice.add(p.id)
+    return saved
+  },
+  stillLocal: async (id) => {
+    if (!get().local.some((p) => p.id === id)) return false
+    if (!onDevice.has(id)) return true
+    try {
+      // Another tab may have removed it from the device: then it leaves this tab's list too, and nothing sends it.
+      if ((await changeLocal((stored) => stored)).some((p) => p.id === id)) return true
+      set({ local: get().local.filter((p) => p.id !== id) })
+      onDevice.delete(id)
+      return false
+    } catch {
+      return true
+    }
   },
   updateLocal: async (id, patch) => {
     const apply = (list: Place[]) => list.map((p) => (p.id === id && p.local ? { ...p, local: { ...p.local, ...patch } } : p))
@@ -183,10 +198,9 @@ export const useStore = create<State>((set, get) => ({
   removeLocal: async (id) => {
     const local = get().local.filter((p) => p.id !== id)
     set({ local, selectedId: get().selectedId === id ? null : get().selectedId })
-    // A browser with no storage at all never kept a place this tab made, so it's gone; one read from the device is
-    // gone only when the device says so, and a save that failed leaves it there.
-    const outcome = await persistOrWhy((stored) => stored.filter((p) => p.id !== id))
-    return outcome === "saved" || (outcome === "unavailable" && !fromDisk.has(id))
+    const saved = await persist((stored) => stored.filter((p) => p.id !== id))
+    if (saved) onDevice.delete(id)
+    return saved || !onDevice.has(id)
   },
   importLocal: async (incoming) => {
     const known = new Set(get().local.map((p) => p.id))
@@ -197,6 +211,7 @@ export const useStore = create<State>((set, get) => ({
     for (const p of added) held.add(p.id)
     set({ local: [...get().local, ...added] })
     const saved = await persist((stored) => [...stored, ...added.filter((p) => !stored.some((s) => s.id === p.id))])
+    if (saved) for (const p of added) onDevice.add(p.id)
     return { added: added.length, saved }
   },
   leaveAnemone: (id) => {

@@ -74,40 +74,52 @@ export async function trackSubmission(id: string, token: string): Promise<Tracke
 }
 
 /** True once the server has erased it; false when it couldn't be done now (the visitor may try again). */
-export async function withdrawSubmission(id: string, token: string): Promise<boolean> {
+/**
+ * "withdrawn" once the server has erased it; "files_pending" when it was withdrawn but its files are still to go (they
+ * are no longer served); "failed" when the server said no or couldn't be reached: the caller checks the status, since a
+ * withdrawal whose answer was lost may have happened.
+ */
+export async function withdrawSubmission(id: string, token: string): Promise<"withdrawn" | "files_pending" | "failed"> {
   try {
     const res = await fetch(`/api/v1/submissions/${encodeURIComponent(id)}/withdraw`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
       signal: AbortSignal.timeout(8000),
     })
-    return res.ok
+    if (!res.ok) return "failed"
+    return ((await res.json().catch(() => ({}))) as { files?: string }).files === "pending" ? "files_pending" : "withdrawn"
   } catch {
-    return false
+    return "failed"
   }
 }
 
-/** "ok", "conflict" when the place changed since the sender looked (reload and try again), or "failed". */
+/**
+ * "ok"; "conflict" when the place changed since the sender looked; "queue_full"; "refused" when the server didn't
+ * accept it (invalid, or the check failed); "failed" when the server answered with an error; "no_answer" when nothing
+ * came back, so the correction may have been saved.
+ */
 export async function reviseSubmission(
   id: string,
   token: string,
   body: RevisionInput,
-): Promise<"ok" | "conflict" | "queue_full" | "failed"> {
+): Promise<"ok" | "conflict" | "queue_full" | "refused" | "failed" | "no_answer"> {
+  let res: Response
   try {
     const check = await turnstileToken("revise")
-    const res = await fetch(`/api/v1/submissions/${encodeURIComponent(id)}/revisions`, {
+    res = await fetch(`/api/v1/submissions/${encodeURIComponent(id)}/revisions`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(check ? { "Turnstile-Token": check } : {}) },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(8000),
     })
-    if (res.ok) return "ok"
-    if (res.status === 409) return "conflict"
-    const code = ((await res.json().catch(() => ({}))) as { code?: string }).code
-    return code === "queue_full" ? "queue_full" : "failed"
   } catch {
-    return "failed"
+    return "no_answer"
   }
+  if (res.ok) return "ok"
+  if (res.status === 409) return "conflict"
+  const code = ((await res.json().catch(() => ({}))) as { code?: string }).code
+  if (code === "queue_full") return "queue_full"
+  return res.status === 400 || res.status === 403 || res.status === 404 ? "refused" : "failed"
 }
 
 /** "ok", "expired" when the link is wrong or older than its seven days, or "failed" when the server can't be reached. */

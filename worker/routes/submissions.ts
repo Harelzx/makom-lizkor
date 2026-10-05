@@ -33,9 +33,12 @@ const KEY = /^[A-Za-z0-9_-]{22,64}$/
 const queueLimit = (c: Context<AppEnv>) => Number(c.env.QUEUE_LIMIT ?? 200)
 const queueFull = (c: Context<AppEnv>) => problem(c, 503, "queue_full", {}, { "Retry-After": "3600" })
 
-/** A full queue refuses before Turnstile is spent; the insert checks again, since requests at once all pass this. */
+/**
+ * A full queue refuses a new submission before Turnstile is spent; the insert checks again, since requests at once all
+ * pass this. A correction is checked only in its own update, so a stale one is told it's stale, full queue or not.
+ */
 async function guard(c: Context<AppEnv>, action: "submit" | "revise"): Promise<Response | null> {
-  if ((await pendingCount(c.env.DB)) >= queueLimit(c)) return queueFull(c)
+  if (action === "submit" && (await pendingCount(c.env.DB)) >= queueLimit(c)) return queueFull(c)
   const address = c.req.header("CF-Connecting-IP")
   if (address && !(await c.env.SUBMIT_LIMIT.limit({ key: address })).success)
     return problem(c, 429, "rate_limited", {}, { "Retry-After": "60" })
@@ -89,8 +92,13 @@ submissions.post("/:id/withdraw", async (c) => {
   const token = bearer(c.req.header("Authorization"))
   const done = token ? await withdraw(c.env.DB, c.req.param("id"), token, clock(c.req.raw, c.env)) : false
   if (!done) return problem(c, 404, "not_found")
-  await erasePhotos(c.env.MEDIA, c.req.param("id"))
-  return c.json({ status: "withdrawn" }, 200, PRIVATE)
+  // The withdrawal stands once stored. Files that can't be erased now are already unreachable (only published photos
+  // are served); the answer says so, and the same request again (or the sweep) finishes them.
+  const erased = await erasePhotos(c.env.MEDIA, c.req.param("id")).then(
+    () => true,
+    (err: Error) => (console.error(JSON.stringify({ level: "error", event: "withdraw_files", error: err.name })), false),
+  )
+  return c.json(erased ? { status: "withdrawn" } : { status: "withdrawn", files: "pending" }, 200, PRIVATE)
 })
 
 submissions.post(

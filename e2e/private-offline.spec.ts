@@ -119,3 +119,28 @@ test("the moderator sees that a place is on private property, the owner's permis
   await expect(item.getByText("במקום פרטי, במיקום מדויק באישור הבעלים")).toBeVisible()
   await expect(item.getByText(note)).toBeVisible()
 })
+
+test("the moderator sees that a place on private property without the owner's permission will be shown approximately", async ({
+  browser,
+}) => {
+  const name = `גינת דמו בלי אישור ${Date.now()}`
+  const ctx = await browser.newContext()
+  const res = await ctx.request.post("/api/v1/submissions", {
+    headers: { "Idempotency-Key": crypto.randomUUID().replaceAll("-", ""), "Turnstile-Token": "XXXX.DUMMY.TOKEN.XXXX" },
+    data: {
+      kind: "garden",
+      name_he: name,
+      lat: 31.423456,
+      lng: 34.498765,
+      on_private_property: true,
+      consent_version: "notice.submission@2026-10-9",
+    },
+  })
+  expect(res.status()).toBe(201)
+  await ctx.request.post("/__dev/login", { data: { email: "dev@example.test" } })
+  const mod = await ctx.newPage()
+  await mod.goto("/admin/")
+  const item = mod.getByRole("article", { name })
+  await expect(item.getByText("במקום פרטי, בלי אישור הבעלים: יוצג מיקום משוער")).toBeVisible()
+  await expect(item.getByText("איך מגיעים", { exact: false })).toHaveCount(0)
+})

@@ -121,3 +121,18 @@ test("a correction whose answer was lost is found saved, not reported as unsent"
   await expect(page.getByText("לא קיבלנו תשובה מהשרת")).toHaveCount(0)
   await expect(page.getByText("לא הצלחנו לשלוח את התיקון")).toHaveCount(0)
 })
+
+test("a withdrawal whose answer was lost is found done, not reported as unchanged", async ({ browser }) => {
+  const name = `ספסל דמו משיכה שאבדה ${Date.now()}`
+  const page = await submit(browser, name)
+  await page.route("**/api/v1/submissions/*/withdraw", async (route) => {
+    await route.fetch()
+    await route.abort("failed")
+  })
+  await page.getByRole("button", { name: "מעקב אחרי ההצעה" }).click()
+  const view = page.getByRole("dialog", { name: "מצב ההצעה" })
+  await view.getByRole("button", { name: "משיכת ההצעה" }).click()
+  await page.getByRole("alertdialog").getByRole("button", { name: "למשוך ולמחוק" }).click()
+  await expect(view.getByText("נמשכה", { exact: false })).toBeVisible()
+  await expect(page.getByText("לא הצלחנו", { exact: false })).toHaveCount(0)
+})

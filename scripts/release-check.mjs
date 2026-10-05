@@ -30,7 +30,8 @@ if (!sitekey || /^[123]x0+/.test(sitekey))
 const { experimental_readRawConfig } = await import("wrangler")
 const { MAIL_BINDING, PRODUCTION_MAIL_SENDS } = await import("../worker/lib/mail-binding.ts")
 const { mailBlockers } = await import("./release-mail.mjs")
-const raw = experimental_readRawConfig({ config: new URL("../wrangler.jsonc", import.meta.url).pathname }).rawConfig
+const { fileURLToPath } = await import("node:url")
+const raw = experimental_readRawConfig({ config: fileURLToPath(new URL("../wrangler.jsonc", import.meta.url)) }).rawConfig
 blockers.push(...mailBlockers(raw, { binding: MAIL_BINDING, sends: PRODUCTION_MAIL_SENDS }))
 
 if (blockers.length) {
