@@ -1,11 +1,18 @@
 import { useCallback, useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
+import { KINDS } from "@/data/taxonomy"
+import type { Kind } from "@/types"
 
 interface Item {
   id: string
   rev: number
   revisionId: string
+  kind: Kind
   name_he: string
+  lat: number
+  lng: number
+  location_precision: "exact" | "approximate"
+  link_url: string | null
   place_he: string | null
   in_memory_of: string | null
   story_he: string | null
@@ -78,8 +85,26 @@ export function Queue() {
             <article key={item.id} aria-label={item.name_he} className="rounded-2xl border border-line p-4">
               <h2 className="text-label font-bold text-ink-1">{item.name_he}</h2>
               <p className="text-caption text-ink-2">
-                {[item.place_he, item.in_memory_of && `לזכר ${item.in_memory_of}`].filter(Boolean).join(" · ")}
+                {[KINDS[item.kind].label, item.place_he, item.in_memory_of && `לזכר ${item.in_memory_of}`].filter(Boolean).join(" · ")}
               </p>
+              {/* The point that would be published, to check against a map before approving. */}
+              <p className="text-caption text-ink-2 tabular-nums" dir="ltr">
+                <a
+                  className="underline underline-offset-2"
+                  href={`https://www.openstreetmap.org/?mlat=${item.lat}&mlon=${item.lng}#map=17/${item.lat}/${item.lng}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {item.lat.toFixed(5)}, {item.lng.toFixed(5)}
+                </a>
+                {item.location_precision === "approximate" && " (משוער)"}
+              </p>
+              {/* Shown as text, never as a link: the moderator reads where it goes before anyone can follow it. */}
+              {item.link_url && (
+                <p className="text-caption break-all text-ink-2" dir="ltr">
+                  {item.link_url}
+                </p>
+              )}
               {item.story_he && <p className="mt-2 whitespace-pre-line text-ink-1">{item.story_he}</p>}
               <div className="mt-3 flex gap-2">
                 <Button className="pressable" disabled={busy === item.id} onClick={() => decide(item, "approve")}>

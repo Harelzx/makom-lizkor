@@ -62,10 +62,11 @@ export async function submissionStatus(db: D1Database, id: string, token: string
   return { status: row.status }
 }
 
+/** Everything a moderator approves is on screen: every field the feed would publish. */
 export async function listQueue(db: D1Database) {
   const { results } = await db
     .prepare(
-      `SELECT p.id, p.rev, r.id AS revisionId, r.kind, r.name_he, r.place_he, r.in_memory_of, r.story_he, p.created_at
+      `SELECT p.id, p.rev, r.id AS revisionId, r.kind, r.name_he, r.lat, r.lng, r.location_precision, r.place_he, r.in_memory_of, r.story_he, r.link_url, p.created_at
        FROM places p JOIN revisions r ON r.place_id = p.id AND r.state = 'pending'
        WHERE p.status = 'pending' ORDER BY p.created_at`,
     )

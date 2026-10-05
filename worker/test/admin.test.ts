@@ -28,6 +28,22 @@ describe("admin", () => {
     })
     expect(res.status).toBe(403)
   })
+  it("shows the moderator every field that would be published", async () => {
+    const res = await exports.default.fetch("http://local/api/v1/submissions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        kind: "lookout",
+        name_he: "מצפור דמו לבדיקה",
+        lat: 31.4321,
+        lng: 34.5432,
+        link_url: "https://example.test/memorial",
+        consent_version: "notice.submission@2026-10-1",
+      }),
+    })
+    const { id } = await res.json<{ id: string }>()
+    expect(await queued(id)).toMatchObject({ kind: "lookout", lat: 31.4321, lng: 34.5432, link_url: "https://example.test/memorial" })
+  })
   it("lists pending submissions with what a moderator needs to decide", async () => {
     const { id } = await submit("גן דמו לתור")
     const item = await queued(id)
