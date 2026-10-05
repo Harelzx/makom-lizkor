@@ -9,7 +9,7 @@ export const SUBMITTABLE_KINDS = ["bench", "lookout", "grove", "garden", "plaque
  * is the one the add form shows now. A submission that names any other version is refused, so what is stored is
  * always a notice the site actually showed. A test keeps this list and the texts in step.
  */
-export const SUBMISSION_NOTICES = ["notice.submission@2026-10-2"] as const
+export const SUBMISSION_NOTICES = ["notice.submission@2026-10-2", "notice.submission@2026-10-3"] as const
 export const CURRENT_SUBMISSION_NOTICE = SUBMISSION_NOTICES[SUBMISSION_NOTICES.length - 1]
 
 export const text = ({ max, multiline = false }: { max: number; multiline?: boolean }) =>
