@@ -1,5 +1,6 @@
 import { Feed, isNewer, type PublicPlace } from "@/shared/contract"
 import { retryWaiting } from "@/lib/outbox"
+import { loadSnapshot, saveSnapshot } from "@/lib/storage"
 import { useStore } from "@/store"
 import type { Place } from "@/types"
 
@@ -17,6 +18,7 @@ function toPlace(p: PublicPlace): Place {
     summary_he: p.summary_he,
     inMemoryOf: p.in_memory_of,
     contributedPhoto: p.photo,
+    accessNote: p.access_note,
     links: p.link_url ? [{ label_he: "אתר הנצחה", url: p.link_url }] : [],
     coord_source: "contribution",
     region: p.lat < 31.7 && p.lng < 34.75 && p.lat > 31.1 ? "envelope" : "country",
@@ -44,7 +46,12 @@ export function startFeedSync(): () => void {
       }
       if (!res.ok) return
       const feed = Feed.parse(await res.json())
-      if (!mine || isNewer(feed.v, mine)) useStore.getState().setRemote(feed.v, feed.places.map(toPlace))
+      const current = useStore.getState().feedVersion
+      if (!current || isNewer(feed.v, current)) {
+        useStore.getState().setRemote(feed.v, feed.places.map(toPlace))
+        // The newest feed replaces the offline copy whole: nothing hidden since lingers in it.
+        void saveSnapshot(feed)
+      }
     } catch {
       /* offline or the server is down: the map keeps what it already shows */
     } finally {
@@ -60,6 +67,13 @@ export function startFeedSync(): () => void {
   document.addEventListener("visibilitychange", onWake)
   window.addEventListener("focus", onWake)
   window.addEventListener("online", onWake)
+  // With no connection yet, the last feed this browser received fills the map; a newer one replaces it whole.
+  void loadSnapshot().then((saved) => {
+    const snapshot = Feed.safeParse(saved)
+    const current = useStore.getState().feedVersion
+    if (snapshot.success && (!current || isNewer(snapshot.data.v, current)))
+      useStore.getState().setRemote(snapshot.data.v, snapshot.data.places.map(toPlace), false)
+  })
   onWake()
   return () => {
     clearInterval(timer)

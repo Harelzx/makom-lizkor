@@ -49,6 +49,25 @@ export async function saveTributes(t: Record<string, number>): Promise<void> {
   }
 }
 
+/** The last feed this browser received, kept whole: what the map shows with no connection (spec 5). */
+export async function loadSnapshot(): Promise<unknown> {
+  try {
+    const s = db()
+    return s ? await get("feed", s) : undefined
+  } catch {
+    return undefined
+  }
+}
+
+export async function saveSnapshot(feed: unknown): Promise<void> {
+  try {
+    const s = db()
+    if (s) await set("feed", feed, s)
+  } catch {
+    /* without storage there is simply no offline copy */
+  }
+}
+
 export function downloadJSON(filename: string, data: unknown) {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" })
   const url = URL.createObjectURL(blob)

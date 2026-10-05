@@ -40,6 +40,8 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
   const [copied, setCopied] = useState(false)
   const photos = place.photos ?? []
   const local = place.local
+  // Contributions (a visitor's own or approved ones) are where private property comes up; curated places are public sites.
+  const inPrivate = !!local || place.coord_source === "contribution"
   const titleRef = useFocusOnOpen<HTMLHeadingElement>()
 
   const share = async () => {
@@ -136,18 +138,30 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
 
       <Tribute placeId={place.id} />
 
+      {place.accessNote && (
+        <p className="text-body text-ink-1">
+          <span className="text-ink-2">איך מגיעים: </span>
+          {place.accessNote}
+        </p>
+      )}
+
       <div className="-mx-2.5 flex flex-wrap gap-x-1 gap-y-1">
-        <Button variant="ghost" className="h-9 rounded-full px-2.5 text-label text-ink-1 hover:bg-surface-2" asChild>
-          <a href={`https://waze.com/ul?ll=${place.lat},${place.lng}&navigate=yes`} target="_blank" rel="noopener">
-            <NavigationIcon data-icon="inline-start" />
-            ניווט ב־Waze
-          </a>
-        </Button>
-        <Button variant="ghost" className="h-9 rounded-full px-2.5 text-label text-ink-1 hover:bg-surface-2" asChild>
-          <a href={`https://www.google.com/maps/search/?api=1&query=${place.lat},${place.lng}`} target="_blank" rel="noopener">
-            Google Maps
-          </a>
-        </Button>
+        {/* A family's place on private property shown approximately leads nobody to it: no navigation (spec 4). */}
+        {!(inPrivate && place.precision === "approx") && (
+          <>
+            <Button variant="ghost" className="h-9 rounded-full px-2.5 text-label text-ink-1 hover:bg-surface-2" asChild>
+              <a href={`https://waze.com/ul?ll=${place.lat},${place.lng}&navigate=yes`} target="_blank" rel="noopener">
+                <NavigationIcon data-icon="inline-start" />
+                ניווט ב־Waze
+              </a>
+            </Button>
+            <Button variant="ghost" className="h-9 rounded-full px-2.5 text-label text-ink-1 hover:bg-surface-2" asChild>
+              <a href={`https://www.google.com/maps/search/?api=1&query=${place.lat},${place.lng}`} target="_blank" rel="noopener">
+                Google Maps
+              </a>
+            </Button>
+          </>
+        )}
         <Button variant="ghost" className="h-9 rounded-full px-2.5 text-label text-ink-1 hover:bg-surface-2" onClick={share}>
           {copied ? <CheckIcon data-icon="inline-start" /> : <Share2Icon data-icon="inline-start" />}
           שיתוף

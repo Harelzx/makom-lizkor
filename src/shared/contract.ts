@@ -21,6 +21,7 @@ export const SUBMISSION_NOTICES = [
   "notice.submission@2026-10-6",
   "notice.submission@2026-10-7",
   "notice.submission@2026-10-8",
+  "notice.submission@2026-10-9",
 ] as const
 export const CURRENT_SUBMISSION_NOTICE = SUBMISSION_NOTICES[SUBMISSION_NOTICES.length - 1]
 
@@ -51,9 +52,13 @@ export const SubmissionInput = z
     // Optional (spec 11). Only verified addresses hear anything private; it is never published.
     email: z.email().max(254).optional(),
     on_private_property: z.boolean().default(false),
+    // On private property, the exact point is shown only with the owner's permission and a note on how to visit.
+    location_permission: z.boolean().default(false),
+    access_note_he: text({ max: 300 }).optional(),
     consent_version: z.enum(SUBMISSION_NOTICES),
   })
   .strict()
+  .refine((s) => !s.location_permission || (s.on_private_property && !!s.access_note_he), { message: "access_note_required" })
 export type SubmissionInput = z.infer<typeof SubmissionInput>
 
 /** The sender's correction: the text fields again, whole, against the version they saw. The kind and point stay. */
@@ -84,6 +89,8 @@ export const PublicPlace = z.object({
   summary_he: z.string(),
   in_memory_of: z.string().optional(),
   link_url: z.string().optional(),
+  /** How to visit a place on private property shown exactly, with its owner's permission. */
+  access_note: z.string().optional(),
   /** Approved with its place; served by the Worker from public/. */
   photo: z.object({ url: z.string(), alt: z.string(), credit: z.string().optional() }).optional(),
 })

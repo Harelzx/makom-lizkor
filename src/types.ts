@@ -45,6 +45,8 @@ export interface Place {
   photos?: Photo[]
   /** Whom a contributed place remembers, as the family wrote it. */
   inMemoryOf?: string
+  /** How to visit a contributed place on private property, shown exactly with its owner's permission. */
+  accessNote?: string
   /** A contributed place's photo, approved with it and served from the site. */
   contributedPhoto?: { url: string; alt: string; credit?: string }
   /** Only on attacked communities. */

@@ -28,6 +28,8 @@ interface State {
   /** Contributions a moderator approved, from the server's feed. */
   remote: Place[]
   feedVersion: string | null
+  /** True once a feed came from the server in this visit; false while only the offline copy is shown. */
+  feedLive: boolean
   local: Place[]
   tributes: Record<string, number>
   selectedId: string | null
@@ -67,7 +69,7 @@ interface State {
   setSearchOpen: (v: boolean) => void
   setPicking: (v: boolean) => void
   setDraft: (p: { lat: number; lng: number } | null) => void
-  setRemote: (v: string, places: Place[]) => void
+  setRemote: (v: string, places: Place[], live?: boolean) => void
   /** Both keep the change in memory and say whether it was also saved on the device; they never throw. */
   addLocal: (p: Place) => Promise<boolean>
   updateLocal: (id: string, patch: Partial<LocalFields>) => Promise<boolean>
@@ -92,6 +94,7 @@ export const useStore = create<State>((set, get) => ({
   seed: seed as Place[],
   remote: [],
   feedVersion: null,
+  feedLive: false,
   local: [],
   tributes: {},
   selectedId: linkedPlaceId(),
@@ -131,7 +134,7 @@ export const useStore = create<State>((set, get) => ({
   setSearchOpen: (searchOpen) => set({ searchOpen }),
   setPicking: (picking) => set({ picking }),
   setDraft: (draft) => set({ draft }),
-  setRemote: (feedVersion, remote) => set({ feedVersion, remote }),
+  setRemote: (feedVersion, remote, live = true) => set({ feedVersion, remote, feedLive: live || get().feedLive }),
   addLocal: async (p) => {
     const local = [...get().local, p]
     set({ local })

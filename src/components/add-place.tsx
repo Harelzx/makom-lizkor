@@ -118,6 +118,10 @@ export function AddPlace() {
   const [photoRights, setPhotoRights] = useState(false)
   const [submitter, setSubmitter] = useState("")
   const [email, setEmail] = useState("")
+  // A place on private property: approximate unless the owner allowed the exact point, with a note on how to visit.
+  const [privateLand, setPrivateLand] = useState(false)
+  const [permission, setPermission] = useState(false)
+  const [accessNote, setAccessNote] = useState("")
   const [family, setFamily] = useState(false)
   const [consent, setConsent] = useState(false)
   const [error, setError] = useState("")
@@ -170,6 +174,9 @@ export function AddPlace() {
     setPhotoRights(false)
     setSubmitter("")
     setEmail("")
+    setPrivateLand(false)
+    setPermission(false)
+    setAccessNote("")
     setFamily(false)
     setConsent(false)
     setError("")
@@ -200,6 +207,7 @@ export function AddPlace() {
       if (!draft) return fail("סמנו קודם את המקום על המפה.")
       if (draft.lat < 29.4 || draft.lat > 33.45 || draft.lng < 34.2 || draft.lng > 35.95)
         return fail("הנקודה מחוץ לאזור שהמפה מכסה. סמנו שוב.")
+      if (privateLand && permission && !accessNote.trim()) return fail("כדי להציג מיקום מדויק בשטח פרטי, כתבו איך מגיעים ומתי מותר לבקר.")
     }
     if (step === 1) {
       if (!name.trim()) return fail('כתבו איך נקרא המקום, למשל "הספסל של נועה".')
@@ -219,13 +227,15 @@ export function AddPlace() {
     sending.current = true
     setBusy(true)
     const now = new Date().toISOString()
+    const approximate = privateLand && !permission
     const place: Place = {
       id: `local-${Date.now().toString(36)}`,
       name_he: name.trim(),
       kind,
-      lat: +draft.lat.toFixed(6),
-      lng: +draft.lng.toFixed(6),
-      precision: "exact",
+      // Approximate on private property without permission: this device shows what will be published, not the exact pin.
+      lat: approximate ? +draft.lat.toFixed(2) : +draft.lat.toFixed(6),
+      lng: approximate ? +draft.lng.toFixed(2) : +draft.lng.toFixed(6),
+      precision: approximate ? "approx" : "exact",
       place_he: placeHe.trim() || "נוסף על ידי משפחה או חברים",
       summary_he: story.trim(),
       links: link ? [{ label_he: "קישור שצירפתם", url: `https://${link}` }] : [],
@@ -255,7 +265,9 @@ export function AddPlace() {
       link_url: link ? `https://${link}` : undefined,
       submitter_name: submitter.trim() || undefined,
       email: email.trim() || undefined,
-      on_private_property: false,
+      on_private_property: privateLand,
+      location_permission: privateLand && permission,
+      access_note_he: privateLand && permission ? accessNote.trim() || undefined : undefined,
       consent_version: CURRENT_SUBMISSION_NOTICE,
     }
     let message: string
@@ -486,6 +498,37 @@ export function AddPlace() {
                               </Button>
                             </AlertAction>
                           </Alert>
+                        )}
+                        <Field orientation="horizontal">
+                          <Checkbox id={`${uid}-private`} checked={privateLand} onCheckedChange={(v) => setPrivateLand(v === true)} />
+                          <FieldLabel htmlFor={`${uid}-private`} className="leading-snug font-normal">
+                            המקום נמצא בשטח פרטי, למשל בחצר של בית
+                          </FieldLabel>
+                        </Field>
+                        {privateLand && (
+                          <FieldGroup className="gap-3 ps-7">
+                            <FieldDescription>
+                              נציג אותו במיקום משוער, ברמת היישוב, בלי ניווט אליו, ונשמור רק את הנקודה המעוגלת. מיקום מדויק יוצג רק ברשות
+                              הבעלים.
+                            </FieldDescription>
+                            <Field orientation="horizontal">
+                              <Checkbox id={`${uid}-permission`} checked={permission} onCheckedChange={(v) => setPermission(v === true)} />
+                              <FieldLabel htmlFor={`${uid}-permission`} className="leading-snug font-normal">
+                                בעלי השטח הסכימו שנציג את המיקום המדויק
+                              </FieldLabel>
+                            </Field>
+                            {permission && (
+                              <Field>
+                                <FieldLabel htmlFor={`${uid}-access`}>איך מגיעים ומתי מותר לבקר</FieldLabel>
+                                <Textarea
+                                  id={`${uid}-access`}
+                                  value={accessNote}
+                                  onChange={(e) => setAccessNote(e.target.value)}
+                                  maxLength={300}
+                                />
+                              </Field>
+                            )}
+                          </FieldGroup>
                         )}
                         <div className="flex flex-col gap-2 rounded-2xl bg-surface-2 p-4">
                           <p className="text-label text-ink-1">המקומות שהוספתם</p>

@@ -20,7 +20,11 @@ export async function insertSubmission(db: D1Database, input: SubmissionInput, k
   const id = placeId(now.getTime())
   const trackingToken = newToken()
   const at = now.toISOString()
-  const precision = input.on_private_property ? "approximate" : "exact"
+  // On private property without the owner's permission, only a point rounded to about a kilometre is ever stored
+  // (spec 4): the exact one never reaches the database, the moderators or a backup.
+  const exact = !input.on_private_property || input.location_permission
+  const precision = exact ? "exact" : "approximate"
+  const round = (v: number) => Math.round(v * 100) / 100
   const stmts = [
     db
       .prepare(
@@ -30,18 +34,21 @@ export async function insertSubmission(db: D1Database, input: SubmissionInput, k
       .bind(id, await sha256Hex(trackingToken), keyHash, bodyHash, at, at),
     db
       .prepare(
-        `INSERT INTO revisions (id, place_id, n, state, kind, name_he, lat, lng, location_precision, on_private_property, place_he, in_memory_of, story_he, link_url, consent_version, created_at)
-         VALUES (?, ?, 1, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO revisions (id, place_id, n, state, kind, name_he, lat, lng, location_precision, on_private_property, location_permission_at,
+           access_note_he, place_he, in_memory_of, story_he, link_url, consent_version, created_at)
+         VALUES (?, ?, 1, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         `r_${ulid(now.getTime())}`,
         id,
         input.kind,
         input.name_he,
-        input.lat,
-        input.lng,
+        exact ? input.lat : round(input.lat),
+        exact ? input.lng : round(input.lng),
         precision,
         input.on_private_property ? 1 : 0,
+        input.on_private_property && input.location_permission ? at : null,
+        input.on_private_property && input.location_permission ? (input.access_note_he ?? null) : null,
         input.place_he ?? null,
         input.in_memory_of ?? null,
         input.story_he ?? null,
@@ -366,7 +373,7 @@ export async function readFeed(db: D1Database, epoch: string): Promise<Feed> {
     db.prepare("SELECT n FROM feed_state WHERE id = 1"),
     db.prepare(
       `SELECT p.id, r.kind, r.name_he, r.lat, r.lng, r.location_precision, r.place_he, r.story_he, r.in_memory_of, r.link_url,
-         r.photo_key, r.photo_alt, r.photo_credit
+         r.photo_key, r.photo_alt, r.photo_credit, r.access_note_he
        FROM places p JOIN revisions r ON r.id = p.published_revision_id WHERE p.status = 'published'`,
     ),
   ])
@@ -382,6 +389,7 @@ export async function readFeed(db: D1Database, epoch: string): Promise<Feed> {
     summary_he: (r.story_he as string | null) ?? "",
     in_memory_of: (r.in_memory_of as string | null) ?? undefined,
     link_url: (r.link_url as string | null) ?? undefined,
+    ...(r.access_note_he ? { access_note: r.access_note_he as string } : {}),
     // Only a photo that reached public/ (approved with its place) is ever named in the feed.
     ...(typeof r.photo_key === "string" && r.photo_key.startsWith("public/")
       ? { photo: { url: `/media/${r.photo_key}`, alt: r.photo_alt as string, credit: (r.photo_credit as string | null) ?? undefined } }

@@ -57,17 +57,19 @@ function useHashRoute() {
     window.addEventListener("hashchange", onHash)
     return () => window.removeEventListener("hashchange", onHash)
   }, [phase])
-  // A contribution's link is trusted until the feed has come; if the feed doesn't have it (a typo, a rejected or hidden
-  // place), the link falls back to the overview, as any unknown link does.
+  // A contribution's link is trusted until the server's feed has come; if that feed doesn't have it (a typo, a rejected
+  // or hidden place), the link falls back to the overview, as any unknown link does. The offline copy doesn't count:
+  // a place approved since it was saved would fall back wrongly.
   const feedVersion = useStore((s) => s.feedVersion)
+  const feedLive = useStore((s) => s.feedLive)
   useEffect(() => {
     const s = useStore.getState()
     const id = s.selectedId
-    if (!feedVersion || !id?.startsWith("p_") || s.remote.some((p) => p.id === id)) return
+    if (!feedVersion || !feedLive || !id?.startsWith("p_") || s.remote.some((p) => p.id === id)) return
     history.replaceState(null, "", "#/")
     s.select(null)
     void import("@/map/controller").then((m) => m.flyToEnvelope(2400))
-  }, [feedVersion])
+  }, [feedVersion, feedLive])
   useEffect(() => {
     if (phase !== "day") return
     const next = selectedId ? `#/place/${encodeURIComponent(selectedId)}` : "#/"

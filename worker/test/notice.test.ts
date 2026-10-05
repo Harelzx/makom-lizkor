@@ -33,6 +33,7 @@ it("describes the flow that exists: a tracking link to follow and withdraw, and 
   expect(text).not.toContain("התמונה לא נשלחת")
   expect(text).toContain("מתפרסמת רק אם המקום אושר")
   expect(text).toContain("את התמונה צילמתי בעצמי")
+  expect(text).toContain("סימנתם שהמקום בשטח פרטי")
   // The browser check runs now, so Cloudflare is named for it among the processors.
   expect(text).toContain("Turnstile")
   expect(text).toContain("מייל אימות")
