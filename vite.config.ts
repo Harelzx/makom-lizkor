@@ -1,4 +1,5 @@
 import { resolve } from "node:path"
+import { cloudflare } from "@cloudflare/vite-plugin"
 import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
@@ -6,7 +7,7 @@ import { checkoutPorts } from "./scripts/parallel/ports.mjs"
 
 // MapLibre v6 loads its worker via `new URL(..., import.meta.url)`; pre-bundling breaks that path.
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), cloudflare()],
   resolve: {
     alias: [
       { find: "@", replacement: resolve(import.meta.dirname, "./src") },

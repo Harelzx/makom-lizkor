@@ -35,3 +35,6 @@ playwright-report/
 # Frames the capture tools write while assembling a video
 tools/frames/
 __pycache__/
+
+# Local Workers state (D1, caches) written by wrangler and the Vite plugin
+.wrangler/

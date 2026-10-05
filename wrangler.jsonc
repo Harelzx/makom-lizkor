@@ -1,0 +1,22 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "makom-lizkor",
+  "main": "./worker/index.ts",
+  "compatibility_date": "2026-10-01",
+  // The SPA is served as static assets; only these paths run the Worker.
+  "assets": { "not_found_handling": "single-page-application", "run_worker_first": ["/api/*", "/__dev/*"] },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "makom-dev", "database_id": "00000000-0000-0000-0000-000000000000", "migrations_dir": "migrations" },
+  ],
+  // Development values only. The production config (phase 6) sets ENVIRONMENT=production and has no DEV_ACCESS_SECRET.
+  "vars": {
+    "ENVIRONMENT": "development",
+    "EPOCH": "0",
+    "MODERATORS": "dev@example.test",
+    "DEV_ACCESS_SECRET": "development-only-not-a-secret",
+    "ACCESS_TEAM_DOMAIN": "",
+    "ACCESS_AUD": "",
+  },
+  // Our own JSON log lines only; no automatic per-request records (they carry URLs and headers).
+  "observability": { "logs": { "enabled": true, "invocation_logs": false } },
+}
