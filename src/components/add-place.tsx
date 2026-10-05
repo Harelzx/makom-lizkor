@@ -102,6 +102,9 @@ export function AddPlace() {
   const [consent, setConsent] = useState(false)
   const [error, setError] = useState("")
   const [saved, setSaved] = useState(false)
+  // Set the moment saving starts, before the send: a second tap or Enter while the server answers must not send it again.
+  const sending = useRef(false)
+  const [busy, setBusy] = useState(false)
   const uid = useId()
   const titleRef = useRef<HTMLHeadingElement>(null)
   // The step area grows and shrinks to fit each step, instead of the dialog jumping between sizes.
@@ -180,7 +183,9 @@ export function AddPlace() {
   const save = async () => {
     if (!draft) return setStep(0)
     if (!family || !consent) return fail("כדי לשמור צריך לסמן את שתי ההצהרות.")
-    if (saved) return
+    if (saved || sending.current) return
+    sending.current = true
+    setBusy(true)
     const now = new Date().toISOString()
     const place: Place = {
       id: `local-${Date.now().toString(36)}`,
@@ -236,6 +241,8 @@ export function AddPlace() {
         setTimeout(() => {
           reset()
           setSaved(false)
+          setBusy(false)
+          sending.current = false
         }, 300)
         useStore.getState().setTab("places")
         select(place.id)
@@ -715,7 +722,8 @@ export function AddPlace() {
                     variant="brand"
                     className="relative overflow-hidden rounded-full px-6"
                     disabled={!family || !consent}
-                    aria-disabled={saved}
+                    aria-disabled={saved || busy}
+                    aria-busy={busy && !saved}
                     onClick={save}
                   >
                     <motion.span

@@ -19,6 +19,7 @@ const SOURCE: Record<Place["coord_source"], string> = {
   wikidata: "Wikidata",
   manual: "איתור ידני",
   community: "הוספה מקומית",
+  contribution: "הצעה של משפחה או חברים, שאושרה",
 }
 
 // `ref` lets AnimatePresence (popLayout) lift the leaving card out of the flow, so the list can take its place at once.
@@ -105,9 +106,9 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
         <p className="text-label font-normal text-ink-2">{place.place_he}</p>
       </header>
 
-      {local?.inMemoryOf && (
+      {(place.inMemoryOf ?? local?.inMemoryOf) && (
         <p className="text-title-3 text-ink-1">
-          לזכר <span className="text-brand">{local.inMemoryOf}</span>
+          לזכר <span className="text-brand">{place.inMemoryOf ?? local?.inMemoryOf}</span>
         </p>
       )}
 
@@ -166,13 +167,16 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
         {place.precision === "approx" && <p>המיקום משוער: הוא מצביע על האזור, לא על הנקודה המדויקת.</p>}
         {local ? (
           <div className="flex items-center justify-between gap-2">
-            <span>נשמר רק בדפדפן הזה.</span>
+            {/* A place sent for review is on the server too; deleting this copy doesn't withdraw it (withdrawal comes with the tracking link). */}
+            <span>{local.remoteId ? "נשלח לבדיקה, ויופיע לכולם אחרי אישור." : "נשמר רק בדפדפן הזה."}</span>
             <Button
               variant="ghost"
               size="xs"
               onClick={() => {
                 void removeLocal(place.id)
-                toast("המקום נמחק מהמכשיר")
+                toast("המקום נמחק מהמכשיר", {
+                  description: local.remoteId ? "ההצעה שנשלחה לבדיקה לא נמשכה. כדי למשוך אותה, כתבו לנו." : undefined,
+                })
               }}
             >
               <Trash2Icon data-icon="inline-start" />

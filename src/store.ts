@@ -177,7 +177,7 @@ export function normalize(s: string) {
 export function matches(p: Place, q: string) {
   const n = normalize(q)
   if (!n) return true
-  const hay = normalize([p.name_he, p.place_he, p.summary_he, p.local?.inMemoryOf].filter(Boolean).join(" "))
+  const hay = normalize([p.name_he, p.place_he, p.summary_he, p.inMemoryOf ?? p.local?.inMemoryOf].filter(Boolean).join(" "))
   return n.split(/\s+/).every((t) => hay.includes(t))
 }
 

@@ -32,12 +32,16 @@ test("a place submitted without email is moderated, published, and seen in anoth
   await dialog.getByRole("button", { name: "המיקום הנוכחי שלי" }).click()
   await dialog.getByRole("button", { name: "המשך" }).click()
   await dialog.getByLabel("שם המקום").fill(name)
+  await dialog.getByLabel("לזכר (לא חובה)").fill("נועה דמו")
   await dialog.getByRole("button", { name: "המשך" }).click()
   for (const box of await dialog.getByRole("checkbox").all()) await box.check()
   const sent = visitor.waitForResponse((r) => r.url().endsWith("/api/v1/submissions") && r.status() === 201)
   await dialog.getByRole("button", { name: "שמירה והנחת כלנית" }).click()
   const { id } = (await (await sent).json()) as { id: string }
   expect(Object.keys((await sent).request().postDataJSON())).not.toContain("email")
+  // The submitter's own card says where the place went; it doesn't promise it stays only in this browser.
+  await expect(visitor.getByText("נשלח לבדיקה", { exact: false }).first()).toBeVisible(DAY)
+  await expect(visitor.getByText("נשמר רק בדפדפן הזה")).toHaveCount(0)
 
   // Someone else already has the map open before the place is approved, and doesn't see it yet.
   const other = await skipIntro(browser)
@@ -68,6 +72,38 @@ test("a place submitted without email is moderated, published, and seen in anoth
   await linked.goto(`/#/place/${id}`)
   await expect(linked.getByRole("heading", { name })).toBeVisible(DAY)
   await expect(linked).toHaveURL(new RegExp(`#/place/${id}$`))
+  // Published, the dedication is still there.
+  await expect(linked.getByText("נועה דמו")).toBeVisible()
+})
+
+test("saving twice while the first send is slow sends the place once", async ({ browser }) => {
+  const page = await skipIntro(browser, { geolocation: { latitude: 31.42, longitude: 34.49 }, permissions: ["geolocation"] })
+  let posts = 0
+  await page.route("**/api/v1/submissions", async (r) => {
+    posts++
+    await new Promise((done) => setTimeout(done, 1500))
+    await r.continue()
+  })
+  await page.getByRole("button", { name: "הוספת מקום" }).first().click()
+  const dialog = page.getByRole("dialog")
+  await dialog.getByRole("button", { name: "המיקום הנוכחי שלי" }).click()
+  await dialog.getByRole("button", { name: "המשך" }).click()
+  await dialog.getByLabel("שם המקום").fill(`ספסל דמו כפול ${Date.now()}`)
+  await dialog.getByRole("button", { name: "המשך" }).click()
+  for (const box of await dialog.getByRole("checkbox").all()) await box.check()
+  const save = dialog.getByRole("button", { name: "שמירה והנחת כלנית" })
+  await save.click()
+  await save.click({ force: true }).catch(() => {})
+  await page.keyboard.press("Enter")
+  await expect(dialog).toBeHidden({ timeout: 10_000 })
+  expect(posts).toBe(1)
+})
+
+test("a link to a contribution that isn't published falls back to the overview once the feed has come", async ({ page }) => {
+  const fed = page.waitForResponse((r) => r.url().includes("/api/v1/feed?") && r.status() === 200)
+  await page.goto("/#/place/p_01ZZZZZZZZZZZZZZZZZZZZZZZZ")
+  await fed
+  await expect(page).toHaveURL(/#\/$/)
 })
 
 test("the opening finishes and the site works while the API is down", async ({ page }) => {

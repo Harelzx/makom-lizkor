@@ -12,10 +12,11 @@ function toPlace(p: PublicPlace): Place {
     lat: p.lat,
     lng: p.lng,
     precision: p.precision,
-    place_he: p.place_he,
+    place_he: p.place_he || "נוסף על ידי משפחה או חברים",
     summary_he: p.summary_he,
+    inMemoryOf: p.in_memory_of,
     links: p.link_url ? [{ label_he: "אתר הנצחה", url: p.link_url }] : [],
-    coord_source: "community",
+    coord_source: "contribution",
     region: p.lat < 31.7 && p.lng < 34.75 && p.lat > 31.1 ? "envelope" : "country",
   }
 }
