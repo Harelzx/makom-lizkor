@@ -14,11 +14,13 @@ import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "@/
 import { Anemone } from "@/components/anemone"
 import { ADDABLE_KINDS, KINDS } from "@/data/taxonomy"
 import { CONSENT_TEXT, FAMILY_CONSENT_TEXT, PHOTO_RIGHTS_TEXT } from "@/data/legal"
+import { submitPlace } from "@/lib/api"
 import { downloadJSON, resizeImage } from "@/lib/storage"
 import { getMap, reducedMotion } from "@/map/controller"
 import { useStore } from "@/store"
 import { ease, spring } from "@/lib/motion"
 import { cn } from "@/lib/utils"
+import type { SubmissionInput } from "@/shared/contract"
 import type { Kind, Place } from "@/types"
 
 type Step = 0 | 1 | 2
@@ -35,7 +37,7 @@ const TITLES = ["איפה המקום?", "מה יש שם?", "לפני שמוסי�
 const DESCRIPTIONS = [
   "ספסל, מצפור, עץ או פינה קטנה. כל מקום שהוקם לזכר מי שנרצחו או נפלו ב־7 באוקטובר מקבל כאן כלנית.",
   "כמה פרטים, כפי שהמשפחה רוצה שיופיעו.",
-  "בגרסה הזו המקום נשמר רק במכשיר שלכם.",
+  "ההצעה תישלח לבדיקה ותופיע לכולם אחרי אישור. עד אז היא מוצגת רק אצלכם.",
 ]
 /** The flower opens as the form moves on: a bud, then one anemone, then a bouquet. */
 const ART = ["/art/bud.webp", "/art/anemone-watercolor.webp", "/art/bouquet.webp"]
@@ -199,6 +201,25 @@ export function AddPlace() {
         photoCredit: photo ? photoCredit.trim() || undefined : undefined,
       },
     }
+    // Sent for review first; the local copy is kept either way, and steps aside once the approved place reaches the feed.
+    // The photo stays on this device until uploads arrive (phase 2).
+    const sent = await submitPlace({
+      kind: kind as SubmissionInput["kind"],
+      name_he: place.name_he,
+      lat: place.lat,
+      lng: place.lng,
+      place_he: placeHe.trim() || undefined,
+      in_memory_of: inMemoryOf.trim() || undefined,
+      story_he: story.trim() || undefined,
+      link_url: link ? `https://${link}` : undefined,
+      submitter_name: submitter.trim() || undefined,
+      on_private_property: false,
+      consent_version: "notice.submission@2026-10-1",
+    })
+    if (sent && place.local) {
+      place.local.remoteId = sent.id
+      place.local.trackingToken = sent.trackingToken
+    }
     await addLocal(place)
     // The button confirms first; then the dialog steps aside and the map flies to the new flower.
     setSaved(true)
@@ -215,7 +236,10 @@ export function AddPlace() {
         useStore.getState().setTab("places")
         select(place.id)
         useStore.getState().celebrate()
-        toast("הכלנית במקומה", { description: "המקום נשמר במכשיר הזה. אפשר לייצא אותו ולשלוח לנו מחלון ההוספה.", duration: 6000 })
+        toast("הכלנית במקומה", {
+          description: sent ? "ההצעה נשלחה לבדיקה. היא תופיע לכולם אחרי אישור." : "לא הצלחנו לשלוח כרגע. המקום נשמר במכשיר הזה.",
+          duration: 6000,
+        })
       },
       reducedMotion() ? 0 : 650,
     )

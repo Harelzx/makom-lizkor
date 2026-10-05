@@ -14,9 +14,10 @@ import type { Place } from "@/types"
 export function CommunityDetail({ place, onBack, ref }: { place: Place; onBack: () => void; ref?: React.Ref<HTMLElement> }) {
   const seed = useStore((s) => s.seed)
   const local = useStore((s) => s.local)
+  const remote = useStore((s) => s.remote)
   const select = useStore((s) => s.select)
   const r = place.revival
-  const sites = sitesNear(place, allPlaces({ seed, local }))
+  const sites = sitesNear(place, allPlaces({ seed, remote, local }))
   const photos = place.photos ?? []
 
   return (

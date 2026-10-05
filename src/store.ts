@@ -16,13 +16,17 @@ const linkedToPlace = () => typeof location !== "undefined" && /^#\/place\/[^/]+
 const linkedPlaceId = () => {
   if (!linkedToPlace()) return null
   const id = decodeURIComponent(location.hash.split("/")[2])
-  return id.startsWith("local-") || (seed as Place[]).some((p) => p.id === id) ? id : null
+  // Local places and approved contributions (p_…) load after the first render, so their ids are trusted.
+  return id.startsWith("local-") || id.startsWith("p_") || (seed as Place[]).some((p) => p.id === id) ? id : null
 }
 
 interface State {
   phase: Phase
   light: Light
   seed: Place[]
+  /** Contributions a moderator approved, from the server's feed. */
+  remote: Place[]
+  feedVersion: string | null
   local: Place[]
   tributes: Record<string, number>
   selectedId: string | null
@@ -53,6 +57,7 @@ interface State {
   setSearchOpen: (v: boolean) => void
   setPicking: (v: boolean) => void
   setDraft: (p: { lat: number; lng: number } | null) => void
+  setRemote: (v: string, places: Place[]) => void
   addLocal: (p: Place) => Promise<void>
   removeLocal: (id: string) => Promise<void>
   importLocal: (places: Place[]) => Promise<number>
@@ -66,6 +71,8 @@ export const useStore = create<State>((set, get) => ({
   phase: linkedToPlace() ? "day" : "intro",
   light: "morning",
   seed: seed as Place[],
+  remote: [],
+  feedVersion: null,
   local: [],
   tributes: {},
   selectedId: linkedPlaceId(),
@@ -97,6 +104,7 @@ export const useStore = create<State>((set, get) => ({
   setSearchOpen: (searchOpen) => set({ searchOpen }),
   setPicking: (picking) => set({ picking }),
   setDraft: (draft) => set({ draft }),
+  setRemote: (feedVersion, remote) => set({ feedVersion, remote }),
   addLocal: async (p) => {
     const local = [...get().local, p]
     set({ local })
@@ -146,7 +154,11 @@ export const useStore = create<State>((set, get) => ({
   setJourney: (journeyIndex, playing) => set({ journeyIndex, journeyPlaying: playing ?? get().journeyPlaying }),
 }))
 
-export const allPlaces = (s: Pick<State, "seed" | "local">) => [...s.seed, ...s.local]
+/** Seed, approved places from the server, and this device's own places; once its place is approved, the local copy steps aside. */
+export const allPlaces = (s: Pick<State, "seed" | "remote" | "local">) => {
+  const published = new Set(s.remote.map((p) => p.id))
+  return [...s.seed, ...s.remote, ...s.local.filter((p) => !p.local?.remoteId || !published.has(p.local.remoteId))]
+}
 
 export function normalize(s: string) {
   return s

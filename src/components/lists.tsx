@@ -37,8 +37,12 @@ function Row({ place, i, children }: { place: Place; i: number; children: React.
 export function PlacesList() {
   const seed = useStore((s) => s.seed)
   const local = useStore((s) => s.local)
+  const remote = useStore((s) => s.remote)
   const query = useStore((s) => s.query)
-  const places = useMemo(() => allPlaces({ seed, local }).filter((p) => p.kind !== "community" && matches(p, query)), [seed, local, query])
+  const places = useMemo(
+    () => allPlaces({ seed, remote, local }).filter((p) => p.kind !== "community" && matches(p, query)),
+    [seed, remote, local, query],
+  )
   const groups = [
     { id: "local", title: "הוספתם במכשיר הזה", items: places.filter((p) => p.local) },
     { id: "envelope", title: "בעוטף עזה", items: places.filter((p) => !p.local && p.region === "envelope") },
@@ -105,8 +109,9 @@ export function PlacesList() {
 export function CommunitiesList() {
   const seed = useStore((s) => s.seed)
   const local = useStore((s) => s.local)
+  const remote = useStore((s) => s.remote)
   const query = useStore((s) => s.query)
-  const all = useMemo(() => allPlaces({ seed, local }), [seed, local])
+  const all = useMemo(() => allPlaces({ seed, remote, local }), [seed, remote, local])
   const communities = all.filter((p) => p.kind === "community" && matches(p, query)).sort((a, b) => b.lat - a.lat)
 
   return (

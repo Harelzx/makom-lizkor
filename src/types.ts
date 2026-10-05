@@ -56,4 +56,8 @@ export interface LocalFields {
   photo?: string
   photoAlt?: string
   photoCredit?: string
+  /** The id the server gave this place when it was sent for review; once approved, the feed carries it. */
+  remoteId?: string
+  /** The private capability to follow the submission's status; only its hash is on the server. */
+  trackingToken?: string
 }
