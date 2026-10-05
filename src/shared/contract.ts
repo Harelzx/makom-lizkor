@@ -46,6 +46,8 @@ export const SubmissionInput = z
       .max(300)
       .optional(),
     submitter_name: text({ max: 80 }).optional(),
+    // Optional (spec 11). Only verified addresses hear anything private; it is never published.
+    email: z.email().max(254).optional(),
     on_private_property: z.boolean().default(false),
     consent_version: z.enum(SUBMISSION_NOTICES),
   })

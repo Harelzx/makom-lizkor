@@ -69,6 +69,7 @@ describe("limits", () => {
     expect(statuses).toContain(429)
     expect(statuses.filter((s) => s === 201).length).toBeLessThanOrEqual(10)
     const tables = await env.DB.prepare("SELECT group_concat(sql) AS s FROM sqlite_master").first<string>("s")
-    expect(tables).not.toMatch(/\bip\b|remote_?ip|address/i)
+    // No column for a visitor's IP in any form (an email's to_address is not one).
+    expect(tables).not.toMatch(/\b(remote_?|client_?)?ip(_?address|_?hash)?\b/i)
   })
 })

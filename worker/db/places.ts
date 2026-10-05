@@ -4,7 +4,13 @@ import { newToken, placeId, sameHash, sha256Hex, ulid } from "../lib/ids"
 // An approximation of a month; phase 5 replaces it with calendar months read from RETENTION (src/config.ts).
 const MONTH_MS = 30 * 24 * 3600 * 1000
 
-export type Inserted = { kind: "created" | "replayed"; id: string; trackingToken: string } | { kind: "mismatch" }
+export type Inserted =
+  /** `verifyToken`: the email verification link's secret, when an address was given; only its hash is stored. */
+  | { kind: "created"; id: string; trackingToken: string; verifyToken?: string }
+  | { kind: "replayed"; id: string; trackingToken: string }
+  | { kind: "mismatch" }
+
+const VERIFY_DAYS = 7
 
 export async function insertSubmission(db: D1Database, input: SubmissionInput, key: string, now: Date): Promise<Inserted> {
   const keyHash = await sha256Hex(key)
@@ -43,21 +49,35 @@ export async function insertSubmission(db: D1Database, input: SubmissionInput, k
         at,
       ),
   ]
-  // The submitter's name is personal data: it lives with the contacts, under a fixed deletion ceiling.
-  if (input.submitter_name) {
+  // The submitter's name and email are personal data: they live with the contacts, under a fixed deletion ceiling.
+  const verifyToken = input.email ? newToken() : undefined
+  if (input.submitter_name || input.email) {
     const ceiling = new Date(now.getTime() + 12 * MONTH_MS).toISOString()
+    const expires = new Date(now.getTime() + VERIFY_DAYS * 24 * 3600 * 1000).toISOString()
     stmts.push(
       db
         .prepare(
-          "INSERT INTO contacts (id, place_id, name, consent_version, created_at, ceiling_at, purge_after) VALUES (?, ?, ?, ?, ?, ?, ?)",
+          `INSERT INTO contacts (id, place_id, name, email, email_verify_hash, email_verify_expires, consent_version, created_at, ceiling_at, purge_after)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
-        .bind(`c_${ulid(now.getTime())}`, id, input.submitter_name, input.consent_version, at, ceiling, ceiling),
+        .bind(
+          `c_${ulid(now.getTime())}`,
+          id,
+          input.submitter_name ?? null,
+          input.email ?? null,
+          verifyToken ? await sha256Hex(verifyToken) : null,
+          verifyToken ? expires : null,
+          input.consent_version,
+          at,
+          ceiling,
+          ceiling,
+        ),
     )
   }
   // One batch is one transaction: a place never exists without its first revision, and a used key adds nothing.
   try {
     await db.batch(stmts)
-    return { kind: "created", id, trackingToken }
+    return { kind: "created", id, trackingToken, verifyToken }
   } catch (err) {
     if (!String(err).includes("places.submit_key_hash")) throw err
   }
@@ -82,7 +102,50 @@ async function tracked(db: D1Database, id: string, token: string) {
     .prepare("SELECT status, rev, tracking_token_hash AS h FROM places WHERE id = ?")
     .bind(id)
     .first<{ status: string; rev: number; h: string | null }>()
-  return row?.h && (await sameHash(row.h, await sha256Hex(token))) ? row : null
+  if (!row) return null
+  const hash = await sha256Hex(token)
+  if (row.h && (await sameHash(row.h, hash))) return row
+  // The tracking link sent to a verified email is a second capability for the same place, erased with the contact.
+  const mailed = await db
+    .prepare("SELECT email_token_hash AS h FROM contacts WHERE place_id = ? AND email_token_hash IS NOT NULL")
+    .bind(id)
+    .first<{ h: string }>()
+  return mailed && (await sameHash(mailed.h, hash)) ? row : null
+}
+
+/**
+ * The sender confirms their address from the link in the verification mail. The first confirmation mints the email's
+ * own tracking token, so the mail that follows can carry a tracking link; a second click changes nothing.
+ */
+export async function verifyEmail(
+  db: D1Database,
+  token: string,
+  now: Date,
+): Promise<{ first: true; to: string; placeId: string; emailToken: string } | { first: false } | null> {
+  const row = await db
+    .prepare("SELECT id, place_id, email, email_verified_at, email_verify_expires FROM contacts WHERE email_verify_hash = ?")
+    .bind(await sha256Hex(token))
+    .first<{ id: string; place_id: string | null; email: string | null; email_verified_at: string | null; email_verify_expires: string }>()
+  if (!row?.email || !row.place_id || row.email_verify_expires < now.toISOString()) return null
+  if (row.email_verified_at) return { first: false }
+  const emailToken = newToken()
+  const done = await db
+    .prepare("UPDATE contacts SET email_verified_at = ?, email_token_hash = ? WHERE id = ? AND email_verified_at IS NULL")
+    .bind(now.toISOString(), await sha256Hex(emailToken), row.id)
+    .run()
+  // Two clicks at once: only the one that verified sends the tracking link.
+  return done.meta.changes === 1 ? { first: true, to: row.email, placeId: row.place_id, emailToken } : { first: false }
+}
+
+/** The verified address to tell about a decision, with the place's current name; null when there is none to tell. */
+export async function verifiedContact(db: D1Database, placeId: string) {
+  return db
+    .prepare(
+      `SELECT c.email AS email, (SELECT name_he FROM revisions WHERE place_id = c.place_id ORDER BY n DESC LIMIT 1) AS name_he
+       FROM contacts c WHERE c.place_id = ? AND c.email IS NOT NULL AND c.email_verified_at IS NOT NULL`,
+    )
+    .bind(placeId)
+    .first<{ email: string; name_he: string | null }>()
 }
 
 export async function submissionStatus(db: D1Database, id: string, token: string) {

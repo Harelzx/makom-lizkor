@@ -3,11 +3,12 @@ import { createExecutionContext } from "cloudflare:test"
 import { describe, expect, it } from "vitest"
 import { createApp } from "../index"
 import { fakeSiteverify } from "./app"
+import { sendMail } from "../lib/mail"
 import { devToken } from "./helpers"
 
 // What a deploy gets: the top-level vars of wrangler.jsonc, without the development values from .dev.vars.
 const production = { ...env, ENVIRONMENT: "production", DEV_ACCESS_SECRET: "", MODERATORS: "", ACCESS_TEAM_DOMAIN: "", ACCESS_AUD: "" }
-const app = createApp({ verifyTurnstile: fakeSiteverify })
+const app = createApp({ verifyTurnstile: fakeSiteverify, sendMail })
 const call = (path: string, init: RequestInit = {}, e: Env = production) =>
   app.fetch(new Request(`http://local${path}`, init), e, createExecutionContext())
 

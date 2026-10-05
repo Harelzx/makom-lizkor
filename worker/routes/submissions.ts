@@ -4,6 +4,7 @@ import { RevisionInput, SubmissionInput } from "@/shared/contract"
 import { insertSubmission, pendingCount, revise, submissionKnown, submissionStatus, withdraw } from "../db/places"
 import { clock } from "../lib/clock"
 import { PRIVATE, problem } from "../lib/http"
+import { verificationMail } from "../lib/messages"
 import { checkTurnstile } from "../lib/turnstile"
 import type { AppEnv } from "../index"
 
@@ -44,6 +45,14 @@ submissions.post(
     const r = await insertSubmission(c.env.DB, c.req.valid("json"), key, clock(c.req.raw, c.env))
     if (r.kind === "mismatch") return problem(c, 409, "idempotency_key_reused")
     // 200 for the same submission sent again, so the browser can tell, though it treats both alike.
+    // An address was given: the verification mail goes first, and says nothing about the place.
+    const input = c.req.valid("json")
+    if (r.kind === "created" && r.verifyToken && input.email) {
+      const link = `${new URL(c.req.url).origin}/#/verify/${r.verifyToken}`
+      await c
+        .get("sendMail")(c.env, verificationMail(input.email, link))
+        .catch(() => false)
+    }
     return c.json({ id: r.id, trackingToken: r.trackingToken }, r.kind === "created" ? 201 : 200, PRIVATE)
   },
 )

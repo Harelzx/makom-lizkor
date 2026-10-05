@@ -1,6 +1,7 @@
 import { createExecutionContext } from "cloudflare:test"
 import { env } from "cloudflare:workers"
 import { createApp } from "../index"
+import { sendMail } from "../lib/mail"
 import type { Siteverify } from "../lib/turnstile"
 
 /**
@@ -18,7 +19,8 @@ export async function fakeSiteverify(_secret: string, token: string): Promise<Si
   return { success: token === "pass", hostname: "example.com", action: "submit" }
 }
 
-const app = createApp({ verifyTurnstile: fakeSiteverify })
+// Mail goes to dev_outbox, as in development, so the tests read what would be sent.
+const app = createApp({ verifyTurnstile: fakeSiteverify, sendMail })
 
 /** The Worker as the tests see it: real routes and bindings, the fake siteverify. */
 export const call = (url: string, init: RequestInit = {}, e: Env = env) => app.fetch(new Request(url, init), e, createExecutionContext())

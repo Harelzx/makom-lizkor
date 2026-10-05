@@ -2,12 +2,14 @@ import { zValidator } from "@hono/zod-validator"
 import { Hono } from "hono"
 import { z } from "zod"
 import { text } from "@/shared/contract"
-import { listQueue, transition } from "../db/places"
+import { listQueue, transition, verifiedContact } from "../db/places"
+import { decisionMail } from "../lib/messages"
+import type { AppEnv } from "../index"
 import { moderator } from "../lib/access"
 import { clock } from "../lib/clock"
 import { PRIVATE, problem } from "../lib/http"
 
-export const admin = new Hono<{ Bindings: Env; Variables: { actor: string } }>()
+export const admin = new Hono<{ Bindings: Env; Variables: AppEnv["Variables"] & { actor: string } }>()
 
 admin.use("*", async (c, next) => {
   // Every admin answer, errors included, stays out of shared caches.
@@ -39,6 +41,13 @@ admin.post(
   async (c) => {
     const body = c.req.valid("json")
     const result = await transition(c.env.DB, { placeId: c.req.param("id"), ...body, actor: c.get("actor") }, clock(c.req.raw, c.env))
-    return result === "ok" ? c.json({ ok: true }) : problem(c, 409, "changed_meanwhile")
+    if (result !== "ok") return problem(c, 409, "changed_meanwhile")
+    // A verified address hears about the decision; a mail that can't go now never undoes the decision.
+    const contact = await verifiedContact(c.env.DB, c.req.param("id"))
+    if (contact)
+      await c
+        .get("sendMail")(c.env, decisionMail(contact.email, body.action, contact.name_he ?? "", body.note))
+        .catch(() => false)
+    return c.json({ ok: true })
   },
 )
