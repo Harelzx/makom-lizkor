@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 import { RETURN_LABEL } from "@/data/taxonomy"
 import type { Revival } from "@/types"
 import { cn } from "@/lib/utils"
@@ -122,4 +122,17 @@ export function SafetyNote({ lead, className }: { lead: string; className?: stri
       , וביישובים תאמו ביקור מראש.
     </p>
   )
+}
+
+/**
+ * A card that opens takes the focus at its title. The control that opened it (a row in the list, a search result, a
+ * flower) is often gone the moment the card appears, and with it the focus; VoiceOver then lost its place and never
+ * heard the card. No scrolling and no ring: the title isn't a control, it's where reading starts.
+ */
+export function useFocusOnOpen<T extends HTMLElement>() {
+  const ref = useRef<T>(null)
+  useEffect(() => {
+    ref.current?.focus({ preventScroll: true })
+  }, [])
+  return ref
 }
