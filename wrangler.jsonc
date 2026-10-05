@@ -24,7 +24,11 @@
   // Photos: quarantine/ until a moderator approves, public/ after. No public bucket; the Worker serves public/ only.
   "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "makom-media", "jurisdiction": "eu" }],
   // A coarse outer cap per visitor's address, counted by Cloudflare at the edge: nothing about the address is stored.
-  "ratelimits": [{ "name": "SUBMIT_LIMIT", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } }],
+  "ratelimits": [
+    { "name": "SUBMIT_LIMIT", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } },
+    // Anemones: generous, since a visitor may leave one at many places; the database already counts one a day each.
+    { "name": "TRIBUTE_LIMIT", "namespace_id": "1002", "simple": { "limit": 60, "period": 60 } },
+  ],
   // Our own JSON log lines only; no automatic per-request records (they carry URLs and headers).
   "observability": { "logs": { "enabled": true, "invocation_logs": false } },
 }

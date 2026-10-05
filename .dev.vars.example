@@ -9,3 +9,5 @@ TURNSTILE_SECRET=1x0000000000000000000000000000000AA
 TURNSTILE_HOSTNAMES=example.com
 # Derives each submission's tracking token from its key (HMAC); a real secret in production, set with wrangler secret.
 TRACKING_SECRET=development-tracking-secret-not-a-secret
+# Keys the daily hash of an anemone's device id (HMAC); a real secret in production, set with wrangler secret.
+TRIBUTE_SECRET=development-tribute-secret-not-a-secret

@@ -7,6 +7,7 @@ import { dev } from "./routes/dev"
 import { email } from "./routes/email"
 import { feed } from "./routes/feed"
 import { submissions } from "./routes/submissions"
+import { tributes } from "./routes/tributes"
 
 /** What the routes reach outside the Worker; the tests pass stand-ins, the deployed Worker the real ones. */
 export type Deps = { verifyTurnstile: VerifyTurnstile; sendMail: SendMail }
@@ -23,6 +24,7 @@ export function createApp(deps: Deps) {
   app.get("/api/v1/health", (c) => c.json({ ok: true }))
   app.route("/api/v1/submissions", submissions)
   app.route("/api/v1/email", email)
+  app.route("/api/v1/tributes", tributes)
   app.route("/api/v1", feed)
   app.route("/api/admin", admin)
   app.route("/__dev", dev)
