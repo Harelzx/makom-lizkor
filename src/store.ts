@@ -1,7 +1,7 @@
 import { create } from "zustand"
 import seed from "@/data/places.json"
 import type { LocalFields, Place } from "@/types"
-import { loadLocal, loadTributes, saveLocal, saveTributes } from "@/lib/storage"
+import { changeLocal, loadLocal, loadTributes, saveTributes } from "@/lib/storage"
 
 /** intro: 06:29, the dark map and the opening words · dawn: the sunrise is playing · day: the site itself */
 export type Phase = "intro" | "dawn" | "day"
@@ -81,12 +81,22 @@ interface State {
   replayIntro: () => void
 }
 
-/** Saves the visitor's places on the device; false when the browser won't keep them (a private window, a full disk). */
-const persist = (local: Place[]) =>
-  saveLocal(local).then(
-    () => true,
-    () => false,
-  )
+/**
+ * Saves a change to the visitor's places on the device; false when the browser won't keep them (a private window, a
+ * full disk). Places another tab stored meanwhile come into this tab's list too; this tab's own copies stay as they are.
+ */
+async function persist(change: (stored: Place[]) => Place[]): Promise<boolean> {
+  try {
+    const stored = await changeLocal(change)
+    const mine = useStore.getState().local
+    const known = new Set(mine.map((p) => p.id))
+    const theirs = stored.filter((p) => !known.has(p.id))
+    if (theirs.length) useStore.setState({ local: [...mine, ...theirs] })
+    return true
+  } catch {
+    return false
+  }
+}
 
 export const useStore = create<State>((set, get) => ({
   phase: linkedToPlace() ? "day" : "intro",
@@ -136,28 +146,27 @@ export const useStore = create<State>((set, get) => ({
   setDraft: (draft) => set({ draft }),
   setRemote: (feedVersion, remote, live = true) => set({ feedVersion, remote, feedLive: live || get().feedLive }),
   addLocal: async (p) => {
-    const local = [...get().local, p]
-    set({ local })
-    return persist(local)
+    set({ local: [...get().local, p] })
+    return persist((stored) => [...stored.filter((s) => s.id !== p.id), p])
   },
   updateLocal: async (id, patch) => {
-    const local = get().local.map((p) => (p.id === id && p.local ? { ...p, local: { ...p.local, ...patch } } : p))
-    set({ local })
-    return persist(local)
+    const apply = (list: Place[]) => list.map((p) => (p.id === id && p.local ? { ...p, local: { ...p.local, ...patch } } : p))
+    set({ local: apply(get().local) })
+    return persist(apply)
   },
   removeLocal: async (id) => {
     const local = get().local.filter((p) => p.id !== id)
     set({ local, selectedId: get().selectedId === id ? null : get().selectedId })
-    await saveLocal(local)
+    await persist((stored) => stored.filter((p) => p.id !== id))
   },
   importLocal: async (incoming) => {
     const known = new Set(get().local.map((p) => p.id))
     const valid = incoming.filter(
       (p) => p && typeof p.id === "string" && !known.has(p.id) && Number.isFinite(p.lat) && Number.isFinite(p.lng) && p.name_he,
     )
-    const local = [...get().local, ...valid.map((p) => ({ ...p, coord_source: "community" as const }))]
-    set({ local })
-    await saveLocal(local)
+    const added = valid.map((p) => ({ ...p, coord_source: "community" as const }))
+    set({ local: [...get().local, ...added] })
+    await persist((stored) => [...stored, ...added.filter((p) => !stored.some((s) => s.id === p.id))])
     return valid.length
   },
   leaveAnemone: (id) => {

@@ -126,3 +126,66 @@ test("a full review queue stops the form politely, keeps the place, and waits be
   await page.waitForTimeout(8000)
   expect(posts).toBe(1)
 })
+
+/** What this browser has stored of the visitor's own places: name, the key it is sent under, and its tracking token. */
+const stored = (page: Page) =>
+  page.evaluate(
+    () =>
+      new Promise<{ name: string; key?: string; token?: string }[]>((resolve, reject) => {
+        const open = indexedDB.open("makom-lizkor-v2")
+        open.onerror = () => reject(open.error)
+        open.onsuccess = () => {
+          const get = open.result.transaction("v1").objectStore("v1").get("local")
+          get.onsuccess = () =>
+            resolve(
+              ((get.result ?? []) as { name_he: string; local?: { submitKey?: string; trackingToken?: string } }[]).map((p) => ({
+                name: p.name_he,
+                key: p.local?.submitKey,
+                token: p.local?.trackingToken,
+              })),
+            )
+        }
+      }),
+  )
+
+test("two tabs adding places at once keep each other's places, keys and tracking links", async ({ browser }) => {
+  const stamp = Date.now()
+  const [x, y] = [`ספסל דמו לשונית א ${stamp}`, `ספסל דמו לשונית ב ${stamp}`]
+  const ctx = await browser.newContext(GEO)
+  // Both tabs open before either adds anything, so neither has the other's place in memory.
+  const tabs = await Promise.all([ctx.newPage(), ctx.newPage()])
+  for (const tab of tabs) {
+    // The first answer is lost after the server saved it, in both tabs.
+    let lost = false
+    await tab.route("**/api/v1/submissions", async (route) => {
+      if (lost) return route.continue()
+      lost = true
+      await route.fetch()
+      await route.abort("failed")
+    })
+    await tab.goto("/")
+    await tab.getByRole("button", { name: "דילוג", exact: true }).click()
+    await expect(tab.getByRole("button", { name: /^חיפוש מקום/ })).toBeVisible(DAY)
+  }
+  await fillAndSave(tabs[0], x)
+  await fillAndSave(tabs[1], y)
+  const afterBoth = await stored(tabs[0])
+  expect(afterBoth.map((p) => p.name)).toEqual(expect.arrayContaining([x, y]))
+  const keys = Object.fromEntries(afterBoth.map((p) => [p.name, p.key]))
+  expect(keys[x]).toBeTruthy()
+  expect(keys[y]).toBeTruthy()
+
+  // Each tab retries; the retries land, and each tab records what it learned without dropping the other's.
+  for (const tab of tabs) await tab.evaluate(() => document.dispatchEvent(new Event("visibilitychange")))
+  await expect
+    .poll(async () => (await stored(tabs[1])).filter((p) => (p.name === x || p.name === y) && p.token).length, { timeout: 20_000 })
+    .toBe(2)
+  await tabs[0].reload()
+  const after = await stored(tabs[0])
+  for (const name of [x, y]) {
+    expect(after.filter((p) => p.name === name)).toHaveLength(1)
+    expect(after.find((p) => p.name === name)!.key).toBe(keys[name])
+  }
+  expect(await queued(browser, x)).toBe(1)
+  expect(await queued(browser, y)).toBe(1)
+})

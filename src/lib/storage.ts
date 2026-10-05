@@ -1,4 +1,4 @@
-import { createStore, get, set, type UseStore } from "idb-keyval"
+import { createStore, get, set, update, type UseStore } from "idb-keyval"
 import type { Place } from "@/types"
 
 // The visitor's own copy of what they added, and their anemones, in this browser's IndexedDB. A place is also sent
@@ -25,10 +25,18 @@ export async function loadLocal(): Promise<Place[]> {
   }
 }
 
-export async function saveLocal(places: Place[]): Promise<void> {
+/**
+ * Changes the stored places in one transaction: what is stored now is read, changed and written back. Another tab may
+ * have stored places since this one loaded, so a change is applied to the stored records, never by writing this tab's
+ * copy over them (that lost the other tab's place, with the only key it is sent under). Returns what is stored now;
+ * throws when the browser keeps nothing.
+ */
+export async function changeLocal(change: (stored: Place[]) => Place[]): Promise<Place[]> {
   const s = db()
   if (!s) throw new Error("storage_unavailable")
-  await set("local", places, s)
+  let next: Place[] = []
+  await update<Place[]>("local", (stored) => (next = change(stored ?? [])), s)
+  return next
 }
 
 export async function loadTributes(): Promise<Record<string, number>> {
