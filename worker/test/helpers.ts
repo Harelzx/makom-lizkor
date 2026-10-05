@@ -21,18 +21,22 @@ export async function submit(name = "ספסל דמו") {
   return res.json<{ id: string; trackingToken: string }>()
 }
 
-export const admin = async (path: string, init: RequestInit = {}, email = "dev@example.test") =>
-  call(`http://local${path}`, {
-    ...init,
-    headers: {
-      "Cf-Access-Jwt-Assertion": await devToken(email),
-      "Content-Type": "application/json",
-      "Idempotency-Key": crypto.randomUUID().replaceAll("-", ""),
-      "Turnstile-Token": "pass",
-      "Sec-Fetch-Site": "same-origin",
-      ...init.headers,
+export const admin = async (path: string, init: RequestInit = {}, email = "dev@example.test", e: Env = env) =>
+  call(
+    `http://local${path}`,
+    {
+      ...init,
+      headers: {
+        "Cf-Access-Jwt-Assertion": await devToken(email),
+        "Content-Type": "application/json",
+        "Idempotency-Key": crypto.randomUUID().replaceAll("-", ""),
+        "Turnstile-Token": "pass",
+        "Sec-Fetch-Site": "same-origin",
+        ...init.headers,
+      },
     },
-  })
+    e,
+  )
 
 export async function approve(id: string) {
   const { items } = await (await admin("/api/admin/queue")).json<{ items: { id: string; rev: number; revisionId: string }[] }>()

@@ -30,6 +30,13 @@ export function createApp(deps: Deps) {
   // Approved photos only: the Worker is the one door to the bucket, and it opens public/ alone (spec 5).
   app.get("/media/public/*", async (c) => {
     const key = c.req.path.replace(/^\/media\//, "")
+    // Only the photo of a revision published now: a file a lost race or a failed cleanup left behind serves nothing.
+    const live = await c.env.DB.prepare(
+      "SELECT 1 FROM places p JOIN revisions r ON r.id = p.published_revision_id WHERE p.status = 'published' AND r.photo_key = ?",
+    )
+      .bind(key)
+      .first()
+    if (!live) return problem(c, 404, "not_found")
     const object = await c.env.MEDIA.get(key)
     if (!object) return problem(c, 404, "not_found")
     // Short-lived: a photo taken down later (phase 4) must not live on in caches for long.

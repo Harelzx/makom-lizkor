@@ -91,3 +91,31 @@ test("a link to a place that isn't published falls back even when the offline co
   await page.reload()
   await expect(page).toHaveURL(/#\/$/, DAY)
 })
+
+test("the moderator sees that a place is on private property, the owner's permission, and the access note, before approving", async ({
+  browser,
+}) => {
+  const name = `גינת דמו באישור הבעלים ${Date.now()}`
+  const note = "הכניסה דרך השער הצפוני, בתיאום מראש עם המשפחה"
+  const ctx = await browser.newContext()
+  const res = await ctx.request.post("/api/v1/submissions", {
+    headers: { "Idempotency-Key": crypto.randomUUID().replaceAll("-", ""), "Turnstile-Token": "XXXX.DUMMY.TOKEN.XXXX" },
+    data: {
+      kind: "garden",
+      name_he: name,
+      lat: 31.423456,
+      lng: 34.498765,
+      on_private_property: true,
+      location_permission: true,
+      access_note_he: note,
+      consent_version: "notice.submission@2026-10-9",
+    },
+  })
+  expect(res.status()).toBe(201)
+  await ctx.request.post("/__dev/login", { data: { email: "dev@example.test" } })
+  const mod = await ctx.newPage()
+  await mod.goto("/admin/")
+  const item = mod.getByRole("article", { name })
+  await expect(item.getByText("במקום פרטי, במיקום מדויק באישור הבעלים")).toBeVisible()
+  await expect(item.getByText(note)).toBeVisible()
+})

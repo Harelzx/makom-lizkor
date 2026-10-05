@@ -11,6 +11,7 @@
     "format": "prettier --write \"**/*.{ts,tsx,js,mjs}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,mjs}\"",
     "release:check": "node scripts/release-check.mjs",
+    "test:scripts": "node --test scripts/*.test.mjs",
     "typecheck": "tsc -b",
     "preview": "vite preview",
     "start": "vite build && vite preview --port 4173 --open",

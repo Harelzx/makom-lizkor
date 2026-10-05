@@ -10,6 +10,7 @@ export type Inserted =
   | { kind: "created"; id: string; trackingToken: string; verifyToken?: string }
   | { kind: "replayed"; id: string; trackingToken: string }
   | { kind: "mismatch" }
+  | { kind: "queue_full" }
 
 const VERIFY_DAYS = 7
 
@@ -33,6 +34,8 @@ export async function insertSubmission(
   key: string,
   trackingToken: string,
   now: Date,
+  /** The most revisions that may wait for a moderator: checked in the insert itself, so requests at once can't pass it together. */
+  queueLimit: number,
 ): Promise<Inserted> {
   const keyHash = await sha256Hex(key)
   // The input after Zod, so the same request always gives the same fingerprint.
@@ -48,14 +51,16 @@ export async function insertSubmission(
     db
       .prepare(
         `INSERT INTO places (id, origin, status, rev, tracking_token_hash, submit_key_hash, submit_body_hash, created_at, status_changed_at)
-         VALUES (?, 'contribution', 'pending', 1, ?, ?, ?, ?, ?)`,
+         SELECT ?, 'contribution', 'pending', 1, ?, ?, ?, ?, ?
+         WHERE (SELECT COUNT(*) FROM revisions WHERE state = 'pending') < ?`,
       )
-      .bind(id, await sha256Hex(trackingToken), keyHash, bodyHash, at, at),
+      .bind(id, await sha256Hex(trackingToken), keyHash, bodyHash, at, at, queueLimit),
     db
       .prepare(
         `INSERT INTO revisions (id, place_id, n, state, kind, name_he, lat, lng, location_precision, on_private_property, location_permission_at,
            access_note_he, place_he, in_memory_of, story_he, link_url, consent_version, created_at)
-         VALUES (?, ?, 1, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         SELECT ?, ?, 1, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+         WHERE EXISTS (SELECT 1 FROM places WHERE id = ?)`,
       )
       .bind(
         `r_${ulid(now.getTime())}`,
@@ -74,6 +79,7 @@ export async function insertSubmission(
         input.link_url ?? null,
         input.consent_version,
         at,
+        id,
       ),
   ]
   // The submitter's name and email are personal data: they live with the contacts, under a fixed deletion ceiling.
@@ -85,7 +91,8 @@ export async function insertSubmission(
       db
         .prepare(
           `INSERT INTO contacts (id, place_id, name, email, email_verify_hash, email_verify_expires, consent_version, created_at, ceiling_at, purge_after)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+           WHERE EXISTS (SELECT 1 FROM places WHERE id = ?)`,
         )
         .bind(
           `c_${ulid(now.getTime())}`,
@@ -98,13 +105,14 @@ export async function insertSubmission(
           at,
           ceiling,
           ceiling,
+          id,
         ),
     )
   }
   // One batch is one transaction: a place never exists without its first revision, and a used key adds nothing.
   try {
-    await db.batch(stmts)
-    return { kind: "created", id, trackingToken, verifyToken }
+    const [place] = await db.batch(stmts)
+    if (place.meta.changes === 1) return { kind: "created", id, trackingToken, verifyToken }
   } catch (err) {
     if (!String(err).includes("places.submit_key_hash")) throw err
   }
@@ -113,7 +121,9 @@ export async function insertSubmission(
     .prepare("SELECT id, submit_body_hash AS body FROM places WHERE submit_key_hash = ?")
     .bind(keyHash)
     .first<{ id: string; body: string }>()
-  if (!prior || prior.body !== bodyHash) return { kind: "mismatch" }
+  // Nothing was inserted and the key is new: the queue was full when it arrived.
+  if (!prior) return { kind: "queue_full" }
+  if (prior.body !== bodyHash) return { kind: "mismatch" }
   // The same key derives the same token: the answer the first try lost is given again, unchanged.
   return { kind: "replayed", id: prior.id, trackingToken }
 }
@@ -354,7 +364,9 @@ export async function revise(
   r: Omit<RevisionInput, "expectedRev">,
   expectedRev: number,
   now: Date,
-): Promise<"ok" | "conflict" | "not_found"> {
+  /** As for a new submission: a correction adds work for the moderators, so it waits for room in the queue. */
+  queueLimit: number,
+): Promise<"ok" | "conflict" | "not_found" | "queue_full"> {
   const place = await tracked(db, id, token)
   if (!place) return "not_found"
   // The photo a correction carries over: the published one while the place is live (a refused correction's photo is
@@ -376,9 +388,10 @@ export async function revise(
         `UPDATE places SET rev = rev + 1, last_transition_id = ?2, status_changed_at = ?3,
            status = CASE WHEN status = 'returned' THEN 'pending' ELSE status END
          WHERE id = ?1 AND rev = ?4 AND status IN ('returned', 'published')
-           AND NOT EXISTS (SELECT 1 FROM revisions WHERE place_id = ?1 AND state = 'pending')`,
+           AND NOT EXISTS (SELECT 1 FROM revisions WHERE place_id = ?1 AND state = 'pending')
+           AND (SELECT COUNT(*) FROM revisions WHERE state = 'pending') < ?5`,
       )
-      .bind(id, tid, at, expectedRev),
+      .bind(id, tid, at, expectedRev, queueLimit),
     db.prepare(`UPDATE revisions SET state = 'superseded' WHERE place_id = ?1 AND state = 'returned' AND ${happened}`).bind(id, tid),
     db
       .prepare(
@@ -411,7 +424,8 @@ export async function revise(
       )
       .bind(id, tid, `a_${ulid(now.getTime())}`, at),
   ])
-  return placeUpdate.meta.changes === 1 ? "ok" : "conflict"
+  if (placeUpdate.meta.changes === 1) return "ok"
+  return (await pendingCount(db)) >= queueLimit ? "queue_full" : "conflict"
 }
 
 /** One batch, so the version and the places come from the same moment. Only public fields leave the database. */
@@ -486,10 +500,19 @@ export async function attachPhoto(
   await media.put(key, clean, { httpMetadata: { contentType: "image/jpeg" } })
   // The rev moves with the photo: a moderator's decision made on what they saw before conflicts instead of approving
   // a picture nobody looked at.
-  await db.batch([
-    db.prepare("UPDATE revisions SET photo_key = ?, photo_alt = ?, photo_credit = ? WHERE id = ?").bind(key, alt, credit ?? null, rev.id),
-    db.prepare("UPDATE places SET rev = rev + 1 WHERE id = ?").bind(id),
+  // Only while the revision is still open: a withdrawal or a decision that came while the file was being written wins.
+  const [attached] = await db.batch([
+    db
+      .prepare("UPDATE revisions SET photo_key = ?, photo_alt = ?, photo_credit = ? WHERE id = ? AND state IN ('pending', 'returned')")
+      .bind(key, alt, credit ?? null, rev.id),
+    db
+      .prepare("UPDATE places SET rev = rev + 1 WHERE id = ? AND EXISTS (SELECT 1 FROM revisions WHERE id = ? AND photo_key = ?)")
+      .bind(id, rev.id, key),
   ])
+  if (attached.meta.changes !== 1) {
+    await media.delete(key).catch(() => undefined)
+    return "closed"
+  }
   // A replaced photo that was never approved goes at once.
   if (rev.photo_key?.startsWith("quarantine/")) await media.delete(rev.photo_key)
   return "ok"
@@ -544,5 +567,30 @@ export async function erasePhotos(media: R2Bucket, placeId: string) {
   for (const prefix of [`quarantine/${placeId}/`, `public/${placeId}/`]) {
     const keys = (await media.list({ prefix })).objects.map((o) => o.key)
     if (keys.length) await media.delete(keys)
+  }
+}
+
+/**
+ * The files no live revision names any more: what a lost race or a failed cleanup left behind. Kept: every photo an
+ * open revision (pending or returned) or a published one points to. A file younger than an hour is left alone, since an
+ * approval copies its photo before it records it. Run by the nightly job (phase 5); safe to run at any time.
+ */
+export async function sweepPhotos(db: D1Database, media: R2Bucket, now: Date) {
+  const { results } = await db
+    .prepare(
+      `SELECT r.photo_key FROM revisions r JOIN places p ON p.id = r.place_id
+       WHERE r.photo_key IS NOT NULL AND r.state IN ('pending', 'returned', 'approved') AND p.status NOT IN ('withdrawn', 'erased')`,
+    )
+    .all<{ photo_key: string }>()
+  const named = new Set(results.map((r) => r.photo_key))
+  const settled = now.getTime() - 3600 * 1000
+  for (const prefix of ["quarantine/", "public/"]) {
+    let cursor: string | undefined
+    do {
+      const page = await media.list({ prefix, cursor })
+      const stray = page.objects.filter((o) => !named.has(o.key) && o.uploaded.getTime() < settled).map((o) => o.key)
+      if (stray.length) await media.delete(stray)
+      cursor = page.truncated ? page.cursor : undefined
+    } while (cursor)
   }
 }

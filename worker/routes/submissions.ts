@@ -30,9 +30,12 @@ const KEY = /^[A-Za-z0-9_-]{22,64}$/
  * cap, and a browser check for this action. The address is passed through to Cloudflare and never stored or logged.
  * A refusal is 403; anything the sender can't help (a full queue, a busy check) is 429 or 503, which the browser retries.
  */
-async function guard(c: Context<AppEnv>, action: "submit" | "revise", queue: boolean): Promise<Response | null> {
-  if (queue && (await pendingCount(c.env.DB)) >= Number(c.env.QUEUE_LIMIT ?? 200))
-    return problem(c, 503, "queue_full", {}, { "Retry-After": "3600" })
+const queueLimit = (c: Context<AppEnv>) => Number(c.env.QUEUE_LIMIT ?? 200)
+const queueFull = (c: Context<AppEnv>) => problem(c, 503, "queue_full", {}, { "Retry-After": "3600" })
+
+/** A full queue refuses before Turnstile is spent; the insert checks again, since requests at once all pass this. */
+async function guard(c: Context<AppEnv>, action: "submit" | "revise"): Promise<Response | null> {
+  if ((await pendingCount(c.env.DB)) >= queueLimit(c)) return queueFull(c)
   const address = c.req.header("CF-Connecting-IP")
   if (address && !(await c.env.SUBMIT_LIMIT.limit({ key: address })).success)
     return problem(c, 429, "rate_limited", {}, { "Retry-After": "60" })
@@ -51,14 +54,15 @@ submissions.post(
     if (!KEY.test(key)) return problem(c, 400, "idempotency_key_required")
     // The same submission sent again (its answer was lost) was checked on its first try; Turnstile tokens are single-use.
     if (!(await submissionKnown(c.env.DB, key))) {
-      const refused = await guard(c, "submit", true)
+      const refused = await guard(c, "submit")
       if (refused) return refused
     }
     // Without the server's secret there is no tracking token to give: refuse rather than hand out a weak one.
     if (!c.env.TRACKING_SECRET) return problem(c, 503, "not_configured")
     const token = await trackingTokenFor(c.env.TRACKING_SECRET, key)
-    const r = await insertSubmission(c.env.DB, c.req.valid("json"), key, token, clock(c.req.raw, c.env))
+    const r = await insertSubmission(c.env.DB, c.req.valid("json"), key, token, clock(c.req.raw, c.env), queueLimit(c))
     if (r.kind === "mismatch") return problem(c, 409, "idempotency_key_reused")
+    if (r.kind === "queue_full") return queueFull(c)
     // 200 for the same submission sent again, so the browser can tell, though it treats both alike.
     // An address was given: the verification mail goes first, and says nothing about the place.
     const input = c.req.valid("json")
@@ -95,11 +99,12 @@ submissions.post(
   async (c) => {
     const token = bearer(c.req.header("Authorization"))
     if (!token) return problem(c, 404, "not_found")
-    const refused = await guard(c, "revise", false)
+    const refused = await guard(c, "revise")
     if (refused) return refused
     const { expectedRev, ...r } = c.req.valid("json")
-    const result = token ? await revise(c.env.DB, c.req.param("id"), token, r, expectedRev, clock(c.req.raw, c.env)) : "not_found"
+    const result = await revise(c.env.DB, c.req.param("id"), token, r, expectedRev, clock(c.req.raw, c.env), queueLimit(c))
     if (result === "not_found") return problem(c, 404, "not_found")
+    if (result === "queue_full") return queueFull(c)
     return result === "ok" ? c.json({ ok: true }, 200, PRIVATE) : problem(c, 409, "changed_meanwhile")
   },
 )
