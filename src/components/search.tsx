@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react"
+import { useEffect, useMemo, useRef } from "react"
 import { AccessibilityIcon, MoonIcon, PlusIcon, RouteIcon, SunIcon } from "lucide-react"
 import { Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { useCommandState } from "cmdk"
@@ -40,7 +40,11 @@ export function Search() {
     return () => window.removeEventListener("keydown", onKey)
   }, [setOpen])
 
+  // Choosing a result opens its card, and the card takes the focus; closing the dialog mustn't take it back to where
+  // the search began. Closing it any other way (Esc) still returns the focus there.
+  const chose = useRef(false)
   const go = (id: string) => {
+    chose.current = true
     setOpen(false)
     const s = useStore.getState()
     if (s.tab === "journey") s.setTab("places")
@@ -48,7 +52,16 @@ export function Search() {
   }
 
   return (
-    <CommandDialog open={open} onOpenChange={setOpen} title="חיפוש" description="חיפוש מקום, קהילה או פעולה">
+    <CommandDialog
+      open={open}
+      onOpenChange={setOpen}
+      title="חיפוש"
+      description="חיפוש מקום, קהילה או פעולה"
+      onCloseAutoFocus={(e) => {
+        if (chose.current) e.preventDefault()
+        chose.current = false
+      }}
+    >
       {/* Plain substring matching: cmdk's fuzzy score lets "בארי" match places in Ashdod and Ness Ziona. */}
       <Command label="חיפוש מקום, יישוב או פעולה" filter={(value, search) => (value.includes(normalize(search)) ? 1 : 0)}>
         <CommandInput placeholder="מקום, יישוב, שם…" />

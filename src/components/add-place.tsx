@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react"
+import { useCallback, useEffect, useId, useRef, useState } from "react"
 import { AnimatePresence, motion } from "motion/react"
 import { CheckIcon, CrosshairIcon, DownloadIcon, ImagePlusIcon, LocateFixedIcon, MapPinIcon, UploadIcon, XIcon } from "lucide-react"
 import { toast } from "sonner"
@@ -100,6 +100,14 @@ export function AddPlace() {
   const [saved, setSaved] = useState(false)
   const uid = useId()
   const titleRef = useRef<HTMLHeadingElement>(null)
+  // stable, so the bar takes the focus once when it appears and not on every render after
+  const focusOnMount = useCallback((el: HTMLDivElement | null) => el?.focus({ preventScroll: true }), [])
+  // A point marked on the map answers "mark the place first"; the message goes once there is one, however it was set.
+  const [seenDraft, setSeenDraft] = useState(draft)
+  if (seenDraft !== draft) {
+    setSeenDraft(draft)
+    if (draft && error) setError("")
+  }
   // The step area grows and shrinks to fit each step, instead of the dialog jumping between sizes.
   const [bodyH, setBodyH] = useState(0)
   const measureBody = (el: HTMLDivElement | null) => {
@@ -726,7 +734,11 @@ export function AddPlace() {
             initial={{ y: 30, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 30, opacity: 0 }}
-            className="fixed inset-x-3 bottom-[max(16px,env(safe-area-inset-bottom))] z-40 mx-auto flex max-w-md items-center justify-between gap-3 rounded-full bg-glass p-2 ps-5 shadow-[0_20px_60px_-20px_rgb(0_0_0/0.5)] ring-1 ring-border"
+            // The bar takes the focus when picking starts: a status region is read when it changes, not when it
+            // appears, so without this VoiceOver said nothing and the instruction went unheard.
+            ref={focusOnMount}
+            tabIndex={-1}
+            className="fixed inset-x-3 bottom-[max(16px,env(safe-area-inset-bottom))] z-40 mx-auto flex max-w-md items-center justify-between gap-3 rounded-full bg-glass p-2 ps-5 shadow-[0_20px_60px_-20px_rgb(0_0_0/0.5)] ring-1 ring-border outline-none"
             role="status"
           >
             <p className="text-label text-ink-1">{draft ? "אפשר לגרור את הסיכה, או ללחוץ במקום אחר" : "לחצו על המפה במקום המדויק"}</p>
