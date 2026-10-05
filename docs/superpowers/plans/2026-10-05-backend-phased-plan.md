@@ -53,7 +53,7 @@
 | 2. הגשות מלאות | Turnstile, rate limits, העלאת תמונה וקידוד מחדש, קישור מעקב, תיקונים, `returned`, מייל אופציונלי ואימותו, snapshot אופליין, מפסק זרם על התור, מיקום משוער במקום פרטי | 1 |
 | 3. כלניות ודפי שיתוף | `tribute_*` ו־batch, outbox, `/place/:id` עם HTMLRewriter, תמונות OG, נתיבים אמיתיים | 1 |
 | 4. דיווחים, הסרות ו־ledger | `reports`, הפרדיקט, `field_suppressions`, התראות דחופות, קודי שחזור, Workflow האישור עם intent ו־commit ב־R2, Workers Cache ו־purge לפי תגים | 2, 3 |
-| 5. שמירה, גיבוי ושחזור | cron למחיקה, ייצוא מוצפן עם manifest, גיבוי תמונות, בדיקות מחיקה, תרגילים, מסלולי A ו־B, בדיקה ב־staging עם זמן מכווץ שמתנה את `RETENTION.verified` | 4 |
+| 5. שמירה, גיבוי ושחזור | cron למחיקה (כולל מחיקת הצעה שהוחזרה ולא תוקנה תוך 30 יום, שההודעה מבטיחה מ־`notice.submission@2026-10-5`; חוסם השקה, עם בדיקה), ייצוא מוצפן עם manifest, גיבוי תמונות, בדיקות מחיקה, תרגילים, מסלולי A ו־B, בדיקה ב־staging עם זמן מכווץ שמתנה את `RETENTION.verified` | 4 |
 | 6. תפעול ושחרור | `/api/ops` ובדיקת סכמת לוגים, חשבון staging, ריפו ב־GitHub, CI, `release.yml` עם `release:check`, `rollback.yml`, כללי deny לסוכנים, כותרות ו־CSP במצב Report-Only, בדיקות קצה אמיתי, עומס | 1–5 |
 | 7. D1 כמקור האמת | רשומות curated עם provenance, הוצאת `places.json` מה־bundle של הייצור, אכלוס אסינכרוני | 6 |
 
