@@ -27,6 +27,7 @@
   --p-ink-700: #29334d;
   --p-ink-600: #3c4764;
   --p-ink-500: #566181;
+  --p-ink-450: #646e8a; /* captions on white: 5:1, where 400 gave 3.6:1 and failed the 4.5:1 that small text needs */
   --p-ink-400: #7c86a1;
   --p-ink-300: #a8b0c4;
   --p-ink-200: #cfd5e2;
@@ -71,7 +72,7 @@
   --canvas: var(--p-field-50); /* behind everything; the map normally covers it */
   --ink-1: var(--p-ink-900); /* primary text */
   --ink-2: var(--p-ink-500); /* secondary text */
-  --ink-3: var(--p-ink-400); /* tertiary, captions */
+  --ink-3: var(--p-ink-450); /* tertiary, captions */
   --line: color-mix(in oklab, var(--p-ink-900) 9%, transparent);
   --line-strong: color-mix(in oklab, var(--p-ink-900) 16%, transparent);
   --brand: var(--p-anemone-500);

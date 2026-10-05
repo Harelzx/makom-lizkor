@@ -1,3 +1,49 @@
-// Fill CONTACT_EMAIL before publishing: it receives corrections and takedown requests.
-export const CONTACT_EMAIL = "contact@example.org"
-export const LAST_UPDATED = "2026-10-04"
+/**
+ * Who runs the site, how to reach them, who processes data for them and how long it is kept: the one place these are
+ * set, for the notices, the About page and, later, the server's retention jobs. A value in [brackets], a null, or
+ * `verified: false` is fine while developing, but `npm run release:check` fails on any of them, so the notices can't
+ * go public with a placeholder or a promise nobody has tested. See docs/compliance-plan.md.
+ */
+
+// The privacy notices must name whoever controls the data (Privacy Protection Law s.11(2א)), and the email receives
+// corrections and takedown requests.
+export const OPERATOR = { name: "[שם המפעיל]", email: "contact@example.org" }
+
+// The project's own managed mailbox. Its provider holds the mail people send us, so the notices name it. The owner
+// chose a per-message rule (5.10): each message is kept at most `maxMonths` from receipt, or from sending for our own,
+// and deleted earlier where required. The provider's trash and admin recovery add a tail on top. Nothing here promises
+// deletion at case closure: the mailbox doesn't do that. `verified` waits for the policy to be configured on the real
+// tenant and its tail measured.
+export const MAILBOX = {
+  provider: "[ספק הדואר]",
+  storedIn: "[מדינת האחסון]",
+  maxMonths: 12,
+  deletionTailDays: null as number | null,
+  verified: false,
+}
+
+// Where the site itself is served from; its logs see visitors' IP addresses.
+export const HOSTING = { provider: "Cloudflare" }
+
+// Provisional until the architecture's deletion and backup jobs are tested end to end, restore drills included.
+export const RETENTION = {
+  /** contact details, report text and moderator notes, after the case closes */
+  contactAfterCloseDays: 90,
+  /** and never longer than this after they were given, closed or not */
+  contactMaxMonths: 12,
+  /** how long a deletion takes to leave our own backups and exports */
+  backupTailDays: 37,
+  /** the drill database's Time Travel window, the provider's and not shortenable. On its own it bounds nothing; the
+   * backend spec's timeline (section 7) derives drill copies gone by deletion + 32 days and exports by + 37, provided
+   * a drill loads only the newest export, which the code enforces. Unproven until the end-to-end test sets `verified` */
+  restoreDrillCopyDays: 30 as number | null,
+  /** a photo that wasn't approved */
+  rejectedPhotoDays: 30,
+  verified: false,
+}
+
+/** Privacy Protection (Access) Regulations: an answer to a request to see one's data within 30 days. */
+export const ACCESS_RESPONSE_DAYS = 30
+
+export const CONTACT_EMAIL = OPERATOR.email
+export const LAST_UPDATED = "2026-10-05"
