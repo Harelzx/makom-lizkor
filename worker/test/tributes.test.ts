@@ -34,7 +34,7 @@ describe("the day an anemone is counted on", () => {
 describe("anemones", () => {
   it("one left at a published place is counted, and shows in the totals", async () => {
     const { id } = await published("ספסל דמו כלנית")
-    expect(await result(await tribute(id, hex()))).toEqual({ status: 200, counted: true })
+    expect(await result(await tribute(id, hex(), hex(), "2026-12-01T10:00:00Z"))).toEqual({ status: 200, counted: true, day: "2026-12-01" })
     expect((await totals())[id]).toBe(1)
   })
 
@@ -56,6 +56,7 @@ describe("anemones", () => {
       status: 200,
       counted: false,
       reason: "already_today",
+      day: "2026-12-01",
     })
     expect((await result(await tribute(id, device, hex(), "2026-12-01T22:01:00Z"))).counted).toBe(true)
     expect((await totals())[id]).toBe(2)
@@ -66,7 +67,13 @@ describe("anemones", () => {
     const device = hex()
     const key = hex()
     await tribute(id, device, key, "2026-12-01T21:59:00Z")
-    expect((await result(await tribute(id, device, key, "2026-12-01T22:01:00Z"))).reason).toBe("replayed")
+    // The answer names the day it was counted on, not the day the retry arrived.
+    expect(await result(await tribute(id, device, key, "2026-12-01T22:01:00Z"))).toEqual({
+      status: 200,
+      counted: true,
+      reason: "replayed",
+      day: "2026-12-01",
+    })
     expect((await totals())[id]).toBe(1)
   })
 
@@ -87,7 +94,7 @@ describe("anemones", () => {
       headers: { Authorization: `Bearer ${gone.trackingToken}` },
     })
     for (const id of [pending.id, gone.id, "kibbutz-beeri-memorial", "p_01ZZZZZZZZZZZZZZZZZZZZZZZZ"])
-      expect(await result(await tribute(id, hex()))).toEqual({ status: 200, counted: false, reason: "not_published" })
+      expect(await result(await tribute(id, hex()))).toMatchObject({ status: 200, counted: false, reason: "not_published" })
     const t = await totals()
     expect(t[pending.id]).toBeUndefined()
     expect(t[gone.id]).toBeUndefined()

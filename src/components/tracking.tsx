@@ -117,8 +117,6 @@ export function Tracking() {
   const [confirming, setConfirming] = useState(false)
   const [working, setWorking] = useState(false)
   const [fixing, setFixing] = useState(false)
-  // Withdrawn, with its files still to be erased (no longer shown anywhere).
-  const [filesPending, setFilesPending] = useState(false)
   const key = tracking ? `${tracking.id}/${tracking.token}` : ""
 
   useEffect(() => {
@@ -141,30 +139,41 @@ export function Tracking() {
 
   const sendCorrection = async (d: Draft) => {
     if (!tracking || current?.result?.rev === undefined) return
-    const r = await reviseSubmission(tracking.id, tracking.token, {
-      expectedRev: current.result.rev,
+    const sent = {
       name_he: d.name_he.trim(),
       place_he: d.place_he?.trim() || undefined,
       in_memory_of: d.in_memory_of?.trim() || undefined,
       story_he: d.story_he?.trim() || undefined,
       link_url: d.link_url || undefined,
+    }
+    const r = await reviseSubmission(tracking.id, tracking.token, {
+      expectedRev: current.result.rev,
+      ...sent,
       consent_version: CURRENT_SUBMISSION_NOTICE,
     })
     if (r === "refused") return void toast("התיקון לא התקבל", { description: "התיקון נשאר כאן. בדקו אותו ונסו לשלוח שוב." })
     if (r === "failed") return void toast("לא הצלחנו לשלוח את התיקון", { description: "התיקון לא נשמר ונשאר כאן. נסו שוב בעוד רגע." })
-    if (r === "no_answer") {
-      // No answer is not a refusal: the correction may have been saved and its answer lost. The status says which.
-      const now = await trackSubmission(tracking.id, tracking.token)
-      const saved = !!now && now.rev !== current.result.rev && (now.status === "pending" || now.revision_state === "pending")
-      if (!saved)
-        return void toast("לא קיבלנו תשובה מהשרת", {
-          description: now
-            ? "התיקון לא מופיע כממתין. הוא נשאר כאן, ואפשר לשלוח שוב."
-            : "לא ברור אם התיקון נשמר. הוא נשאר כאן; בדקו שוב בעוד רגע.",
-        })
-    }
     if (r === "queue_full")
       return void toast("יש עכשיו יותר הצעות ממה שאפשר לבדוק", { description: "התיקון לא נשמר. נסו שוב בעוד כמה שעות." })
+    if (r === "uncertain") {
+      // No clear answer: the correction may have been saved. It counts as saved only if the newest text on the server
+      // is the very text sent from here (another tab may have sent a different one); otherwise it stays in the form.
+      const now = await trackSubmission(tracking.id, tracking.token)
+      const same = (a?: string | null, b?: string | null) => (a ?? "") === (b ?? "")
+      const mine =
+        !!now?.draft &&
+        now.rev !== current.result.rev &&
+        (Object.keys(sent) as (keyof typeof sent)[]).every((k) => same(now.draft![k], sent[k]))
+      if (!mine) {
+        if (now) setState({ key, result: now, failed: false })
+        return void toast(now ? "התיקון שלכם לא מופיע בשרת" : "לא ברור אם התיקון נשמר", {
+          description:
+            now && now.rev !== current.result.rev
+              ? "ההצעה השתנתה בינתיים, אולי מחלון אחר. התיקון שלכם נשאר כאן; בדקו את המצב לפני ששולחים שוב."
+              : "התיקון נשאר כאן. נסו שוב בעוד רגע.",
+        })
+      }
+    }
     if (r === "conflict") toast("ההצעה השתנתה בינתיים", { description: "הנה המצב העדכני." })
     setFixing(false)
     await reload()
@@ -174,14 +183,21 @@ export function Tracking() {
   const withdraw = async () => {
     if (!tracking) return
     setWorking(true)
-    let done = await withdrawSubmission(tracking.id, tracking.token)
-    // An error or no answer may hide a withdrawal that happened: the status says which.
-    if (done === "failed" && (await trackSubmission(tracking.id, tracking.token))?.status === "withdrawn") done = "withdrawn"
+    const done = await withdrawSubmission(tracking.id, tracking.token)
+    // The status says what is established, whatever the answer was (or if none came): withdrawn, and whether its files
+    // are still to be erased.
+    const now = await trackSubmission(tracking.id, tracking.token)
     setWorking(false)
     setConfirming(false)
-    if (done === "failed") return void toast("לא הצלחנו לוודא שההצעה נמשכה", { description: "נסו שוב בעוד רגע." })
-    setFilesPending(done === "files_pending")
-    setState({ key, result: { status: "withdrawn", name_he: null }, failed: false })
+    if (now?.status === "withdrawn") setState({ key, result: now, failed: false })
+    else if (done === "failed" || now) return void toast("לא הצלחנו לוודא שההצעה נמשכה", { description: "נסו שוב בעוד רגע." })
+    // Withdrawn, but the status couldn't be read just now: say only what the answer established.
+    else
+      setState({
+        key,
+        result: { status: "withdrawn", name_he: null, ...(done === "withdrawn" ? {} : { files: "pending" }) },
+        failed: false,
+      })
     // The sender's own copy on this device, if it is here, says so too.
     const own = useStore.getState().local.find((p) => p.local?.remoteId === tracking.id)
     if (own) void useStore.getState().updateLocal(own.id, { send: "withdrawn" })
@@ -202,7 +218,7 @@ export function Tracking() {
             <>
               {current.result.name_he && <p className="text-title-3 text-ink-1">{current.result.name_he}</p>}
               <p className="text-label text-ink-1">
-                {current.result.status === "withdrawn" && filesPending
+                {current.result.status === "withdrawn" && current.result.files === "pending"
                   ? "נמשכה. ההצעה, השם והמייל שלכם נמחקו מהשרת. התמונה כבר לא מוצגת, ותימחק מהשרת בהמשך"
                   : (STATUS[current.result.status] ?? current.result.status)}
               </p>

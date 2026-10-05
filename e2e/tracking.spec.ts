@@ -136,3 +136,74 @@ test("a withdrawal whose answer was lost is found done, not reported as unchange
   await expect(view.getByText("נמשכה", { exact: false })).toBeVisible()
   await expect(page.getByText("לא הצלחנו", { exact: false })).toHaveCount(0)
 })
+
+/** A submission returned by the moderator, with its tracking view open on the correction form. */
+async function returnedAndFixing(browser: Browser, name: string) {
+  const page = await submit(browser, name)
+  const modCtx = await browser.newContext()
+  await modCtx.request.post("/__dev/login", { data: { email: "dev@example.test" } })
+  const mod = await modCtx.newPage()
+  await mod.goto("/admin/")
+  const item = mod.getByRole("article", { name })
+  await item.getByRole("button", { name: "החזרה לתיקון" }).click()
+  await item.getByLabel("הערה למגיש").fill("נא לציין את שם היישוב")
+  await item.getByRole("button", { name: "שליחת ההחזרה" }).click()
+  await expect(item).toHaveCount(0)
+  await page.getByRole("button", { name: "מעקב אחרי ההצעה" }).click()
+  const view = page.getByRole("dialog", { name: "מצב ההצעה" })
+  await view.getByRole("button", { name: "תיקון ההצעה" }).click()
+  await view.getByLabel("יישוב או אזור").fill("בארי")
+  await view.getByRole("checkbox").check()
+  return { page, view, modCtx }
+}
+
+test("a correction saved before the server failed is found saved", async ({ browser }) => {
+  test.setTimeout(120_000)
+  const { page, view } = await returnedAndFixing(browser, `ספסל דמו תיקון ושגיאה ${Date.now()}`)
+  await page.route("**/api/v1/submissions/*/revisions", async (route) => {
+    await route.fetch()
+    await route.fulfill({ status: 500, contentType: "application/problem+json", body: JSON.stringify({ status: 500, code: "internal" }) })
+  })
+  await view.getByRole("button", { name: "שליחה מחדש לבדיקה" }).click()
+  await expect(view.getByText("ממתינה לבדיקה")).toBeVisible()
+  await expect(page.getByText("התיקון לא נשמר", { exact: false })).toHaveCount(0)
+})
+
+test("when another window's different correction got in first, this one stays in the form", async ({ browser }) => {
+  test.setTimeout(120_000)
+  const { page, view } = await returnedAndFixing(browser, `ספסל דמו שני חלונות ${Date.now()}`)
+  await page.route("**/api/v1/submissions/*/revisions", async (route) => {
+    const sent = route.request().postDataJSON() as Record<string, unknown>
+    // Another window sends its own correction first; this one's answer is lost.
+    await page.request.post(route.request().url(), {
+      headers: { ...route.request().headers() },
+      data: { ...sent, place_he: "כפר עזה" },
+    })
+    await route.abort("failed")
+  })
+  await view.getByRole("button", { name: "שליחה מחדש לבדיקה" }).click()
+  await expect(page.getByText("ההצעה השתנתה בינתיים", { exact: false }).first()).toBeVisible()
+  await expect(view.getByLabel("יישוב או אזור")).toHaveValue("בארי")
+})
+
+test("a correction approved before its lost answer was checked is found saved", async ({ browser }) => {
+  test.setTimeout(120_000)
+  const name = `ספסל דמו תיקון שאושר ${Date.now()}`
+  const { page, view, modCtx } = await returnedAndFixing(browser, name)
+  await page.route("**/api/v1/submissions/*/revisions", async (route) => {
+    await route.fetch()
+    // A moderator approves it before the sender's browser looks again.
+    const { items } = (await (await modCtx.request.get("/api/admin/queue")).json()) as {
+      items: { id: string; rev: number; revisionId: string; name_he: string }[]
+    }
+    const item = items.find((i) => i.name_he === name)!
+    await modCtx.request.post(`/api/admin/places/${item.id}/transitions`, {
+      headers: { "Sec-Fetch-Site": "same-origin" },
+      data: { action: "approve", revisionId: item.revisionId, expectedRev: item.rev },
+    })
+    await route.abort("failed")
+  })
+  await view.getByRole("button", { name: "שליחה מחדש לבדיקה" }).click()
+  await expect(view.getByText("אושרה ומופיעה באתר")).toBeVisible()
+  await expect(page.getByText("לא מופיע בשרת", { exact: false })).toHaveCount(0)
+})

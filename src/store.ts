@@ -77,8 +77,8 @@ interface State {
   updateLocal: (id: string, patch: Partial<LocalFields>) => Promise<boolean>
   /** Whether a place is still the visitor's to send: in this tab's list, and on the device if it was ever stored there. */
   stillLocal: (id: string) => Promise<boolean>
-  /** False when the place is gone from the screen but couldn't be removed from the device. */
-  removeLocal: (id: string) => Promise<boolean>
+  /** "removed" from the device too; "kept" there (the removal couldn't be saved); "unknown" whether the device has it. */
+  removeLocal: (id: string) => Promise<"removed" | "kept" | "unknown">
   /** How many places were new, and whether they were also saved on the device. */
   importLocal: (places: Place[]) => Promise<{ added: number; saved: boolean }>
   leaveAnemone: (id: string) => void
@@ -90,11 +90,12 @@ interface State {
 
 /** Every place this tab has had in its list, removed ones included. */
 const held = new Set<string>()
-/**
- * The places known to be on the device: read from it, or written to it by this tab. Removing one is done only once the
- * device says so; a place the device never kept (it refused every write) is gone once it leaves the list.
- */
+/** The places the device was seen to hold: in what it read out, or in what it answered after a write. */
 const onDevice = new Set<string>()
+/** Places this tab made whose writes all failed: never on the device, if the device's contents were known at the start. */
+const neverStored = new Set<string>()
+/** Whether the device could be read when this tab started; if not, what it holds is unknown. */
+let readable = false
 /** A place stored as "sending" by a visit that closed mid-send, or by another tab: here it waits for a retry. */
 const waiting = (p: Place): Place => (p.local?.send === "sending" ? { ...p, local: { ...p.local, send: "waiting" as const } } : p)
 
@@ -105,12 +106,13 @@ const waiting = (p: Place): Place => (p.local?.send === "sending" ? { ...p, loca
 async function persist(change: (stored: Place[]) => Place[]): Promise<boolean> {
   try {
     const stored = await changeLocal(change)
+    for (const p of stored) {
+      onDevice.add(p.id)
+      neverStored.delete(p.id)
+    }
     // Only places this tab has never held: one it removed is not brought back by a write that was still in flight.
     const theirs = stored.filter((p) => !held.has(p.id)).map(waiting)
-    for (const p of theirs) {
-      held.add(p.id)
-      onDevice.add(p.id)
-    }
+    for (const p of theirs) held.add(p.id)
     if (theirs.length) useStore.setState({ local: [...useStore.getState().local, ...theirs] })
     return true
   } catch {
@@ -147,8 +149,9 @@ export const useStore = create<State>((set, get) => ({
 
   init: async () => {
     const [stored, tributes] = await Promise.all([loadLocal(), loadTributes()])
+    readable = stored !== null
     // A place still "sending" is from a visit that closed mid-send; nothing is sending it now, so it waits for a retry.
-    const local = stored.map(waiting)
+    const local = (stored ?? []).map(waiting)
     for (const p of local) {
       held.add(p.id)
       onDevice.add(p.id)
@@ -174,20 +177,22 @@ export const useStore = create<State>((set, get) => ({
     held.add(p.id)
     set({ local: [...get().local, p] })
     const saved = await persist((stored) => [...stored.filter((s) => s.id !== p.id), p])
-    if (saved) onDevice.add(p.id)
+    if (!saved && !onDevice.has(p.id)) neverStored.add(p.id)
     return saved
   },
   stillLocal: async (id) => {
-    if (!get().local.some((p) => p.id === id)) return false
+    const here = () => get().local.some((p) => p.id === id)
+    if (!here()) return false
     if (!onDevice.has(id)) return true
     try {
       // Another tab may have removed it from the device: then it leaves this tab's list too, and nothing sends it.
-      if ((await changeLocal((stored) => stored)).some((p) => p.id === id)) return true
+      if ((await changeLocal((stored) => stored)).some((p) => p.id === id)) return here()
       set({ local: get().local.filter((p) => p.id !== id) })
       onDevice.delete(id)
       return false
     } catch {
-      return true
+      // The visitor may have removed it while the device was being read.
+      return here()
     }
   },
   updateLocal: async (id, patch) => {
@@ -198,9 +203,14 @@ export const useStore = create<State>((set, get) => ({
   removeLocal: async (id) => {
     const local = get().local.filter((p) => p.id !== id)
     set({ local, selectedId: get().selectedId === id ? null : get().selectedId })
-    const saved = await persist((stored) => stored.filter((p) => p.id !== id))
-    if (saved) onDevice.delete(id)
-    return saved || !onDevice.has(id)
+    if (await persist((stored) => stored.filter((p) => p.id !== id))) {
+      onDevice.delete(id)
+      return "removed"
+    }
+    // Couldn't save the removal: a place the device never kept is gone anyway; one it was seen to hold is still there;
+    // otherwise (it couldn't be read at the start, or a write is still out) nobody knows.
+    if (onDevice.has(id)) return "kept"
+    return readable && neverStored.has(id) ? "removed" : "unknown"
   },
   importLocal: async (incoming) => {
     const known = new Set(get().local.map((p) => p.id))
@@ -211,7 +221,7 @@ export const useStore = create<State>((set, get) => ({
     for (const p of added) held.add(p.id)
     set({ local: [...get().local, ...added] })
     const saved = await persist((stored) => [...stored, ...added.filter((p) => !stored.some((s) => s.id === p.id))])
-    if (saved) for (const p of added) onDevice.add(p.id)
+    if (!saved) for (const p of added) if (!onDevice.has(p.id)) neverStored.add(p.id)
     return { added: added.length, saved }
   },
   leaveAnemone: (id) => {

@@ -36,15 +36,14 @@ export async function queueTribute(placeId: string) {
 }
 
 /**
- * The answer for one waiting anemone, recorded as the day it was answered, but only if it is still the one sent
+ * The answer for one waiting anemone, recorded as the day it was counted on, but only if it is still the one sent
  * (another tab may have replaced it). Answers from earlier days are dropped as they are no longer needed.
  */
-const settle = (placeId: string, sent: PendingTribute, answered: boolean) =>
+const settle = (placeId: string, sent: PendingTribute, countedOn: string | null) =>
   changeTributeOutbox((o) => {
-    const day = today()
-    const kept = Object.fromEntries(Object.entries(o).filter(([, e]) => "key" in e || e.day === day))
+    const kept = Object.fromEntries(Object.entries(o).filter(([, e]) => "key" in e || e.day === today()))
     if ((o[placeId] as PendingTribute | undefined)?.key !== sent.key) return kept
-    if (answered) return { ...kept, [placeId]: { day } }
+    if (countedOn) return { ...kept, [placeId]: { day: countedOn } }
     const rest = { ...kept }
     delete rest[placeId]
     return rest
@@ -62,13 +61,14 @@ export async function drainTributes() {
     for (const [placeId, entry] of Object.entries(queue)) {
       if (!("key" in entry)) continue
       if (Date.now() - entry.at > WEEK) {
-        await settle(placeId, entry, false)
+        await settle(placeId, entry, null)
         continue
       }
       const r = await sendTribute(placeId, id, entry.key)
       if (!r.ok && r.kind === "temporary") break
-      // Answered: the server has this device's anemone for today (or refused it); later taps today stay local.
-      await settle(placeId, entry, true)
+      // Answered: recorded under the day the server counts it on (a late answer may come after midnight), so later taps
+      // that day stay local; a refusal is recorded as today's.
+      await settle(placeId, entry, r.ok && "day" in r.result ? r.result.day : today())
       // Counted just now: the shared count shows it at once, before the next refresh.
       if (r.ok && r.result.counted && !r.result.reason) {
         const totals = useStore.getState().tributeTotals

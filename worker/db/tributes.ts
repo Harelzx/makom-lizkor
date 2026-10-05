@@ -1,6 +1,10 @@
 import { sha256Hex, ulid } from "../lib/ids"
 
-export type Counted = { counted: true; reason?: "replayed" } | { counted: false; reason: "already_today" | "not_published" }
+/** `day`: the Jerusalem day the server counts this device's anemone on (for a replay, the day it was counted). */
+export type Counted =
+  | { counted: true; reason?: "replayed"; day: string }
+  | { counted: false; reason: "already_today"; day: string }
+  | { counted: false; reason: "not_published" }
 
 /** The device as the server keeps it: HMAC(secret, deviceId|day). Without the device's own id, days can't be linked. */
 async function deviceKey(secret: string, deviceId: string, day: string) {
@@ -39,13 +43,16 @@ export async function leaveTribute(
       )
       .bind(keyHash, nonce, t.placeId),
   ])
-  if (inserted.meta.changes === 1) return { counted: true }
+  if (inserted.meta.changes === 1) return { counted: true, day }
   // Nothing inserted: this anemone was counted before (its answer was lost), the device already left one today, or
   // there is no published place by that id.
-  const prior = await db.prepare("SELECT place_id FROM tribute_events WHERE idempotency_key = ?").bind(keyHash).first<string>("place_id")
-  if (prior) return prior === t.placeId ? { counted: true, reason: "replayed" } : "key_reused"
+  const prior = await db
+    .prepare("SELECT place_id, day FROM tribute_events WHERE idempotency_key = ?")
+    .bind(keyHash)
+    .first<{ place_id: string; day: string }>()
+  if (prior) return prior.place_id === t.placeId ? { counted: true, reason: "replayed", day: prior.day } : "key_reused"
   const live = await db.prepare("SELECT 1 FROM places WHERE id = ? AND status = 'published'").bind(t.placeId).first()
-  return live ? { counted: false, reason: "already_today" } : { counted: false, reason: "not_published" }
+  return live ? { counted: false, reason: "already_today", day } : { counted: false, reason: "not_published" }
 }
 
 /** The public counts: published places only, so a place taken down takes its count with it. */

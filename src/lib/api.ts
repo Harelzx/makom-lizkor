@@ -55,6 +55,8 @@ export type Tracked = {
   revision_state?: string
   /** The moderator's note, when the newest revision was returned for a change. */
   note?: string
+  /** "pending" when the submission was withdrawn but some of its files are still to be erased (they are not shown). */
+  files?: string
   draft?: Draft
 }
 
@@ -87,22 +89,24 @@ export async function withdrawSubmission(id: string, token: string): Promise<"wi
       signal: AbortSignal.timeout(8000),
     })
     if (!res.ok) return "failed"
-    return ((await res.json().catch(() => ({}))) as { files?: string }).files === "pending" ? "files_pending" : "withdrawn"
+    // Erased only when the answer says so plainly; an unreadable answer leaves the files' fate unknown.
+    const body = (await res.json().catch(() => null)) as { status?: string; files?: string } | null
+    return body?.status === "withdrawn" && !body.files ? "withdrawn" : "files_pending"
   } catch {
     return "failed"
   }
 }
 
 /**
- * "ok"; "conflict" when the place changed since the sender looked; "queue_full"; "refused" when the server didn't
- * accept it (invalid, or the check failed); "failed" when the server answered with an error; "no_answer" when nothing
- * came back, so the correction may have been saved.
+ * "ok"; "conflict" when the place changed since the sender looked; "queue_full"; "refused" when the server didn't accept
+ * it (invalid); "failed" when it was turned away before anything was saved (the check failed, too many at once);
+ * "uncertain" when no answer came or the server failed midway, so the correction may have been saved.
  */
 export async function reviseSubmission(
   id: string,
   token: string,
   body: RevisionInput,
-): Promise<"ok" | "conflict" | "queue_full" | "refused" | "failed" | "no_answer"> {
+): Promise<"ok" | "conflict" | "queue_full" | "refused" | "failed" | "uncertain"> {
   let res: Response
   try {
     const check = await turnstileToken("revise")
@@ -113,13 +117,15 @@ export async function reviseSubmission(
       signal: AbortSignal.timeout(8000),
     })
   } catch {
-    return "no_answer"
+    return "uncertain"
   }
   if (res.ok) return "ok"
   if (res.status === 409) return "conflict"
   const code = ((await res.json().catch(() => ({}))) as { code?: string }).code
   if (code === "queue_full") return "queue_full"
-  return res.status === 400 || res.status === 403 || res.status === 404 ? "refused" : "failed"
+  if (res.status === 400 || res.status === 404) return "refused"
+  if (res.status === 403 || res.status === 429 || code === "turnstile_unavailable") return "failed"
+  return "uncertain"
 }
 
 /** "ok", "expired" when the link is wrong or older than its seven days, or "failed" when the server can't be reached. */

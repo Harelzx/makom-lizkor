@@ -16,12 +16,14 @@ function db(): UseStore | null {
   return store
 }
 
-export async function loadLocal(): Promise<Place[]> {
+/** The visitor's places as stored; null when the device couldn't be read (then nothing is known about what it holds). */
+export async function loadLocal(): Promise<Place[] | null> {
   try {
     const s = db()
-    return (s && (await get<Place[]>("local", s))) ?? []
+    if (!s) return null
+    return (await get<Place[]>("local", s)) ?? []
   } catch {
-    return []
+    return null
   }
 }
 

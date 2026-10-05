@@ -213,9 +213,11 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
               size="xs"
               onClick={async () => {
                 const sentCopy = local.remoteId && local.send !== "withdrawn"
-                // One message, once the device has answered: removed, or still kept there.
-                if (!(await removeLocal(place.id)))
+                // One message, once the device has answered: removed, still kept there, or not known.
+                const outcome = await removeLocal(place.id)
+                if (outcome === "kept")
                   return void toast("המקום הוסר מהרשימה, אבל לא מהמכשיר", { description: "הוא יחזור בביקור הבא. נסו שוב אז." })
+                if (outcome === "unknown") return void toast("המקום הוסר מהרשימה")
                 toast("המקום נמחק מהמכשיר", {
                   description: sentCopy
                     ? "ההצעה שנשלחה לבדיקה לא נמשכה, וקישור המעקב נמחק עם העותק. כדי למשוך אותה עכשיו, כתבו לנו."

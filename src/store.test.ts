@@ -5,15 +5,19 @@ import type { Place } from "@/types"
 const disk = vi.hoisted(() => ({
   stored: [] as Place[],
   fail: null as Error | null,
+  /** the change is applied, then an error is reported anyway */
+  failAfter: null as Error | null,
+  unreadable: false,
   hold: null as Promise<void> | null,
 }))
 vi.mock("@/lib/storage", () => ({
-  loadLocal: async () => disk.stored,
+  loadLocal: async () => (disk.unreadable ? null : disk.stored),
   loadTributes: async () => ({}),
   saveTributes: async () => undefined,
   changeLocal: async (change: (s: Place[]) => Place[]) => {
     if (disk.fail) throw disk.fail
     disk.stored = change(disk.stored)
+    if (disk.failAfter) throw disk.failAfter
     const answer = disk.stored
     // The transaction is done; its answer reaches the store only when released.
     if (disk.hold) await disk.hold
@@ -29,6 +33,8 @@ const place = (id: string, extra: Partial<Place["local"]> = {}): Place =>
 beforeEach(async () => {
   disk.stored = []
   disk.fail = null
+  disk.failAfter = null
+  disk.unreadable = false
   disk.hold = null
   useStore.setState({ local: [] })
 })
@@ -63,22 +69,52 @@ describe("the visitor's places in the store", () => {
     expect(disk.stored.map((p) => p.id).sort()).toEqual(["local-mine", "local-other"])
   })
 
-  it("a removal the device couldn't save says so, for a place read from it or written to it", async () => {
+  it("a removal the device couldn't save says the place is kept there, for a place read from it or written to it", async () => {
     disk.stored = [place("local-x")]
     await useStore.getState().init()
     await useStore.getState().addLocal(place("local-w"))
     disk.fail = new DOMException("full", "QuotaExceededError")
-    expect(await useStore.getState().removeLocal("local-x")).toBe(false)
-    expect(await useStore.getState().removeLocal("local-w")).toBe(false)
+    expect(await useStore.getState().removeLocal("local-x")).toBe("kept")
+    expect(await useStore.getState().removeLocal("local-w")).toBe("kept")
   })
 
-  it("in a browser that keeps nothing, a place made here is simply gone when removed", async () => {
-    // What a blocked IndexedDB really throws: not a message of ours.
-    disk.fail = new DOMException("blocked", "SecurityError")
+  it("in a browser that keeps nothing, a place made here is simply removed", async () => {
     await useStore.getState().init()
+    disk.fail = new DOMException("blocked", "SecurityError")
     expect(await useStore.getState().addLocal(place("local-z"))).toBe(false)
-    expect(await useStore.getState().removeLocal("local-z")).toBe(true)
+    expect(await useStore.getState().removeLocal("local-z")).toBe("removed")
   })
+
+  it("a place whose write reported an error but was later seen on the device counts as kept there", async () => {
+    await useStore.getState().init()
+    disk.failAfter = new DOMException("aborted", "AbortError")
+    expect(await useStore.getState().addLocal(place("local-c"))).toBe(false)
+    disk.failAfter = null
+    await useStore.getState().updateLocal("local-c", { nextTryAt: 1 })
+    disk.fail = new DOMException("blocked", "SecurityError")
+    expect(await useStore.getState().removeLocal("local-c")).toBe("kept")
+  })
+
+  it("when the device couldn't be read at the start, a failed removal is unknown, not done", async () => {
+    disk.unreadable = true
+    await useStore.getState().init()
+    disk.fail = new DOMException("blocked", "SecurityError")
+    await useStore.getState().importLocal([place("local-i")])
+    expect(await useStore.getState().removeLocal("local-i")).toBe("unknown")
+  })
+
+  it("a removal while the guard's own read of the device is held still stops the send", async () => {
+    disk.stored = [place("local-g")]
+    await useStore.getState().init()
+    let release!: () => void
+    disk.hold = new Promise((r) => (release = r))
+    const asking = useStore.getState().stillLocal("local-g")
+    disk.hold = null
+    useStore.setState({ local: [] })
+    release()
+    expect(await asking).toBe(false)
+  })
+
   it("a place another tab removed from the device isn't the visitor's to send any more", async () => {
     disk.stored = [place("local-a"), place("local-b")]
     await useStore.getState().init()

@@ -6,6 +6,7 @@ import {
   attachPhoto,
   canTrack,
   erasePhotos,
+  photosRemain,
   insertSubmission,
   trackingTokenFor,
   pendingCount,
@@ -85,7 +86,10 @@ submissions.get("/:id", async (c) => {
   const token = bearer(c.req.header("Authorization"))
   // An unknown id and a wrong token look the same, so the endpoint reveals nothing about which ids exist.
   const status = token ? await submissionStatus(c.env.DB, c.req.param("id"), token) : null
-  return status ? c.json(status, 200, PRIVATE) : problem(c, 404, "not_found")
+  if (!status) return problem(c, 404, "not_found")
+  // A withdrawal whose files couldn't all be erased yet says so (they are no longer served), on every later visit.
+  const pending = status.status === "withdrawn" && (await photosRemain(c.env.MEDIA, c.req.param("id")))
+  return c.json(pending ? { ...status, files: "pending" } : status, 200, PRIVATE)
 })
 
 submissions.post("/:id/withdraw", async (c) => {

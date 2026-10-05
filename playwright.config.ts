@@ -26,7 +26,8 @@ export default defineConfig({
       : `${fresh} && npm run dev -- --port ${port} --strictPort`,
     env: { E2E_STATE: state },
     url: `http://localhost:${port}`,
-    reuseExistingServer: !prod,
+    // Never another process's server: only one started here has the fresh state above.
+    reuseExistingServer: false,
     timeout: 120_000,
   },
 })

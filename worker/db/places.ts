@@ -612,6 +612,13 @@ async function keysUnder(media: R2Bucket, prefix: string): Promise<string[]> {
   return keys
 }
 
+/** Whether any file of a place is still stored, in quarantine or public. */
+export async function photosRemain(media: R2Bucket, placeId: string): Promise<boolean> {
+  for (const prefix of [`quarantine/${placeId}/`, `public/${placeId}/`])
+    if ((await media.list({ prefix, limit: 1 })).objects.length) return true
+  return false
+}
+
 /** Every file of a place, in quarantine and public alike: a withdrawal erases them all at once. */
 export async function erasePhotos(media: R2Bucket, placeId: string) {
   for (const prefix of [`quarantine/${placeId}/`, `public/${placeId}/`]) {

@@ -325,9 +325,20 @@ describe("phase 2 close-out", () => {
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ status: "withdrawn", files: "pending" })
     expect(await env.DB.prepare("SELECT status FROM places WHERE id = ?").bind(id).first("status")).toBe("withdrawn")
+    // The status says so too, on any later visit, until the files are gone.
+    const status = async () =>
+      (
+        await (
+          await call(`http://local/api/v1/submissions/${id}`, { headers: { Authorization: `Bearer ${trackingToken}` } })
+        ).json<{
+          files?: string
+        }>()
+      ).files
+    expect(await status()).toBe("pending")
     const again = await withdraw(id, trackingToken)
     expect(await again.json()).toEqual({ status: "withdrawn" })
     expect(await objects(id)).toHaveLength(0)
+    expect(await status()).toBeUndefined()
   })
 
   it("the sweep leaves a copy younger than an hour alone: an approval may be about to record it", async () => {
