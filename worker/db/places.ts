@@ -521,8 +521,9 @@ export async function attachPhoto(
     await media.delete(key).catch(() => undefined)
     return "closed"
   }
-  // A replaced photo that was never approved goes at once.
-  if (rev.photo_key?.startsWith("quarantine/")) await media.delete(rev.photo_key)
+  // A replaced photo that was never approved goes at once; if it can't now, the photo is still attached, and the old
+  // file (named by no revision any more) is left for the sweep.
+  if (rev.photo_key?.startsWith("quarantine/")) await media.delete(rev.photo_key).catch(() => undefined)
   return "ok"
 }
 
@@ -559,7 +560,7 @@ export async function preparePhoto(
 export async function photosAfterDecision(db: D1Database, media: R2Bucket, placeId: string, revisionId: string, action: string) {
   try {
     if (action === "return") return
-    const quarantined = (await media.list({ prefix: `quarantine/${placeId}/` })).objects.map((o) => o.key)
+    const quarantined = await keysUnder(media, `quarantine/${placeId}/`)
     if (quarantined.length) await media.delete(quarantined)
     if (action === "reject") {
       await db
@@ -571,17 +572,29 @@ export async function photosAfterDecision(db: D1Database, media: R2Bucket, place
       return
     }
     const live = await db.prepare("SELECT photo_key FROM revisions WHERE id = ?").bind(revisionId).first<string | null>("photo_key")
-    const others = (await media.list({ prefix: `public/${placeId}/` })).objects.map((o) => o.key).filter((k) => k !== live)
+    const others = (await keysUnder(media, `public/${placeId}/`)).filter((k) => k !== live)
     if (others.length) await media.delete(others)
   } catch (err) {
     console.error(JSON.stringify({ level: "error", event: "photo_cleanup", error: (err as Error).name }))
   }
 }
 
+/** Every key under a prefix, page after page: R2 cuts a long listing short and says where to go on. */
+async function keysUnder(media: R2Bucket, prefix: string): Promise<string[]> {
+  const keys: string[] = []
+  let cursor: string | undefined
+  do {
+    const page = await media.list({ prefix, cursor })
+    keys.push(...page.objects.map((o) => o.key))
+    cursor = page.truncated ? page.cursor : undefined
+  } while (cursor)
+  return keys
+}
+
 /** Every file of a place, in quarantine and public alike: a withdrawal erases them all at once. */
 export async function erasePhotos(media: R2Bucket, placeId: string) {
   for (const prefix of [`quarantine/${placeId}/`, `public/${placeId}/`]) {
-    const keys = (await media.list({ prefix })).objects.map((o) => o.key)
+    const keys = await keysUnder(media, prefix)
     if (keys.length) await media.delete(keys)
   }
 }

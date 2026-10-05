@@ -136,6 +136,64 @@ describe("phase 2 close-out", () => {
     expect((await call(`http://local${url}`)).status).toBe(200)
   })
 
+  it("a replaced photo whose old file can't be deleted is still attached, and the old file is left for the sweep", async () => {
+    const { id, trackingToken } = await send("ספסל דמו תמונה מוחלפת ומחיקה נכשלת")
+    await upload(id, trackingToken, jpeg(0x11))
+    const deleteFails = new Proxy(env.MEDIA, {
+      get(target, prop) {
+        if (prop === "delete")
+          return async () => {
+            throw new Error("r2 down")
+          }
+        const value = Reflect.get(target, prop)
+        return typeof value === "function" ? value.bind(target) : value
+      },
+    })
+    const form = new FormData()
+    form.append("photo", new File([jpeg(0x22)], "p.jpg", { type: "image/jpeg" }))
+    form.append("alt", "תיאור דמו")
+    const encoded = new Request("http://local/", { method: "PUT", body: form })
+    const body = await encoded.arrayBuffer()
+    const res = await call(
+      `http://local/api/v1/submissions/${id}/photo`,
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${trackingToken}`,
+          "Content-Type": encoded.headers.get("Content-Type")!,
+          "Content-Length": String(body.byteLength),
+        },
+        body,
+      },
+      { ...env, MEDIA: deleteFails },
+    )
+    expect(res.status).toBe(200)
+    expect(await objects(id)).toHaveLength(2)
+    await sweepPhotos(env.DB, env.MEDIA, later())
+    expect(await objects(id)).toHaveLength(1)
+  })
+
+  it("a withdrawal erases every file of the place, however many pages the listing takes", async () => {
+    const { id, trackingToken } = await send("ספסל דמו קבצים רבים")
+    for (let i = 0; i < 3; i++) await env.MEDIA.put(`quarantine/${id}/extra-${i}.jpg`, jpeg())
+    await env.MEDIA.put(`public/${id}/extra.jpg`, jpeg())
+    // A listing one object at a page, as a long one is cut by R2.
+    const paged = new Proxy(env.MEDIA, {
+      get(target, prop) {
+        if (prop === "list") return (o: R2ListOptions = {}) => target.list({ ...o, limit: 1 })
+        const value = Reflect.get(target, prop)
+        return typeof value === "function" ? value.bind(target) : value
+      },
+    })
+    const res = await call(
+      `http://local/api/v1/submissions/${id}/withdraw`,
+      { method: "POST", headers: { Authorization: `Bearer ${trackingToken}` } },
+      { ...env, MEDIA: paged },
+    )
+    expect(res.status).toBe(200)
+    expect(await objects(id)).toHaveLength(0)
+  })
+
   it("the sweep leaves a copy younger than an hour alone: an approval may be about to record it", async () => {
     const { id } = await send("ספסל דמו העתק טרי")
     await env.MEDIA.put(`public/${id}/r_fresh.jpg`, jpeg())

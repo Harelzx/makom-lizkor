@@ -34,6 +34,8 @@ npx playwright test e2e/routing.spec.ts          # one file
 npx playwright test -g "shared link to a place"  # one test by name
 node scripts/build-data.mjs                      # regenerate src/data/*.json from data-src/
 npm test                   # the Worker's tests (Vitest inside workerd, fresh local D1 per run); heavy: scripts/heavy npm test
+npm run test:client        # the browser code's own logic (the store) in Node, storage stood in for; heavy: scripts/heavy npm run test:client
+npm run test:scripts       # node:test for scripts/ (the release check's mail rules)
 npm run db:migrate:local   # apply migrations/ to the local D1 the dev server uses (Playwright's webServer runs it first)
 npm run cf-typegen         # regenerate worker-configuration.d.ts after changing wrangler.jsonc or .dev.vars
 ```

@@ -75,7 +75,8 @@ interface State {
   /** Both keep the change in memory and say whether it was also saved on the device; they never throw. */
   addLocal: (p: Place) => Promise<boolean>
   updateLocal: (id: string, patch: Partial<LocalFields>) => Promise<boolean>
-  removeLocal: (id: string) => Promise<void>
+  /** False when the place is gone from the screen but couldn't be removed from the device. */
+  removeLocal: (id: string) => Promise<boolean>
   /** How many places were new, and whether they were also saved on the device. */
   importLocal: (places: Place[]) => Promise<{ added: number; saved: boolean }>
   leaveAnemone: (id: string) => void
@@ -95,15 +96,20 @@ const waiting = (p: Place): Place => (p.local?.send === "sending" ? { ...p, loca
  * full disk). Places another tab stored meanwhile come into this tab's list too; this tab's own copies stay as they are.
  */
 async function persist(change: (stored: Place[]) => Place[]): Promise<boolean> {
+  return (await persistOrWhy(change)) === "saved"
+}
+
+/** As persist, telling a browser that keeps nothing (nothing was ever stored) from a save that failed. */
+async function persistOrWhy(change: (stored: Place[]) => Place[]): Promise<"saved" | "unavailable" | "failed"> {
   try {
     const stored = await changeLocal(change)
     // Only places this tab has never held: one it removed is not brought back by a write that was still in flight.
     const theirs = stored.filter((p) => !held.has(p.id)).map(waiting)
     for (const p of theirs) held.add(p.id)
     if (theirs.length) useStore.setState({ local: [...useStore.getState().local, ...theirs] })
-    return true
-  } catch {
-    return false
+    return "saved"
+  } catch (err) {
+    return (err as Error).message === "storage_unavailable" ? "unavailable" : "failed"
   }
 }
 
@@ -169,7 +175,8 @@ export const useStore = create<State>((set, get) => ({
   removeLocal: async (id) => {
     const local = get().local.filter((p) => p.id !== id)
     set({ local, selectedId: get().selectedId === id ? null : get().selectedId })
-    await persist((stored) => stored.filter((p) => p.id !== id))
+    // Without any storage there was nothing to remove; a save that failed leaves the place on the device.
+    return (await persistOrWhy((stored) => stored.filter((p) => p.id !== id))) !== "failed"
   },
   importLocal: async (incoming) => {
     const known = new Set(get().local.map((p) => p.id))

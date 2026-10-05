@@ -212,7 +212,9 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
               variant="ghost"
               size="xs"
               onClick={() => {
-                void removeLocal(place.id)
+                void removeLocal(place.id).then(
+                  (ok) => ok || toast("המקום הוסר מהרשימה, אבל לא מהמכשיר", { description: "הוא יחזור בביקור הבא. נסו שוב אז." }),
+                )
                 toast("המקום נמחק מהמכשיר", {
                   description:
                     local.remoteId && local.send !== "withdrawn"
