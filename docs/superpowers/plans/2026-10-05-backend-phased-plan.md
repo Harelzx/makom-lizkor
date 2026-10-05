@@ -429,7 +429,7 @@ CREATE TABLE revisions (
   decision_note TEXT,
   created_at TEXT NOT NULL,
   decided_at TEXT,
-  CHECK (NOT on_private_property OR location_precision = 'approximate'
+  CHECK (on_private_property = 0 OR location_precision = 'approximate'
          OR (location_permission_at IS NOT NULL AND access_note_he IS NOT NULL))
 );
 CREATE INDEX revisions_by_place ON revisions(place_id, n);
@@ -577,6 +577,8 @@ export async function sameHash(a: string, b: string): Promise<boolean> {
   return x.byteLength === y.byteLength && crypto.subtle.timingSafeEqual(x, y)
 }
 ```
+
+**הערה:** `crypto.subtle.timingSafeEqual` הוא הרחבה של workerd. אם tsc לא מכיר אותו גם אחרי `npx wrangler types`, ממירים את `crypto.subtle` לטיפוס של Workers (`SubtleCrypto` מ־`worker-configuration.d.ts`), או מוסיפים `declare` של שורה אחת.
 
 - [ ] **צעד 4: מריצים ומוודאים שהבדיקות עוברות**
 
@@ -1277,8 +1279,6 @@ export function startFeedSync(): () => void {
       }
       const feed = Feed.parse(await res.json())
       if (!mine || isNewer(feed.v, mine)) useStore.getState().setRemote(feed.v, feed.places.map(toPlace))
-      // dev only: lets the e2e test wait for the feed instead of sleeping
-      if (import.meta.env.DEV) (window as unknown as { __remoteIds?: string[] }).__remoteIds = feed.places.map((p) => p.id)
     } catch {
       /* offline or the server is down: the map keeps what it already shows */
     } finally {
@@ -1329,7 +1329,9 @@ export const allPlaces = (s: Pick<State, "seed" | "remote" | "local">) => {
   - מוסיפים `const remote = useStore((s) => s.remote)`.
   - קוראים ל־`allPlaces({ seed, remote, local })`.
   - מוסיפים את `remote` לרשימת התלויות של `useMemo`.
-- **ב־`src/App.tsx`, `useHashRoute`:** התנאי `pid.startsWith("local-")` הופך ל־`pid.startsWith("local-") || pid.startsWith("p_")`.
+- **ב־`src/App.tsx`, `useHashRoute`:** התנאי `pid.startsWith("local-")` הופך ל־`pid.startsWith("local-") || pid.startsWith("p_")`. כך מזהה `p_` לא מפעיל את הנפילה לתצוגה הכללית (`history.replaceState(null, "", "#/")`).
+  - **מה רואים עד שהפיד מגיע:** `Explorer` (`explorer.tsx:30`) מציג את הרשימה כל עוד `find` מחזיר `undefined`, ולא מאפס את הבחירה. כשהפיד מגיע, `selected` נמצא, והכרטיס נפתח.
+  - **אותו דבר צריך להתקיים במפה:** אם `map-canvas.tsx` טס למקום רק כש־`selectedId` משתנה, מוסיפים טיסה גם כשהמקום שנבחר מופיע לראשונה ב־`allPlaces`.
 - **ב־`src/App.tsx`, `App`:** מוסיפים אפקט שמפעיל את הסנכרון כשמגיעים ליום. הסנכרון נטען דינמית, כדי שהחבילה הראשונה תישאר נקייה:
 
 ```tsx
@@ -1464,8 +1466,9 @@ test("a place submitted without email is moderated, published, and seen in anoth
   await expect(other.getByRole("option", { name: new RegExp(name) })).toBeVisible()
 
   // The submitter sees one copy, not their local one beside the published one.
+  const fed = visitor.waitForResponse((r) => r.url().includes("/api/v1/feed?") && r.status() === 200)
   await visitor.evaluate(() => document.dispatchEvent(new Event("visibilitychange")))
-  await expect.poll(() => visitor.evaluate((pid) => (window as unknown as { __remoteIds?: string[] }).__remoteIds?.includes(pid), id)).toBe(true)
+  await fed
   await visitor.getByRole("button", { name: "חיפוש", exact: true }).click()
   await visitor.getByRole("dialog").getByRole("combobox").fill(name)
   await expect(visitor.getByRole("option", { name: new RegExp(name) })).toHaveCount(1)
@@ -1591,6 +1594,11 @@ export function Queue() {
   )
 }
 ```
+
+**חשוב:**
+- `admin/index.html` נשאר **מחוץ** ל־`src/`, כי Vite משתמש בנתיב שלו כקלט של העמוד השני.
+- Tailwind סורק רק את `src/`, ולכן ה־classes של העמוד יושבים ב־`src/admin/queue.tsx`. לא מעבירים את ה־HTML לתוך `src/`.
+- `/admin/` הוא קובץ סטטי ולא נמצא ב־`run_worker_first`. ההגנה עליו בייצור היא Access על הנתיב, והנתונים עצמם מוגנים ב־`/api/admin`.
 
 ב־`vite.config.ts` מוסיפים קלט ברמה העליונה. ב־Vite 8 זו ההמלצה, כי הוא משמש גם בפיתוח:
 
