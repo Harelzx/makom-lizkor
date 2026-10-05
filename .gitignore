@@ -38,3 +38,5 @@ __pycache__/
 
 # Local Workers state (D1, caches) written by wrangler and the Vite plugin
 .wrangler/
+# Local development vars; the committed template is .dev.vars.example
+.dev.vars
