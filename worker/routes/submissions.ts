@@ -1,7 +1,7 @@
 import { zValidator } from "@hono/zod-validator"
 import { Hono } from "hono"
-import { SubmissionInput } from "@/shared/contract"
-import { insertSubmission, submissionStatus, withdraw } from "../db/places"
+import { RevisionInput, SubmissionInput } from "@/shared/contract"
+import { insertSubmission, revise, submissionStatus, withdraw } from "../db/places"
 import { clock } from "../lib/clock"
 import { PRIVATE, problem } from "../lib/http"
 
@@ -37,3 +37,15 @@ submissions.post("/:id/withdraw", async (c) => {
   const done = token ? await withdraw(c.env.DB, c.req.param("id"), token, clock(c.req.raw, c.env)) : false
   return done ? c.json({ status: "withdrawn" }, 200, PRIVATE) : problem(c, 404, "not_found")
 })
+
+submissions.post(
+  "/:id/revisions",
+  zValidator("json", RevisionInput, (r, c) => (r.success ? undefined : problem(c, 400, "invalid_input"))),
+  async (c) => {
+    const token = bearer(c.req.header("Authorization"))
+    const { expectedRev, ...r } = c.req.valid("json")
+    const result = token ? await revise(c.env.DB, c.req.param("id"), token, r, expectedRev, clock(c.req.raw, c.env)) : "not_found"
+    if (result === "not_found") return problem(c, 404, "not_found")
+    return result === "ok" ? c.json({ ok: true }, 200, PRIVATE) : problem(c, 409, "changed_meanwhile")
+  },
+)

@@ -46,6 +46,23 @@ export const SubmissionInput = z
   .strict()
 export type SubmissionInput = z.infer<typeof SubmissionInput>
 
+/** The sender's correction: the text fields again, whole, against the version they saw. The kind and point stay. */
+export const RevisionInput = z
+  .object({
+    expectedRev: z.number().int(),
+    name_he: text({ max: 80 }),
+    place_he: text({ max: 80 }).optional(),
+    in_memory_of: text({ max: 120 }).optional(),
+    story_he: text({ max: 2000, multiline: true }).optional(),
+    link_url: z
+      .url({ protocol: /^https$/ })
+      .max(300)
+      .optional(),
+    consent_version: z.enum(SUBMISSION_NOTICES),
+  })
+  .strict()
+export type RevisionInput = z.infer<typeof RevisionInput>
+
 export const PublicPlace = z.object({
   id: z.string(),
   kind: z.enum(SUBMITTABLE_KINDS),

@@ -1,6 +1,7 @@
 import { zValidator } from "@hono/zod-validator"
 import { Hono } from "hono"
 import { z } from "zod"
+import { text } from "@/shared/contract"
 import { listQueue, transition } from "../db/places"
 import { moderator } from "../lib/access"
 import { clock } from "../lib/clock"
@@ -21,7 +22,16 @@ admin.use("*", async (c, next) => {
 
 admin.get("/queue", async (c) => c.json({ items: await listQueue(c.env.DB) }))
 
-const Transition = z.object({ action: z.enum(["approve", "reject"]), revisionId: z.string(), expectedRev: z.number().int() }).strict()
+// Returning asks the sender for a change, so it carries a note; the note is all the moderator writes.
+const Transition = z
+  .object({
+    action: z.enum(["approve", "reject", "return"]),
+    revisionId: z.string(),
+    expectedRev: z.number().int(),
+    note: text({ max: 500, multiline: true }).optional(),
+  })
+  .strict()
+  .refine((t) => t.action !== "return" || !!t.note, { message: "note_required" })
 
 admin.post(
   "/places/:id/transitions",

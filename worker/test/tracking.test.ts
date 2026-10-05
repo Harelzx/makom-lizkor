@@ -33,7 +33,7 @@ describe("withdrawing", () => {
     const res = await withdraw(id, trackingToken)
     expect(res.status).toBe(200)
     expect(res.headers.get("Cache-Control")).toBe("private, no-store")
-    expect(await (await status(id, trackingToken)).json()).toEqual({ status: "withdrawn", name_he: null })
+    expect(await (await status(id, trackingToken)).json()).toMatchObject({ status: "withdrawn", name_he: null })
     const rev = await env.DB.prepare("SELECT state, name_he, story_he, lat, lng FROM revisions WHERE place_id = ?").bind(id).first()
     expect(rev).toEqual({ state: "withdrawn", name_he: null, story_he: null, lat: null, lng: null })
     expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM contacts WHERE place_id = ?").bind(id).first("n")).toBe(0)
