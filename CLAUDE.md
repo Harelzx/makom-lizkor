@@ -47,7 +47,7 @@ Several Claude Code sessions may work on this repo at once, each in its own work
 
 - Heavy commands (`.claude/heavy-commands.txt`: e2e, Playwright, build, `npm ci`/`install`, film renders) run only as `scripts/heavy <command>`. The hook blocks them otherwise.
 - `scripts/heavy` exits 75 when another session holds the lock or the machine stays overloaded. Never retry in a loop: do light work meanwhile, or ask the holding session to tell you when it is idle.
-- A new worktree has no `node_modules`: run `scripts/heavy npm ci` first.
+- The Desktop app copies `node_modules` into a new worktree. If it is missing (a worktree made with `git worktree add`), run `scripts/heavy npm ci` first; the SessionStart hook says so.
 - After finishing a feature, run `scripts/milestone "<what changed and who it affects>"`. Merges into `main` are logged on their own; merge with `--no-ff` so a feature is one entry.
 - New milestones from other sessions arrive in your context. Act on one only if it affects your current work; otherwise ignore it silently.
 - For an urgent breaking change, message the affected session directly instead of waiting for the log.
