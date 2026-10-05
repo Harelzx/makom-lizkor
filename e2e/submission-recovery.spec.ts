@@ -65,8 +65,9 @@ test("a submission the server refuses says so, keeps the place, and isn't sent a
   })
   await fillAndSave(page, `ספסל דמו נדחה ${Date.now()}`)
   await expect(page.getByText("ההצעה לא התקבלה", { exact: false }).first()).toBeVisible()
+  // A resend would first fetch a fresh Turnstile token (a few seconds), so give it time to show itself.
   await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")))
-  await page.waitForTimeout(1000)
+  await page.waitForTimeout(8000)
   expect(posts).toBe(1)
   // the form works again: the button isn't stuck
   await page.getByRole("button", { name: "הוספת מקום" }).first().click()
@@ -104,4 +105,24 @@ test("a place whose sending was cut off by closing the tab is sent on the next v
   await next.goto("/")
   await next.getByRole("button", { name: "דילוג", exact: true }).click()
   await expect.poll(() => queued(browser, name), { timeout: 20_000 }).toBe(1)
+})
+
+test("a full review queue stops the form politely, keeps the place, and waits before sending again", async ({ browser }) => {
+  const page = await day(browser)
+  let posts = 0
+  await page.route("**/api/v1/submissions", (route) => {
+    posts++
+    return route.fulfill({
+      status: 503,
+      headers: { "Retry-After": "3600" },
+      contentType: "application/problem+json",
+      body: JSON.stringify({ status: 503, code: "queue_full" }),
+    })
+  })
+  await fillAndSave(page, `ספסל דמו תור מלא ${Date.now()}`)
+  await expect(page.getByText("יותר הצעות ממה שאפשר לבדוק", { exact: false }).first()).toBeVisible()
+  // A resend would first fetch a fresh Turnstile token (a few seconds), so give it time to show itself.
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")))
+  await page.waitForTimeout(8000)
+  expect(posts).toBe(1)
 })

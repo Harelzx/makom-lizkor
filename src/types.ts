@@ -71,6 +71,8 @@ export interface LocalFields {
   /** sending: on its way (or cut off by a closed tab) · waiting: unreachable, retried on its own · sent · rejected: never
    *  resent · withdrawn: taken back by the sender, erased on the server */
   send?: "sending" | "waiting" | "sent" | "rejected" | "withdrawn"
-  /** The server's reason, when it refused the place. */
+  /** The server's reason, when it refused the place, or why it asked to wait. */
   sendError?: string
+  /** Not before this time (ms): the server asked to wait (a full queue, too many at once). */
+  nextTryAt?: number
 }

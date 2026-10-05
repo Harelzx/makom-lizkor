@@ -25,6 +25,9 @@ import type { Kind, Place } from "@/types"
 
 type Step = 0 | 1 | 2
 
+/** More places are waiting for review than the moderators can read: the form stops politely (spec 12). */
+const QUEUE_FULL = "אנחנו מקבלים עכשיו יותר הצעות ממה שאפשר לבדוק. ההצעה נשמרה במכשיר, ונשלח אותה לבד כשיתפנה מקום."
+
 /** What the visitor is told after saving: whether the server took the place, and whether this device kept a copy. */
 const SAVE_MESSAGE = {
   sent: {
@@ -258,8 +261,13 @@ export function AddPlace() {
       const r = await submitPlace(submission, place.local!.submitKey!)
       if (r.ok) await updateLocal(place.id, { send: "sent", remoteId: r.id, trackingToken: r.trackingToken })
       else if (r.kind === "rejected") await updateLocal(place.id, { send: "rejected", sendError: r.code })
-      else await updateLocal(place.id, { send: "waiting" })
-      message = SAVE_MESSAGE[r.ok ? "sent" : r.kind][stored ? "stored" : "unstored"]
+      else
+        await updateLocal(place.id, {
+          send: "waiting",
+          sendError: r.code,
+          nextTryAt: r.retryAfter ? Date.now() + r.retryAfter * 1000 : undefined,
+        })
+      message = !r.ok && r.code === "queue_full" ? QUEUE_FULL : SAVE_MESSAGE[r.ok ? "sent" : r.kind][stored ? "stored" : "unstored"]
     } catch {
       // Nothing above should throw; if something does, the form stays usable rather than stuck on its button.
       sending.current = false

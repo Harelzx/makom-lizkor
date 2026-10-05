@@ -1,7 +1,11 @@
+import { turnstileToken } from "@/lib/turnstile"
 import type { RevisionInput, SubmissionInput } from "@/shared/contract"
 
 export type SendResult =
-  { ok: true; id: string; trackingToken: string } | { ok: false; kind: "rejected"; code: string } | { ok: false; kind: "temporary" }
+  | { ok: true; id: string; trackingToken: string }
+  | { ok: false; kind: "rejected"; code: string }
+  /** `retryAfter` (seconds) when the server said when to come back: a full queue, a busy check, too many at once. */
+  | { ok: false; kind: "temporary"; code?: string; retryAfter?: number }
 
 /** One key per place, made before the first try and kept with the place, so every retry is the same submission. */
 export function newSubmitKey(): string {
@@ -17,9 +21,10 @@ const REJECTED = new Set([400, 409, 413, 415, 422])
 /** The server either took the place, refused it (don't send it again), or couldn't be reached (send it again later). */
 export async function submitPlace(input: SubmissionInput, key: string): Promise<SendResult> {
   try {
+    const token = await turnstileToken("submit")
     const res = await fetch("/api/v1/submissions", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "Idempotency-Key": key },
+      headers: { "Content-Type": "application/json", "Idempotency-Key": key, ...(token ? { "Turnstile-Token": token } : {}) },
       body: JSON.stringify(input),
       signal: AbortSignal.timeout(8000),
     })
@@ -28,7 +33,8 @@ export async function submitPlace(input: SubmissionInput, key: string): Promise<
       const code = ((await res.json().catch(() => ({}))) as { code?: string }).code ?? `http_${res.status}`
       return { ok: false, kind: "rejected", code }
     }
-    return { ok: false, kind: "temporary" }
+    const code = ((await res.json().catch(() => ({}))) as { code?: string }).code
+    return { ok: false, kind: "temporary", code, retryAfter: Number(res.headers.get("Retry-After")) || undefined }
   } catch {
     return { ok: false, kind: "temporary" }
   }
@@ -84,9 +90,10 @@ export async function withdrawSubmission(id: string, token: string): Promise<boo
 /** "ok", "conflict" when the place changed since the sender looked (reload and try again), or "failed". */
 export async function reviseSubmission(id: string, token: string, body: RevisionInput): Promise<"ok" | "conflict" | "failed"> {
   try {
+    const check = await turnstileToken("revise")
     const res = await fetch(`/api/v1/submissions/${encodeURIComponent(id)}/revisions`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(check ? { "Turnstile-Token": check } : {}) },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(8000),
     })

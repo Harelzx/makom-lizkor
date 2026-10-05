@@ -10,11 +10,15 @@ export async function retryWaiting(): Promise<void> {
   try {
     for (const p of useStore.getState().local) {
       const l = p.local
-      if (l?.send !== "waiting" || !l.submitKey || !l.submission) continue
+      if (l?.send !== "waiting" || !l.submitKey || !l.submission || (l.nextTryAt ?? 0) > Date.now()) continue
       const r = await submitPlace(l.submission, l.submitKey)
       if (r.ok) await useStore.getState().updateLocal(p.id, { send: "sent", remoteId: r.id, trackingToken: r.trackingToken })
       else if (r.kind === "rejected") await useStore.getState().updateLocal(p.id, { send: "rejected", sendError: r.code })
-      else break // still unreachable: the next wake tries again
+      else {
+        // Still unreachable, or asked to wait: the next wake tries again, not before the server's time.
+        if (r.retryAfter) await useStore.getState().updateLocal(p.id, { nextTryAt: Date.now() + r.retryAfter * 1000, sendError: r.code })
+        break
+      }
     }
   } finally {
     busy = false

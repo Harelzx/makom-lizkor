@@ -17,6 +17,13 @@ if (!config.MAILBOX.verified)
     "MAILBOX.verified is false: the 12-month per-message policy isn't configured and its trash tail measured on the real mailbox",
   )
 
+// The browser check: a public build needs the site's own Turnstile sitekey, not Cloudflare's test key from .env.
+const sitekey = process.env.VITE_TURNSTILE_SITEKEY ?? ""
+if (!sitekey || /^[123]x0+/.test(sitekey))
+  blockers.push(
+    "VITE_TURNSTILE_SITEKEY is unset or Cloudflare's test key: a public build needs the site's own (the secret goes to the Worker)",
+  )
+
 if (blockers.length) {
   console.error("Not ready to publish the notices:\n" + blockers.map((b) => `  - ${b}`).join("\n"))
   process.exit(1)

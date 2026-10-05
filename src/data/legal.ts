@@ -71,7 +71,7 @@ export const LEGAL_SECTIONS: { id: string; title: string; html: string }[] = [
 <p><strong>אם תכתבו לנו במייל.</strong> נשתמש במה שכתבתם רק כדי לטפל בפנייה ולחזור אליכם. המייל נשמר בתיבת הדואר של הפרויקט אצל {{MAIL_PROVIDER}}, שמאחסן אותו ב{{MAIL_STORED_IN}} ועשוי לעבד אותו גם במדינות אחרות. כל מייל נשמר בתיבה לכל היותר {{MAIL_MAX}} מהיום שהגיע, ונמחק קודם כשצריך, למשל אם תבקשו. אצל ספק הדואר הוא נמחק תוך {{MAIL_TAIL}} נוספים.</p>
 <p><strong>המיקום שלכם.</strong> הכפתור "המיקום הנוכחי שלי" מבקש מהדפדפן את המיקום שלכם רק כשלוחצים עליו, ורק כדי לסמן את המקום שאתם מוסיפים. נשמרת רק הנקודה של המקום, בלי השעה ובלי הדיוק של האיתור. הנקודה נשלחת עם המקום, ואם הוא יאושר, היא תוצג במדויק. אם המקום בשטח פרטי, אל תשלחו נקודה מדויקת בלי רשות הבעלים: כתבו לנו, ונציג אותו במיקום משוער, ברמת היישוב.</p>
 <p><strong>מה נשמר בדפדפן.</strong> אם כבר צפיתם בפתיחה, ואם בחרתם לצפות בה עם צליל, כדי שלא תצטרכו לבחור שוב; המקומות שהוספתם, עם המזהה של כל הצעה שנשלחה; והכלניות שהשארתם. אין באתר עוגיות, כלי מדידה או פרסום.</p>
-<p><strong>שירותים חיצוניים.</strong> האתר מוגש דרך {{HOSTING}}. המפה נטענת מהשרתים של OpenFreeMap, ונתוני הגובה מ־Amazon Web Services. כמו בכל טעינה של תוכן חיצוני, השרתים האלה מקבלים את כתובת ה־IP שלכם. כפתורי הניווט פותחים את Waze או את Google Maps, לפי התנאים שלהם.</p>
+<p><strong>שירותים חיצוניים.</strong> האתר מוגש דרך {{HOSTING}}. כשאתם שולחים מקום או תיקון, בדיקת הבוטים של Cloudflare (Turnstile) רצה בדפדפן. המפה נטענת מהשרתים של OpenFreeMap, ונתוני הגובה מ־Amazon Web Services. כמו בכל טעינה של תוכן חיצוני, השרתים האלה מקבלים את כתובת ה־IP שלכם. כפתורי הניווט פותחים את Waze או את Google Maps, לפי התנאים שלהם.</p>
 <p><strong>הזכויות שלכם.</strong> לעיין במידע שלכם שנמצא אצלנו ולבקש לתקן אותו. נשיב תוך {{ACCESS_DAYS}}.</p>`,
   },
   {
@@ -191,6 +191,9 @@ const SUBMISSION_TERMS_RETURNS = SUBMISSION_TERMS.replace(
   "ההצעה, וכל תיקון שלה, ייבדקו לפני שיתפרסמו, ויכולים להתאשר, להידחות או לחזור אליי לתיקון עם הערה.",
 )
 
+// Version 5 with the browser check live: Cloudflare's Turnstile is named among the processors again.
+const SUBMISSION_GUARDED = SUBMISSION_CORRECTABLE.replace(SEEN_BY_NOW, SEEN_BY)
+
 export const NOTICES = {
   // Drafted for the full flow (email, tracking link, photo upload) that later phases build; the form no longer shows it.
   "notice.submission@2026-10-1": `
@@ -218,6 +221,9 @@ ${RIGHTS}
 
   // Version 4 with corrections and returns through the tracking link.
   "notice.submission@2026-10-5": `${SUBMISSION_CORRECTABLE}${SUBMISSION_TERMS_RETURNS}`,
+
+  // Version 5 with Turnstile running before a place or a correction is sent.
+  "notice.submission@2026-10-6": `${SUBMISSION_GUARDED}${SUBMISSION_TERMS_RETURNS}`,
 
   "notice.report@2026-10-1": `
 ${WHO}
