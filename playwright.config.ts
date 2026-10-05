@@ -17,7 +17,9 @@ export default defineConfig({
   reporter: [["list"]],
   use: { baseURL: `http://localhost:${port}`, ...devices["Desktop Chrome"], viewport: { width: 1280, height: 900 } },
   webServer: {
-    command: prod ? `npm run db:migrate:local && npm run build && npx vite preview --port ${port} --strictPort` : `npm run db:migrate:local && npm run dev -- --port ${port} --strictPort`,
+    command: prod
+      ? `npm run db:migrate:local && npm run build && npx vite preview --port ${port} --strictPort`
+      : `npm run db:migrate:local && npm run dev -- --port ${port} --strictPort`,
     url: `http://localhost:${port}`,
     reuseExistingServer: !prod,
     timeout: 120_000,

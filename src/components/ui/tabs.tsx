@@ -80,7 +80,12 @@ function TabsContent({
   return (
     <TabsPrimitive.Content
       data-slot="tabs-content"
-      className={cn("flex-1 text-sm outline-none", className)}
+      // Radix makes the panel a Tab stop, so it needs a visible focus ring like
+      // every other stop (WCAG 2.4.7).
+      className={cn(
+        "flex-1 rounded-2xl text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/30",
+        className
+      )}
       {...props}
     />
   )

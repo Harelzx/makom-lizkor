@@ -35,6 +35,8 @@ interface State {
   query: string
   addOpen: boolean
   aboutOpen: boolean
+  /** About can open straight at one of its sections: the statement, the privacy notice, the terms. */
+  aboutSection: string | null
   searchOpen: boolean
   picking: boolean
   draft: { lat: number; lng: number } | null
@@ -54,6 +56,7 @@ interface State {
   setQuery: (q: string) => void
   setAddOpen: (v: boolean) => void
   setAboutOpen: (v: boolean) => void
+  openAbout: (section: string) => void
   setSearchOpen: (v: boolean) => void
   setPicking: (v: boolean) => void
   setDraft: (p: { lat: number; lng: number } | null) => void
@@ -81,6 +84,7 @@ export const useStore = create<State>((set, get) => ({
   query: "",
   addOpen: false,
   aboutOpen: false,
+  aboutSection: null,
   searchOpen: false,
   picking: false,
   draft: null,
@@ -100,7 +104,8 @@ export const useStore = create<State>((set, get) => ({
   setTab: (tab) => set({ tab, selectedId: tab === "journey" ? get().selectedId : null }),
   setQuery: (query) => set({ query }),
   setAddOpen: (addOpen) => set({ addOpen, picking: addOpen ? get().picking : false, draft: addOpen ? get().draft : null }),
-  setAboutOpen: (aboutOpen) => set({ aboutOpen }),
+  setAboutOpen: (aboutOpen) => set({ aboutOpen, aboutSection: null }),
+  openAbout: (aboutSection) => set({ aboutOpen: true, aboutSection, searchOpen: false }),
   setSearchOpen: (searchOpen) => set({ searchOpen }),
   setPicking: (picking) => set({ picking }),
   setDraft: (draft) => set({ draft }),

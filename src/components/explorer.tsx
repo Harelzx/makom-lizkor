@@ -125,8 +125,34 @@ export function Explorer() {
               </motion.div>
             </TabsContent>
           </Tabs>
+          <SiteLinks />
         </motion.div>
       )}
     </AnimatePresence>
+  )
+}
+
+/** A second way to the accessibility statement, the privacy notice and the terms, besides About: the Commission asks for two. */
+const SITE_LINKS = [
+  ["accessibility", "הצהרת נגישות"],
+  ["privacy", "פרטיות"],
+  ["terms", "תנאי שימוש"],
+] as const
+
+function SiteLinks() {
+  const openAbout = useStore((s) => s.openAbout)
+  return (
+    <nav aria-label="מידע על האתר" className="mt-6 flex flex-wrap justify-center gap-x-1 border-t border-line pt-3 pb-1">
+      {SITE_LINKS.map(([id, label]) => (
+        <button
+          key={id}
+          type="button"
+          onClick={() => openAbout(id)}
+          className="pressable rounded-full px-2.5 py-1.5 text-caption text-ink-2 underline-offset-2 outline-none hover:text-ink-1 hover:underline focus-visible:ring-3 focus-visible:ring-ring/30"
+        >
+          {label}
+        </button>
+      ))}
+    </nav>
   )
 }

@@ -46,9 +46,13 @@ export function PhotoGallery({ photos, className, ratio = "aspect-[4/3]" }: { ph
   return (
     <figure className={cn("flex flex-col gap-2", className)}>
       <div className="relative">
+        {/* The strip takes focus, so a keyboard can scroll it with the arrows; a screen reader hears how many photos it holds. */}
         <div
           ref={strip}
-          className="flex snap-x snap-mandatory [scrollbar-width:none] overflow-x-auto overscroll-x-contain rounded-3xl bg-surface-3"
+          tabIndex={0}
+          role="group"
+          aria-label={`${photos.length} תמונות. אפשר לעבור ביניהן בחיצים`}
+          className="flex snap-x snap-mandatory [scrollbar-width:none] overflow-x-auto overscroll-x-contain rounded-3xl bg-surface-3 outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
           onScroll={(e) => {
             const el = e.currentTarget
             setIndex(Math.round(Math.abs(el.scrollLeft) / el.clientWidth))
@@ -64,14 +68,24 @@ export function PhotoGallery({ photos, className, ratio = "aspect-[4/3]" }: { ph
             />
           ))}
         </div>
-        <div className="absolute inset-x-0 bottom-3 flex justify-center gap-1.5" aria-hidden="true">
+        {/* Each dot is a real button with a name, so the photos can also be chosen one by one. The hit area is larger than the dot. */}
+        <div className="absolute inset-x-0 bottom-1.5 flex justify-center">
           {photos.map((p, i) => (
             <button
               key={p.file}
-              tabIndex={-1}
+              type="button"
+              aria-label={`תמונה ${i + 1} מתוך ${photos.length}`}
+              aria-current={i === index ? "true" : undefined}
               onClick={() => strip.current?.children[i]?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" })}
-              className={cn("h-1.5 rounded-full bg-white/70 shadow transition-all", i === index ? "w-5 bg-white" : "w-1.5")}
-            />
+              className="group grid h-6 place-items-center rounded-full px-1 outline-none focus-visible:ring-3 focus-visible:ring-white/70"
+            >
+              <span
+                className={cn(
+                  "block h-1.5 rounded-full bg-white/70 shadow transition-all group-hover:bg-white",
+                  i === index ? "w-5 bg-white" : "w-1.5",
+                )}
+              />
+            </button>
           ))}
         </div>
       </div>

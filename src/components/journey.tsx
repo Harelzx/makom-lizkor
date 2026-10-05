@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { KINDS } from "@/data/taxonomy"
 import { journeyStops, useStore } from "@/store"
 import { flyToEnvelope, getMap, isMobile, reducedMotion } from "@/map/controller"
-import { Img } from "@/components/kit"
+import { Img, SafetyNote } from "@/components/kit"
 
 const DWELL = 9000
 
@@ -62,6 +62,7 @@ export function Journey() {
           <p className="text-body text-pretty text-ink-2">
             {stops.length} עצירות, מצפון לדרום: מחוף זיקים, דרך שדרות והקיבוצים, עד כרם שלום. המצלמה נעה ממקום למקום, ואפשר לעצור בכל רגע.
           </p>
+          <SafetyNote lead="המסע עובר לאורך גבול עזה." />
           <Button size="lg" variant="brand" className="mt-1 self-start rounded-full px-5" onClick={() => setJourney(0, !reducedMotion())}>
             <PlayIcon data-icon="inline-start" />
             יציאה למסע
