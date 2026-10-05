@@ -76,7 +76,10 @@ test.describe("desktop", () => {
     const tab = browserName === "webkit" ? "Alt+Tab" : "Tab"
     // a keyboard visitor skips the opening with Esc, and the focus waits at the top of the page
     await page.goto("/")
-    await expect(page.getByRole("button", { name: "בלי צליל" })).toBeVisible()
+    // the opening hands the keyboard its choice of sound; Esc from there skips the film
+    const choice = page.getByRole("button", { name: "בלי צליל" })
+    await expect(choice).toBeVisible()
+    await choice.focus()
     await page.keyboard.press("Escape")
     await page.locator("#places").waitFor()
     const skip = page.getByRole("button", { name: "דילוג לרשימת המקומות" })
