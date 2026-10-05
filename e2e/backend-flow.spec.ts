@@ -34,11 +34,16 @@ test("a place submitted without email is moderated, published, and seen in anoth
   await dialog.getByLabel("שם המקום").fill(name)
   await dialog.getByLabel("לזכר (לא חובה)").fill("נועה דמו")
   await dialog.getByRole("button", { name: "המשך" }).click()
+  await dialog.getByText("הודעת הפרטיות", { exact: true }).click()
+  await expect(dialog.getByText("התמונה נשארת במכשיר שלכם", { exact: false })).toBeVisible()
   for (const box of await dialog.getByRole("checkbox").all()) await box.check()
   const sent = visitor.waitForResponse((r) => r.url().endsWith("/api/v1/submissions") && r.status() === 201)
   await dialog.getByRole("button", { name: "שמירה והנחת כלנית" }).click()
   const { id } = (await (await sent).json()) as { id: string }
-  expect(Object.keys((await sent).request().postDataJSON())).not.toContain("email")
+  const body = (await sent).request().postDataJSON() as Record<string, unknown>
+  expect(Object.keys(body)).not.toContain("email")
+  // The version recorded is the notice the form showed.
+  expect(body.consent_version).toBe("notice.submission@2026-10-2")
   // The submitter's own card says where the place went; it doesn't promise it stays only in this browser.
   await expect(visitor.getByText("נשלח לבדיקה", { exact: false }).first()).toBeVisible(DAY)
   await expect(visitor.getByText("נשמר רק בדפדפן הזה")).toHaveCount(0)
@@ -104,6 +109,13 @@ test("a link to a contribution that isn't published falls back to the overview o
   await page.goto("/#/place/p_01ZZZZZZZZZZZZZZZZZZZZZZZZ")
   await fed
   await expect(page).toHaveURL(/#\/$/)
+})
+
+test("About says that a place you add is sent for review", async ({ browser }) => {
+  const page = await skipIntro(browser)
+  await page.getByRole("button", { name: "פרטיות" }).click()
+  await expect(page.getByText("נשלח אלינו לבדיקה", { exact: false }).first()).toBeVisible()
+  await expect(page.getByText("לא נשלח אלינו", { exact: false })).toHaveCount(0)
 })
 
 test("the opening finishes and the site works while the API is down", async ({ page }) => {

@@ -1,7 +1,7 @@
 import { env, exports } from "cloudflare:workers"
 import { describe, expect, it } from "vitest"
 
-const valid = { kind: "bench", name_he: "ספסל דמו", lat: 31.42, lng: 34.49, consent_version: "notice.submission@2026-10-1" }
+const valid = { kind: "bench", name_he: "ספסל דמו", lat: 31.42, lng: 34.49, consent_version: "notice.submission@2026-10-2" }
 const post = (body: unknown) =>
   exports.default.fetch("http://local/api/v1/submissions", {
     method: "POST",

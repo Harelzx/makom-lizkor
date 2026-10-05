@@ -38,7 +38,7 @@ describe("admin", () => {
         lat: 31.4321,
         lng: 34.5432,
         link_url: "https://example.test/memorial",
-        consent_version: "notice.submission@2026-10-1",
+        consent_version: "notice.submission@2026-10-2",
       }),
     })
     const { id } = await res.json<{ id: string }>()

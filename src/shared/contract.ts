@@ -4,6 +4,14 @@ import { cleanText } from "./text"
 /** Must match ADDABLE_KINDS in src/data/taxonomy.ts; a test keeps them equal. Communities are out of scope. */
 export const SUBMITTABLE_KINDS = ["bench", "lookout", "grove", "garden", "plaque", "monument", "other"] as const
 
+/**
+ * The submission notices a form may record. Each is a key in NOTICES (src/data/legal.ts), with its own text; the last
+ * is the one the add form shows now. A submission that names any other version is refused, so what is stored is
+ * always a notice the site actually showed. A test keeps this list and the texts in step.
+ */
+export const SUBMISSION_NOTICES = ["notice.submission@2026-10-2"] as const
+export const CURRENT_SUBMISSION_NOTICE = SUBMISSION_NOTICES[SUBMISSION_NOTICES.length - 1]
+
 export const text = ({ max, multiline = false }: { max: number; multiline?: boolean }) =>
   z
     .string()
@@ -29,7 +37,7 @@ export const SubmissionInput = z
       .optional(),
     submitter_name: text({ max: 80 }).optional(),
     on_private_property: z.boolean().default(false),
-    consent_version: z.string().min(1).max(64),
+    consent_version: z.enum(SUBMISSION_NOTICES),
   })
   .strict()
 export type SubmissionInput = z.infer<typeof SubmissionInput>

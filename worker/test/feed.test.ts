@@ -37,7 +37,7 @@ it("never carries the submitter's name or the tracking hash", async () => {
       lat: 31.4,
       lng: 34.5,
       submitter_name: "שם פרטי דמו",
-      consent_version: "notice.submission@2026-10-1",
+      consent_version: "notice.submission@2026-10-2",
     }),
   })
   const { id } = await res.json<{ id: string }>()

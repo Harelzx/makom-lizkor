@@ -20,14 +20,13 @@ import { getMap, reducedMotion } from "@/map/controller"
 import { useStore } from "@/store"
 import { ease, spring } from "@/lib/motion"
 import { cn } from "@/lib/utils"
-import type { SubmissionInput } from "@/shared/contract"
+import { CURRENT_SUBMISSION_NOTICE, type SubmissionInput } from "@/shared/contract"
 import type { Kind, Place } from "@/types"
 
 type Step = 0 | 1 | 2
 
-// The form sends the place for review, so it shows the notice for submissions, the version recorded with each one.
-const SUBMISSION_NOTICE = "notice.submission@2026-10-1" as const
-const NOTICE_HTML = noticeHtml(SUBMISSION_NOTICE)
+// The form sends the place for review, so it shows the notice for submissions: the same version each submission records.
+const NOTICE_HTML = noticeHtml(CURRENT_SUBMISSION_NOTICE)
 
 /** People type "www.site.co.il" or paste a full address; either way we store a working https link. */
 const stripScheme = (v: string) =>
@@ -102,6 +101,8 @@ export function AddPlace() {
   const [consent, setConsent] = useState(false)
   const [error, setError] = useState("")
   const [saved, setSaved] = useState(false)
+  // Places that never reached the server (it was down); only these still need the export.
+  const unsent = local.filter((p) => !p.local?.remoteId).length
   // Set the moment saving starts, before the send: a second tap or Enter while the server answers must not send it again.
   const sending = useRef(false)
   const [busy, setBusy] = useState(false)
@@ -231,7 +232,7 @@ export function AddPlace() {
       link_url: link ? `https://${link}` : undefined,
       submitter_name: submitter.trim() || undefined,
       on_private_property: false,
-      consent_version: SUBMISSION_NOTICE,
+      consent_version: CURRENT_SUBMISSION_NOTICE,
     })
     if (sent && place.local) {
       place.local.remoteId = sent.id
@@ -449,7 +450,9 @@ export function AddPlace() {
                           <p className="text-caption text-ink-2">
                             {local.length === 0
                               ? "עוד לא הוספתם מקומות מהמכשיר הזה."
-                              : `${local.length === 1 ? "מקום אחד" : `${local.length} מקומות`} שמור במכשיר. ייצאו לקובץ ושלחו לנו כדי שיופיעו אצל כולם.`}
+                              : unsent === 0
+                                ? `${local.length === 1 ? "המקום שהוספתם נשלח" : `כל ${local.length} המקומות שהוספתם נשלחו`} לבדיקה. עותק נשמר גם במכשיר.`
+                                : `${unsent === 1 ? "מקום אחד לא נשלח" : `${unsent} מקומות לא נשלחו`} ונשמר במכשיר בלבד. ייצאו לקובץ ושלחו לנו כדי שיופיעו אצל כולם.`}
                           </p>
                           <div className="flex gap-2">
                             <Button

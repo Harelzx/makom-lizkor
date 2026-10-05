@@ -15,7 +15,7 @@ export async function submit(name = "ספסל דמו") {
   const res = await exports.default.fetch("http://local/api/v1/submissions", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ kind: "bench", name_he: name, lat: 31.42, lng: 34.49, consent_version: "notice.submission@2026-10-1" }),
+    body: JSON.stringify({ kind: "bench", name_he: name, lat: 31.42, lng: 34.49, consent_version: "notice.submission@2026-10-2" }),
   })
   return res.json<{ id: string; trackingToken: string }>()
 }
