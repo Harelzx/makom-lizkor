@@ -107,7 +107,10 @@ async function persistOrWhy(change: (stored: Place[]) => Place[]): Promise<"save
     const stored = await changeLocal(change)
     // Only places this tab has never held: one it removed is not brought back by a write that was still in flight.
     const theirs = stored.filter((p) => !held.has(p.id)).map(waiting)
-    for (const p of theirs) (held.add(p.id), fromDisk.add(p.id))
+    for (const p of theirs) {
+      held.add(p.id)
+      fromDisk.add(p.id)
+    }
     if (theirs.length) useStore.setState({ local: [...useStore.getState().local, ...theirs] })
     return "saved"
   } catch (err) {
@@ -146,7 +149,10 @@ export const useStore = create<State>((set, get) => ({
     const [stored, tributes] = await Promise.all([loadLocal(), loadTributes()])
     // A place still "sending" is from a visit that closed mid-send; nothing is sending it now, so it waits for a retry.
     const local = stored.map(waiting)
-    for (const p of local) (held.add(p.id), fromDisk.add(p.id))
+    for (const p of local) {
+      held.add(p.id)
+      fromDisk.add(p.id)
+    }
     set({ local, tributes })
   },
   setPhase: (phase) => set({ phase }),
