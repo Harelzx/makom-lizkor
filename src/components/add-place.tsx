@@ -14,7 +14,7 @@ import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "@/
 import { Anemone } from "@/components/anemone"
 import { ADDABLE_KINDS, KINDS } from "@/data/taxonomy"
 import { CONSENT_TEXT, FAMILY_CONSENT_TEXT, noticeHtml, PHOTO_RIGHTS_TEXT } from "@/data/legal"
-import { newSubmitKey, submitPlace } from "@/lib/api"
+import { newSubmitKey, submitPlace, uploadPhoto } from "@/lib/api"
 import { downloadJSON, resizeImage } from "@/lib/storage"
 import { getMap, reducedMotion } from "@/map/controller"
 import { useStore } from "@/store"
@@ -263,8 +263,14 @@ export function AddPlace() {
       Object.assign(place.local!, { submitKey: newSubmitKey(), submission, send: "sending" })
       const stored = await addLocal(place)
       const r = await submitPlace(submission, place.local!.submitKey!)
-      if (r.ok) await updateLocal(place.id, { send: "sent", remoteId: r.id, trackingToken: r.trackingToken })
-      else if (r.kind === "rejected") await updateLocal(place.id, { send: "rejected", sendError: r.code })
+      if (r.ok) {
+        await updateLocal(place.id, { send: "sent", remoteId: r.id, trackingToken: r.trackingToken })
+        // The photo follows the place; if it can't go now, the outbox sends it later.
+        if (photo) {
+          const sent = await uploadPhoto(r.id, r.trackingToken, photo, photoAlt.trim() || place.name_he, photoCredit.trim() || undefined)
+          if (sent !== "temporary") await updateLocal(place.id, sent === "ok" ? { photoSent: true } : { photoError: "refused" })
+        }
+      } else if (r.kind === "rejected") await updateLocal(place.id, { send: "rejected", sendError: r.code })
       else
         await updateLocal(place.id, {
           send: "waiting",
@@ -656,7 +662,9 @@ export function AddPlace() {
                               בחירת תמונה
                             </label>
                           )}
-                          <FieldDescription>התמונה מוקטנת ונשמרת רק במכשיר הזה. נתוני המיקום שבקובץ נמחקים.</FieldDescription>
+                          <FieldDescription>
+                            התמונה מוקטנת, ונתוני המיקום שבקובץ נמחקים. היא נשלחת לבדיקה עם המקום, ומתפרסמת רק אם המקום אושר.
+                          </FieldDescription>
                         </Field>
                         {photo && (
                           <>

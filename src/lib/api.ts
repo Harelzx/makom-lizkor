@@ -117,3 +117,31 @@ export async function confirmEmail(token: string): Promise<"ok" | "expired" | "f
     return "failed"
   }
 }
+
+/**
+ * The photo of a place already sent, in a second request (the submission's retry stays exact). "rejected" when the
+ * server won't take it (not a picture, too large), so it isn't sent again; "temporary" otherwise.
+ */
+export async function uploadPhoto(
+  id: string,
+  token: string,
+  dataUrl: string,
+  alt: string,
+  credit?: string,
+): Promise<"ok" | "rejected" | "temporary"> {
+  try {
+    const form = new FormData()
+    form.append("photo", await (await fetch(dataUrl)).blob(), "photo.jpg")
+    form.append("alt", alt)
+    if (credit) form.append("credit", credit)
+    const res = await fetch(`/api/v1/submissions/${encodeURIComponent(id)}/photo`, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+      signal: AbortSignal.timeout(30_000),
+    })
+    return res.ok ? "ok" : REJECTED.has(res.status) ? "rejected" : "temporary"
+  } catch {
+    return "temporary"
+  }
+}

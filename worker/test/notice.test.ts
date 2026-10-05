@@ -20,7 +20,7 @@ it("refuses a submission that names a notice the site never showed", async () =>
   expect((await submit(CURRENT_SUBMISSION_NOTICE)).status).toBe(201)
 })
 
-it("describes the flow that exists: a tracking link to follow and withdraw, and the photo stays on the device", () => {
+it("describes the flow that exists: a tracking link to follow and withdraw, and a photo sent for review", () => {
   const text = NOTICES[CURRENT_SUBMISSION_NOTICE]
   expect(text).toContain("קישור המעקב")
   expect(text).toContain("למשוך אותה")
@@ -30,7 +30,9 @@ it("describes the flow that exists: a tracking link to follow and withdraw, and 
   expect(text).toContain("לחזור אליי לתיקון")
   expect(text).toContain("תנאי השליחה")
   expect(text).toContain("התמונה")
-  expect(text).toContain("נשארת במכשיר")
+  expect(text).not.toContain("התמונה לא נשלחת")
+  expect(text).toContain("מתפרסמת רק אם המקום אושר")
+  expect(text).toContain("את התמונה צילמתי בעצמי")
   // The browser check runs now, so Cloudflare is named for it among the processors.
   expect(text).toContain("Turnstile")
   expect(text).toContain("מייל אימות")

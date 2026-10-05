@@ -17,6 +17,9 @@ interface Item {
   link_url: string | null
   /** 1 when this is a correction of a place that is already published (the published version stays live meanwhile). */
   correction: number
+  photo_url: string | null
+  photo_alt: string | null
+  photo_credit: string | null
   place_he: string | null
   in_memory_of: string | null
   story_he: string | null
@@ -165,6 +168,14 @@ export function Queue() {
                 <p className="text-caption break-all text-ink-2" dir="ltr">
                   {item.link_url}
                 </p>
+              )}
+              {item.photo_url && (
+                <figure className="mt-2">
+                  <img src={item.photo_url} alt={item.photo_alt ?? ""} className="max-h-64 rounded-xl object-contain" />
+                  <figcaption className="text-caption text-ink-2">
+                    {[item.photo_alt, item.photo_credit && `צילום: ${item.photo_credit}`].filter(Boolean).join(" · ")}
+                  </figcaption>
+                </figure>
               )}
               {item.story_he && <p className="mt-2 whitespace-pre-line text-ink-1">{item.story_he}</p>}
               <Decision item={item} busy={busy === item.id} decide={decide} />

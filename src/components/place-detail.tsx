@@ -84,12 +84,17 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
         >
           <PhotoGallery photos={photos} />
         </motion.div>
-      ) : local?.photo ? (
+      ) : local?.photo || place.contributedPhoto ? (
+        // The visitor's own photo on this device, or a contributed one approved with its place.
         <figure className="-mx-1">
-          <img src={local.photo} alt={local.photoAlt || place.name_he} className="aspect-[4/3] w-full rounded-3xl object-cover" />
-          {local.photoCredit && (
+          <img
+            src={local?.photo ?? place.contributedPhoto!.url}
+            alt={(local ? local.photoAlt : place.contributedPhoto?.alt) || place.name_he}
+            className="aspect-[4/3] w-full rounded-3xl object-cover"
+          />
+          {(local ? local.photoCredit : place.contributedPhoto?.credit) && (
             <figcaption className="px-1 pt-2 text-micro text-ink-3">
-              צילום: <bdi>{local.photoCredit}</bdi>
+              צילום: <bdi>{local ? local.photoCredit : place.contributedPhoto?.credit}</bdi>
             </figcaption>
           )}
         </figure>

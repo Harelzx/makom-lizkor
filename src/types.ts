@@ -45,6 +45,8 @@ export interface Place {
   photos?: Photo[]
   /** Whom a contributed place remembers, as the family wrote it. */
   inMemoryOf?: string
+  /** A contributed place's photo, approved with it and served from the site. */
+  contributedPhoto?: { url: string; alt: string; credit?: string }
   /** Only on attacked communities. */
   revival?: Revival
   /** Only on places a visitor added on this device. */
@@ -75,4 +77,8 @@ export interface LocalFields {
   sendError?: string
   /** Not before this time (ms): the server asked to wait (a full queue, too many at once). */
   nextTryAt?: number
+  /** The photo reached the server with the place (it stays here too). Unset while it still has to be sent. */
+  photoSent?: boolean
+  /** The server refused the photo (not a picture, too large): it isn't sent again. */
+  photoError?: string
 }
