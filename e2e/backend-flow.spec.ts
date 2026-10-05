@@ -2,18 +2,20 @@ import { expect, test, type Browser, type BrowserContextOptions, type Page } fro
 
 // Skipping still plays the sunrise; the panel and its buttons arrive once the day begins.
 const DAY = { timeout: 20_000 }
+// On a desktop the search opens from the header's wide button («חיפוש מקום או קהילה ⌘K»).
+const searchButton = (page: Page) => page.getByRole("button", { name: /^חיפוש מקום/ })
 
 const skipIntro = async (b: Browser, opts: BrowserContextOptions = {}) => {
   const ctx = await b.newContext(opts)
   const page = await ctx.newPage()
   await page.goto("/")
-  await page.getByRole("button", { name: "דילוג" }).click()
-  await expect(page.getByRole("button", { name: "חיפוש", exact: true })).toBeVisible(DAY)
+  await page.getByRole("button", { name: "דילוג", exact: true }).click()
+  await expect(searchButton(page)).toBeVisible(DAY)
   return page
 }
 
 const search = async (page: Page, name: string) => {
-  await page.getByRole("button", { name: "חיפוש", exact: true }).click()
+  await searchButton(page).click()
   await page.getByRole("dialog").getByRole("combobox").fill(name)
   return page.getByRole("option", { name: new RegExp(name) })
 }
@@ -73,8 +75,8 @@ test("the opening finishes and the site works while the API is down", async ({ p
   page.on("pageerror", (e) => errors.push(e.message))
   await page.route("**/api/**", (r) => r.abort())
   await page.goto("/")
-  await page.getByRole("button", { name: "דילוג" }).click()
-  await expect(page.getByRole("button", { name: "חיפוש", exact: true })).toBeVisible(DAY)
+  await page.getByRole("button", { name: "דילוג", exact: true }).click()
+  await expect(searchButton(page)).toBeVisible(DAY)
   await expect(page.getByRole("button", { name: "הוספת מקום" }).first()).toBeVisible()
   await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")))
   await page.waitForTimeout(500)

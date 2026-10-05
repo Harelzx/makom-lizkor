@@ -17,6 +17,12 @@ export default defineConfig({
   },
   // A port of its own: 5173 is shared with other local projects, and two servers on it answer at random.
   // The main checkout keeps 5174; each parallel worktree gets its own, so their dev servers never collide.
+  // Two pages: the site, and the moderators' queue (protected by Access in production; its data by /api/admin).
+  build: {
+    rolldownOptions: {
+      input: { main: resolve(import.meta.dirname, "index.html"), admin: resolve(import.meta.dirname, "admin/index.html") },
+    },
+  },
   server: { port: checkoutPorts(import.meta.dirname).dev, strictPort: true },
   optimizeDeps: { exclude: ["maplibre-gl"] },
   worker: { format: "es" },
