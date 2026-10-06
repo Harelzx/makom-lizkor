@@ -60,6 +60,25 @@ describe("the visitor's places in the store", () => {
     expect(useStore.getState().local.map((p) => [p.id, p.local?.submitKey])).toEqual([["local-y", "key-local-y"]])
   })
 
+  it("a place removed while its first save is still settling stays removed, and is never sent", async () => {
+    await useStore.getState().init()
+    let release!: () => void
+    disk.hold = new Promise((r) => (release = r))
+    // The new place's first save reaches storage, but its answer is held…
+    const added = useStore.getState().addLocal(place("local-new"))
+    disk.hold = null
+    // …while the visitor removes it; the removal is stored and says so.
+    expect(await useStore.getState().removeLocal("local-new")).toBe("removed")
+    release()
+    await added
+    expect(useStore.getState().local).toEqual([])
+    expect(disk.stored).toEqual([])
+    expect(await useStore.getState().stillLocal("local-new")).toBe(false)
+    // On the next visit too.
+    await useStore.getState().init()
+    expect(useStore.getState().local).toEqual([])
+  })
+
   it("a place another tab stored joins this tab's list, waiting rather than 'sending'", async () => {
     await useStore.getState().init()
     disk.stored = [place("local-other", { send: "sending" })]

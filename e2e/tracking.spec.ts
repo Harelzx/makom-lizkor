@@ -24,6 +24,23 @@ async function submit(b: Browser, name: string): Promise<Page> {
   return page
 }
 
+/** The tracking link this browser keeps for its copy of a place, read from storage itself. */
+const storedToken = (page: Page, name: string) =>
+  page.evaluate(
+    (n) =>
+      new Promise<string | undefined>((resolve) => {
+        const req = indexedDB.open("makom-lizkor-v2")
+        req.onsuccess = () => {
+          const get = req.result.transaction("v1").objectStore("v1").get("local")
+          get.onsuccess = () =>
+            resolve(
+              (get.result as { name_he: string; local?: { trackingToken?: string } }[]).find((p) => p.name_he === n)?.local?.trackingToken,
+            )
+        }
+      }),
+    name,
+  )
+
 async function queued(b: Browser, name: string) {
   const ctx = await b.newContext()
   await ctx.request.post("/__dev/login", { data: { email: "dev@example.test" } })
@@ -139,25 +156,7 @@ test("a withdrawal whose answer was lost is found done, not reported as unchange
   await expect(view.getByText("נמשכה", { exact: false })).toBeVisible()
   await expect(page.getByText("לא הצלחנו", { exact: false })).toHaveCount(0)
   // The device no longer keeps the tracking link of a withdrawn place.
-  await expect
-    .poll(() =>
-      page.evaluate(
-        (n) =>
-          new Promise<unknown>((resolve) => {
-            const req = indexedDB.open("makom-lizkor-v2")
-            req.onsuccess = () => {
-              const get = req.result.transaction("v1").objectStore("v1").get("local")
-              get.onsuccess = () =>
-                resolve(
-                  (get.result as { name_he: string; local?: { trackingToken?: string } }[]).find((p) => p.name_he === n)?.local
-                    ?.trackingToken,
-                )
-            }
-          }),
-        name,
-      ),
-    )
-    .toBeUndefined()
+  await expect.poll(() => storedToken(page, name)).toBeUndefined()
 })
 
 /** A submission returned by the moderator, with its tracking view open on the correction form. */
@@ -283,7 +282,42 @@ test("a withdrawal whose photo erasure is still pending can be finished after a 
   // view, and the view offers to finish.
   await page.reload()
   await page.getByRole("button", { name: "מעקב אחרי ההצעה" }).click()
-  await expect(page.getByRole("dialog", { name: "מצב ההצעה" }).getByRole("button", { name: "להשלים את מחיקת התמונה" })).toBeVisible()
+  const again = page.getByRole("dialog", { name: "מצב ההצעה" })
+  await expect(again.getByRole("button", { name: "להשלים את מחיקת התמונה" })).toBeVisible()
+  expect(await storedToken(page, name)).toBeTruthy()
+  // The storage works again: finishing erases the rest, and only then does the device let the link go.
+  await page.unrouteAll({ behavior: "wait" })
+  await again.getByRole("button", { name: "להשלים את מחיקת התמונה" }).click()
+  await expect(again.getByText("נמשכה. ההצעה, השם והמייל שלכם והתמונה נמחקו מהשרת")).toBeVisible()
+  await expect(again.getByRole("button", { name: "להשלים את מחיקת התמונה" })).toHaveCount(0)
+  await expect.poll(() => storedToken(page, name)).toBeUndefined()
+})
+
+test("a withdrawal the server was too busy to make keeps the link, says so, and works on the next try", async ({ browser }) => {
+  const name = `ספסל דמו משיכה עמוסה ${Date.now()}`
+  const page = await submit(browser, name)
+  let busy = true
+  await page.route("**/api/v1/submissions/*/withdraw", async (route) => {
+    if (!busy) return route.continue()
+    await route.fulfill({
+      status: 503,
+      contentType: "application/problem+json",
+      headers: { "Retry-After": "1" },
+      body: JSON.stringify({ code: "withdrawal_busy" }),
+    })
+  })
+  await page.getByRole("button", { name: "מעקב אחרי ההצעה" }).click()
+  const view = page.getByRole("dialog", { name: "מצב ההצעה" })
+  await view.getByRole("button", { name: "משיכת ההצעה" }).click()
+  await page.getByRole("alertdialog").getByRole("button", { name: "למשוך ולמחוק" }).click()
+  await expect(page.getByText("לא הצלחנו לוודא שההצעה נמשכה")).toBeVisible()
+  await expect(view.getByText("ממתינה לבדיקה")).toBeVisible()
+  expect(await storedToken(page, name)).toBeTruthy()
+  busy = false
+  await view.getByRole("button", { name: "משיכת ההצעה" }).click()
+  await page.getByRole("alertdialog").getByRole("button", { name: "למשוך ולמחוק" }).click()
+  await expect(view.getByText("נמשכה", { exact: false })).toBeVisible()
+  await expect.poll(() => storedToken(page, name)).toBeUndefined()
 })
 
 test("a link that ended with its withdrawal doesn't offer to finish the photo's erasure, and says who can", async ({ browser }) => {
