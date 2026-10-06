@@ -133,7 +133,7 @@ export const LEGAL_SECTIONS: { id: string; title: string; html: string }[] = [
 <li><strong>איורים:</strong> איורי צבעי המים (הכלנית, הניצן, זר הכלניות ושדה הכלניות בזריחה) נוצרו בבינה מלאכותית, במודלי תמונה של OpenAI, לפי הנחיות שנכתבו לאתר. אף איור באתר אינו מתאר אדם אמיתי או אירוע אמיתי. הכלנית שעל המפה, הסמל והאייקונים צוירו בקוד במיוחד לאתר.</li>
 <li><strong>צלילים:</strong> המוזיקה וצלילי הפתיחה (אוויר הלילה, השעון, הנייר והשחר) נוצרו בבינה מלאכותית ב־${link("https://elevenlabs.io", "elevenlabs.io")}, לפי הנחיות שנכתבו לאתר. אין בהם צליל של האירועים עצמם ולא קול של אדם.</li>
 <li><strong>טקסטים:</strong> התיאורים נכתבו במקור עבור "מקום לזכור". לא הועתקו טקסטים או תמונות מאתרי יזכור, לעד או ויקיפדיה.</li>
-<li><strong>ספריות קוד:</strong> MapLibre GL JS (BSD-3-Clause), React (MIT), shadcn/ui (MIT), Radix UI (MIT), Tailwind CSS (MIT), Motion (MIT), Vaul (MIT), cmdk (MIT), Zustand (MIT), idb-keyval (Apache-2.0), Sonner (MIT), Lucide (ISC). בשרת: Hono (MIT), Zod (MIT), jose (MIT).</li>
+<li><strong>ספריות קוד:</strong> MapLibre GL JS (BSD-3-Clause), React (MIT), shadcn/ui (MIT), Radix UI (MIT), Tailwind CSS (MIT), Motion (MIT), Vaul (MIT), cmdk (MIT), Zustand (MIT), idb-keyval (Apache-2.0), Sonner (MIT), Lucide (ISC). בשרת: Hono (MIT), Zod (MIT), jose (MIT), ו־resvg-wasm (MPL-2.0, בלי שינויים; ${link("https://github.com/yisibl/resvg-js", "קוד המקור")}).</li>
 <li><strong>אין שימוש בסמלים רשמיים:</strong> באתר אין סמל מדינה, סמל צה"ל, סמל יזכור או כל סמל רשמי אחר.</li>
 </ul>`,
   },
