@@ -42,6 +42,9 @@ Recent chain: b03acd0b → bc46a39c → 5131154b → bb965446 → 4889666d → d
   - F4-O3 finishOp progress overwrites (non-monotonic, lost purge tries); resumeOps oldest-100 starvation; per-op failure isolation.
   - F4-O4 replay: abort-only / intent+abort withdraw/erase must not count as erased; document/test the fromSeq window.
   - Also: L1 wording (verify ctx.cache.purge in Cloudflare docs; missing support = success only in explicit local/test mode); remove the ledger comment's claim that ids are non-personal and justify lifetime retention.
+  - `e548ab5` fixed O1..O4 → adviser `a27.json` (revise): O1, O4 closed; O3 step monotonicity + fairness accepted. Still open (delta from e548ab5):
+    - O2: durable media reconciliation in the scheduled path regardless of op flags (late delete then caller dies), refused-prepare cleanup durable, served photo with no bytes = media failure not success.
+    - O3 purge: reserve retry slots atomically before calling purge; late success sets done; stale failure can't undo; interrupted reservation accounting; purge.test must capture the real options argument.
   - Packet 4 must add retirePhotos and prepare/cleanup callers, and show that lifting one of two same-field suppressions is reconstructible from the ledger (add target ids to LedgerEntry if needed). `ops-transitions.test.ts` moved to packet 4 for size.
 
 ## Open findings (one list, stable IDs)
