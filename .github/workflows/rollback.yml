@@ -1,8 +1,10 @@
 # Rolling the Worker's code back to an earlier release (spec 14.2). The agent prepares; the owner runs it with the
 # release tag to go back to. Only code goes back: no Time Travel, no migration, no bucket command, so no old data comes
-# back and nothing deleted returns (a49). scripts/rollback-check.mjs refuses when today's schema would break the earlier
-# code, or when the rollback would cross a change to a deletion safeguard; then fix forward, or the owner decides in
-# the dashboard.
+# back and nothing deleted returns (a49). scripts/rollback-state.mjs finds every state production may have been through
+# (unfinished release attempts included) and checks the target against each: it refuses when today's schema would
+# break the earlier code, or when the rollback would cross a change to a deletion safeguard; then fix forward, or a
+# separately authorized recovery decision. Like release.yml, it can't run on GitHub Free as things stand (no production
+# credentials in GitHub).
 name: rollback
 
 on:
@@ -28,6 +30,9 @@ jobs:
   rollback:
     runs-on: ubuntu-latest
     environment: production
+    permissions:
+      contents: read
+      actions: read
     env:
       GH_TOKEN: ${{ github.token }}
       TO_RELEASE: ${{ inputs.to_release }}
@@ -51,9 +56,11 @@ jobs:
           set -euo pipefail
           [[ "$TO_RELEASE" =~ ^release-[0-9]{4}-[0-9]{2}-[0-9]{2}(-[0-9]+)?$ ]]
           test "$(gh release view "$TO_RELEASE" --json isDraft --jq .isDraft)" = "false"
-          # Checked against the newest release ever deployed, which covers any rollback made since.
-          latest=$(gh release list --exclude-drafts --limit 1 --json tagName --jq '.[0].tagName')
-          node scripts/rollback-check.mjs "$(git rev-list -n 1 "$TO_RELEASE")" "$(git rev-list -n 1 "$latest")"
+          target=$(git rev-list -n 1 "$TO_RELEASE")
+          # Checked against every state production may have been through: each published release, and each release
+          # attempt whose release job started (it may have migrated or deployed, then failed), by its own record.
+          # Refused when that can't be known (a51, a53, P6-ROLLBACK-1).
+          node scripts/rollback-state.mjs "$target"
       - name: Deploy the earlier release's version
         run: |
           npx wrangler versions deploy --version-tag "$TO_RELEASE" --message "rollback to $TO_RELEASE: $REASON" --yes

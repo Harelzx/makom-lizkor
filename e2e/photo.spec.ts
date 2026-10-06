@@ -16,6 +16,13 @@ test("a photo sent with a place reaches the moderator, and is published with it"
   const page = await (
     await ownAddress(await browser.newContext({ geolocation: { latitude: 31.42, longitude: 34.49 }, permissions: ["geolocation"] }))
   ).newPage()
+  // Every policy violation on the sender's page, as it happens: preparing and sending the photo must cause none, or an
+  // enforced policy would block it (the production build carries the policy; the dev server's pages don't).
+  await page.addInitScript(() => {
+    const seen: string[] = []
+    Object.assign(window, { __violations: seen })
+    document.addEventListener("securitypolicyviolation", (e) => seen.push(`${e.effectiveDirective} ${e.blockedURI}`))
+  })
   await page.goto("/")
   await page.getByRole("button", { name: "דילוג", exact: true }).click()
   await expect(page.getByRole("button", { name: /^חיפוש מקום/ })).toBeVisible(DAY)
@@ -38,6 +45,7 @@ test("a photo sent with a place reaches the moderator, and is published with it"
   const uploaded = page.waitForResponse((r) => /\/api\/v1\/submissions\/p_[^/]+\/photo$/.test(r.url()) && r.status() === 200)
   await dialog.getByRole("button", { name: "שמירה והנחת כלנית" }).click()
   await uploaded
+  expect(await page.evaluate(() => (window as unknown as { __violations: string[] }).__violations)).toEqual([])
 
   const modCtx = await browser.newContext()
   await modCtx.request.post("/__dev/login", { data: { email: "dev@example.test" } })

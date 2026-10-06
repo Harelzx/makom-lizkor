@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers"
-import { beforeEach, describe, expect, it } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import { RETENTION } from "@/config"
 import { CURRENT_SUBMISSION_NOTICE } from "@/shared/contract"
 import { runJobs } from "../jobs"
@@ -727,5 +727,26 @@ describe("anemones, the audit trail and unapproved photos (task 4)", () => {
       "SELECT body FROM dev_outbox WHERE subject LIKE '%ממתינות לבדיקה%' ORDER BY at DESC LIMIT 1",
     ).first<string>("body")
     expect(body).not.toContain("ספסל")
+  })
+})
+
+describe("a failed part of the retention run", () => {
+  it("is logged by a code the log keeps, so the part is named (decision_notes, not dropped)", async () => {
+    const error = vi.spyOn(console, "error")
+    // The decision notes' statement fails; every other part runs as usual.
+    const db = new Proxy(env.DB, {
+      get(target, key) {
+        if (key !== "prepare") return Reflect.get(target, key).bind(target)
+        return (sql: string) => {
+          if (sql.includes("SET decision_note = NULL")) throw new Error("synthetic failure")
+          return target.prepare(sql)
+        }
+      },
+    })
+    const { ok } = await runRetention({ db, media: env.MEDIA, ledger: env.LEDGER, purge: async () => true }, new Date())
+    expect(ok).toBe(false)
+    const failed = error.mock.calls.map((c) => JSON.parse(String(c[0]))).filter((l) => l.event === "retention_failed")
+    error.mockRestore()
+    expect(failed).toEqual([{ level: "error", event: "retention_failed", part: "decision_notes", error: "Error" }])
   })
 })

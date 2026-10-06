@@ -1,6 +1,11 @@
 // node --test scripts/ci-policy.test.mjs
 import assert from "node:assert/strict"
+import { spawnSync } from "node:child_process"
+import { mkdtempSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { test } from "node:test"
+import { parse } from "yaml"
 import { policyProblems, readWorkflows } from "./ci-policy.mjs"
 
 const real = readWorkflows()
@@ -78,11 +83,21 @@ test("the release binds one commit through every step", () => {
     withChange("release.yml", "--workflow ci.yml --commit", "--workflow ci.yml --branch main --commit-any"),
     "doesn't check CI on that commit",
   )
+  // Staging's receipt for this commit, never a run's own metadata (P6-STAGING-1).
+  fails(withChange("release.yml", 'node scripts/staging-evidence.mjs check "$SHA"', "true"), "doesn't check staging on that commit")
+  // The attachment compared whole, and the release tag's commit (P6-MANIFEST-1): a declared hash proves nothing.
   fails(
-    withChange("release.yml", "--workflow staging.yml --commit", "--workflow staging.yml --any"),
-    "doesn't check staging on that commit",
+    withChange("release.yml", '"$SHA" $from --verify "$RUNNER_TEMP/manifest.json" --tag "$RELEASE"', '"$SHA" $from --hash'),
+    "the attached manifest's content for that commit",
   )
-  fails(withChange("release.yml", '"$SHA" $from --hash', "HEAD $from --hash"), "the manifest's hash for that commit")
+  fails(
+    withChange(
+      "release.yml",
+      '"$SHA" $from --verify "$RUNNER_TEMP/manifest.json" --tag "$RELEASE"',
+      '"$SHA" $from --verify "$RUNNER_TEMP/manifest.json"',
+    ),
+    "the release tag's commit",
+  )
   fails(withChange("release.yml", 'git merge-base --is-ancestor "$sha" origin/main', "true"), "the commit being on main")
   fails(withChange("release.yml", '--tag "$RELEASE" --message "release $RELEASE $SHA"', ""), "must run, in order")
 })
@@ -114,9 +129,32 @@ test("a rollback moves code only, after its check", () => {
     ["npx wrangler deploy", "a fresh deploy"],
   ])
     fails(withChange("rollback.yml", "      - run: npm ci\n", `      - run: npm ci\n      - run: ${line}\n`), `a rollback runs ${what}`)
+  // Checked against every state production may hold, unfinished release attempts included (P6-ROLLBACK-1).
   fails(
-    withChange("rollback.yml", "          node scripts/rollback-check.mjs", "          echo skipped"),
-    "must pass scripts/rollback-check.mjs",
+    withChange("rollback.yml", '          node scripts/rollback-state.mjs "$target"', "          echo skipped"),
+    "must pass scripts/rollback-state.mjs",
+  )
+  fails(withChange("rollback.yml", "      actions: read\n", ""), "must read the release runs")
+})
+
+test("a release records the commit it attempts before it touches production (P6-ROLLBACK-1)", () => {
+  fails(
+    withChange(
+      "release.yml",
+      "          name: release-attempt-${{ inputs.release }}-${{ github.run_attempt }}",
+      "          name: release-attempt-${{ inputs.release }}",
+    ),
+    "record its attempt",
+  )
+  // The run named for its release, so a published tag stands for a record that has expired (a52).
+  fails(withChange("release.yml", "run-name: release ${{ inputs.release }}\n", ""), "named for its release")
+  fails(
+    withChange(
+      "release.yml",
+      "      - name: Time Travel bookmark before the migrations\n",
+      "      - name: Time Travel bookmark before the migrations\n        if: false\n",
+    ),
+    "record its attempt",
   )
 })
 
@@ -134,7 +172,13 @@ test("staging deploys only the commit CI passed on main, with staging's secrets 
     "check out the commit CI passed",
   )
   fails(withChange("staging.yml", "node scripts/staging-check.mjs --deploy", "true"), "check the staging config")
-  fails(withChange("staging.yml", "run: node scripts/edge-check.mjs", "run: echo"), "then run the edge checks")
+  fails(withChange("staging.yml", "node scripts/edge-check.mjs", "echo"), "then run the edge checks")
+  // Its receipt comes last, from the edge check's own report, under this commit's name (P6-STAGING-1).
+  fails(
+    withChange("staging.yml", "name: staging-receipt-${{ github.event.workflow_run.head_sha }}", "name: staging-receipt"),
+    "upload its receipt",
+  )
+  fails(withChange("staging.yml", "          retention-days: 90\n", "          retention-days: 400\n"), "upload its receipt")
   // A production credential, or an environment, never comes into staging; staging's never into production.
   fails(
     withChange("staging.yml", "secrets.STAGING_CLOUDFLARE_API_TOKEN", "secrets.CLOUDFLARE_API_TOKEN"),
@@ -143,6 +187,15 @@ test("staging deploys only the commit CI passed on main, with staging's secrets 
   fails(
     withChange("staging.yml", "    runs-on: ubuntu-latest\n    env:", "    runs-on: ubuntu-latest\n    environment: production\n    env:"),
     "uses the production environment",
+  )
+  // Staging's secrets are staging.yml's alone: CI, which runs every pull request, never reads one.
+  fails(
+    withChange(
+      "ci.yml",
+      "      - run: npm test\n",
+      "      - run: npm test\n        env:\n          T: ${{ secrets.STAGING_CLOUDFLARE_API_TOKEN }}\n",
+    ),
+    "reads STAGING_CLOUDFLARE_API_TOKEN outside the production environment",
   )
   fails(
     withChange("release.yml", "secrets.CLOUDFLARE_ACCOUNT_ID", "secrets.STAGING_CLOUDFLARE_ACCOUNT_ID"),
@@ -171,4 +224,15 @@ test("every build that is checked or deployed is searched for curated records fi
   const deploy = "      - name: Deploy, the version tagged with the release and its commit\n"
   assert.ok(source.includes(check) && source.includes(deploy))
   fails({ ...real, "release.yml": source.replace(check, "").replace(deploy, check + deploy) }, "before the migrations")
+})
+
+test("a failed command inside a pipe fails its step, so no migration runs without the bookmark (P6-BOOKMARK-1)", () => {
+  // GitHub runs an unspecified shell as `bash -e {0}`, without pipefail (workflow syntax, jobs.<id>.steps[*].shell).
+  fails(withChange("ci.yml", "      - run: npm test\n", "      - run: npm test | tee test.log\n"), "a pipe that hides a failure")
+  // The release's own bookmark step, run as GitHub runs it, with a Wrangler that fails and a tee that succeeds.
+  const step = parse(real["release.yml"]).jobs.release.steps.find((s) => /time-travel/.test(s.run ?? ""))
+  const dir = mkdtempSync(join(tmpdir(), "bookmark-"))
+  writeFileSync(join(dir, "npx"), "#!/bin/sh\necho 'no bookmark' >&2\nexit 1\n", { mode: 0o755 })
+  const res = spawnSync("bash", ["-e", "-c", step.run], { env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, RUNNER_TEMP: dir } })
+  assert.notEqual(res.status, 0, "the step passed although Wrangler failed")
 })

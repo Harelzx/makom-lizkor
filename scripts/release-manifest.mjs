@@ -1,10 +1,14 @@
 // The release manifest (spec 14.2, 12.2): what a release changes since the last one, the SQL of its new migrations as
 // they will run, and the risk flags the owner reads before pressing Run workflow. It is deterministic (no times, sorted
-// lists), so release.yml rebuilds it for the commit it deploys and refuses when its hash differs from the one attached
-// to the draft release: the manifest, the CI run, the checkout and the deploy all name one commit (adviser a49).
+// lists), so release.yml rebuilds it for the commit it deploys and refuses unless the attachment to the draft release
+// is the same, field by field (a hash it merely declares proves nothing, a51): the manifest, the CI run, the checkout
+// and the deploy all name one commit (adviser a49).
 //   node scripts/release-manifest.mjs <to> [<from>] [--json | --hash]
+//   node scripts/release-manifest.mjs <to> [<from>] --verify <attached.json> [--tag <release-tag>]
 import { createHash } from "node:crypto"
 import { execFileSync } from "node:child_process"
+import { readFileSync } from "node:fs"
+import { isDeepStrictEqual } from "node:util"
 import { pathToFileURL } from "node:url"
 
 const git = (cwd, args) =>
@@ -152,6 +156,31 @@ export function manifest({ cwd = process.cwd(), to, from = null }) {
 
 export const manifestHash = (m) => createHash("sha256").update(JSON.stringify(m)).digest("hex")
 
+/**
+ * Why an attached manifest isn't this commit's: each top-level field that differs from the one rebuilt here (its hash
+ * included), and a release tag that already exists at another commit (rollback finds a release by its tag, and GitHub
+ * publishes an existing tag as it is, whatever the draft's target). Empty when it is.
+ */
+export function attachedProblems({ cwd = process.cwd(), to, from = null, attached, tag = null }) {
+  const m = manifest({ cwd, to, from })
+  const expected = { ...m, hash: manifestHash(m) }
+  const fields = [...new Set([...Object.keys(expected), ...Object.keys(attached ?? {})])].filter(
+    (k) => !isDeepStrictEqual(expected[k], attached?.[k]),
+  )
+  const problems = fields.length ? [`the attached manifest differs from this commit's: ${fields.join(", ")}`] : []
+  if (tag) {
+    let at = null
+    try {
+      at = git(cwd, ["rev-parse", "-q", "--verify", `refs/tags/${tag}^{commit}`]).trim()
+    } catch {
+      // No such tag yet: publishing makes it at the target.
+    }
+    const sha = git(cwd, ["rev-parse", `${to}^{commit}`]).trim()
+    if (at && at !== sha) problems.push(`the tag ${tag} names ${at}, not ${sha}`)
+  }
+  return problems
+}
+
 export function render(m) {
   const lines = [
     `# Release manifest`,
@@ -177,10 +206,22 @@ export function render(m) {
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const args = process.argv.slice(2).filter((a) => !a.startsWith("--"))
+  const argv = process.argv.slice(2)
+  const option = (name) => (argv.includes(name) ? argv[argv.indexOf(name) + 1] : null)
+  const args = argv.filter((a, i) => !a.startsWith("--") && !["--verify", "--tag"].includes(argv[i - 1]))
   if (!args[0]) {
-    console.error("usage: node scripts/release-manifest.mjs <to> [<from>] [--json | --hash]")
+    console.error("usage: node scripts/release-manifest.mjs <to> [<from>] [--json | --hash | --verify <file> [--tag <tag>]]")
     process.exit(2)
+  }
+  if (option("--verify")) {
+    const attached = JSON.parse(readFileSync(option("--verify"), "utf8"))
+    const problems = attachedProblems({ to: args[0], from: args[1] ?? null, attached, tag: option("--tag") })
+    if (problems.length) {
+      console.error("Release manifest refused:\n" + problems.map((p) => `  - ${p}`).join("\n"))
+      process.exit(1)
+    }
+    console.log("The attached manifest is this commit's.")
+    process.exit(0)
   }
   const m = manifest({ to: args[0], from: args[1] ?? null })
   if (process.argv.includes("--hash")) console.log(manifestHash(m))

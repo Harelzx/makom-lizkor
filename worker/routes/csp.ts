@@ -51,6 +51,34 @@ function violations(parsed: unknown): { directive: unknown; blocked: unknown }[]
 }
 
 /**
+ * The body as text if it is at most MAX_BYTES bytes, read only that far: a body sent without a length (or with a false
+ * one) is cancelled at the bound, never buffered whole. Null past the bound.
+ */
+async function bounded(body: ReadableStream<Uint8Array> | null): Promise<string | null> {
+  if (!body) return ""
+  const reader = body.getReader()
+  const chunks: Uint8Array[] = []
+  let size = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    size += value.byteLength
+    if (size > MAX_BYTES) {
+      await reader.cancel()
+      return null
+    }
+    chunks.push(value)
+  }
+  const all = new Uint8Array(size)
+  let at = 0
+  for (const c of chunks) {
+    all.set(c, at)
+    at += c.byteLength
+  }
+  return new TextDecoder().decode(all)
+}
+
+/**
  * A browser's report that the page policy was broken (spec 11). Logged as two codes, the directive and the kind of
  * source, so the move to enforcing can be judged; the page's address, the referrer, the file, the sample and the host
  * blocked are read past and never kept. A malformed report is answered and forgotten.
@@ -61,8 +89,8 @@ csp.post("/", async (c) => {
   if (address && c.env.TRACKING_SECRET && !(await c.env.CSP_LIMIT.limit({ key: await rateKey(c.env.TRACKING_SECRET, address) })).success)
     return problem(c, 429, "rate_limited", {}, { "Retry-After": "60" })
   if (Number(c.req.header("Content-Length") ?? 0) > MAX_BYTES) return c.body(null, 204)
-  const text = await c.req.text()
-  if (text.length > MAX_BYTES) return c.body(null, 204)
+  const text = await bounded(c.req.raw.body)
+  if (text === null) return c.body(null, 204)
   let parsed: unknown
   try {
     parsed = JSON.parse(text)

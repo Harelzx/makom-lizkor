@@ -14,6 +14,11 @@ const SHA_REF = "${{ needs.verify.outputs.sha }}"
 const runs = (job) => (job.steps ?? []).map((s) => (typeof s.run === "string" ? s.run : ""))
 const text = (o) => JSON.stringify(o ?? null)
 
+/** A pipe (not ||) outside single quotes, where jq filters keep theirs. */
+const hidesFailure = (run) => /(^|[^|])\|(?!\|)/.test(run.replace(/'[^']*'/g, "''"))
+const pipefail = (step, job, w) =>
+  /^\s*set -[a-z]*o pipefail\b/.test(step.run) || [step.shell, job.defaults?.run?.shell, w.defaults?.run?.shell].includes("bash")
+
 export function policyProblems(workflows) {
   const problems = []
   for (const [name, source] of Object.entries(workflows)) {
@@ -42,6 +47,10 @@ export function policyProblems(workflows) {
       if (secrets.length && env !== "production" && !staging)
         say(`job ${id} reads ${secrets.join(", ")} outside the production environment`)
       if (production && secrets.some((s) => s.startsWith("STAGING_"))) say(`job ${id} reads staging secrets in a production workflow`)
+      // GitHub runs a step with no shell named as `bash -e {0}`, without pipefail: a failure before a pipe would pass.
+      for (const step of job.steps ?? [])
+        if (typeof step.run === "string" && hidesFailure(step.run) && !pipefail(step, job, w))
+          say(`job ${id} has a pipe that hides a failure; start the step with set -o pipefail`)
       // An input or event field written into a script is a script injection; it goes through env instead.
       for (const run of runs(job))
         if (/\$\{\{\s*(inputs\.|github\.event\.)/.test(run)) say(`job ${id} writes an input into a script; pass it through env`)
@@ -88,11 +97,14 @@ function releaseProblems(w) {
       ["the draft release's target commit", /targetCommitish/],
       ["the commit being on main", /merge-base --is-ancestor "\$sha" origin\/main/],
       ["CI on that commit", /--workflow ci\.yml --commit "\$SHA" --status success/],
-      ["staging on that commit", /--workflow staging\.yml --commit "\$SHA" --status success/],
-      ["the manifest's hash for that commit", /release-manifest\.mjs "\$SHA"[^\n]*--hash/],
+      ["staging on that commit", /node scripts\/staging-evidence\.mjs check "\$SHA"/],
+      ["the attached manifest's content for that commit", /release-manifest\.mjs "\$SHA"[^\n]*--verify "\$RUNNER_TEMP\/manifest\.json"/],
+      ["the release tag's commit", /release-manifest\.mjs "\$SHA"[^\n]*--verify[^\n]*--tag "\$RELEASE"/],
     ])
       if (!pattern.test(all)) problems.push(`verify doesn't check ${what}`)
     if (verify.outputs?.sha !== "${{ steps.bind.outputs.sha }}") problems.push("verify must output the bound commit as sha")
+    if (w["run-name"] !== "release ${{ inputs.release }}")
+      problems.push("the run must be named for its release (run-name: release <release>)")
   }
   for (const [id, job] of jobs) {
     if (job.environment !== "production") continue
@@ -103,6 +115,17 @@ function releaseProblems(w) {
     if (!steps.some((r) => r.includes('test "$(git rev-parse HEAD)" = "$SHA"')))
       problems.push(`job ${id} doesn't confirm the commit it checked out`)
     if (job.env?.SHA !== SHA_REF) problems.push(`job ${id} must take SHA from verify`)
+    // The attempt's record, uploaded before anything changes production, for a later rollback (P6-ROLLBACK-1).
+    const all = job.steps ?? []
+    const record = all.findIndex(
+      (st) =>
+        String(st.uses ?? "").startsWith("actions/upload-artifact") &&
+        st.with?.name === "release-attempt-${{ inputs.release }}-${{ github.run_attempt }}" &&
+        !("if" in st),
+    )
+    const bookmark = all.findIndex((st) => /d1 time-travel info/.test(st.run ?? ""))
+    if (record < 0 || bookmark < 0 || record > bookmark || all.slice(record, bookmark + 1).some((st) => "if" in st))
+      problems.push(`job ${id} must record its attempt (release-attempt-<release>-<attempt>) before the bookmark, unconditionally`)
     // Spec 14.2's order: the release check, the bookmark, the migrations, the deploy, the production checks.
     const order = [
       /npm run release:check/,
@@ -148,6 +171,20 @@ function stagingProblems(w, triggers) {
       problems.push(
         `job ${id} must confirm the commit, check the staging config, migrate, deploy tagged with the commit, then run the edge checks`,
       )
+    // The receipt release.yml reads (P6-STAGING-1): the last step, so it exists only if every step before it passed,
+    // named for the commit deployed, from the edge check's own report, kept a modest while.
+    const all = job.steps ?? []
+    const last = all[all.length - 1] ?? {}
+    const edge = all.findIndex((st) => /edge-check\.mjs[^\n]*--report/.test(st.run ?? ""))
+    if (
+      !String(last.uses ?? "").startsWith("actions/upload-artifact") ||
+      "if" in last ||
+      last.with?.name !== "staging-receipt-${{ github.event.workflow_run.head_sha }}" ||
+      !(Number(last.with?.["retention-days"]) > 0 && Number(last.with?.["retention-days"]) <= 90) ||
+      edge < 0 ||
+      !all.slice(edge + 1).some((st) => /receipt\.json/.test(st.run ?? ""))
+    )
+      problems.push(`job ${id} must upload its receipt last, named for the commit, from the edge check's report, kept at most 90 days`)
   }
   return problems
 }
@@ -165,10 +202,13 @@ function rollbackProblems(w) {
     ["a fresh deploy", /wrangler\s+deploy\b/],
   ])
     if (pattern.test(all)) problems.push(`a rollback runs ${what}`)
-  const check = all.indexOf("scripts/rollback-check.mjs")
+  // The check runs against every state production may hold (scripts/rollback-state.mjs runs rollback-check for each).
+  const check = all.indexOf('node scripts/rollback-state.mjs "$target"')
   const move = all.indexOf("versions deploy --version-tag")
   if (check < 0 || move < 0 || move < check)
-    problems.push("a rollback must pass scripts/rollback-check.mjs before it deploys the earlier version")
+    problems.push("a rollback must pass scripts/rollback-state.mjs before it deploys the earlier version")
+  for (const [id, job] of Object.entries(w.jobs ?? {}))
+    if (job.permissions?.actions !== "read") problems.push(`job ${id} must read the release runs (permissions: actions: read)`)
   return problems
 }
 

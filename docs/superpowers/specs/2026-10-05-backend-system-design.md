@@ -884,11 +884,11 @@ purge_after  TEXT NOT NULL,   -- starts equal to ceiling_at; only ever lowered
 |---|---|---|---|
 | Workers Paid לייצור | 0 | 0 | 5 |
 | Workers Paid ל־staging | 0 | 5 | 5 (אפשר לחזור ל־Free בין עונות) |
-| GitHub Pro (בחשבון הקיים) | 0 | 4 | 4 |
+| GitHub Free, מאגר פרטי (בלי Pro; תיקון ב־12.2) | 0 | 0 | 0 |
 | Exchange Online Plan 1, מושב אחד | 0 | 0 | 4 |
 | דומיין (74–92 ₪ לשנה כולל מע"מ) | 0 | כ־2 | כ־2 |
 | Access, Turnstile, אזור DNS, heartbeat | 0 | 0 | 0 |
-| **סך הכל** | **0** | **כ־11** | **כ־20 (כ־15 מחוץ לעונה)** |
+| **סך הכל** | **0** | **כ־7** | **כ־16 (כ־11 מחוץ לעונה)** |
 
 - **שימוש:** הצפי הוא 0$ בהיקף הנוכחי. לעיון, המחירים מעל המכסות:
   - Workers: 0.30$ למיליון בקשות;
@@ -939,7 +939,7 @@ purge_after  TEXT NOT NULL,   -- starts equal to ceiling_at; only ever lowered
   - D1 ו־R2 בתחום `eu`.
   - עד 3 אנשים.
   - שני חשבונות Cloudflare.
-  - GitHub Pro.
+  - GitHub Free, מאגר פרטי. שום דבר ב־GitHub אינו שער אישור אנושי לשחרור, ומפתחות הייצור לא נשמרים בו (12.2).
 - **סוכני AI:** מודל הגישה שלהם (סעיף 12).
 - **שונות:**
   - כלנית אחת ליום לכל מכשיר ומקום.
