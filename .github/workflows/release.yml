@@ -63,14 +63,18 @@ jobs:
         run: |
           set -euo pipefail
           test "$(gh run list --workflow ci.yml --commit "$SHA" --status success --json databaseId --jq length)" -gt 0
-      # staging.yml comes with the staging account (the owner's decision); until it exists this step fails, so no
-      # release can pass without a staging run on the same commit.
+      # Staging's receipt for this commit, from a completed, successful staging.yml run, with its edge check passed. A
+      # run's own head_sha is not read: for a workflow_run trigger it is main's tip, not the commit deployed (a51).
       - name: Staging passed on that commit
         env:
           SHA: ${{ steps.bind.outputs.sha }}
         run: |
           set -euo pipefail
-          test "$(gh run list --workflow staging.yml --commit "$SHA" --status success --json databaseId --jq length)" -gt 0
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=staging-receipt-$SHA" > "$RUNNER_TEMP/artifacts.json"
+          run=$(node scripts/staging-evidence.mjs run-id "$SHA" "$RUNNER_TEMP/artifacts.json")
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run" > "$RUNNER_TEMP/run.json"
+          gh run download "$run" --name "staging-receipt-$SHA" --dir "$RUNNER_TEMP/receipt"
+          node scripts/staging-evidence.mjs check "$SHA" "$RUNNER_TEMP/artifacts.json" "$RUNNER_TEMP/run.json" "$RUNNER_TEMP/receipt/receipt.json"
       - name: The attached manifest is this commit's
         env:
           SHA: ${{ steps.bind.outputs.sha }}

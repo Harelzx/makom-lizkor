@@ -81,7 +81,7 @@ function releaseProblems(w) {
       ["the draft release's target commit", /targetCommitish/],
       ["the commit being on main", /merge-base --is-ancestor "\$sha" origin\/main/],
       ["CI on that commit", /--workflow ci\.yml --commit "\$SHA" --status success/],
-      ["staging on that commit", /--workflow staging\.yml --commit "\$SHA" --status success/],
+      ["staging on that commit", /node scripts\/staging-evidence\.mjs check "\$SHA"/],
       ["the attached manifest's content for that commit", /release-manifest\.mjs "\$SHA"[^\n]*--verify "\$RUNNER_TEMP\/manifest\.json"/],
       ["the release tag's commit", /release-manifest\.mjs "\$SHA"[^\n]*--verify[^\n]*--tag "\$RELEASE"/],
     ])
@@ -142,6 +142,20 @@ function stagingProblems(w, triggers) {
       problems.push(
         `job ${id} must confirm the commit, check the staging config, migrate, deploy tagged with the commit, then run the edge checks`,
       )
+    // The receipt release.yml reads (P6-STAGING-1): the last step, so it exists only if every step before it passed,
+    // named for the commit deployed, from the edge check's own report, kept a modest while.
+    const all = job.steps ?? []
+    const last = all[all.length - 1] ?? {}
+    const edge = all.findIndex((st) => /edge-check\.mjs[^\n]*--report/.test(st.run ?? ""))
+    if (
+      !String(last.uses ?? "").startsWith("actions/upload-artifact") ||
+      last.if ||
+      last.with?.name !== "staging-receipt-${{ github.event.workflow_run.head_sha }}" ||
+      !(Number(last.with?.["retention-days"]) > 0 && Number(last.with?.["retention-days"]) <= 90) ||
+      edge < 0 ||
+      !all.slice(edge + 1).some((st) => /receipt\.json/.test(st.run ?? ""))
+    )
+      problems.push(`job ${id} must upload its receipt last, named for the commit, from the edge check's report, kept at most 90 days`)
   }
   return problems
 }

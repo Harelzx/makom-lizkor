@@ -83,10 +83,8 @@ test("the release binds one commit through every step", () => {
     withChange("release.yml", "--workflow ci.yml --commit", "--workflow ci.yml --branch main --commit-any"),
     "doesn't check CI on that commit",
   )
-  fails(
-    withChange("release.yml", "--workflow staging.yml --commit", "--workflow staging.yml --any"),
-    "doesn't check staging on that commit",
-  )
+  // Staging's receipt for this commit, never a run's own metadata (P6-STAGING-1).
+  fails(withChange("release.yml", 'node scripts/staging-evidence.mjs check "$SHA"', "true"), "doesn't check staging on that commit")
   // The attachment compared whole, and the release tag's commit (P6-MANIFEST-1): a declared hash proves nothing.
   fails(
     withChange("release.yml", '"$SHA" $from --verify "$RUNNER_TEMP/manifest.json" --tag "$RELEASE"', '"$SHA" $from --hash'),
@@ -151,7 +149,13 @@ test("staging deploys only the commit CI passed on main, with staging's secrets 
     "check out the commit CI passed",
   )
   fails(withChange("staging.yml", "node scripts/staging-check.mjs --deploy", "true"), "check the staging config")
-  fails(withChange("staging.yml", "run: node scripts/edge-check.mjs", "run: echo"), "then run the edge checks")
+  fails(withChange("staging.yml", "node scripts/edge-check.mjs", "echo"), "then run the edge checks")
+  // Its receipt comes last, from the edge check's own report, under this commit's name (P6-STAGING-1).
+  fails(
+    withChange("staging.yml", "name: staging-receipt-${{ github.event.workflow_run.head_sha }}", "name: staging-receipt"),
+    "upload its receipt",
+  )
+  fails(withChange("staging.yml", "          retention-days: 90\n", "          retention-days: 400\n"), "upload its receipt")
   // A production credential, or an environment, never comes into staging; staging's never into production.
   fails(
     withChange("staging.yml", "secrets.STAGING_CLOUDFLARE_API_TOKEN", "secrets.CLOUDFLARE_API_TOKEN"),
