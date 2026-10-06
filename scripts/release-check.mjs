@@ -36,6 +36,10 @@ const raw = experimental_readRawConfig({ config: fileURLToPath(new URL("../wrang
 blockers.push(...mailBlockers(raw, { binding: MAIL_BINDING, sends: PRODUCTION_MAIL_SENDS }))
 const { originBlockers } = await import("./release-origin.mjs")
 blockers.push(...originBlockers(raw))
+const { moderatorBlockers } = await import("./release-moderators.mjs")
+blockers.push(...moderatorBlockers(raw))
+const { backupBlockers } = await import("./release-backup.mjs")
+blockers.push(...backupBlockers(raw))
 
 if (blockers.length) {
   console.error("Not ready to publish the notices:\n" + blockers.map((b) => `  - ${b}`).join("\n"))
