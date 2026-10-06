@@ -1,0 +1,15 @@
+{
+  "$comment": "Who may use the database, and through what (docs/database-definitions.md, 'סיווג המאגר'). Roles until go-live; then the operator's and the approvers' names, never their addresses. At most three people, the operator included. Checked by scripts/access-registry.mjs.",
+  "people": [
+    { "id": "owner", "name": "[שם המפעיל]", "role": "בעל השליטה ומנהל המאגר" },
+    { "id": "approver-1", "name": "[מאשר או מאשרת 1]", "role": "מאשר תוכן" },
+    { "id": "approver-2", "name": "[מאשר או מאשרת 2]", "role": "מאשר תוכן" }
+  ],
+  "permissions": {
+    "cloudflare_account": ["owner"],
+    "access_identity": ["owner", "approver-1", "approver-2"],
+    "mailbox": ["owner"],
+    "release_approver": ["owner"],
+    "backup_private_key": ["owner"]
+  }
+}
