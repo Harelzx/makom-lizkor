@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers"
 import { describe, expect, it } from "vitest"
 import { sweepPhotos, erasePhotos } from "../db/photos"
-import { ogResponse, ogState } from "../lib/og"
+import { ogResponse, ogState, renderOg } from "../lib/og"
 import { call } from "./app"
 import { admin, approve, withSite } from "./helpers"
 import { decide, jpeg, queued, send, upload } from "./submission-helpers"
@@ -170,5 +170,64 @@ describe("a place's own share image (L4)", () => {
     expect(failed.headers.get("Cloudflare-CDN-Cache-Control")).toBe("no-store")
     expect(await files(id)).toEqual([])
     expect((await get(`/media/og/${id}/${h}.png`)).status).toBe(200)
+  })
+
+  it("a photo that isn't there while drawing sends the general image and stores nothing; once it's back the image has it (a47 L4-R1)", async () => {
+    const { id } = await publishedWithPhoto("גן דמו שתמונתו חסרה לרגע")
+    const state = (await ogState(env.DB, id))!
+    const key = state.projection.photo!
+    const bytes = new Uint8Array(await (await env.MEDIA.get(key))!.arrayBuffer())
+    await env.MEDIA.delete(key)
+    const missing = await get(`/media/og/${id}/${state.hash}.png`)
+    expect(missing.status).toBe(302)
+    expect(missing.headers.get("Location")).toBe("/og.png")
+    expect(missing.headers.get("Cache-Control")).toBe("no-store")
+    expect(await files(id)).toEqual([])
+    await env.MEDIA.put(key, bytes)
+    const back = await get(`/media/og/${id}/${state.hash}.png`)
+    expect(back.status).toBe(200)
+    expect(new Uint8Array(await back.arrayBuffer())).toEqual(await renderOg(state.projection, bytes))
+  })
+
+  it("two first requests at once both get the image, drawn the same, stored once (E-L4-1)", async () => {
+    const { id } = await publishedWithPhoto("גן דמו שתי בקשות ראשונות")
+    const url = (await ogUrl(id))!
+    expect(await files(id)).toEqual([])
+    const [a, b] = await Promise.all([get(url), get(url)])
+    expect([a.status, b.status]).toEqual([200, 200])
+    expect(new Uint8Array(await a.arrayBuffer())).toEqual(new Uint8Array(await b.arrayBuffer()))
+    expect(await files(id)).toHaveLength(1)
+  })
+
+  it("a stored image whose read is held while the place is hidden is not sent (E-L4-1)", async () => {
+    const { id } = await publishedWithPhoto("גן דמו קריאה עצורה")
+    const url = (await ogUrl(id))!
+    expect((await get(url)).status).toBe(200)
+    expect(await files(id)).toHaveLength(1)
+    const h = url.split("/").pop()!.replace(".png", "")
+    let reached!: () => void
+    const atRead = new Promise<void>((r) => (reached = r))
+    let release!: () => void
+    const gate = new Promise<void>((r) => (release = r))
+    const holding = new Proxy(env.MEDIA, {
+      get(target, prop) {
+        if (prop === "get")
+          return async (k: string) => {
+            const object = await target.get(k)
+            if (k.startsWith("og/")) {
+              reached()
+              await gate
+            }
+            return object
+          }
+        const v = Reflect.get(target, prop)
+        return typeof v === "function" ? v.bind(target) : v
+      },
+    })
+    const pending = ogResponse({ db: env.DB, media: holding }, id, h)
+    await atRead
+    expect((await hide(id, ["name_he"])).status).toBe(200)
+    release()
+    expect((await pending).status).toBe(404)
   })
 })

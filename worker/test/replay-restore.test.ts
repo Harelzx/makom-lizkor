@@ -5,7 +5,7 @@ import { EXPORT_TABLES, runExport } from "../db/exports"
 import { importExport, type ExportPayload } from "../db/import"
 import { readFeed } from "../db/places"
 import { readLedger, replayLedger, restorePhotos } from "../db/replay"
-import { ogState } from "../lib/og"
+import { ogResponse, ogState } from "../lib/og"
 import { sha256, unseal, type Manifest } from "../lib/sealed"
 import { call } from "./app"
 import { admin, approve } from "./helpers"
@@ -144,5 +144,23 @@ describe("replaying the ledger onto a restored database (spec 8.2, 8.3)", () => 
     expect(await env.MEDIA.head(heldKey.replace(/^held\//, "public/"))).toBeNull()
     expect((await env.MEDIA.list({ prefix: `public/${gone.id}/` })).objects).toHaveLength(0)
     expect((await env.MEDIA.list({ prefix: `held/${gone.id}/` })).objects).toHaveLength(0)
+  })
+
+  it("a hide of what the share image shows, made after the export, is in the restored image's address; the old one is refused (E-L4-1)", async () => {
+    for (const t of [...EXPORT_TABLES].reverse()) await env.IMPORT_TEST.prepare(`DELETE FROM ${t}`).run()
+    const p = await send("גן דמו ששמו הוסתר אחרי הייצוא")
+    expect((await upload(p.id, p.trackingToken, jpeg(0x7a))).status).toBe(200)
+    await approve(p.id)
+    const before = (await ogState(env.DB, p.id))!.hash
+    const payload = await exportNow()
+    expect((await hide(p.id, ["name_he", "photo"], await rev(p.id))).status).toBe(200)
+    const live = (await ogState(env.DB, p.id))!
+    expect(live.hash).not.toBe(before)
+    expect(live.projection.photo).toBeNull()
+
+    expect(await importExport(env.IMPORT_TEST, payload, new Date(), await readLedger(env.LEDGER))).toMatchObject({ ok: true })
+    await replayLedger(env.IMPORT_TEST, env.LEDGER, new Date(), payload.created_at)
+    expect((await ogState(env.IMPORT_TEST, p.id))!.hash).toBe(live.hash)
+    expect((await ogResponse({ db: env.IMPORT_TEST, media: env.MEDIA }, p.id, before)).status).toBe(404)
   })
 })

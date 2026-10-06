@@ -13,7 +13,8 @@ import { OG_FONTS } from "./og-font"
  */
 
 /** Bump with any change to the layout, the font or the rendering, so every image is drawn again. */
-export const OG_TEMPLATE_VERSION = 1
+// 2: a projected photo that can't be read is a failed render, never an image drawn without it (adviser a47, L4-R1).
+export const OG_TEMPLATE_VERSION = 2
 const W = 1200
 const H = 630
 
@@ -149,7 +150,8 @@ const NOT_FOUND = () =>
  * drawn (a malformed or stale address never renders), and again just before the bytes go out, after the photo was
  * read, the image drawn and stored, so a hide or withdrawal that lands meanwhile wins, and a file this request wrote
  * for a state that is no longer current is deleted. Two requests at once draw the same bytes under the same name.
- * A failed render sends the general image, uncached, and the next request tries again.
+ * A failed render, or a photo the projection names that can't be read now, sends the general image, uncached, and
+ * stores nothing: the next request tries again.
  */
 export async function ogResponse(
   env: { db: D1Database; media: R2Bucket },
@@ -168,6 +170,8 @@ export async function ogResponse(
   else {
     try {
       const photo = state.projection.photo ? await env.media.get(state.projection.photo) : null
+      // The hash names the photo: drawn without it, the image would be stored and served as if it had it, for good.
+      if (state.projection.photo && !photo) throw new Error("photo_unavailable")
       bytes = await render(state.projection, photo ? new Uint8Array(await photo.arrayBuffer()) : null)
     } catch (err) {
       console.error(JSON.stringify({ level: "error", event: "og_render_failed", error: (err as Error).name }))
