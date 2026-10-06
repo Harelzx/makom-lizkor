@@ -138,7 +138,16 @@ test("a rollback moves code only, after its check", () => {
 })
 
 test("a release records the commit it attempts before it touches production (P6-ROLLBACK-1)", () => {
-  fails(withChange("release.yml", "          name: release-attempt-${{ inputs.release }}", "          name: attempt"), "record its attempt")
+  fails(
+    withChange(
+      "release.yml",
+      "          name: release-attempt-${{ inputs.release }}-${{ github.run_attempt }}",
+      "          name: release-attempt-${{ inputs.release }}",
+    ),
+    "record its attempt",
+  )
+  // The run named for its release, so a published tag stands for a record that has expired (a52).
+  fails(withChange("release.yml", "run-name: release ${{ inputs.release }}\n", ""), "named for its release")
   fails(
     withChange(
       "release.yml",

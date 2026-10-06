@@ -10,6 +10,8 @@
 # Production credentials are therefore kept out of GitHub entirely, so this workflow can't deploy until the owner
 # chooses the production release path; it fails closed (no credentials, and no staging.yml run on the commit).
 name: release
+# Named for its release, so a rollback can tell which release an attempt was, even once its record has expired.
+run-name: release ${{ inputs.release }}
 
 on:
   workflow_dispatch:
@@ -125,9 +127,10 @@ jobs:
           node -e 'console.log(JSON.stringify({ release: process.env.RELEASE, sha: process.env.SHA }))' > "$RUNNER_TEMP/attempt/attempt.json"
       - uses: actions/upload-artifact@v4
         with:
-          name: release-attempt-${{ inputs.release }}
+          # One per attempt, a rerun's included; kept as long as a private repository allows (a52).
+          name: release-attempt-${{ inputs.release }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/attempt/attempt.json
-          retention-days: 90
+          retention-days: 400
       # Without pipefail (GitHub's default `bash -e`), a failed command before tee would pass and the migrations would
       # run with no recovery point (a51, P6-BOOKMARK-1).
       - name: Time Travel bookmark before the migrations

@@ -87,6 +87,8 @@ function releaseProblems(w) {
     ])
       if (!pattern.test(all)) problems.push(`verify doesn't check ${what}`)
     if (verify.outputs?.sha !== "${{ steps.bind.outputs.sha }}") problems.push("verify must output the bound commit as sha")
+    if (w["run-name"] !== "release ${{ inputs.release }}")
+      problems.push("the run must be named for its release (run-name: release <release>)")
   }
   for (const [id, job] of jobs) {
     if (job.environment !== "production") continue
@@ -102,12 +104,12 @@ function releaseProblems(w) {
     const record = all.findIndex(
       (st) =>
         String(st.uses ?? "").startsWith("actions/upload-artifact") &&
-        st.with?.name === "release-attempt-${{ inputs.release }}" &&
+        st.with?.name === "release-attempt-${{ inputs.release }}-${{ github.run_attempt }}" &&
         !("if" in st),
     )
     const bookmark = all.findIndex((st) => /d1 time-travel info/.test(st.run ?? ""))
     if (record < 0 || bookmark < 0 || record > bookmark || all.slice(record, bookmark + 1).some((st) => "if" in st))
-      problems.push(`job ${id} must record its attempt (release-attempt-<release>) before the bookmark, unconditionally`)
+      problems.push(`job ${id} must record its attempt (release-attempt-<release>-<attempt>) before the bookmark, unconditionally`)
     // Spec 14.2's order: the release check, the bookmark, the migrations, the deploy, the production checks.
     const order = [
       /npm run release:check/,
