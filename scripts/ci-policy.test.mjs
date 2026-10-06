@@ -129,9 +129,23 @@ test("a rollback moves code only, after its check", () => {
     ["npx wrangler deploy", "a fresh deploy"],
   ])
     fails(withChange("rollback.yml", "      - run: npm ci\n", `      - run: npm ci\n      - run: ${line}\n`), `a rollback runs ${what}`)
+  // Checked against every state production may hold, unfinished release attempts included (P6-ROLLBACK-1).
   fails(
-    withChange("rollback.yml", "          node scripts/rollback-check.mjs", "          echo skipped"),
-    "must pass scripts/rollback-check.mjs",
+    withChange("rollback.yml", '          node scripts/rollback-state.mjs "$target"', "          echo skipped"),
+    "must pass scripts/rollback-state.mjs",
+  )
+  fails(withChange("rollback.yml", "      actions: read\n", ""), "must read the release runs")
+})
+
+test("a release records the commit it attempts before it touches production (P6-ROLLBACK-1)", () => {
+  fails(withChange("release.yml", "          name: release-attempt-${{ inputs.release }}", "          name: attempt"), "record its attempt")
+  fails(
+    withChange(
+      "release.yml",
+      "      - name: Time Travel bookmark before the migrations\n",
+      "      - name: Time Travel bookmark before the migrations\n        if: false\n",
+    ),
+    "record its attempt",
   )
 })
 

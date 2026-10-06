@@ -116,6 +116,18 @@ jobs:
       - run: npm ci
       - name: Release check
         run: npm run release:check
+      # Before anything changes production: which commit this attempt releases, so a later rollback knows what a
+      # failed attempt may have migrated or deployed (scripts/rollback-state.mjs; a51, P6-ROLLBACK-1).
+      - name: Record this attempt
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/attempt"
+          node -e 'console.log(JSON.stringify({ release: process.env.RELEASE, sha: process.env.SHA }))' > "$RUNNER_TEMP/attempt/attempt.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-attempt-${{ inputs.release }}
+          path: ${{ runner.temp }}/attempt/attempt.json
+          retention-days: 90
       # Without pipefail (GitHub's default `bash -e`), a failed command before tee would pass and the migrations would
       # run with no recovery point (a51, P6-BOOKMARK-1).
       - name: Time Travel bookmark before the migrations

@@ -97,6 +97,17 @@ function releaseProblems(w) {
     if (!steps.some((r) => r.includes('test "$(git rev-parse HEAD)" = "$SHA"')))
       problems.push(`job ${id} doesn't confirm the commit it checked out`)
     if (job.env?.SHA !== SHA_REF) problems.push(`job ${id} must take SHA from verify`)
+    // The attempt's record, uploaded before anything changes production, for a later rollback (P6-ROLLBACK-1).
+    const all = job.steps ?? []
+    const record = all.findIndex(
+      (st) =>
+        String(st.uses ?? "").startsWith("actions/upload-artifact") &&
+        st.with?.name === "release-attempt-${{ inputs.release }}" &&
+        !("if" in st),
+    )
+    const bookmark = all.findIndex((st) => /d1 time-travel info/.test(st.run ?? ""))
+    if (record < 0 || bookmark < 0 || record > bookmark || all.slice(record, bookmark + 1).some((st) => "if" in st))
+      problems.push(`job ${id} must record its attempt (release-attempt-<release>) before the bookmark, unconditionally`)
     // Spec 14.2's order: the release check, the bookmark, the migrations, the deploy, the production checks.
     const order = [
       /npm run release:check/,
@@ -149,7 +160,7 @@ function stagingProblems(w, triggers) {
     const edge = all.findIndex((st) => /edge-check\.mjs[^\n]*--report/.test(st.run ?? ""))
     if (
       !String(last.uses ?? "").startsWith("actions/upload-artifact") ||
-      last.if ||
+      "if" in last ||
       last.with?.name !== "staging-receipt-${{ github.event.workflow_run.head_sha }}" ||
       !(Number(last.with?.["retention-days"]) > 0 && Number(last.with?.["retention-days"]) <= 90) ||
       edge < 0 ||
@@ -173,10 +184,13 @@ function rollbackProblems(w) {
     ["a fresh deploy", /wrangler\s+deploy\b/],
   ])
     if (pattern.test(all)) problems.push(`a rollback runs ${what}`)
-  const check = all.indexOf("scripts/rollback-check.mjs")
+  // The check runs against every state production may hold (scripts/rollback-state.mjs runs rollback-check for each).
+  const check = all.indexOf('node scripts/rollback-state.mjs "$target"')
   const move = all.indexOf("versions deploy --version-tag")
   if (check < 0 || move < 0 || move < check)
-    problems.push("a rollback must pass scripts/rollback-check.mjs before it deploys the earlier version")
+    problems.push("a rollback must pass scripts/rollback-state.mjs before it deploys the earlier version")
+  for (const [id, job] of Object.entries(w.jobs ?? {}))
+    if (job.permissions?.actions !== "read") problems.push(`job ${id} must read the release runs (permissions: actions: read)`)
   return problems
 }
 
