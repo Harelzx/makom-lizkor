@@ -1,4 +1,5 @@
 import { expect, test, type Browser, type BrowserContextOptions, type Page } from "@playwright/test"
+import { ownAddress } from "./publish"
 
 // The opening isn't what this file tests, and its sunrise took about 8 s on every page that went through it. A visitor
 // who asked for less motion gets the day at once, with every flow the same; the opening keeps its own full-motion
@@ -9,7 +10,7 @@ const DAY = { timeout: 20_000 }
 const GEO: BrowserContextOptions = { geolocation: { latitude: 31.42, longitude: 34.49 }, permissions: ["geolocation"] }
 
 async function submit(b: Browser, name: string): Promise<Page> {
-  const page = await (await b.newContext(GEO)).newPage()
+  const page = await (await ownAddress(await b.newContext(GEO))).newPage()
   await page.goto("/")
   await page.getByRole("button", { name: "דילוג", exact: true }).click()
   await expect(page.getByRole("button", { name: /^חיפוש מקום/ })).toBeVisible(DAY)
@@ -451,7 +452,7 @@ test("after a correction expires (returned, then refused), the sender corrects a
   await cron(31)
 
   // The tracking page offers a correction again, from the published text.
-  const page = await (await browser.newContext()).newPage()
+  const page = await (await ownAddress(await browser.newContext())).newPage()
   const correct = async (newName: string) => {
     await page.goto(`/#/track/${id}/${trackingToken}`)
     const dialog = page.getByRole("dialog", { name: "מצב ההצעה" })

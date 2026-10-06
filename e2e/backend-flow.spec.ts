@@ -1,4 +1,5 @@
 import { expect, test, type Browser, type BrowserContextOptions, type Page } from "@playwright/test"
+import { ownAddress } from "./publish"
 
 // The opening isn't what this file tests, and its sunrise took about 8 s on every page that went through it. A visitor
 // who asked for less motion gets the day at once, with every flow the same; the opening keeps its own full-motion
@@ -11,7 +12,7 @@ const DAY = { timeout: 20_000 }
 const searchButton = (page: Page) => page.getByRole("button", { name: /^חיפוש מקום/ })
 
 const skipIntro = async (b: Browser, opts: BrowserContextOptions = {}) => {
-  const ctx = await b.newContext(opts)
+  const ctx = await ownAddress(await b.newContext(opts))
   const page = await ctx.newPage()
   await page.goto("/")
   await page.getByRole("button", { name: "דילוג", exact: true }).click()

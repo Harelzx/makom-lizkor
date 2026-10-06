@@ -1,4 +1,4 @@
-import type { Browser } from "@playwright/test"
+import type { Browser, BrowserContext } from "@playwright/test"
 
 /** A contribution published through the API: Cloudflare's dummy token passes the development test secret. */
 // Each demo place comes from its own sender (a documentation address, synthetic), so the server's per-address limit on
@@ -28,4 +28,20 @@ export async function published(browser: Browser, name: string) {
   })
   await ctx.close()
   return { id, trackingToken }
+}
+
+/**
+ * A browser that sends places from its own address (a documentation range, synthetic), as the request specs' visitors
+ * do. The server's cap of a few submissions a minute per address has its own tests (worker/test/rate-key.test.ts,
+ * src/lib/submit-place.test.ts); without this, specs that run quickly add up past it across tests from one machine.
+ * Only the submission requests carry it: the map's tile servers would refuse an unknown header. A test's own route on
+ * the page still comes first.
+ */
+let addresses = Date.now() % 200
+export async function ownAddress(ctx: BrowserContext) {
+  const address = `192.0.2.${addresses++ % 250}`
+  await ctx.route("**/api/v1/submissions**", (route) =>
+    route.fallback({ headers: { ...route.request().headers(), "cf-connecting-ip": address } }),
+  )
+  return ctx
 }

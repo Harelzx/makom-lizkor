@@ -1,4 +1,5 @@
 import { expect, test, type Browser, type BrowserContextOptions, type Page } from "@playwright/test"
+import { ownAddress } from "./publish"
 
 // The opening isn't what this file tests, and its sunrise took about 8 s on every page that went through it. A visitor
 // who asked for less motion gets the day at once, with every flow the same; the opening keeps its own full-motion
@@ -9,7 +10,7 @@ const DAY = { timeout: 20_000 }
 const GEO: BrowserContextOptions = { geolocation: { latitude: 31.42, longitude: 34.49 }, permissions: ["geolocation"] }
 
 async function day(b: Browser, init?: string) {
-  const page = await (await b.newContext(GEO)).newPage()
+  const page = await (await ownAddress(await b.newContext(GEO))).newPage()
   if (init) await page.addInitScript(init)
   await page.goto("/")
   await page.getByRole("button", { name: "דילוג", exact: true }).click()
@@ -94,7 +95,7 @@ test("when the browser can't store anything, the site opens and the place is sti
 
 test("a place whose sending was cut off by closing the tab is sent on the next visit", async ({ browser }) => {
   const name = `ספסל דמו נסגר ${Date.now()}`
-  const ctx = await browser.newContext(GEO)
+  const ctx = await ownAddress(await browser.newContext(GEO))
   const page = await ctx.newPage()
   await page.route("**/api/v1/submissions", () => new Promise(() => {})) // never answers
   await page.goto("/")
@@ -170,7 +171,7 @@ test("two tabs adding places at once keep each other's places, keys and tracking
   test.setTimeout(90_000)
   const stamp = Date.now()
   const [x, y] = [`ספסל דמו לשונית א ${stamp}`, `ספסל דמו לשונית ב ${stamp}`]
-  const ctx = await browser.newContext(GEO)
+  const ctx = await ownAddress(await browser.newContext(GEO))
   // Both tabs open before either adds anything, so neither has the other's place in memory.
   const tabs = await Promise.all([ctx.newPage(), ctx.newPage()])
   for (const tab of tabs) {

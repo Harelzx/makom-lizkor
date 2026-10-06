@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test"
+import { ownAddress } from "./publish"
 import { fileURLToPath } from "node:url"
 
 // The opening isn't what this file tests, and its sunrise took about 8 s on every page that went through it. A visitor
@@ -13,7 +14,7 @@ test("a photo sent with a place reaches the moderator, and is published with it"
   test.setTimeout(120_000)
   const name = `ספסל דמו עם תמונה ${Date.now()}`
   const page = await (
-    await browser.newContext({ geolocation: { latitude: 31.42, longitude: 34.49 }, permissions: ["geolocation"] })
+    await ownAddress(await browser.newContext({ geolocation: { latitude: 31.42, longitude: 34.49 }, permissions: ["geolocation"] }))
   ).newPage()
   await page.goto("/")
   await page.getByRole("button", { name: "דילוג", exact: true }).click()

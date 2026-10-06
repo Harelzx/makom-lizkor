@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test"
+import { ownAddress } from "./publish"
 
 // The opening isn't what this file tests, and its sunrise took about 8 s on every page that went through it. A visitor
 // who asked for less motion gets the day at once, with every flow the same; the opening keeps its own full-motion
@@ -12,7 +13,7 @@ test("an optional email is verified from the site, then receives a tracking link
   const name = `ספסל דמו עם מייל ${Date.now()}`
   const to = `visitor${Date.now()}@example.test`
   const page = await (
-    await browser.newContext({ geolocation: { latitude: 31.42, longitude: 34.49 }, permissions: ["geolocation"] })
+    await ownAddress(await browser.newContext({ geolocation: { latitude: 31.42, longitude: 34.49 }, permissions: ["geolocation"] }))
   ).newPage()
   await page.goto("/")
   await page.getByRole("button", { name: "דילוג", exact: true }).click()
