@@ -5,38 +5,32 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Field, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import { messageOf, useHolder } from "@/components/report-state"
 import { noticeHtml } from "@/data/legal"
-import { ELEMENT_LABEL, REQUESTER_LABEL } from "@/data/reports"
+import { DISCARD_LABEL, ELEMENT_LABEL, REQUESTER_LABEL } from "@/data/reports"
 import { newSubmitKey } from "@/lib/api"
-import { attempt, forget, freeze, pendingReport, remember, type PendingReport } from "@/lib/report-outbox"
 import { ease } from "@/lib/motion"
-import { CURRENT_REPORT_NOTICE, REQUESTER_TYPES, type Element } from "@/shared/contract"
+import { freeze, pendingReport } from "@/lib/report-outbox"
+import { CURRENT_REPORT_NOTICE, REQUESTER_TYPES, type Element, type ReportInput } from "@/shared/contract"
 import type { Place } from "@/types"
 
 const NOTICE_HTML = noticeHtml(CURRENT_REPORT_NOTICE)
 
-// The privacy session's wording for each result (2026-10-06), word for word: a hide is never a decision on the request.
-const HIDDEN = "מה שציינתם הוסתר באופן זמני, כאמצעי זהירות, עד שאדם יבדוק את הבקשה. ההסתרה אינה הכרעה בבקשה."
-const RECEIVED = "הבקשה התקבלה. אדם יבדוק אותה בדחיפות."
-const RECEIVED_CURATED = "הבקשה התקבלה. אדם יבדוק אותה בדחיפות. במקומות שהאתר הוסיף בעצמו, שום דבר לא מוסתר לפני הבדיקה."
-
-// Not known to have arrived: never worded as received (F4-R12), and never as if nothing had arrived either.
-const UNKNOWN = "לא ברור אם הבקשה הגיעה אלינו. אפשר לשלוח אותה שוב כמו שהיא: אם כבר הגיעה, לא תיפתח בקשה נוספת."
-const RESTORED = "בקשה ששלחתם מכאן עוד לא אושרה כמתקבלת. אפשר לשלוח אותה שוב כמו שהיא: אם כבר הגיעה, לא תיפתח בקשה נוספת."
-const CONFLICT =
-  "הקוד של הבקשה הזו כבר שמור אצלנו עם בקשה אחרת, ולכן לא ברור אם הבקשה הזו הגיעה. אפשר להסיר אותה מהמכשיר הזה ולשלוח בקשה חדשה."
-const NOT_KEPT = " הדפדפן הזה לא שומר אותה: אם תסגרו או תרעננו את הדף, לא יהיה אפשר לשלוח אותה שוב."
-// Refused before the server stored anything: about this try only.
-const NOT_SENT: Record<string, string> = {
-  not_found: "המקום הזה אינו מוצג עכשיו, ולכן אי אפשר לשלוח עליו בקשה מכאן.",
-  invalid_input: "משהו בטופס לא תקין. בדקו את המייל ואת ההסבר, ונסו שוב.",
-  turnstile_required: "בדיקת הדפדפן לא הושלמה. נסו שוב בעוד רגע.",
-  turnstile_failed: "בדיקת הדפדפן לא עברה. נסו שוב בעוד רגע.",
-  rate_limited: "נשלחו מכאן הרבה בקשות בזמן קצר. נסו שוב בעוד דקה.",
-  not_configured: "השליחה לא זמינה כרגע. נסו שוב מאוחר יותר.",
-  turnstile_unavailable: "השליחה לא זמינה כרגע. נסו שוב בעוד רגע.",
+type Fields = {
+  elements: Element[]
+  requester: (typeof REQUESTER_TYPES)[number] | null
+  relationship: string
+  explanation: string
+  email: string
 }
-const AFTER_EARLIER = " ניסיון קודם עדיין לא אושר, ואפשר לנסות שוב כמו שהבקשה נשלחה."
+const EMPTY: Fields = { elements: [], requester: null, relationship: "", explanation: "", email: "" }
+const fieldsOf = (p: ReportInput): Fields => ({
+  elements: p.elements,
+  requester: p.requesterType,
+  relationship: p.relationship ?? "",
+  explanation: p.explanation,
+  email: p.email ?? "",
+})
 
 /** What a request can name on this place: only what it shows, and always the place as a whole. */
 function elementsOf(place: Place): Element[] {
@@ -56,99 +50,55 @@ function elementsOf(place: Place): Element[] {
 export function ReportRequest({ place }: { place: Place }) {
   const uid = useId()
   const [open, setOpen] = useState(false)
-  const [elements, setElements] = useState<Element[]>([])
-  const [requester, setRequester] = useState<(typeof REQUESTER_TYPES)[number] | null>(null)
-  const [relationship, setRelationship] = useState("")
-  const [explanation, setExplanation] = useState("")
-  const [email, setEmail] = useState("")
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState("")
-  // The request as sent, while its arrival isn't known: the form shows it and can only send it again, as it was.
-  const [kept, setKept] = useState<PendingReport | null>(null)
-  // Whether any try of it may have reached the server.
-  const [uncertain, setUncertain] = useState(false)
-  // Whether this browser kept it (false: it lives only in this page).
-  const [stored, setStored] = useState(true)
+  const [draft, setDraft] = useState<Fields>(EMPTY)
+  const [h, s] = useHolder()
   // A request sent from here earlier comes back first; nothing can be sent until that is known.
   const [restoring, setRestoring] = useState(true)
-  const [result, setResult] = useState<string | null>(null)
   const curated = place.coord_source !== "contribution"
+  // While a request is kept, the form shows it as it was sent, and only it.
+  const f = s.kept ? fieldsOf(s.kept.payload) : draft
+  const change = (patch: Partial<Fields>) => setDraft((d) => ({ ...d, ...patch }))
 
   useEffect(() => {
     let live = true
-    void pendingReport(place.id).then((r) => {
+    void pendingReport(place.id).then(({ report, complete }) => {
       if (!live) return
-      // A request sent from here earlier, as it was sent and locked: it can only be sent again, or let go.
-      if (r) {
-        setKept(r)
-        setUncertain(true)
-        setElements(r.payload.elements)
-        setRequester(r.payload.requesterType)
-        setRelationship(r.payload.relationship ?? "")
-        setExplanation(r.payload.explanation)
-        setEmail(r.payload.email ?? "")
+      if (report) {
+        h.restore(report)
         setOpen(true)
-        setError(RESTORED)
-      }
+      } else if (!complete) h.unread()
       setRestoring(false)
     })
     return () => {
       live = false
     }
-  }, [place.id])
+  }, [place.id, h])
 
-  const ready = elements.length > 0 && !!requester && explanation.trim().length > 0
+  const ready = f.elements.length > 0 && !!f.requester && f.explanation.trim().length > 0
+  const { status, alert } = messageOf(s, curated)
 
   const send = async () => {
-    if (busy || restoring || (!kept && (!ready || !requester))) return
-    setBusy(true)
-    setError("")
-    let r = kept
-    // Read from this try, not from state: a first try learns here whether the browser kept it.
-    let keptHere = stored
-    if (!r) {
-      r = freeze(
-        place.id,
-        {
-          placeId: place.id,
-          elements,
-          requesterType: requester!,
-          ...(relationship.trim() ? { relationship: relationship.trim() } : {}),
-          explanation: explanation.trim(),
-          ...(email.trim() ? { email: email.trim() } : {}),
-          noticeVersion: CURRENT_REPORT_NOTICE,
-        },
-        newSubmitKey(),
-      )
-      setKept(r)
-      keptHere = await remember(r)
-      setStored(keptHere)
-    }
-    const next = await attempt(r, uncertain)
-    setBusy(false)
-    if (next.view === "result") {
-      setKept(null)
-      return setResult(next.outcome === "hidden_for_review" ? HIDDEN : curated ? RECEIVED_CURATED : RECEIVED)
-    }
-    if (next.view === "editable") {
-      // Refused before anything was stored, and no earlier try is in doubt: the form is the visitor's again.
-      setKept(null)
-      return setError(NOT_SENT[next.code] ?? NOT_SENT.not_configured)
-    }
-    setUncertain(true)
-    const keptNote = keptHere ? "" : NOT_KEPT
-    if (next.reason === "conflict") return setError(CONFLICT + keptNote)
-    if (next.reason === "refused") return setError((NOT_SENT[next.code!] ?? NOT_SENT.not_configured) + AFTER_EARLIER + keptNote)
-    setError(UNKNOWN + keptNote)
-  }
-
-  /** Lets go of the kept request here, at the visitor's word. If it arrived, it is reviewed as usual. */
-  const discard = async () => {
-    if (!kept) return
-    await forget(kept.key)
-    setKept(null)
-    setUncertain(false)
-    setError("")
+    if (restoring || s.busy) return
+    if (s.kept) return void h.resend()
+    if (!ready || !draft.requester) return
+    const r = freeze(
+      place.id,
+      {
+        placeId: place.id,
+        elements: draft.elements,
+        requesterType: draft.requester,
+        ...(draft.relationship.trim() ? { relationship: draft.relationship.trim() } : {}),
+        explanation: draft.explanation.trim(),
+        ...(draft.email.trim() ? { email: draft.email.trim() } : {}),
+        noticeVersion: CURRENT_REPORT_NOTICE,
+      },
+      newSubmitKey(),
+    )
+    // The fields show the kept request from here on. The draft goes, and comes back only when this first try is refused
+    // before anything was stored; an expired or removed request leaves an empty form.
+    setDraft(EMPTY)
+    await h.start(r)
+    if (h.get().shown?.view === "editable") setDraft(fieldsOf(r.payload))
   }
 
   if (!open)
@@ -163,14 +113,14 @@ export function ReportRequest({ place }: { place: Place }) {
       <h3 id={`${uid}-title`} className="text-title-3 text-ink-1">
         בקשת הסרה או תיקון
       </h3>
-      {result ? (
+      {status ? (
         <p role="status" className="text-body text-ink-1">
-          {result}
+          {status}
         </p>
       ) : (
         <>
           <p className="text-caption text-ink-2">כל בקשה נבדקת בידי אדם בדחיפות. אין צורך בשם, בתעודה מזהה או במסמכים.</p>
-          <fieldset disabled={!!kept || busy || restoring} className="contents">
+          <fieldset disabled={!!s.kept || s.busy || restoring} className="contents">
             <FieldGroup>
               <FieldSet>
                 <FieldLegend variant="label">מה לבקש להסיר או לתקן</FieldLegend>
@@ -178,8 +128,8 @@ export function ReportRequest({ place }: { place: Place }) {
                   <Field key={e} orientation="horizontal">
                     <Checkbox
                       id={`${uid}-${e}`}
-                      checked={elements.includes(e)}
-                      onCheckedChange={(v) => setElements((all) => (v === true ? [...all, e] : all.filter((x) => x !== e)))}
+                      checked={f.elements.includes(e)}
+                      onCheckedChange={(v) => change({ elements: v === true ? [...f.elements, e] : f.elements.filter((x) => x !== e) })}
                     />
                     <FieldLabel htmlFor={`${uid}-${e}`} className="font-normal">
                       {ELEMENT_LABEL[e]}
@@ -195,8 +145,8 @@ export function ReportRequest({ place }: { place: Place }) {
                       type="radio"
                       id={`${uid}-who-${t}`}
                       name={`${uid}-who`}
-                      checked={requester === t}
-                      onChange={() => setRequester(t)}
+                      checked={f.requester === t}
+                      onChange={() => change({ requester: t })}
                       className="size-4 accent-brand"
                     />
                     <FieldLabel htmlFor={`${uid}-who-${t}`} className="font-normal">
@@ -207,14 +157,19 @@ export function ReportRequest({ place }: { place: Place }) {
               </FieldSet>
               <Field>
                 <FieldLabel htmlFor={`${uid}-rel`}>הקשר שלכם למקום או למי שהוא מנציח (לא חובה)</FieldLabel>
-                <Input id={`${uid}-rel`} value={relationship} onChange={(e) => setRelationship(e.target.value)} maxLength={200} />
+                <Input
+                  id={`${uid}-rel`}
+                  value={f.relationship}
+                  onChange={(e) => change({ relationship: e.target.value })}
+                  maxLength={200}
+                />
               </Field>
               <Field>
                 <FieldLabel htmlFor={`${uid}-why`}>מה לבדוק, ולמה</FieldLabel>
                 <Textarea
                   id={`${uid}-why`}
-                  value={explanation}
-                  onChange={(e) => setExplanation(e.target.value)}
+                  value={f.explanation}
+                  onChange={(e) => change({ explanation: e.target.value })}
                   maxLength={2000}
                   rows={4}
                 />
@@ -227,8 +182,8 @@ export function ReportRequest({ place }: { place: Place }) {
                   type="email"
                   dir="ltr"
                   autoComplete="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  value={f.email}
+                  onChange={(e) => change({ email: e.target.value })}
                   maxLength={254}
                 />
                 <FieldDescription>רק כדי שנוכל לעדכן אתכם או לשאול שאלה. המייל לא יתפרסם.</FieldDescription>
@@ -244,9 +199,9 @@ export function ReportRequest({ place }: { place: Place }) {
             </FieldGroup>
           </fieldset>
           <AnimatePresence>
-            {error && (
+            {alert && (
               <motion.p
-                key={error}
+                key={alert}
                 role="alert"
                 className="text-label text-destructive"
                 initial={{ opacity: 0, height: 0 }}
@@ -254,23 +209,28 @@ export function ReportRequest({ place }: { place: Place }) {
                 exit={{ opacity: 0, height: 0 }}
                 transition={{ duration: 0.22, ease }}
               >
-                {error}
+                {alert}
               </motion.p>
             )}
           </AnimatePresence>
           <div className="flex items-center justify-between gap-2">
-            {kept ? (
+            {s.kept ? (
               // Letting go here doesn't take back a request that arrived: a person reviews it as usual.
-              <Button variant="ghost" disabled={busy} onClick={discard}>
-                הסרה מהמכשיר הזה
+              <Button variant="ghost" disabled={s.busy} onClick={() => void h.discard()}>
+                {DISCARD_LABEL}
               </Button>
             ) : (
               <Button variant="ghost" onClick={() => setOpen(false)}>
                 ביטול
               </Button>
             )}
-            <Button className="pressable rounded-full px-5" disabled={restoring || (!kept && !ready)} aria-busy={busy} onClick={send}>
-              {kept ? "שליחה שוב" : "שליחת הבקשה"}
+            <Button
+              className="pressable rounded-full px-5"
+              disabled={restoring || s.busy || (!s.kept && !ready)}
+              aria-busy={s.busy}
+              onClick={() => void send()}
+            >
+              {s.kept ? "שליחה שוב" : "שליחת הבקשה"}
             </Button>
           </div>
         </>

@@ -42,6 +42,9 @@ export const RETENTION = {
   reportAbuseCodeHours: 24,
   /** what the notice promises for them: the job's hours plus room for a late run (every 15 minutes in production) */
   reportAbuseCodeMaxHours: 25,
+  /** a removal request kept in the visitor's own browser for a resend, from its first try, until what happened to it
+   * is known; never longer. Past it the request is cleared in an open page, or on the next visit if the site was closed */
+  reportOutboxHours: 24,
   /** a photo that wasn't approved */
   rejectedPhotoDays: 30,
   /** anemone count rows: the daily code, the place, the day and the time */

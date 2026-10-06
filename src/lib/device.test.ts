@@ -3,6 +3,8 @@ import { beforeEach, expect, it, vi } from "vitest"
 // IndexedDB shared by two tabs: one map. Each tab's store says which tab it is, so tab B's writes can be slower; an
 // update is one transaction (read and write together), as idb-keyval's is.
 const idb = vi.hoisted(() => ({ map: new Map<string, unknown>(), tabs: 0, slowTab: 2, broken: false }))
+// A browser that has IndexedDB (Node has none, and the storage module asks before it opens one); idb-keyval stands in.
+vi.stubGlobal("indexedDB", {})
 vi.mock("idb-keyval", () => {
   // Tab B reads as fast as A but writes slowly: both find no id, A stores and reads back its own, then B writes.
   const pause = async (s: { tab: number }, write = false) => {

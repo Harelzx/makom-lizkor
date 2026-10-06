@@ -1,4 +1,4 @@
-import { expect, test, type APIRequestContext, type Browser, type Page, type Route } from "@playwright/test"
+import { expect, test, type APIRequestContext, type Browser, type BrowserContext, type Page, type Route } from "@playwright/test"
 import { published } from "./publish"
 
 /** The place as the public feed has it now. */
@@ -144,8 +144,21 @@ const RECEIVED_CURATED = "הבקשה התקבלה. אדם יבדוק אותה ב
 const DAY = { timeout: 20_000 }
 
 /** The place's card, opened from a link, with the request form open. */
-async function requestForm(browser: Browser, id: string, heading: string | RegExp) {
+// The server allows a few requests a minute from one address; each visitor here comes from its own (a documentation
+// range, synthetic), so one test's requests never count against another's.
+// Only the requests themselves carry it: the map's tile servers would refuse an unknown header.
+let visitors = Date.now() % 200
+const visitorHeaders = new WeakMap<BrowserContext, Record<string, string>>()
+async function visitor(browser: Browser, more: Record<string, string> = {}) {
   const ctx = await browser.newContext()
+  visitorHeaders.set(ctx, { "cf-connecting-ip": `198.51.100.${visitors++ % 250}`, ...more })
+  await ctx.route("**/api/v1/reports", (route) => route.continue({ headers: from(route, ctx) }))
+  return ctx
+}
+const from = (route: Route, ctx: BrowserContext) => ({ ...route.request().headers(), ...visitorHeaders.get(ctx) })
+
+async function requestForm(browser: Browser, id: string, heading: string | RegExp, more: Record<string, string> = {}) {
+  const ctx = await visitor(browser, more)
   const page = await ctx.newPage()
   await page.goto(`/#/place/${id}`)
   await expect(page.getByRole("heading", { name: heading })).toBeVisible(DAY)
@@ -163,11 +176,12 @@ async function casesAbout(browser: Browser, id: string) {
 }
 
 /** Each request the page sends, by its key and body (the browser check's token is fresh each time, so it isn't compared). */
-function recordReports(page: Page, first: (route: Route) => Promise<void>) {
+function recordReports(page: Page, first: (route: Route, headers: Record<string, string>) => Promise<void>) {
   const sent: { key: string; body: string }[] = []
   void page.route("**/api/v1/reports", async (route) => {
     sent.push({ key: route.request().headers()["idempotency-key"], body: route.request().postData() ?? "" })
-    return sent.length === 1 ? first(route) : route.continue()
+    const headers = from(route, page.context())
+    return sent.length === 1 ? first(route, headers) : route.continue({ headers })
   })
   return sent
 }
@@ -178,7 +192,7 @@ test("a family member asks from the place card: the name is hidden for now, and 
 }) => {
   const name = `גן דמו לבקשה מהכרטיס ${Date.now()}`
   const { id } = await published(browser, name)
-  const { form } = await requestForm(browser, id, name)
+  const { ctx, form } = await requestForm(browser, id, name)
   // Only what the place shows can be named, and the place as a whole.
   await expect(form.getByRole("checkbox", { name: "התמונה" })).toHaveCount(0)
   await expect(form.getByRole("checkbox", { name: "המקום כולו" })).toBeVisible()
@@ -192,17 +206,19 @@ test("a family member asks from the place card: the name is hidden for now, and 
   await form.getByRole("button", { name: "שליחת הבקשה" }).click()
   await expect(form.getByRole("status")).toHaveText(HIDDEN)
   await expect.poll(async () => (await inFeed(request, id))?.name_he).toBe("גן זיכרון")
+  await ctx.close()
 })
 
 test("a request about one of the site's own places: received, and the answer says nothing is hidden before the review", async ({
   browser,
 }) => {
-  const { form } = await requestForm(browser, "nova-memorial-reim", /נובה/)
+  const { ctx, form } = await requestForm(browser, "nova-memorial-reim", /נובה/)
   await form.getByRole("checkbox", { name: "הסיפור" }).check()
   await form.getByRole("radio", { name: /^אחר/ }).check()
   await form.getByLabel("מה לבדוק, ולמה").fill("יש טעות בתאריך שמופיע בתיאור של המקום הזה.")
   await form.getByRole("button", { name: "שליחת הבקשה" }).click()
   await expect(form.getByRole("status")).toHaveText(RECEIVED_CURATED)
+  await ctx.close()
 })
 
 test("a request whose answer was lost says so without claiming it arrived, and sending it again opens no second request", async ({
@@ -210,16 +226,11 @@ test("a request whose answer was lost says so without claiming it arrived, and s
 }) => {
   const name = `גן דמו לבקשה שאבדה ${Date.now()}`
   const { id } = await published(browser, name)
-  const { page, form } = await requestForm(browser, id, name)
-  let posts = 0
-  await page.route("**/api/v1/reports", async (route) => {
-    posts++
-    // The first reaches the server, and its answer never comes back.
-    if (posts === 1) {
-      await route.fetch()
-      return route.abort("failed")
-    }
-    return route.continue()
+  const { ctx, page, form } = await requestForm(browser, id, name)
+  // The first reaches the server, and its answer never comes back.
+  const sent = recordReports(page, async (route, headers) => {
+    await route.fetch({ headers })
+    await route.abort("failed")
   })
   await form.getByRole("checkbox", { name: "השם" }).check()
   await form.getByRole("radio", { name: /^אחר/ }).check()
@@ -230,12 +241,10 @@ test("a request whose answer was lost says so without claiming it arrived, and s
   await expect(form.getByLabel("מה לבדוק, ולמה")).toBeDisabled()
   await form.getByRole("button", { name: "שליחה שוב" }).click()
   await expect(form.getByRole("status")).toHaveText(RECEIVED)
-  expect(posts).toBe(2)
-  const mod = await browser.newContext()
-  await mod.request.post("/__dev/login", { data: { email: "dev@example.test" } })
-  const { items } = (await (await mod.request.get("/api/admin/reports")).json()) as { items: { place_id: string }[] }
-  expect(items.filter((r) => r.place_id === id)).toHaveLength(1)
-  await mod.close()
+  expect(sent).toHaveLength(2)
+  expect(sent[1]).toEqual(sent[0])
+  expect(await casesAbout(browser, id)).toBe(1)
+  await ctx.close()
 })
 
 test("a card open while its place is hidden whole closes quietly when the feed catches up", async ({ browser }) => {
@@ -267,10 +276,10 @@ test("a request the server stored but answered with an error comes back after a 
   const name = `גן דמו לבקשה ששמורה ${Date.now()}`
   const { id } = await published(browser, name)
   const { ctx, page, form } = await requestForm(browser, id, name)
-  // The first reaches the server and is stored there; the answer that comes back is a server error.
-  const sent = recordReports(page, async (route) => {
-    await route.fetch()
-    await route.fulfill({ status: 500, json: { code: "internal" } })
+  // The first reaches the server and is stored there; what comes back is a server error whose body is JSON null.
+  const sent = recordReports(page, async (route, headers) => {
+    await route.fetch({ headers })
+    await route.fulfill({ status: 500, contentType: "application/json", body: "null" })
   })
   const why = "השם כתוב כאן בטעות, כך כתוב באתר המועצה. כדאי לבדוק."
   await form.getByRole("checkbox", { name: "השם" }).check()
@@ -279,6 +288,8 @@ test("a request the server stored but answered with an error comes back after a 
   await form.getByRole("button", { name: "שליחת הבקשה" }).click()
   await expect(form.getByRole("alert")).toHaveText(/לא ברור אם הבקשה הגיעה אלינו/)
   await expect(form.getByLabel("מה לבדוק, ולמה")).toBeDisabled()
+  // Free for another try, not stuck mid-send.
+  await expect(form.getByRole("button", { name: "שליחה שוב" })).toBeEnabled()
 
   await page.reload()
   await expect(page.getByRole("heading", { name })).toBeVisible(DAY)
@@ -309,8 +320,8 @@ test("a request whose fate is unknown stays with its own place: another place's 
   const { id } = await published(browser, one)
   const { id: other } = await published(browser, two)
   const { ctx, page, form } = await requestForm(browser, id, one)
-  const sent = recordReports(page, async (route) => {
-    await route.fetch()
+  const sent = recordReports(page, async (route, headers) => {
+    await route.fetch({ headers })
     await route.abort("failed")
   })
   const why = "בסיפור של המקום יש פרט שגוי על התאריך שבו הוקם."
@@ -362,5 +373,94 @@ test("a link to a place approved after the page's last feed stays open, and the 
   await expect(page.getByRole("heading", { name: later })).toBeVisible()
   await expect(page).toHaveURL(new RegExp(`#/place/${fresh}$`))
   await expect(page.getByText("המקום הזה אינו מוצג כרגע")).toHaveCount(0)
+  await ctx.close()
+})
+
+test("a browser that keeps nothing still holds the request in the open page: another place's card and back, it is there, and it says a reload loses it", async ({
+  browser,
+}) => {
+  const one = `גן דמו בלי אחסון ${Date.now()}`
+  const two = `גן דמו שני בלי אחסון ${Date.now()}`
+  const { id } = await published(browser, one)
+  const { id: other } = await published(browser, two)
+  const ctx = await visitor(browser)
+  await ctx.addInitScript(() => Object.defineProperty(window, "indexedDB", { value: undefined }))
+  const page = await ctx.newPage()
+  await page.goto(`/#/place/${id}`)
+  await expect(page.getByRole("heading", { name: one })).toBeVisible(DAY)
+  await page.getByRole("button", { name: "בקשת הסרה או תיקון" }).click()
+  const form = page.getByRole("region", { name: "בקשת הסרה או תיקון" })
+  const sent = recordReports(page, async (route, headers) => {
+    await route.fetch({ headers })
+    await route.abort("failed")
+  })
+  const why = "התאריך בסיפור של המקום לא נכון, כדאי לבדוק מול המועצה."
+  await form.getByRole("checkbox", { name: "השם" }).check()
+  await form.getByRole("radio", { name: /^אחר/ }).check()
+  await form.getByLabel("מה לבדוק, ולמה").fill(why)
+  await form.getByRole("button", { name: "שליחת הבקשה" }).click()
+  await expect(form.getByRole("alert")).toHaveText(/לא ברור אם הבקשה הגיעה אלינו.*נשמרת רק בדף הפתוח/)
+
+  // Another place's card, then no card at all, so the first card is gone from the page before it opens again.
+  await page.evaluate((p) => (location.hash = `#/place/${p}`), other)
+  await expect(page.getByRole("heading", { name: two })).toBeVisible()
+  await page.evaluate(() => (location.hash = "#/"))
+  await expect(page.getByRole("heading", { name: two })).toHaveCount(0)
+  await expect(page.getByRole("heading", { name: one })).toHaveCount(0)
+  await page.evaluate((p) => (location.hash = `#/place/${p}`), id)
+  await expect(page.getByRole("heading", { name: one })).toBeVisible()
+  const back = page.getByRole("region", { name: "בקשת הסרה או תיקון" })
+  await expect(back.getByLabel("מה לבדוק, ולמה")).toHaveValue(why)
+  await expect(back.getByLabel("מה לבדוק, ולמה")).toBeDisabled()
+  await back.getByRole("button", { name: "שליחה שוב" }).click()
+  await expect(back.getByRole("status")).toHaveText(RECEIVED)
+  expect(sent).toHaveLength(2)
+  expect(sent[1]).toEqual(sent[0])
+  expect(await casesAbout(browser, id)).toBe(1)
+  await ctx.close()
+})
+
+test("a family's request that hides the whole place and loses its answer stays recoverable after the card closes and the page reloads, under its first key, showing nothing of the place", async ({
+  browser,
+}) => {
+  const name = `גן דמו שהוסתר בבקשה ${Date.now()}`
+  const { id } = await published(browser, name)
+  // A week on (the dev server's test clock), so the site-wide hourly and daily quotas the other tests used up don't
+  // stop this request's precaution: those safeguards are tested in the Worker's own tests.
+  const later = { "x-test-now": new Date(Date.now() + 7 * 86_400_000).toISOString() }
+  const { ctx, page, form } = await requestForm(browser, id, name, later)
+  const sent = recordReports(page, async (route, headers) => {
+    await route.fetch({ headers })
+    await route.abort("failed")
+  })
+  await form.getByRole("checkbox", { name: "המקום כולו" }).check()
+  await form.getByRole("radio", { name: "בן או בת משפחה" }).check()
+  // Complete (a family member says how), so the automatic precaution may act on it.
+  await form.getByLabel(/^הקשר שלכם/).fill("אח")
+  await form.getByLabel("מה לבדוק, ולמה").fill("המקום כולו מנציח את אחי בלי שהמשפחה נשאלה. נבקש להסתיר אותו עד שנדבר.")
+  await form.getByRole("button", { name: "שליחת הבקשה" }).click()
+  await expect(form.getByRole("alert")).toHaveText(/לא ברור אם הבקשה הגיעה אלינו/)
+
+  // The request hid the place; the next feed closes its card.
+  const fed = page.waitForResponse((r) => r.url().includes("/api/v1/feed?") && r.status() === 200)
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")))
+  await fed
+  await expect(page.getByText("המקום הזה אינו מוצג כרגע")).toBeVisible()
+  await expect(page.getByRole("heading", { name })).toHaveCount(0)
+  await expect(page.getByRole("region", { name: "בקשה ששלחתם" })).toBeVisible()
+
+  // A new load of the page (a query, so it isn't only a hash change).
+  await page.goto(`/?again=1#/place/${id}`)
+  const pending = page.getByRole("region", { name: "בקשה ששלחתם" })
+  await expect(pending).toBeVisible(DAY)
+  await expect(pending.getByRole("alert")).toHaveText(/על מקום שאינו מוצג כרגע/)
+  await expect(page.getByText(name)).toHaveCount(0)
+  await pending.getByRole("button", { name: "שליחה שוב" }).click()
+  await expect(pending.getByRole("status")).toHaveText(HIDDEN)
+  expect(sent).toHaveLength(2)
+  expect(sent[1]).toEqual(sent[0])
+  expect(await casesAbout(browser, id)).toBe(1)
+  await pending.getByRole("button", { name: "סגירה" }).click()
+  await expect(pending).toHaveCount(0)
   await ctx.close()
 })

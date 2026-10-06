@@ -14,6 +14,8 @@ const About = lazy(() => import("@/components/about").then((m) => ({ default: m.
 const AddPlace = lazy(() => import("@/components/add-place").then((m) => ({ default: m.AddPlace })))
 const Tracking = lazy(() => import("@/components/tracking").then((m) => ({ default: m.Tracking })))
 const VerifyEmail = lazy(() => import("@/components/verify-email").then((m) => ({ default: m.VerifyEmail })))
+// Requests about places no longer shown; loaded once the day begins, never in the opening's bundle.
+const PendingReports = lazy(() => import("@/components/pending-reports").then((m) => ({ default: m.PendingReports })))
 
 /** Keep the URL and the selection in step, so a place can be linked and shared. */
 function useHashRoute() {
@@ -189,6 +191,7 @@ export default function App() {
         {addLoaded && <AddPlace />}
         {trackingLoaded && <Tracking />}
         {verifying && <VerifyEmail />}
+        {phase === "day" && <PendingReports />}
       </Suspense>
       <Celebration />
       <Toaster position="top-center" />

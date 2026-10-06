@@ -1,7 +1,9 @@
 import { call } from "./app"
 import { expect, it } from "vitest"
 import { CURRENT_REPORT_NOTICE, CURRENT_SUBMISSION_NOTICE, REPORT_NOTICES, SUBMISSION_NOTICES } from "@/shared/contract"
-import { NOTICES } from "@/data/legal"
+import { NOTICES, noticeHtml } from "@/data/legal"
+import { DISCARD_LABEL } from "@/data/reports"
+import { RETENTION } from "@/config"
 
 const submit = (consent_version: string) =>
   call("http://local/api/v1/submissions", {
@@ -77,10 +79,12 @@ it("keeps every report notice a request may have recorded, in the order they wer
   expect(CURRENT_REPORT_NOTICE).toBe("notice.report@2026-10-3")
 })
 
-it("the report notice says the browser keeps a request until its arrival is known, for at most a day, and what a browser that keeps nothing means", () => {
-  const text = NOTICES[CURRENT_REPORT_NOTICE]
+it("the report notice says what the browser keeps and for how long, from the configured hours, and names the button that lets it go", () => {
+  const text = noticeHtml(CURRENT_REPORT_NOTICE)
   expect(text).toContain("בדפדפן שלכם")
-  expect(text).toContain("24 שעות")
+  expect(text).toContain(`לכל היותר ${RETENTION.reportOutboxHours} שעות מהשליחה הראשונה`)
+  expect(text).toContain(`«${DISCARD_LABEL}»`)
   expect(text).toContain("ולא נשלחת שוב מעצמה")
-  expect(text).toContain("נשמרת רק עד שתסגרו או תרעננו את הדף")
+  expect(text).toContain("נשמרת רק בדף הפתוח")
+  expect(text).not.toContain("{{")
 })

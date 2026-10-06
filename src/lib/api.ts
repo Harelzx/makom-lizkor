@@ -1,5 +1,6 @@
 import { turnstileToken } from "@/lib/turnstile"
-import type { ReportInput, ReportResult, RevisionInput, SubmissionInput, TributeResult, TributeTotals } from "@/shared/contract"
+import { ReportResult } from "@/shared/contract"
+import type { ReportInput, RevisionInput, SubmissionInput, TributeResult, TributeTotals } from "@/shared/contract"
 
 export type SendResult =
   | { ok: true; id: string; trackingToken: string }
@@ -299,11 +300,13 @@ export async function sendReport(input: ReportInput, key: string): Promise<Repor
   } catch {
     return { ok: false, kind: "unknown" }
   }
+  // Any body at all may come back (a proxy's page, JSON null, an array): only a recognised answer is read as one.
+  const body: unknown = await res.json().catch(() => null)
   if (res.status === 202) {
-    const result = (await res.json().catch(() => null)) as ReportResult | null
-    return result?.ticket ? { ok: true, ...result } : { ok: false, kind: "unknown" }
+    const result = ReportResult.safeParse(body)
+    return result.success ? { ok: true, ...result.data } : { ok: false, kind: "unknown" }
   }
-  const code = ((await res.json().catch(() => ({}))) as { code?: string }).code
+  const code = body && typeof body === "object" && "code" in body && typeof body.code === "string" ? body.code : undefined
   if (res.status === 409 && code === "idempotency_key_reused") return { ok: false, kind: "conflict" }
   if (code && BEFORE_WRITE[res.status]?.includes(code)) return { ok: false, kind: "not_sent", code }
   return { ok: false, kind: "unknown" }

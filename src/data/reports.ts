@@ -25,3 +25,6 @@ export const BASIS_LABEL = {
   review_supports_restore: "בדיקה מידתית ומתועדת תומכת בהחזרה",
   legal_advice: "ייעוץ משפטי",
 } as const
+
+/** The button that lets a kept request go; the report notice names it, word for word (notice.test.ts checks). */
+export const DISCARD_LABEL = "הסרה מהמכשיר הזה"

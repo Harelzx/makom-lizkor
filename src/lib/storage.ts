@@ -8,7 +8,8 @@ let store: UseStore | null | undefined
 function db(): UseStore | null {
   if (store === undefined) {
     try {
-      store = createStore("makom-lizkor-v2", "v1")
+      // idb-keyval opens the database lazily, so a browser with no IndexedDB at all would only fail on first use.
+      store = typeof indexedDB === "undefined" ? null : createStore("makom-lizkor-v2", "v1")
     } catch {
       store = null
     }

@@ -141,7 +141,8 @@ export const ReportInput = z
 export type ReportInput = z.infer<typeof ReportInput>
 
 /** hidden_for_review: the element is hidden as a precaution until a person decides; received: a person will review it. */
-export type ReportResult = { ticket: string; outcome: "hidden_for_review" | "received" }
+export const ReportResult = z.object({ ticket: z.string().min(1), outcome: z.enum(["hidden_for_review", "received"]) })
+export type ReportResult = z.infer<typeof ReportResult>
 
 export const Feed = z.object({ v: z.string(), places: z.array(PublicPlace) })
 export type Feed = z.infer<typeof Feed>
