@@ -71,3 +71,19 @@ test("an invalid feed, a failed request and a server error each fail their metri
   assert.equal(broken.metrics.serverErrors, 1)
   assert.ok(broken.metrics.checks.some(([name, ok]) => name === "the page answers" && !ok))
 })
+
+test("a feed at another version, and totals that aren't a record of counts, fail their checks (a52)", () => {
+  const failed = (answer, name) => {
+    const h = harness(answer)
+    h.run(null)
+    return h.metrics.checks.some(([n, ok]) => n === name && !ok)
+  }
+  const feedAt = (v) => (p) => (p.startsWith("/api/v1/feed") ? { ...good(p), json: (k) => ({ v, places: [] })[k] } : good(p))
+  assert.equal(failed(feedAt("2"), "feed answers at its version"), true)
+  assert.equal(failed(feedAt("3"), "feed answers at its version"), false)
+  const totals = (value) => (p) => (p === "/api/v1/tributes" ? { ...good(p), json: (k) => ({ totals: value })[k] } : good(p))
+  for (const bad of [null, [], { a: -1 }, { a: 1.5 }, { a: "3" }])
+    assert.equal(failed(totals(bad), "the anemone totals answer"), true, JSON.stringify(bad))
+  for (const ok of [{}, { "community-beeri": 3, p_01J0000000000000000000000A: 0 }])
+    assert.equal(failed(totals(ok), "the anemone totals answer"), false, JSON.stringify(ok))
+})

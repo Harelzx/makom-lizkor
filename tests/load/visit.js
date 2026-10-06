@@ -44,6 +44,10 @@ export function optionsFor(smoke) {
   }
 }
 
+/** A record of counts by place: an object (not null, not a list) whose every value is a whole number from 0. */
+const isCounts = (t) =>
+  typeof t === "object" && t !== null && !Array.isArray(t) && Object.values(t).every((n) => Number.isInteger(n) && n >= 0)
+
 /**
  * One visit. `get(path, headers)` answers { status, headers, json(key), body }; `metrics` records; `access` is the
  * Access service token ({ id, secret }) for staging, or null. Every answer is edge-cacheable: each counts toward the
@@ -66,7 +70,8 @@ export function visit({ get, metrics, access }) {
   const v = version.status === 200 ? version.json("v") : undefined
   metrics.check("the version answers", typeof v === "string" && v.length > 0)
   const feed = ask(`/api/v1/feed?v=${encodeURIComponent(v ?? "")}`)
-  metrics.check("feed answers at its version", feed.status === 200 && Array.isArray(feed.json("places")))
+  // At the version asked for: a stale answer kept somewhere on the way is not a valid one (a52).
+  metrics.check("feed answers at its version", feed.status === 200 && feed.json("v") === v && Array.isArray(feed.json("places")))
   const totals = ask("/api/v1/tributes")
-  metrics.check("the anemone totals answer", totals.status === 200 && typeof totals.json("totals") === "object")
+  metrics.check("the anemone totals answer", totals.status === 200 && isCounts(totals.json("totals")))
 }
