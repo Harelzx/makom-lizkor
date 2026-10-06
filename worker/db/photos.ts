@@ -111,7 +111,11 @@ export async function erasePhotos(media: R2Bucket, placeId: string) {
 /**
  * The files no live revision names any more: what a lost race or a failed cleanup left behind. Kept: every photo an
  * open revision (pending or returned) or a published one points to. A file younger than an hour is left alone, since an
- * approval copies its photo before it records it. Run by the nightly job (phase 5); safe to run at any time.
+ * approval copies its photo before it records it.
+ *
+ * Not scheduled yet, and not safe to schedule as it is (Phase 5, L2): it doesn't cover held/, where it must keep the
+ * held twin of every key it keeps; and an age alone doesn't show that a writer has finished (an approval's copy made
+ * before its key is recorded, an upload, a late move). Phase 5 sets the rule and schedules it.
  */
 export async function sweepPhotos(db: D1Database, media: R2Bucket, now: Date) {
   const { results } = await db
