@@ -29,6 +29,8 @@ export type LedgerEntry = {
   targets?: string[]
   media?: string[]
   basis?: string
+  /** On an approval, a refusal or a return: the revision decided (an id, never its content). */
+  revision?: string
   at: string
   /** Written after the fact: an intent the bucket refused at the time (a removal that went ahead), or an abort repaired. */
   late?: boolean

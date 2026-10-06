@@ -1,0 +1,94 @@
+import { applyD1Migrations } from "cloudflare:test"
+import { env } from "cloudflare:workers"
+import { beforeAll, describe, expect, it } from "vitest"
+import { EXPORT_TABLES, runExport } from "../db/exports"
+import { importExport, type ExportPayload } from "../db/import"
+import { readFeed } from "../db/places"
+import { replayLedger } from "../db/replay"
+import { unseal, type Manifest } from "../lib/sealed"
+import { call } from "./app"
+import { admin, approve } from "./helpers"
+import { decide, jpeg, queued, send, upload } from "./submission-helpers"
+
+let keys: CryptoKeyPair
+beforeAll(async () => {
+  await applyD1Migrations(env.IMPORT_TEST, env.TEST_MIGRATIONS)
+  for (const t of [...EXPORT_TABLES].reverse()) await env.IMPORT_TEST.prepare(`DELETE FROM ${t}`).run()
+  keys = (await crypto.subtle.generateKey(
+    { name: "RSA-OAEP", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
+    true,
+    ["encrypt", "decrypt"],
+  )) as CryptoKeyPair
+})
+
+async function exportNow(): Promise<ExportPayload> {
+  await env.DB.prepare("DELETE FROM exports").run()
+  const pub = JSON.stringify([await crypto.subtle.exportKey("jwk", keys.publicKey)])
+  const id = (await runExport({ db: env.DB, media: env.MEDIA, exports: env.EXPORTS, keys: pub }, "rr_test", new Date()))!
+  const manifest = (await (await env.EXPORTS.get(`exports/${id}/manifest.json`))!.json()) as Manifest
+  const data = new Uint8Array(await (await env.EXPORTS.get(manifest.data.key))!.arrayBuffer())
+  const plain = await unseal(data, manifest.data, (await crypto.subtle.exportKey("jwk", keys.privateKey)) as JsonWebKey)
+  return JSON.parse(await new Response(new Blob([plain]).stream().pipeThrough(new DecompressionStream("gzip"))).text()) as ExportPayload
+}
+const rev = async (id: string) => (await (await admin(`/api/admin/places/${id}`)).json<{ rev: number }>()).rev
+const hide = (placeId: string, fields: string[], expectedRev: number) =>
+  admin("/api/admin/suppressions", { method: "POST", body: JSON.stringify({ placeId, fields, expectedRev, reason: "נימוק דמו להסתרה" }) })
+const without = (places: { id: string }[], id: string) => places.filter((p) => p.id !== id)
+
+describe("replaying the ledger onto a restored database (spec 8.2, 8.3)", () => {
+  it("brings back every decision taken after the export, never an erased place, and hides a place whose chain has a gap", async () => {
+    // Before the export: one pending with its photo, four published.
+    const pending = await send("גן דמו שאושר אחרי הייצוא")
+    expect((await upload(pending.id, pending.trackingToken, jpeg(0x61))).status).toBe(200)
+    const hidden = await send("גן דמו שהוסתר אחרי הייצוא")
+    await approve(hidden.id)
+    const withdrawn = await send("גן דמו שנמשך אחרי הייצוא")
+    await approve(withdrawn.id)
+    const gap = await send("גן דמו עם פער ברישום")
+    await approve(gap.id)
+    const untouched = await send("גן דמו שלא השתנה")
+    await approve(untouched.id)
+
+    const payload = await exportNow()
+
+    // After it: an approval (with its photo), a hide, a withdrawal, two hides of which one commit goes missing.
+    expect((await decide(pending.id, await queued(pending.id), "approve")).status).toBe(200)
+    expect((await hide(hidden.id, ["story_he"], await rev(hidden.id))).status).toBe(200)
+    expect(
+      (
+        await call(`http://local/api/v1/submissions/${withdrawn.id}/withdraw`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${withdrawn.trackingToken}` },
+        })
+      ).status,
+    ).toBe(200)
+    expect((await hide(gap.id, ["name_he"], await rev(gap.id))).status).toBe(200)
+    expect((await hide(gap.id, ["story_he"], await rev(gap.id))).status).toBe(200)
+    const gapCommits = (await env.LEDGER.list({ prefix: `ledger/${gap.id}/` })).objects.filter((o) => o.key.endsWith("-commit.json"))
+    await env.LEDGER.delete(gapCommits[gapCommits.length - 2].key)
+
+    expect(await importExport(env.IMPORT_TEST, payload, new Date())).toMatchObject({ ok: true })
+    const result = await replayLedger(env.IMPORT_TEST, env.LEDGER, new Date())
+    expect(result.quarantined).toEqual([gap.id])
+
+    // What the public sees is what it saw before the loss, but for the place whose record has a gap: hidden until a
+    // moderator looks.
+    const live = (await readFeed(env.DB, "0")).places
+    const restored = (await readFeed(env.IMPORT_TEST, "0")).places
+    expect(restored).toEqual(without(live, gap.id))
+    expect(restored.find((p) => p.id === pending.id)?.photo?.url).toMatch(/^\/media\/public\//)
+    expect(restored.find((p) => p.id === hidden.id)?.summary_he).toBe("")
+    const tomb = await env.IMPORT_TEST.prepare("SELECT status FROM places WHERE id = ?").bind(withdrawn.id).first<string>("status")
+    expect(tomb).toBe("withdrawn")
+    const left = await env.IMPORT_TEST.prepare("SELECT COUNT(*) AS n FROM revisions WHERE place_id = ? AND name_he IS NOT NULL")
+      .bind(withdrawn.id)
+      .first<number>("n")
+    expect(left).toBe(0)
+
+    // Twice is once.
+    const before = JSON.stringify(await env.IMPORT_TEST.prepare("SELECT * FROM field_suppressions ORDER BY id").all())
+    expect(await replayLedger(env.IMPORT_TEST, env.LEDGER, new Date())).toMatchObject({ applied: 0 })
+    expect(JSON.stringify(await env.IMPORT_TEST.prepare("SELECT * FROM field_suppressions ORDER BY id").all())).toBe(before)
+    expect((await readFeed(env.IMPORT_TEST, "0")).places).toEqual(restored)
+  })
+})

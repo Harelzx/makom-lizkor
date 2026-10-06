@@ -31,7 +31,15 @@ beforeAll(async () => {
   await approve(id)
 })
 
-const drillEnv = (key = drillKey) => ({ db: env.DB, exports: env.EXPORTS, drillDb: env.IMPORT_TEST, drillKey: key, env, sendMail })
+const drillEnv = (key = drillKey) => ({
+  db: env.DB,
+  exports: env.EXPORTS,
+  ledger: env.LEDGER,
+  drillDb: env.IMPORT_TEST,
+  drillKey: key,
+  env,
+  sendMail,
+})
 const exportAt = async (at: Date) => {
   await env.DB.prepare("DELETE FROM exports").run()
   return (await runExport({ db: env.DB, media: env.MEDIA, exports: env.EXPORTS, keys: pub }, "rr_test", at))!

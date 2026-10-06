@@ -60,6 +60,7 @@ admin.post(
         placeId,
         kind: body.action,
         actor: "moderator",
+        detail: { revision: body.revisionId },
         expectedRev: body.expectedRev,
         removal: false,
         public: body.action === "approve",

@@ -3,6 +3,7 @@ import type { SendMail } from "../lib/mail"
 import { sha256, unseal, type Manifest } from "../lib/sealed"
 import { EXPORT_TABLES } from "./exports"
 import { importExport, type ExportPayload } from "./import"
+import { replayLedger } from "./replay"
 import { tellModerators } from "./retention"
 
 const DAY_MS = 86_400_000
@@ -12,6 +13,8 @@ const DRILL_MAX_EXPORT_AGE_MS = 26 * 3600_000
 export type DrillEnv = {
   db: D1Database
   exports: R2Bucket
+  /** The ledger, replayed onto the restored copy as a restore would. */
+  ledger: R2Bucket
   /** The drill database; without it (or the key) no drill runs. */
   drillDb?: D1Database
   /** The drill's private key (a JWK, a secret): one of the recipients every export is sealed to. */
@@ -31,7 +34,8 @@ async function empty(db: D1Database) {
 /**
  * The weekly restore drill (spec 8.4): the newest export, and only if it is under 26 hours old, is opened with the drill
  * key, checked against its manifest (the data's checksum, each table's checksum and count), imported through the
- * filtered import into the drill database, counted there, and every photo copy it lists is read and checked. The drill
+ * filtered import into the drill database, counted there, the ledger replayed onto it, and every photo copy it lists
+ * is read and checked. The drill
  * database is emptied before and after, whatever happened. Checked against the manifest, a fixed point, never against
  * the live site. A failure is recorded by its code and told to the moderators once a day; a failed drill is tried
  * again the next day, a passed one a week later.
@@ -78,6 +82,8 @@ export async function runDrill(d: DrillEnv, now: Date): Promise<string | null> {
     const counted = await d.drillDb.batch(EXPORT_TABLES.map((t) => d.drillDb!.prepare(`SELECT COUNT(*) AS n FROM ${t}`)))
     for (const [i, t] of EXPORT_TABLES.entries())
       if ((counted[i].results[0] as { n: number }).n !== (imported as { counts: Record<string, number> }).counts[t]) fail("row_counts")
+    // Then the decisions since the export, as a restore replays them.
+    await replayLedger(d.drillDb, d.ledger, now).catch(() => fail("replay"))
     for (const f of manifest!.files) {
       const copy = await d.exports.get(`photos/${f.sha256}`)
       if (!copy) fail("file_missing")

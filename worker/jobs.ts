@@ -64,7 +64,15 @@ export async function runJobs(env: Env, deps: { sendMail: SendMail; purge: Purge
   const drill = env as Env & { DRILL_DB?: D1Database; DRILL_PRIVATE_KEY?: string }
   await part("drill", () =>
     runDrill(
-      { db: env.DB, exports: env.EXPORTS, drillDb: drill.DRILL_DB, drillKey: drill.DRILL_PRIVATE_KEY, env, sendMail: deps.sendMail },
+      {
+        db: env.DB,
+        exports: env.EXPORTS,
+        ledger: env.LEDGER,
+        drillDb: drill.DRILL_DB,
+        drillKey: drill.DRILL_PRIVATE_KEY,
+        env,
+        sendMail: deps.sendMail,
+      },
       now,
     ),
   )
