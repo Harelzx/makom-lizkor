@@ -150,6 +150,37 @@
   - node:test ל־policy;
   - פענוח ה־YAML.
 
+- **הכרעות (בביצוע):**
+  - **קשירה ל־commit אחד:** ‏job ה־`verify` (בלי environment) קורא את ה־commit מה־draft release (`targetCommitish`) ובודק:
+    - שה־commit ב־`main`;
+    - ש־`ci.yml` ו־`staging.yml` עברו עליו;
+    - שה־hash של ה־manifest שנבנה מחדש עבורו שווה ל־`manifest.json` שמצורף לטיוטה.
+
+    ה־job שב־`production` עושה checkout ל־`needs.verify.outputs.sha` ומוודא את `git rev-parse HEAD`. ה־deploy מתויג `--tag <release>` עם `--message "release <tag> <sha>"`. `scripts/ci-policy.mjs` בודק את כל אלה ואת הסדר של 14.2.
+
+  - **`staging.yml` עדיין לא קיים.** הוא יבוא עם חשבון ה־staging, החלטה של הבעלים. עד אז צעד ה־staging ב־`release.yml` נכשל, ושום שחרור לא עובר. זה סגור בכוונה.
+  - **rollback לפי tag של שחרור:** ‏`wrangler versions deploy --version-tag <tag>` במקום `wrangler rollback <version-id>`. כך שני ה־commits באים מ־git, ולא צריך לפענח JSON של wrangler שהמבנה שלו לא מתועד.
+  - **`scripts/rollback-check.mjs` מסרב** כשמתקיים אחד מאלה:
+    - היעד אינו commit קודם של הנוכחי;
+    - מיגרציה ששוחררה נערכה;
+    - מיגרציה חדשה מוחקת או משנה שם, מוסיפה עמודה חובה בלי ברירת מחדל, trigger או אינדקס ייחודי;
+    - קובץ מרשימת `SAFEGUARDS` השתנה (קוד המחיקה, ה־purge והשחזור, ו־`worker/jobs.ts`);
+    - לוח הזמנים של ה־cron השתנה.
+
+    הבדיקה מול השחרור החדש ביותר שנפרס, ולכן היא מכסה גם rollback קודם. סירוב פירושו תיקון קדימה, או החלטה של הבעלים בדשבורד. ‏`rollback.yml` לא מריץ Time Travel, מיגרציה, R2 או deploy חדש, ו־`ci-policy` אוכף זאת.
+
+  - **ה־manifest** מסמן מארחים חדשים בקוד (בלי `src/data` ובלי בדיקות). זה תופס גם הרחבה של ה־CSP.
+  - **כלל סשן הפרטיות** ליד `ops-summary.schema.json`: שדה חדש שאינו ספירה, דגל, תאריך או קוד (תבנית הקוד של הסכמה, או רשימה סגורה) מסומן «text or id: privacy review required before merge». גם מפתחות של record נבדקים.
+  - **`release:check`** חוסם רק את המסלולים שמפעילים אותו (`release.yml`). הוא לא עוצר deploy שנעשה בדרך אחרת (a49).
+  - **`yaml` כתלות dev ישירה** (2.9.1, שכבר הייתה בעץ), לפענוח ה־workflows.
+  - **לא מאומת, ונעשה בהגדרות GitHub:** ה־environment מוגבל ל־`main` עם הבעלים כ־reviewer, GitHub Pro למאגר פרטי, היקף ה־`CLOUDFLARE_API_TOKEN`, ו־pin של ה־actions ל־SHA. `ci-policy` לא רואה אותם.
+- **רשימת staging** (מה שנבדק רק בענן):
+  - Turnstile תחת ה־CSP;
+  - `staging.yml` עצמו;
+  - הפורמט של `wrangler d1 time-travel info DB`;
+  - `versions deploy --version-tag`;
+  - הכותרות דרך ה־CDN האמיתי.
+
 ## משימה 6: כללי deny לסוכנים (spec 12.2)
 
 - **ב־`.claude/settings.json`:** ‏`permissions.deny` עבור:

@@ -1,0 +1,132 @@
+// The rules every workflow in .github/workflows keeps (spec 12.2, 14.2; adviser a49), checked by CI on every change:
+// only release.yml and rollback.yml reach the production environment, and only through workflow_dispatch; nothing
+// else reads a secret; the release checks out and deploys the one commit it verified, in the order 14.2 sets; and a
+// rollback moves code only. What this can't see is set in GitHub itself (the environment's branch and reviewers).
+//   node scripts/ci-policy.mjs
+import { readdirSync, readFileSync } from "node:fs"
+import { pathToFileURL } from "node:url"
+import { parse } from "yaml"
+
+const PRODUCTION = ["release.yml", "rollback.yml"]
+const SHA_REF = "${{ needs.verify.outputs.sha }}"
+
+const runs = (job) => (job.steps ?? []).map((s) => (typeof s.run === "string" ? s.run : ""))
+const text = (o) => JSON.stringify(o ?? null)
+
+export function policyProblems(workflows) {
+  const problems = []
+  for (const [name, source] of Object.entries(workflows)) {
+    let w
+    try {
+      w = parse(source)
+    } catch (e) {
+      problems.push(`${name}: not valid YAML (${e.name})`)
+      continue
+    }
+    const say = (p) => problems.push(`${name}: ${p}`)
+    const production = PRODUCTION.includes(name)
+    const triggers = typeof w.on === "string" ? [w.on] : Array.isArray(w.on) ? w.on : Object.keys(w.on ?? {})
+    if (!w.permissions) say("no top-level permissions")
+    if (triggers.includes("pull_request_target")) say("pull_request_target runs a fork's change with this repository's secrets")
+    if (production && text(triggers) !== text(["workflow_dispatch"]))
+      say("a production workflow runs only when the owner starts it (workflow_dispatch)")
+    for (const [id, job] of Object.entries(w.jobs ?? {})) {
+      const env = typeof job.environment === "object" ? job.environment?.name : job.environment
+      const body = text({ env: job.env, steps: job.steps, with: job.with })
+      if (env === "production" && !production) say(`job ${id} uses the production environment`)
+      if (env && env !== "production") say(`job ${id} uses an unknown environment '${env}'`)
+      const secrets = [...body.matchAll(/secrets\.([A-Za-z_][A-Za-z0-9_]*)/g)].map((m) => m[1]).filter((s) => s !== "GITHUB_TOKEN")
+      if (secrets.length && env !== "production") say(`job ${id} reads ${secrets.join(", ")} outside the production environment`)
+      // An input or event field written into a script is a script injection; it goes through env instead.
+      for (const run of runs(job))
+        if (/\$\{\{\s*(inputs\.|github\.event\.)/.test(run)) say(`job ${id} writes an input into a script; pass it through env`)
+      const deploys = runs(job).some((r) =>
+        /\bwrangler\s+(deploy|rollback|versions\s+(deploy|upload)|d1\s+(migrations\s+apply|execute|time-travel\s+restore))\b/.test(r),
+      )
+      if (deploys && !production) say(`job ${id} changes production from outside release.yml and rollback.yml`)
+    }
+    if (name === "release.yml") problems.push(...releaseProblems(w).map((p) => `${name}: ${p}`))
+    if (name === "rollback.yml") problems.push(...rollbackProblems(w).map((p) => `${name}: ${p}`))
+  }
+  for (const name of PRODUCTION) if (!(name in workflows)) problems.push(`${name} is missing`)
+  return problems
+}
+
+function releaseProblems(w) {
+  const problems = []
+  const jobs = Object.entries(w.jobs ?? {})
+  const verify = w.jobs?.verify
+  if (!verify || verify.environment) problems.push("needs a verify job, outside the production environment, that binds the commit")
+  else {
+    const all = runs(verify).join("\n")
+    for (const [what, pattern] of [
+      ["the draft release's target commit", /targetCommitish/],
+      ["the commit being on main", /merge-base --is-ancestor "\$sha" origin\/main/],
+      ["CI on that commit", /--workflow ci\.yml --commit "\$SHA" --status success/],
+      ["staging on that commit", /--workflow staging\.yml --commit "\$SHA" --status success/],
+      ["the manifest's hash for that commit", /release-manifest\.mjs "\$SHA"[^\n]*--hash/],
+    ])
+      if (!pattern.test(all)) problems.push(`verify doesn't check ${what}`)
+    if (verify.outputs?.sha !== "${{ steps.bind.outputs.sha }}") problems.push("verify must output the bound commit as sha")
+  }
+  for (const [id, job] of jobs) {
+    if (job.environment !== "production") continue
+    if (!text(job.needs).includes("verify")) problems.push(`job ${id} doesn't wait for verify`)
+    const checkout = (job.steps ?? []).find((s) => String(s.uses ?? "").startsWith("actions/checkout"))
+    if (checkout?.with?.ref !== SHA_REF) problems.push(`job ${id} must check out ${SHA_REF}`)
+    const steps = runs(job)
+    if (!steps.some((r) => r.includes('test "$(git rev-parse HEAD)" = "$SHA"')))
+      problems.push(`job ${id} doesn't confirm the commit it checked out`)
+    if (job.env?.SHA !== SHA_REF) problems.push(`job ${id} must take SHA from verify`)
+    // Spec 14.2's order: the release check, the bookmark, the migrations, the deploy, the production checks.
+    const order = [
+      /npm run release:check/,
+      /d1 time-travel info/,
+      /d1 migrations apply/,
+      /wrangler deploy --tag "\$RELEASE" --message "release \$RELEASE \$SHA"/,
+      /edge-check/,
+    ]
+    const at = order.map((p) => steps.findIndex((r) => p.test(r)))
+    if (at.some((i) => i < 0) || at.some((i, k) => k && i < at[k - 1]))
+      problems.push(
+        `job ${id} must run, in order: release:check, the Time Travel bookmark, the migrations, the deploy (tagged with the release and its commit), the production checks`,
+      )
+  }
+  return problems
+}
+
+function rollbackProblems(w) {
+  const problems = []
+  const all = Object.values(w.jobs ?? {})
+    .flatMap(runs)
+    .join("\n")
+  // Code only: nothing that brings data back or changes the schema.
+  for (const [what, pattern] of [
+    ["Time Travel", /time-travel/],
+    ["a migration", /migrations\s+apply|d1\s+execute/],
+    ["a bucket command", /\br2\b/],
+    ["a fresh deploy", /wrangler\s+deploy\b/],
+  ])
+    if (pattern.test(all)) problems.push(`a rollback runs ${what}`)
+  const check = all.indexOf("scripts/rollback-check.mjs")
+  const move = all.indexOf("versions deploy --version-tag")
+  if (check < 0 || move < 0 || move < check)
+    problems.push("a rollback must pass scripts/rollback-check.mjs before it deploys the earlier version")
+  return problems
+}
+
+export const readWorkflows = (dir = new URL("../.github/workflows/", import.meta.url)) =>
+  Object.fromEntries(
+    readdirSync(dir)
+      .filter((f) => /\.ya?ml$/.test(f))
+      .map((f) => [f, readFileSync(new URL(f, dir), "utf8")]),
+  )
+
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const problems = policyProblems(readWorkflows())
+  if (problems.length) {
+    console.error("Workflow policy:\n" + problems.map((p) => `  - ${p}`).join("\n"))
+    process.exit(1)
+  }
+  console.log("Workflow policy holds.")
+}

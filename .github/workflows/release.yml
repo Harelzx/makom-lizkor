@@ -1,0 +1,126 @@
+# A release to production (spec 14.2). The agent prepares a draft GitHub release whose target is one commit, with the
+# manifest attached (manifest.json, from scripts/release-manifest.mjs); the owner reads it and runs this workflow with
+# the release's tag. That is the only manual step. Everything below names that one commit: the manifest's hash is
+# rebuilt for it, CI and staging must have passed on it, and it is what is checked out, checked and deployed (a49).
+#
+# release:check gates this path; it does not by itself stop a deploy made some other way (a49). The environment's
+# protection (main only, the owner as reviewer) is set in GitHub, not in this file, and isn't something CI can check.
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "The draft release's tag, e.g. release-2026-11-02"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      sha: ${{ steps.bind.outputs.sha }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE: ${{ inputs.release }}
+    steps:
+      - name: Runs from main only
+        run: test "$GITHUB_REF" = "refs/heads/main"
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - name: The draft release names one commit on main
+        id: bind
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE" =~ ^release-[0-9]{4}-[0-9]{2}-[0-9]{2}(-[0-9]+)?$ ]]
+          test "$(gh release view "$RELEASE" --json isDraft --jq .isDraft)" = "true"
+          sha=$(gh release view "$RELEASE" --json targetCommitish --jq .targetCommitish)
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]]
+          git merge-base --is-ancestor "$sha" origin/main
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+      - name: CI passed on that commit
+        env:
+          SHA: ${{ steps.bind.outputs.sha }}
+        run: |
+          set -euo pipefail
+          test "$(gh run list --workflow ci.yml --commit "$SHA" --status success --json databaseId --jq length)" -gt 0
+      # staging.yml comes with the staging account (the owner's decision); until it exists this step fails, so no
+      # release can pass without a staging run on the same commit.
+      - name: Staging passed on that commit
+        env:
+          SHA: ${{ steps.bind.outputs.sha }}
+        run: |
+          set -euo pipefail
+          test "$(gh run list --workflow staging.yml --commit "$SHA" --status success --json databaseId --jq length)" -gt 0
+      - name: The attached manifest is this commit's
+        env:
+          SHA: ${{ steps.bind.outputs.sha }}
+        run: |
+          set -euo pipefail
+          git checkout --detach "$SHA"
+          previous=$(gh release list --exclude-drafts --limit 1 --json tagName --jq '.[0].tagName // ""')
+          from=""
+          if [ -n "$previous" ]; then from=$(git rev-list -n 1 "$previous"); fi
+          gh release download "$RELEASE" --pattern manifest.json --dir "$RUNNER_TEMP"
+          expected=$(node scripts/release-manifest.mjs "$SHA" $from --hash)
+          attached=$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).hash)' "$RUNNER_TEMP/manifest.json")
+          test "$expected" = "$attached"
+
+  release:
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: write
+    env:
+      SHA: ${{ needs.verify.outputs.sha }}
+      RELEASE: ${{ inputs.release }}
+      GH_TOKEN: ${{ github.token }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      VITE_TURNSTILE_SITEKEY: ${{ vars.TURNSTILE_SITEKEY }}
+      PUBLIC_ORIGIN: ${{ vars.PUBLIC_ORIGIN }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.verify.outputs.sha }}
+      - name: The commit checked out is the one verified
+        run: test "$(git rev-parse HEAD)" = "$SHA"
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Release check
+        run: npm run release:check
+      - name: Time Travel bookmark before the migrations
+        run: npx wrangler d1 time-travel info DB | tee "$RUNNER_TEMP/bookmark.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bookmark-${{ inputs.release }}
+          path: ${{ runner.temp }}/bookmark.txt
+          retention-days: 30
+      - name: Migrations (expand only; scripts/rollback-check.mjs refuses a rollback across anything else)
+        run: npx wrangler d1 migrations apply DB --remote
+      - run: npm run build
+      - name: Deploy, the version tagged with the release and its commit
+        run: npx wrangler deploy --tag "$RELEASE" --message "release $RELEASE $SHA"
+      - name: Production checks
+        run: node scripts/edge-check.mjs "$PUBLIC_ORIGIN"
+      - name: Publish the release, which notifies the owner
+        run: gh release edit "$RELEASE" --draft=false
