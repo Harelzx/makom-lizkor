@@ -1,5 +1,5 @@
 import { expect, test, type Browser, type BrowserContextOptions, type Page } from "@playwright/test"
-import { ownAddress } from "./publish"
+import { from, ownAddress } from "./publish"
 
 // The opening isn't what this file tests, and its sunrise took about 8 s on every page that went through it. A visitor
 // who asked for less motion gets the day at once, with every flow the same; the opening keeps its own full-motion
@@ -136,7 +136,7 @@ test("a correction whose answer was lost is found saved, not reported as unsent"
 
   // The server saves the correction; its answer never reaches the browser.
   await page.route("**/api/v1/submissions/*/revisions", async (route) => {
-    await route.fetch()
+    await route.fetch({ headers: from(page.context(), route.request().headers()) })
     await route.abort("failed")
   })
   await page.getByRole("button", { name: "מעקב אחרי ההצעה" }).click()
@@ -154,7 +154,7 @@ test("a withdrawal whose answer was lost is found done, not reported as unchange
   const name = `ספסל דמו משיכה שאבדה ${Date.now()}`
   const page = await submit(browser, name)
   await page.route("**/api/v1/submissions/*/withdraw", async (route) => {
-    await route.fetch()
+    await route.fetch({ headers: from(page.context(), route.request().headers()) })
     await route.abort("failed")
   })
   await page.getByRole("button", { name: "מעקב אחרי ההצעה" }).click()
@@ -191,7 +191,7 @@ test("a correction saved before the server failed is found saved", async ({ brow
   test.setTimeout(120_000)
   const { page, view } = await returnedAndFixing(browser, `ספסל דמו תיקון ושגיאה ${Date.now()}`)
   await page.route("**/api/v1/submissions/*/revisions", async (route) => {
-    await route.fetch()
+    await route.fetch({ headers: from(page.context(), route.request().headers()) })
     await route.fulfill({ status: 500, contentType: "application/problem+json", body: JSON.stringify({ status: 500, code: "internal" }) })
   })
   await view.getByRole("button", { name: "שליחה מחדש לבדיקה" }).click()
@@ -206,7 +206,7 @@ test("when another window's different correction got in first, this one stays in
     const sent = route.request().postDataJSON() as Record<string, unknown>
     // Another window sends its own correction first; this one's answer is lost.
     await page.request.post(route.request().url(), {
-      headers: { ...route.request().headers() },
+      headers: from(page.context(), route.request().headers()),
       data: { ...sent, place_he: "כפר עזה" },
     })
     await route.abort("failed")
@@ -221,7 +221,7 @@ test("a correction approved before its lost answer was checked is found saved", 
   const name = `ספסל דמו תיקון שאושר ${Date.now()}`
   const { page, view, modCtx } = await returnedAndFixing(browser, name)
   await page.route("**/api/v1/submissions/*/revisions", async (route) => {
-    await route.fetch()
+    await route.fetch({ headers: from(page.context(), route.request().headers()) })
     // A moderator approves it before the sender's browser looks again.
     const { items } = (await (await modCtx.request.get("/api/admin/queue")).json()) as {
       items: { id: string; rev: number; revisionId: string; name_he: string }[]
@@ -243,7 +243,7 @@ test("a correction with doubled spaces, saved but unanswered, is still recognise
   const { page, view } = await returnedAndFixing(browser, `ספסל דמו רווחים ${Date.now()}`)
   await view.getByLabel("כמה מילים על המקום (לא חובה)").fill("שורה  עם רווח כפול\n\n\n\nושורה אחרי שורות ריקות")
   await page.route("**/api/v1/submissions/*/revisions", async (route) => {
-    await route.fetch()
+    await route.fetch({ headers: from(page.context(), route.request().headers()) })
     await route.abort("failed")
   })
   await view.getByRole("button", { name: "שליחה מחדש לבדיקה" }).click()
@@ -257,9 +257,12 @@ test("when another window's different correction got in first and this one is re
   const { page, view } = await returnedAndFixing(browser, `ספסל דמו סירוב בגלל חלון אחר ${Date.now()}`)
   await page.route("**/api/v1/submissions/*/revisions", async (route) => {
     const sent = route.request().postDataJSON() as Record<string, unknown>
-    await page.request.post(route.request().url(), { headers: { ...route.request().headers() }, data: { ...sent, place_he: "כפר עזה" } })
+    await page.request.post(route.request().url(), {
+      headers: from(page.context(), route.request().headers()),
+      data: { ...sent, place_he: "כפר עזה" },
+    })
     // This window's own request now meets the other's correction: a real 409.
-    await route.continue()
+    await route.continue({ headers: from(page.context(), route.request().headers()) })
   })
   await view.getByRole("button", { name: "שליחה מחדש לבדיקה" }).click()
   await expect(page.getByText("ההצעה השתנתה בינתיים", { exact: false }).first()).toBeVisible()
@@ -272,12 +275,12 @@ test("a withdrawal whose photo erasure is still pending can be finished after a 
   const page = await submit(browser, name)
   // The server withdraws it but can't erase its files yet (as R2 failing would leave it).
   await page.route("**/api/v1/submissions/*/withdraw", async (route) => {
-    await route.fetch()
+    await route.fetch({ headers: from(page.context(), route.request().headers()) })
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ status: "withdrawn", files: "pending" }) })
   })
   await page.route(/\/api\/v1\/submissions\/[^/]+$/, async (route) => {
     if (route.request().method() !== "GET") return route.continue()
-    const res = await route.fetch()
+    const res = await route.fetch({ headers: from(page.context(), route.request().headers()) })
     const body = (await res.json()) as Record<string, unknown>
     await route.fulfill({ response: res, json: body.status === "withdrawn" ? { ...body, files: "pending" } : body })
   })
@@ -338,7 +341,7 @@ test("a link that ended with its withdrawal doesn't offer to finish the photo's 
   // Withdrawn with its photo still to erase; from then on this link opens nothing, as a mailed link does once the
   // withdrawal has erased the address it was made for.
   await page.route("**/api/v1/submissions/*/withdraw", async (route) => {
-    await route.fetch()
+    await route.fetch({ headers: from(page.context(), route.request().headers()) })
     withdrawn = true
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ status: "withdrawn", files: "pending" }) })
   })

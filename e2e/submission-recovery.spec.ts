@@ -1,5 +1,5 @@
 import { expect, test, type Browser, type BrowserContextOptions, type Page } from "@playwright/test"
-import { ownAddress } from "./publish"
+import { from, ownAddress } from "./publish"
 
 // The opening isn't what this file tests, and its sunrise took about 8 s on every page that went through it. A visitor
 // who asked for less motion gets the day at once, with every flow the same; the opening keeps its own full-motion
@@ -49,9 +49,9 @@ test("an answer lost after the server saved is retried as the same place, once",
   let first = true
   await page.route("**/api/v1/submissions", async (route) => {
     keys.push(route.request().headers()["idempotency-key"])
-    if (!first) return route.continue()
+    if (!first) return route.continue({ headers: from(page.context(), route.request().headers()) })
     first = false
-    await route.fetch() // the server saves it…
+    await route.fetch({ headers: from(page.context(), route.request().headers()) }) // the server saves it…
     await route.abort("failed") // …and the answer never arrives
   })
   await fillAndSave(page, name)
@@ -178,9 +178,9 @@ test("two tabs adding places at once keep each other's places, keys and tracking
     // The first answer is lost after the server saved it, in both tabs.
     let lost = false
     await tab.route("**/api/v1/submissions", async (route) => {
-      if (lost) return route.continue()
+      if (lost) return route.continue({ headers: from(tab.context(), route.request().headers()) })
       lost = true
-      await route.fetch()
+      await route.fetch({ headers: from(tab.context(), route.request().headers()) })
       await route.abort("failed")
     })
     await tab.goto("/")

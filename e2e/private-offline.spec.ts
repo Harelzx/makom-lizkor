@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext, type Browser } from "@playwright/test"
-import { ownAddress } from "./publish"
+import { from, ownAddress } from "./publish"
 
 // The opening isn't what this file tests, and its sunrise took about 8 s on every page that went through it. A visitor
 // who asked for less motion gets the day at once, with every flow the same; the opening keeps its own full-motion
@@ -13,7 +13,7 @@ async function published(browser: Browser, name: string, extra: Record<string, u
   const ctx = await ownAddress(await browser.newContext())
   const api: APIRequestContext = ctx.request
   const res = await api.post("/api/v1/submissions", {
-    headers: { "Idempotency-Key": crypto.randomUUID().replaceAll("-", ""), "Turnstile-Token": "XXXX.DUMMY.TOKEN.XXXX" },
+    headers: from(ctx, { "Idempotency-Key": crypto.randomUUID().replaceAll("-", ""), "Turnstile-Token": "XXXX.DUMMY.TOKEN.XXXX" }),
     data: { kind: "garden", name_he: name, lat: 31.423456, lng: 34.498765, consent_version: "notice.submission@2026-10-9", ...extra },
   })
   expect(res.status()).toBe(201)
@@ -105,7 +105,7 @@ test("the moderator sees that a place is on private property, the owner's permis
   const note = "הכניסה דרך השער הצפוני, בתיאום מראש עם המשפחה"
   const ctx = await ownAddress(await browser.newContext())
   const res = await ctx.request.post("/api/v1/submissions", {
-    headers: { "Idempotency-Key": crypto.randomUUID().replaceAll("-", ""), "Turnstile-Token": "XXXX.DUMMY.TOKEN.XXXX" },
+    headers: from(ctx, { "Idempotency-Key": crypto.randomUUID().replaceAll("-", ""), "Turnstile-Token": "XXXX.DUMMY.TOKEN.XXXX" }),
     data: {
       kind: "garden",
       name_he: name,
@@ -132,7 +132,7 @@ test("the moderator sees that a place on private property without the owner's pe
   const name = `גינת דמו בלי אישור ${Date.now()}`
   const ctx = await ownAddress(await browser.newContext())
   const res = await ctx.request.post("/api/v1/submissions", {
-    headers: { "Idempotency-Key": crypto.randomUUID().replaceAll("-", ""), "Turnstile-Token": "XXXX.DUMMY.TOKEN.XXXX" },
+    headers: from(ctx, { "Idempotency-Key": crypto.randomUUID().replaceAll("-", ""), "Turnstile-Token": "XXXX.DUMMY.TOKEN.XXXX" }),
     data: {
       kind: "garden",
       name_he: name,

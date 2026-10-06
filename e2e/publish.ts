@@ -38,10 +38,19 @@ export async function published(browser: Browser, name: string) {
  * the page still comes first.
  */
 let addresses = Date.now() % 200
+const own = new WeakMap<BrowserContext, string>()
 export async function ownAddress(ctx: BrowserContext) {
   const address = `192.0.2.${addresses++ % 250}`
-  await ctx.route("**/api/v1/submissions**", (route) =>
-    route.fallback({ headers: { ...route.request().headers(), "cf-connecting-ip": address } }),
-  )
+  own.set(ctx, address)
+  await ctx.route("**/api/v1/submissions**", (route) => route.fallback({ headers: from(ctx, route.request().headers()) }))
   return ctx
+}
+/**
+ * Headers with the context's own address, for the requests routing doesn't reach: `ctx.request`, `page.request`, and
+ * a test's own page route that fetches or continues the request itself (a page route runs before the context's).
+ */
+export const from = (ctx: BrowserContext, headers: Record<string, string> = {}) => {
+  const address = own.get(ctx)
+  if (!address) throw new Error("this context has no address of its own: ownAddress first")
+  return { ...headers, "cf-connecting-ip": address }
 }
