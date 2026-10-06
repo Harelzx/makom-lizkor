@@ -12,6 +12,10 @@ test("an empty or missing origin blocks: share pages would carry no address", ()
   assert.equal(originBlockers(vars("")).length, 1)
   assert.equal(originBlockers({}).length, 1)
 })
+test("a reserved example domain or a workers.dev preview address blocks", () => {
+  for (const bad of ["https://example.com", "https://www.example.org", "https://example.net", "https://makom.harel.workers.dev"])
+    assert.equal(originBlockers(vars(bad)).length, 1, bad)
+})
 test("plain http, a path, a trailing slash or a placeholder domain blocks", () => {
   for (const bad of [
     "http://makom-lizkor.org.il",

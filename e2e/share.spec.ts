@@ -50,7 +50,15 @@ test("a place taken back opens the overview, even where this browser's offline c
   const res = await page.goto(`/place/${id}`)
   expect(res!.status()).toBe(410)
   await expect(page).toHaveURL(/\/#\/$/)
-  await page.waitForTimeout(1500)
   await expect(page.getByRole("heading", { name })).toHaveCount(0)
   await expect(page.getByRole("button", { name: "עם צליל" })).toHaveCount(0)
+  // Off the map and the list too, though the offline copy (the only feed this page has) still holds it; a search for
+  // a place that is listed (the site's own) proves the search itself works.
+  await page.getByRole("button", { name: /^חיפוש מקום/ }).click()
+  const box = page.getByRole("dialog").getByRole("combobox")
+  await box.fill("קיר המכוניות")
+  await expect(page.getByRole("option", { name: /קיר המכוניות/ }).first()).toBeVisible(DAY)
+  await box.fill(name)
+  await page.waitForTimeout(500)
+  await expect(page.getByRole("option", { name: new RegExp(name) })).toHaveCount(0)
 })

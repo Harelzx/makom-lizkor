@@ -14,18 +14,27 @@ export const INTRO_SEEN = "makom-lizkor:v2-seen"
 /** A shared link to a place lands on that place: the opening is for those who come in through the front door. */
 // A tracking link (#/track/<id>/<token>) is opened for its status, so it skips the opening too.
 const linkedToPlace = () => typeof location !== "undefined" && /^#\/(place|track|verify)\/[^/]+/.test(location.hash)
+/** A link's id, or null when its escapes are broken: a mistyped link opens the site, not an empty page. */
+const decoded = (part: string) => {
+  try {
+    return decodeURIComponent(part)
+  } catch {
+    return null
+  }
+}
 // A share page (/place/<id>, the Worker's copy of this page with the place's preview tags) is the site opened at that
-// place: its address becomes the hash route the rest of the site reads, before anything reads it. A place that isn't
-// public, or no longer is, opens the overview instead, and stays off the map even where this browser's offline copy of
-// the feed still has it.
+// place: its address becomes the hash route the rest of the site reads, before anything reads it. A contribution that
+// isn't public (hidden, or never approved) or no longer is (taken back) opens the overview instead, and stays off the
+// map even where this browser's offline copy of the feed still has it, until the server's own feed says otherwise.
 const sharedPath = typeof location !== "undefined" ? /^\/place\/([^/]+)\/?$/.exec(location.pathname) : null
 const shareStatus = sharedPath && document.querySelector('meta[name="place-status"]')?.getAttribute("content")
 if (sharedPath) history.replaceState(null, "", shareStatus ? "/#/" : `/#/place/${sharedPath[1]}`)
-const takenBack = shareStatus === "gone" ? decodeURIComponent(sharedPath![1]) : null
+const offMap = shareStatus ? decoded(sharedPath![1]) : null
 /** The place a shared link names, chosen before the first render so the address is never rewritten under it. */
 const linkedPlaceId = () => {
   if (!linkedToPlace() || !location.hash.startsWith("#/place/")) return null
-  const id = decodeURIComponent(location.hash.split("/")[2])
+  const id = decoded(location.hash.split("/")[2])
+  if (!id) return null
   // Local places and approved contributions (p_…) load after the first render, so their ids are trusted.
   return id.startsWith("local-") || id.startsWith("p_") || (seed as Place[]).some((p) => p.id === id) ? id : null
 }
@@ -183,7 +192,12 @@ export const useStore = create<State>((set, get) => ({
   setPicking: (picking) => set({ picking }),
   setDraft: (draft) => set({ draft }),
   setRemote: (feedVersion, remote, live = true) =>
-    set({ feedVersion, remote: takenBack ? remote.filter((p) => p.id !== takenBack) : remote, feedLive: live || get().feedLive }),
+    set({
+      feedVersion,
+      // Only an offline copy is filtered: the live feed is the server's word, and a place may have been approved since.
+      remote: offMap && !live ? remote.filter((p) => p.id !== offMap) : remote,
+      feedLive: live || get().feedLive,
+    }),
   addLocal: async (p) => {
     held.add(p.id)
     set({ local: [...get().local, p] })

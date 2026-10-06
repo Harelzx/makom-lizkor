@@ -13,7 +13,7 @@ export function originBlockers(raw) {
   if (
     url.protocol !== "https:" ||
     url.origin !== origin ||
-    /(^|\.)(example|test|localhost)$/.test(url.hostname) ||
+    /(^|\.)(example|test|localhost|invalid|example\.(com|net|org)|workers\.dev)$/.test(url.hostname) ||
     url.hostname === "localhost"
   )
     return [`PUBLIC_ORIGIN (${origin}) must be the site's own https origin, with no path or trailing slash`]

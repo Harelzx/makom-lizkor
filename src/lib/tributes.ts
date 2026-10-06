@@ -50,36 +50,48 @@ const settle = (placeId: string, sent: PendingTribute, countedOn: string | null)
   }).catch(() => undefined)
 
 let draining = false
-/** Sends what waits, each under the key it was given; stops at the first sign the server is unreachable. */
+let again = false
+/**
+ * Sends what waits, each under the key it was given; stops at the first sign the server is unreachable. An anemone
+ * left while a send is under way is picked up by the same run: it reads the outbox again before it ends.
+ */
 export async function drainTributes() {
-  if (draining) return
+  if (draining) return void (again = true)
   draining = true
   try {
-    const queue = await changeTributeOutbox((o) => o).catch(() => ({}) as Record<string, TributeEntry>)
-    if (!Object.values(queue).some((e) => "key" in e)) return
-    // Only an anemone left here made the id; nothing waiting, nothing read.
-    const id = await deviceId()
-    if (!id) return
-    for (const [placeId, entry] of Object.entries(queue)) {
-      if (!("key" in entry)) continue
-      if (Date.now() - entry.at > WEEK) {
-        await settle(placeId, entry, null)
-        continue
-      }
-      const r = await sendTribute(placeId, id, entry.key)
-      if (!r.ok && r.kind === "temporary") break
-      // Answered: recorded under the day the server counts it on (a late answer may come after midnight), so later taps
-      // that day stay local; a refusal is recorded as today's.
-      await settle(placeId, entry, r.ok && "day" in r.result ? r.result.day : today())
-      // Counted just now: the shared count shows it at once, before the next refresh.
-      if (r.ok && r.result.counted && !r.result.reason) {
-        const totals = useStore.getState().tributeTotals
-        useStore.getState().setTributeTotals({ ...totals, [placeId]: (totals[placeId] ?? 0) + 1 })
-      }
-    }
+    do {
+      again = false
+    } while ((await drainOnce()) && again)
   } finally {
     draining = false
   }
+}
+
+/** One pass over the outbox as it is now; false when the server was unreachable, so nothing more is tried. */
+async function drainOnce(): Promise<boolean> {
+  const queue = await changeTributeOutbox((o) => o).catch(() => ({}) as Record<string, TributeEntry>)
+  if (!Object.values(queue).some((e) => "key" in e)) return true
+  // Only an anemone left here made the id; nothing waiting, nothing read.
+  const id = await deviceId()
+  if (!id) return false
+  for (const [placeId, entry] of Object.entries(queue)) {
+    if (!("key" in entry)) continue
+    if (Date.now() - entry.at > WEEK) {
+      await settle(placeId, entry, null)
+      continue
+    }
+    const r = await sendTribute(placeId, id, entry.key)
+    if (!r.ok && r.kind === "temporary") return false
+    // Answered: recorded under the day the server counts it on (a late answer may come after midnight), so later taps
+    // that day stay local; a refusal is recorded as today's.
+    await settle(placeId, entry, r.ok && "day" in r.result ? r.result.day : today())
+    // Counted just now: the shared count shows it at once, before the next refresh.
+    if (r.ok && r.result.counted && !r.result.reason) {
+      const totals = useStore.getState().tributeTotals
+      useStore.getState().setTributeTotals({ ...totals, [placeId]: (totals[placeId] ?? 0) + 1 })
+    }
+  }
+  return true
 }
 
 export async function refreshTotals() {

@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers"
 import { describe, expect, it } from "vitest"
 import { call } from "./app"
-import { decide, queued, send } from "./submission-helpers"
+import { decide, queued, rev, revise, send, upload } from "./submission-helpers"
 
 // The site's page as the static assets serve it: the share route rewrites a copy of it.
 const SITE = `<!doctype html><html lang="he"><head><meta charset="UTF-8" /><title>מקום לזכור</title>
@@ -35,6 +35,19 @@ describe("a place's share page", () => {
     expect(html).not.toContain("example.test")
   })
 
+  it("carries the published text only, never a correction or photo still waiting for review", async () => {
+    const { id, trackingToken } = await send("ספסל דמו שפורסם")
+    await decide(id, await queued(id), "approve")
+    expect((await revise(id, trackingToken, await rev(id, trackingToken), "ספסל דמו בתיקון שממתין")).ok).toBe(true)
+    expect((await upload(id, trackingToken)).status).toBeLessThan(300)
+    const html = await (await page(id)).text()
+    const data = JSON.parse(/id="place-data">([^<]*)<\/script>/.exec(html)![1])
+    expect(data.name_he).toBe("ספסל דמו שפורסם")
+    expect(data.photo ?? null).toBeNull()
+    expect(html).not.toContain("בתיקון")
+    expect(html).not.toContain("quarantine")
+  })
+
   it("names one of the site's own places too, without carrying its data (it ships with the site)", async () => {
     const html = await (await page("nova-memorial-reim")).text()
     expect(meta(html, "og:title")).toBeTruthy()
@@ -50,6 +63,16 @@ describe("a place's share page", () => {
     expect(html).not.toContain("<img src=x")
     expect(html.match(/<\/script>/g)).toHaveLength(1)
     expect(JSON.parse(/id="place-data">([^<]*)<\/script>/.exec(html)![1]).name_he).toBe(name.replace("</script>", "</script>"))
+  })
+
+  it("is the site's page at any /place/ address: a trailing slash names the place, a deeper path is a 404 page", async () => {
+    const slash = await call("http://local/place/nova-memorial-reim/", {}, withSite)
+    expect(slash.status).toBe(200)
+    expect(meta(await slash.text(), "og:title")).not.toBe("מקום לזכור · שלוש שנים")
+    const deep = await call("http://local/place/nova-memorial-reim/x", {}, withSite)
+    expect(deep.status).toBe(404)
+    expect(deep.headers.get("Content-Type")).toContain("text/html")
+    expect(await deep.text()).toContain('<meta name="place-status" content="none"')
   })
 
   it("is 404, unindexed and uncached for a place that was never public, and says nothing of it", async () => {

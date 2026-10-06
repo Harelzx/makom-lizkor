@@ -60,3 +60,14 @@ it("an anemone counted just before midnight, answered after it, doesn't hold bac
   await queueTribute("p_2")
   expect(net.posts).toHaveLength(2)
 })
+
+it("an anemone left at another place while one is being sent is sent too, not left until the tab comes back", async () => {
+  const first = queueTribute("p_a")
+  await vi.waitFor(() => expect(net.posts).toHaveLength(1))
+  const second = queueTribute("p_b")
+  await second
+  net.answer!()
+  await first
+  await vi.waitFor(() => expect(net.posts).toHaveLength(2))
+  expect(Object.values(disk.keys.tributeOutbox as object).every((e) => "day" in e)).toBe(true)
+})
