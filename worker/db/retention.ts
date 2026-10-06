@@ -109,7 +109,8 @@ export async function runRetention(env: OpEnv, now: Date): Promise<{ id: string;
       counts[name] = await run()
     } catch (err) {
       ok = false
-      log("error", "retention_failed", { part: name, error: (err as Error).name })
+      // Logged as a code (decision_notes), which the log keeps; the counts' own key would be dropped.
+      log("error", "retention_failed", { part: name.replace(/[A-Z]/g, (m) => `_${m.toLowerCase()}`), error: (err as Error).name })
     }
   }
   await part("erased", () => eraseAbandoned(env, now))
