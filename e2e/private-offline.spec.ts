@@ -1,5 +1,10 @@
 import { expect, test, type APIRequestContext, type Browser } from "@playwright/test"
 
+// The opening isn't what this file tests, and its sunrise took about 8 s on every page that went through it. A visitor
+// who asked for less motion gets the day at once, with every flow the same; the opening keeps its own full-motion
+// specs (three-years, sound, montage, panel).
+test.use({ reducedMotion: "reduce" })
+
 const DAY = { timeout: 20_000 }
 
 /** A published place made through the API: Cloudflare's dummy token passes the development test secret. */

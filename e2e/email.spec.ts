@@ -1,5 +1,10 @@
 import { expect, test } from "@playwright/test"
 
+// The opening isn't what this file tests, and its sunrise took about 8 s on every page that went through it. A visitor
+// who asked for less motion gets the day at once, with every flow the same; the opening keeps its own full-motion
+// specs (three-years, sound, montage, panel).
+test.use({ reducedMotion: "reduce" })
+
 const DAY = { timeout: 20_000 }
 
 test("an optional email is verified from the site, then receives a tracking link that opens the status", async ({ browser }) => {

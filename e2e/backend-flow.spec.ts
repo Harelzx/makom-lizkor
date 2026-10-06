@@ -1,5 +1,10 @@
 import { expect, test, type Browser, type BrowserContextOptions, type Page } from "@playwright/test"
 
+// The opening isn't what this file tests, and its sunrise took about 8 s on every page that went through it. A visitor
+// who asked for less motion gets the day at once, with every flow the same; the opening keeps its own full-motion
+// specs (three-years, sound, montage, panel).
+test.use({ reducedMotion: "reduce" })
+
 // Skipping still plays the sunrise; the panel and its buttons arrive once the day begins.
 const DAY = { timeout: 20_000 }
 // On a desktop the search opens from the header's wide button («חיפוש מקום או קהילה ⌘K»).
