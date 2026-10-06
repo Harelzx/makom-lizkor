@@ -477,7 +477,7 @@ function Name({
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: after(1), duration: 0.8, ease }}
       >
-        מפה של {count} מקומות שהוקמו לזכרם של נרצחי ונופלי 7 באוקטובר, ושל הקהילות בדרום שחוזרות לפרוח.
+        מפה של {count ? `${count} ` : ""}מקומות שהוקמו לזכרם של נרצחי ונופלי 7 באוקטובר, ושל הקהילות בדרום שחוזרות לפרוח.
       </motion.p>
       <motion.div
         initial={{ opacity: 0, scale: 0.9 }}
@@ -511,7 +511,8 @@ function Name({
 export function Intro() {
   const phase = useStore((s) => s.phase)
   const setPhase = useStore((s) => s.setPhase)
-  const count = useStore((s) => s.seed.filter((p) => p.kind !== "community").length)
+  // How many places the map holds, once the feed has said; until then the line goes without a number.
+  const count = useStore((s) => s.remote.filter((p) => p.kind !== "community").length)
   const replay = useStore((s) => s.introRun > 0)
   // Returning visitors, and anyone who asked for less motion, go straight to the name.
   const [quick] = useState(() => reducedMotion() || seen())

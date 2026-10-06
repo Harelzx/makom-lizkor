@@ -35,13 +35,12 @@ function Row({ place, i, children }: { place: Place; i: number; children: React.
 }
 
 export function PlacesList() {
-  const seed = useStore((s) => s.seed)
   const local = useStore((s) => s.local)
   const remote = useStore((s) => s.remote)
   const query = useStore((s) => s.query)
   const places = useMemo(
-    () => allPlaces({ seed, remote, local }).filter((p) => p.kind !== "community" && matches(p, query)),
-    [seed, remote, local, query],
+    () => allPlaces({ remote, local }).filter((p) => p.kind !== "community" && matches(p, query)),
+    [remote, local, query],
   )
   const groups = [
     { id: "local", title: "הוספתם במכשיר הזה", items: places.filter((p) => p.local) },
@@ -107,11 +106,10 @@ export function PlacesList() {
 }
 
 export function CommunitiesList() {
-  const seed = useStore((s) => s.seed)
   const local = useStore((s) => s.local)
   const remote = useStore((s) => s.remote)
   const query = useStore((s) => s.query)
-  const all = useMemo(() => allPlaces({ seed, remote, local }), [seed, remote, local])
+  const all = useMemo(() => allPlaces({ remote, local }), [remote, local])
   const communities = all.filter((p) => p.kind === "community" && matches(p, query)).sort((a, b) => b.lat - a.lat)
 
   return (

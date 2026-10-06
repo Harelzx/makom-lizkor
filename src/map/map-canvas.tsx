@@ -4,7 +4,7 @@ import * as maplibregl from "maplibre-gl"
 import "maplibre-gl/dist/maplibre-gl.css"
 import { allPlaces, useStore } from "@/store"
 import { FlowerSprite } from "./flower-sprite"
-import { createMap, destroyMap, flyToPlace, getMap, returnToDawn, setLabels, shiftLight, startOrbit } from "./controller"
+import { createMap, destroyMap, flyToPlace, getMap, returnToDawn, setLabels, setOwnLabels, shiftLight, startOrbit } from "./controller"
 import type { Place } from "@/types"
 import { cn } from "@/lib/utils"
 
@@ -18,7 +18,6 @@ export function MapCanvas() {
   const [ready, setReady] = useState(false)
   const draftMarker = useRef<maplibregl.Marker | null>(null)
 
-  const seed = useStore((s) => s.seed)
   const local = useStore((s) => s.local)
   const remote = useStore((s) => s.remote)
   const phase = useStore((s) => s.phase)
@@ -26,7 +25,13 @@ export function MapCanvas() {
   const selectedId = useStore((s) => s.selectedId)
   const picking = useStore((s) => s.picking)
   const draft = useStore((s) => s.draft)
-  const places = useMemo(() => allPlaces({ seed, remote, local }), [seed, remote, local])
+  const places = useMemo(() => allPlaces({ remote, local }), [remote, local])
+  // The communities' names, as the feed brings them, kept off the basemap's own labels.
+  const communityNames = useMemo(
+    () => remote.filter((p) => p.kind === "community").map((p) => p.name_he.replace(/^(קיבוץ|מושב|העיר) /, "")),
+    [remote],
+  )
+  useEffect(() => setOwnLabels(communityNames), [communityNames])
 
   // Create the map once, at 06:29.
   useEffect(() => {

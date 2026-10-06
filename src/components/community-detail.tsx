@@ -12,12 +12,11 @@ import type { Place } from "@/types"
 /** A community holds both stories: who it lost, and how it is coming back. */
 // `ref` lets AnimatePresence (popLayout) lift the leaving card out of the flow, so the list can take its place at once.
 export function CommunityDetail({ place, onBack, ref }: { place: Place; onBack: () => void; ref?: React.Ref<HTMLElement> }) {
-  const seed = useStore((s) => s.seed)
   const local = useStore((s) => s.local)
   const remote = useStore((s) => s.remote)
   const select = useStore((s) => s.select)
   const r = place.revival
-  const sites = sitesNear(place, allPlaces({ seed, remote, local }))
+  const sites = sitesNear(place, allPlaces({ remote, local }))
   const photos = place.photos ?? []
   const titleRef = useFocusOnOpen<HTMLHeadingElement>()
 

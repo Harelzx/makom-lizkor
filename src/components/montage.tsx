@@ -241,9 +241,11 @@ export function Montage({ mode, days, count }: { mode: MontageMode; days: number
         const vis = Math.max(0, Math.min(w, cx + hw) - Math.max(0, cx - hw)) * Math.max(0, Math.min(h, cy + hh) - Math.max(0, cy - hh))
         return vis / (4 * hw * hh)
       }
+      // The memorial sites as the feed has them at this moment: with no feed yet, there are no sites to land on, and
+      // every clipping fades where it is.
       const sites = useStore
         .getState()
-        .seed.filter((p) => p.kind !== "community")
+        .remote.filter((p) => p.kind !== "community")
         .map((p) => [p.lng, p.lat] as [number, number])
       const inView = m
         .screenPoints(sites)

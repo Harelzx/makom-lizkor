@@ -1,16 +1,8 @@
 import { create } from "zustand"
-import seedRecords from "@/data/places.json"
 import type { LocalFields, Place } from "@/types"
 import { importable } from "@/lib/export"
 import { changeLocal, loadLocal, loadTributes, markUnlisted, saveTributes } from "@/lib/storage"
 import { superviseReports } from "@/lib/report-outbox"
-
-// The bundled records' photos as URLs, the shape places from the database have (phase 7 takes the bundle away).
-const seed = (seedRecords as unknown as (Omit<Place, "photos"> & { photos?: { file: string }[] })[]).map((p) =>
-  p.photos
-    ? { ...p, photos: p.photos.map(({ file, ...rest }) => ({ ...rest, url: `/photos/${file}`, thumb_url: `/photos/thumb/${file}` })) }
-    : p,
-) as Place[]
 
 /** intro: 06:29, the dark map and the opening words · dawn: the sunrise is playing · day: the site itself */
 export type Phase = "intro" | "dawn" | "day"
@@ -45,15 +37,21 @@ const linkedPlaceId = () => {
   if (!linkedToPlace() || !location.hash.startsWith("#/place/")) return null
   const id = decoded(location.hash.split("/")[2])
   if (!id) return null
-  // Local places and approved contributions (p_…) load after the first render, so their ids are trusted.
-  return id.startsWith("local-") || id.startsWith("p_") || seed.some((p) => p.id === id) ? id : null
+  return placeIdShape(id) ? id : null
 }
+
+/**
+ * An id a place could have: a visitor's own (local-…), an approved contribution (p_…) or one of the site's own (a slug).
+ * Every place comes from the feed or this browser after the first render, so a link with such an id is trusted until
+ * the server's own feed has come (App.tsx); the shape is CURATED_ID's (src/shared/curated.ts), kept here so the opening
+ * carries no schema code.
+ */
+export const placeIdShape = (id: string) => id.startsWith("local-") || id.startsWith("p_") || /^[a-z0-9][a-z0-9-]{0,63}$/.test(id)
 
 interface State {
   phase: Phase
   light: Light
-  seed: Place[]
-  /** Contributions a moderator approved, from the server's feed. */
+  /** Every published place, from the server's feed: the site's own and the contributions a moderator approved. */
   remote: Place[]
   feedVersion: string | null
   /** True once a feed came from the server in this visit; false while only the offline copy is shown. */
@@ -152,7 +150,6 @@ export const useStore = create<State>((set, get) => ({
   // A share link to a place that isn't there skips the opening all the same: it came through a link, not the front door.
   phase: linkedToPlace() || sharedPath ? "day" : "intro",
   light: "morning",
-  seed,
   remote: [],
   feedVersion: null,
   feedLive: false,
@@ -292,10 +289,10 @@ export const useStore = create<State>((set, get) => ({
   setJourney: (journeyIndex, playing) => set({ journeyIndex, journeyPlaying: playing ?? get().journeyPlaying }),
 }))
 
-/** Seed, approved places from the server, and this device's own places; once its place is approved, the local copy steps aside. */
-export const allPlaces = (s: Pick<State, "seed" | "remote" | "local">) => {
+/** The server's places (the site's own and approved contributions) and this device's own; once its place is approved, the local copy steps aside. */
+export const allPlaces = (s: Pick<State, "remote" | "local">) => {
   const published = new Set(s.remote.map((p) => p.id))
-  return [...s.seed, ...s.remote, ...s.local.filter((p) => !p.local?.remoteId || !published.has(p.local.remoteId))]
+  return [...s.remote, ...s.local.filter((p) => !p.local?.remoteId || !published.has(p.local.remoteId))]
 }
 
 export function normalize(s: string) {

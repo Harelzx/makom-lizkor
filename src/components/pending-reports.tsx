@@ -17,12 +17,13 @@ export function PendingReports() {
   useReports()
   const feedVersion = useStore((s) => s.feedVersion)
   const feedLive = useStore((s) => s.feedLive)
-  const seed = useStore((s) => s.seed)
   const remote = useStore((s) => s.remote)
   useEffect(() => void hydrate(), [])
   // Only the server's own feed tells which places aren't shown; before it, every contribution would look hidden.
   const live = !!feedVersion && feedLive
-  const shown = new Set([...seed, ...remote].map((p) => p.id))
+  // Every place shown comes with the feed now, the site's own included (phase 7): a request about one of them is
+  // judged by the same live feed as a contribution's.
+  const shown = new Set(remote.map((p) => p.id))
   const elsewhere = live ? allEntries().filter((e) => !shown.has(e.placeId) && (e.r || e.shown)) : []
   const unread = readFailed()
   if (!elsewhere.length && !unread) return null

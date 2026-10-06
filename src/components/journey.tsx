@@ -11,8 +11,9 @@ const DWELL = 9000
 
 /** A quiet passage north to south along Route 232, from Zikim to Kerem Shalom. */
 export function Journey() {
-  const seed = useStore((s) => s.seed)
-  const stops = useMemo(() => journeyStops(seed), [seed])
+  // The site's own places come with the feed; until it has come, the journey has no stops yet.
+  const remote = useStore((s) => s.remote)
+  const stops = useMemo(() => journeyStops(remote), [remote])
   const index = useStore((s) => s.journeyIndex)
   const playing = useStore((s) => s.journeyPlaying)
   const setJourney = useStore((s) => s.setJourney)

@@ -20,6 +20,12 @@ export default defineConfig({
   workers: 1,
   reporter: [["list"]],
   use: { baseURL: `http://localhost:${port}`, ...devices["Desktop Chrome"], viewport: { width: 1280, height: 900 } },
+  // The site's own places come from the database (phase 7): the "seed" project imports them into the fresh state
+  // first, and every spec depends on it (a test filter still runs it: dependencies always run).
+  projects: [
+    { name: "seed", testMatch: /seed\.setup\.ts/ },
+    { name: "e2e", dependencies: ["seed"], testIgnore: /seed\.setup\.ts/ },
+  ],
   webServer: {
     command: prod
       ? `node scripts/dev-vars.mjs && ${fresh} && npm run build && npx vite preview --port ${port} --strictPort`

@@ -33,8 +33,9 @@ export function About() {
     setSeen({ open, section })
     if (open) setItem(section ?? "")
   }
-  const sites = useStore((s) => s.seed.filter((p) => p.kind !== "community").length)
-  const communities = useStore((s) => s.seed.filter((p) => p.kind === "community").length)
+  // Counted from the feed: the site's own places and approved contributions alike.
+  const sites = useStore((s) => s.remote.filter((p) => p.kind !== "community").length)
+  const communities = useStore((s) => s.remote.filter((p) => p.kind === "community").length)
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>

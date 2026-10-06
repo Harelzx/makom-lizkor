@@ -1,7 +1,7 @@
 import * as maplibregl from "maplibre-gl"
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url"
 import { FIRST_LIGHT, MORNING, NIGHT, type Palette } from "./palette"
-import { applyPalette, buildStyle } from "./style"
+import { applyPalette, buildStyle, OWN_LABEL_LAYERS, ownLabelsFilter } from "./style"
 
 // MapLibre's own relative worker lookup doesn't survive a production build.
 maplibregl.setWorkerUrl(workerUrl)
@@ -56,6 +56,7 @@ export function createMap(container: HTMLElement, light: "night" | "morning", la
     },
   })
   if (import.meta.env.DEV) (window as unknown as { __map: maplibregl.Map }).__map = map
+  if (ownLabels.length) setOwnLabels(ownLabels)
   map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "bottom-left")
   map.addControl(new maplibregl.AttributionControl({ compact: false }), "bottom-left")
   return map
@@ -68,6 +69,22 @@ export function destroyMap() {
 }
 
 const LABEL_LAYERS = ["road-label", "place-small", "place-town"]
+
+let ownLabels: string[] = []
+/** The communities' names, hidden from the basemap's labels (style.ts); kept for a map made later, applied once the style is in. */
+export function setOwnLabels(names: string[]) {
+  ownLabels = names
+  if (!map) return
+  const m = map
+  const apply = () => {
+    for (const id of OWN_LABEL_LAYERS) {
+      const filter = m.getFilter(id) as unknown[] | null
+      if (filter) m.setFilter(id, [...filter.slice(0, -1), ownLabelsFilter(names)] as never)
+    }
+  }
+  if (m.isStyleLoaded()) apply()
+  else m.once("load", apply)
+}
 
 /** The opening is wordless on the map: labels stay hidden until the sun is up. */
 export function setLabels(visible: boolean) {
