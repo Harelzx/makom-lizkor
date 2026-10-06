@@ -125,7 +125,7 @@ Red checks where a test's sensitivity was in doubt (logs in `runs/*-c1*-mutation
 
 - **Denied:** `wrangler deploy`, `versions deploy`, `rollback`, `tail` and `login`, bare and through `npx`; `gh workflow run` of release or rollback, and their dispatch through `gh api`; `gh release edit … --draft=false`; `git tag …release-…`; `git push …release-…`; `git push --tags`.
 - **Still allowed:** everyday work, including `wrangler types`, local D1 migrations, `deployments status`, `versions list`, `gh run list` and a draft `gh release create`.
-- **A harness guardrail, not isolation (spec 12.2, a49):** a rule matches the form Claude writes, not the same program reached another way (a path, `sh -c`, a script). The real gates are the production environment's protection in GitHub and the owner's hand on Run workflow.
+- **A harness guardrail, not isolation (spec 12.2, a49):** a rule matches the form Claude writes, not the same program reached another way (a path, `sh -c`, a script). Nothing in GitHub is a human-approval gate on our plan (GitHub Free, private repository: no environment protection or reviewers), and `workflow_dispatch` alone is not one either. Production stays safe because its credentials are not in GitHub at all; how a production release happens is Harel's decision.
 
 ## Next action
 
