@@ -594,7 +594,12 @@ purge_after  TEXT NOT NULL,   -- starts equal to ceiling_at; only ever lowered
 - **הרשאות ייצור:**
   - קיימות רק כ־secrets של GitHub Environment בשם `production`, ואף פעם לא על המחשב.
   - GitHub מסתיר את ערכי ה־secrets, והם לא נחשפים ישירות לשום סשן. workflow שנכתב לשם כך יכול בכל זאת לחשוף אותם (ראו "מה שאי אפשר להפריד" בהמשך).
-  - ה־environment מוגבל לענף `main`. רק `release.yml` ו־`rollback.yml` משתמשים בו, וזו מוסכמה ש־CI בודק. במאגר פרטי זה דורש GitHub Pro: ב־Free יש רק secret ברמת המאגר, וכל workflow בכל ענף יכול לקרוא אותו.
+  - ה־environment מוגבל לענף `main`. רק `release.yml` ו־`rollback.yml` משתמשים בו, וזו מוסכמה ש־CI בודק.
+  - **תיקון (2026-10-06, לפי התיעוד של GitHub):** במאגר פרטי, GitHub Free לא נותן environment secrets, ‏required reviewers או deployment branches. Pro ו־Team נותנים environment secrets ו־deployment branches, אבל לא required reviewers. Required reviewers במאגר פרטי יש רק ב־Enterprise.
+    - Harel בחר ב־Free, ולא אישר שדרוג.
+    - **לכן הרשאות הייצור לא נשמרות ב־GitHub בכלל,** ו־`release.yml` לא יכול לפרוס לייצור עד שתתקבל החלטה על מסלול השחרור.
+    - **הרשאות ה־staging** (חשבון ה־staging בלבד, נתונים סינתטיים) הן repository secrets בשם `STAGING_*`.
+    - `workflow_dispatch` וכללי ה־deny אינם גבול אישור אנושי שנאכף.
 - **מה בידי הסוכן:** הרשאות staging (נתונים סינתטיים), הקוד, ו־service token לאבחון בלבד. הנתונים שה־`/api/ops` חושף נאכפים בקוד שלנו ובבדיקת סכמה.
 - **לוגים נקיים כבר במקור** (סעיף 11).
 - **כללי deny בשכבת הסוכן:**
@@ -969,7 +974,7 @@ purge_after  TEXT NOT NULL,   -- starts equal to ceiling_at; only ever lowered
 5. **בסיס ההעברה לכל מעבד:** תואם עם סשן הפרטיות (סעיף 12.3). נשאר רק ספק התיבה, שייקבע עם בחירתו.
 6. **רשימת קודי השחזור** וזמני השמירה של `audit_log`: אישור משפטי.
 7. **ה־cache של ה־Worker:** מגבלת ה־purge נסגרה (תמיד Free, סעיף 5). נשארה בדיקה אחת ב־staging: ש־`no-store` לדפדפן לא מבטל את ה־cache בקצה.
-8. **GitHub:** אין עדיין remote. צריך ליצור מאגר פרטי בחשבון הקיים ולשדרג ל־Pro כשמתחיל האימות בענן.
+8. **GitHub:** מאגר פרטי, `Harelzx/makom-lizkor`, ב־GitHub Free. ‏`main` נדחף ב־2026-10-06. אין שדרוג ל־Pro, שגם ככה לא היה נותן required reviewers למאגר פרטי (תיקון ב־12.2). מסלול השחרור לייצור ממתין להחלטה.
 
 ---
 

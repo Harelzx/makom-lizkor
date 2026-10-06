@@ -1,0 +1,74 @@
+# Staging (spec 14.1, 14.2): every commit on main that passed CI is deployed to the staging account, synthetic data
+# only, on its workers.dev address behind Cloudflare Access, and checked there. release.yml requires a successful run of
+# this workflow on the commit it releases.
+#
+# GitHub Free, private repository: no environment secrets, no required reviewers, no deployment branches (GitHub docs,
+# 2026-10-06). So the staging credentials are repository secrets, readable by any workflow on any branch: they must
+# be scoped to the staging account alone, which holds nothing but synthetic data. Production credentials never go into
+# this repository's secrets (scripts/ci-policy.mjs keeps their names out of every workflow but release and rollback).
+name: staging
+
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # Only a push to main that CI passed: never a pull request's run, never a failed one.
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    env:
+      SHA: ${{ github.event.workflow_run.head_sha }}
+      CLOUDFLARE_ENV: staging
+      CLOUDFLARE_API_TOKEN: ${{ secrets.STAGING_CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.STAGING_CLOUDFLARE_ACCOUNT_ID }}
+      VITE_TURNSTILE_SITEKEY: ${{ vars.STAGING_TURNSTILE_SITEKEY }}
+      STAGING_ACCESS_TEAM_DOMAIN: ${{ vars.STAGING_ACCESS_TEAM_DOMAIN }}
+      STAGING_ACCESS_AUD: ${{ vars.STAGING_ACCESS_AUD }}
+      STAGING_PUBLIC_ORIGIN: ${{ vars.STAGING_PUBLIC_ORIGIN }}
+      STAGING_TURNSTILE_HOSTNAMES: ${{ vars.STAGING_TURNSTILE_HOSTNAMES }}
+      STAGING_MODERATORS: ${{ vars.STAGING_MODERATORS }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - name: The commit checked out is the one CI passed
+        run: test "$(git rev-parse HEAD)" = "$SHA"
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Staging config holds, with the real database id and every account value
+        run: node scripts/staging-check.mjs --deploy
+      - run: npm run build
+      - name: Migrations, on the staging database
+        run: npx wrangler d1 migrations apply DB --remote
+      - name: Deploy, tagged with its commit
+        env:
+          TURNSTILE_SECRET: ${{ secrets.STAGING_TURNSTILE_SECRET }}
+          TRACKING_SECRET: ${{ secrets.STAGING_TRACKING_SECRET }}
+          TRIBUTE_SECRET: ${{ secrets.STAGING_TRIBUTE_SECRET }}
+        run: |
+          set -euo pipefail
+          secrets="$RUNNER_TEMP/staging-secrets.json"
+          trap 'rm -f "$secrets"' EXIT
+          node -e 'const e=process.env; require("fs").writeFileSync(process.argv[1], JSON.stringify({TURNSTILE_SECRET:e.TURNSTILE_SECRET, TRACKING_SECRET:e.TRACKING_SECRET, TRIBUTE_SECRET:e.TRIBUTE_SECRET}), {mode:0o600})' "$secrets"
+          npx wrangler deploy --tag "staging-${SHA:0:12}" --message "staging $SHA" --secrets-file "$secrets" \
+            --var "ACCESS_TEAM_DOMAIN:$STAGING_ACCESS_TEAM_DOMAIN" --var "ACCESS_AUD:$STAGING_ACCESS_AUD" \
+            --var "PUBLIC_ORIGIN:$STAGING_PUBLIC_ORIGIN" --var "TURNSTILE_HOSTNAMES:$STAGING_TURNSTILE_HOSTNAMES" \
+            --var "MODERATORS:$STAGING_MODERATORS"
+      - name: Edge checks through Access
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.STAGING_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.STAGING_ACCESS_CLIENT_SECRET }}
+        run: node scripts/edge-check.mjs "$STAGING_PUBLIC_ORIGIN"

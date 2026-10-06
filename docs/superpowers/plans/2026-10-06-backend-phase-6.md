@@ -173,7 +173,10 @@
   - **כלל סשן הפרטיות** ליד `ops-summary.schema.json`: שדה חדש שאינו ספירה, דגל, תאריך או קוד (תבנית הקוד של הסכמה, או רשימה סגורה) מסומן «text or id: privacy review required before merge». גם מפתחות של record נבדקים.
   - **`release:check`** חוסם רק את המסלולים שמפעילים אותו (`release.yml`). הוא לא עוצר deploy שנעשה בדרך אחרת (a49).
   - **`yaml` כתלות dev ישירה** (2.9.1, שכבר הייתה בעץ), לפענוח ה־workflows.
-  - **לא מאומת, ונעשה בהגדרות GitHub:** ה־environment מוגבל ל־`main` עם הבעלים כ־reviewer, GitHub Pro למאגר פרטי, היקף ה־`CLOUDFLARE_API_TOKEN`, ו־pin של ה־actions ל־SHA. `ci-policy` לא רואה אותם.
+  - **לא מאומת, ונעשה בהגדרות GitHub:** היקף ה־token של Cloudflare, ו־pin של ה־actions ל־SHA. `ci-policy` לא רואה אותם.
+  - **תוקן ב־2026-10-06:** ההנחה ש־Pro נותן environment מוגן עם reviewer שגויה.
+    - **במאגר פרטי:** Free לא נותן environment secrets, reviewers או deployment branches. ל־Pro ול־Team יש environment secrets ו־deployment branches, אבל לא reviewers.
+    - **ההחלטה:** Harel בחר ב־Free, ולכן הרשאות הייצור לא נשמרות ב־GitHub, ו־`release.yml` לא פורס לייצור עד החלטה על מסלול השחרור. ה־staging עובר ל־`staging.yml` עם `STAGING_*` secrets.
 - **רשימת staging** (מה שנבדק רק בענן):
   - Turnstile תחת ה־CSP;
   - `staging.yml` עצמו;

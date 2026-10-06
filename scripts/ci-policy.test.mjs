@@ -18,7 +18,7 @@ const fails = (workflows, expected) => {
 
 test("the committed workflows keep the policy", () => {
   assert.deepEqual(policyProblems(real), [])
-  assert.deepEqual(Object.keys(real).sort(), ["ci.yml", "release.yml", "rollback.yml"])
+  assert.deepEqual(Object.keys(real).sort(), ["ci.yml", "release.yml", "rollback.yml", "staging.yml"])
 })
 
 test("only release and rollback reach production, and nothing else reads a secret", () => {
@@ -117,5 +117,39 @@ test("a rollback moves code only, after its check", () => {
   fails(
     withChange("rollback.yml", "          node scripts/rollback-check.mjs", "          echo skipped"),
     "must pass scripts/rollback-check.mjs",
+  )
+})
+
+test("CI runs once per commit", () => {
+  fails(withChange("ci.yml", "  push:\n    branches: [main]\n", "  push:\n"), "once per commit")
+})
+
+test("staging deploys only the commit CI passed on main, with staging's secrets alone, checked before and after", () => {
+  fails(withChange("staging.yml", "    branches: [main]\n", "    branches: [main, dev]\n"), "only after CI completes on main")
+  fails(withChange("staging.yml", "on:\n  workflow_run:", "on:\n  push:\n  workflow_run:"), "only after CI completes on main")
+  fails(withChange("staging.yml", " && github.event.workflow_run.event == 'push'", ""), "only when CI passed on a push")
+  fails(withChange("staging.yml", "      CLOUDFLARE_ENV: staging\n", ""), "must set CLOUDFLARE_ENV to staging")
+  fails(
+    withChange("staging.yml", "          ref: ${{ github.event.workflow_run.head_sha }}\n", "          ref: main\n"),
+    "check out the commit CI passed",
+  )
+  fails(withChange("staging.yml", "node scripts/staging-check.mjs --deploy", "true"), "check the staging config")
+  fails(withChange("staging.yml", "run: node scripts/edge-check.mjs", "run: echo"), "then run the edge checks")
+  // A production credential, or an environment, never comes into staging; staging's never into production.
+  fails(
+    withChange("staging.yml", "secrets.STAGING_CLOUDFLARE_API_TOKEN", "secrets.CLOUDFLARE_API_TOKEN"),
+    "outside the production environment",
+  )
+  fails(
+    withChange("staging.yml", "    runs-on: ubuntu-latest\n    env:", "    runs-on: ubuntu-latest\n    environment: production\n    env:"),
+    "uses the production environment",
+  )
+  fails(
+    withChange("release.yml", "secrets.CLOUDFLARE_ACCOUNT_ID", "secrets.STAGING_CLOUDFLARE_ACCOUNT_ID"),
+    "staging secrets in a production workflow",
+  )
+  fails(
+    withChange("staging.yml", 'npx wrangler deploy --tag "staging-', 'npx wrangler deploy --env production --tag "staging-'),
+    "changes production",
   )
 })

@@ -66,4 +66,48 @@
   "triggers": { "crons": ["*/15 * * * *"] },
   // Our own JSON log lines only; no automatic per-request records (they carry URLs and headers).
   "observability": { "logs": { "enabled": true, "invocation_logs": false } },
+  "env": {
+    // Staging (spec 14.1): synthetic data only, in the staging account, on its workers.dev address behind Cloudflare
+    // Access. Built with CLOUDFLARE_ENV=staging and deployed only by .github/workflows/staging.yml, which fills the
+    // empty vars from the repository's variables and the secrets from its secrets. Never development: ENVIRONMENT is
+    // "staging" and there is no DEV_ACCESS_SECRET, so /__dev and X-Test-Now stay closed (scripts/staging-check.mjs).
+    // Bindings aren't inherited from the top level, so each is named here, apart from production's.
+    "staging": {
+      "name": "makom-lizkor-staging",
+      "workers_dev": true,
+      "preview_urls": false,
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "makom-staging",
+          // Set once the staging database exists (created with jurisdiction eu); an id is not a secret.
+          "database_id": "00000000-0000-0000-0000-000000000000",
+          "migrations_dir": "migrations",
+        },
+      ],
+      "vars": {
+        "ENVIRONMENT": "staging",
+        "EPOCH": "0",
+        "MODERATORS": "",
+        "OPS_SERVICE_TOKENS": "",
+        "ACCESS_TEAM_DOMAIN": "",
+        "ACCESS_AUD": "",
+        "TURNSTILE_HOSTNAMES": "",
+        "QUEUE_LIMIT": "200",
+        "PUBLIC_ORIGIN": "",
+        "EXPORT_PUBLIC_KEYS": "",
+      },
+      "r2_buckets": [
+        { "binding": "MEDIA", "bucket_name": "makom-staging-media", "jurisdiction": "eu" },
+        { "binding": "LEDGER", "bucket_name": "makom-staging-ledger", "jurisdiction": "eu" },
+        { "binding": "EXPORTS", "bucket_name": "makom-staging-exports", "jurisdiction": "eu" },
+      ],
+      "ratelimits": [
+        { "name": "SUBMIT_LIMIT", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } },
+        { "name": "TRIBUTE_LIMIT", "namespace_id": "1002", "simple": { "limit": 60, "period": 60 } },
+        { "name": "REPORT_LIMIT", "namespace_id": "1003", "simple": { "limit": 5, "period": 60 } },
+        { "name": "CSP_LIMIT", "namespace_id": "1004", "simple": { "limit": 20, "period": 60 } },
+      ],
+    },
+  },
 }

@@ -3,8 +3,12 @@
 # the release's tag. That is the only manual step. Everything below names that one commit: the manifest's hash is
 # rebuilt for it, CI and staging must have passed on it, and it is what is checked out, checked and deployed (a49).
 #
-# release:check gates this path; it does not by itself stop a deploy made some other way (a49). The environment's
-# protection (main only, the owner as reviewer) is set in GitHub, not in this file, and isn't something CI can check.
+# release:check gates this path; it does not by itself stop a deploy made some other way (a49).
+#
+# Not usable as it stands on GitHub Free with a private repository (GitHub docs, 2026-10-06): the production environment
+# there holds no secrets and enforces no reviewer or branch rule, and workflow_dispatch is no human-approval boundary.
+# Production credentials are therefore kept out of GitHub entirely, so this workflow can't deploy until the owner
+# chooses the production release path; it fails closed (no credentials, and no staging.yml run on the commit).
 name: release
 
 on:

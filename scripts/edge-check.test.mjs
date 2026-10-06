@@ -75,3 +75,18 @@ test("--dev without a working sign-in fails instead of checking less", async () 
   const fetch = deployment((u, _i, res) => u.pathname === "/__dev/login" && res.headers.delete("Set-Cookie"))
   assert.equal(status(await edgeChecks("https://site.example", { fetch, dev: true })).private_no_store, "fail")
 })
+
+test("behind Access, the service token goes with every request, and never to the workers.dev probe", async () => {
+  const seen = []
+  const open = deployment()
+  const fetch = async (input, init = {}) => {
+    seen.push([String(input), new Headers(init.headers).get("CF-Access-Client-Id")])
+    return open(input, init)
+  }
+  await edgeChecks("https://site.example", { fetch, workersDev: "https://w.example.workers.dev", access: { id: "id.access", secret: "s" } })
+  assert.ok(seen.filter(([u]) => !u.includes("workers.dev")).every(([, id]) => id === "id.access"))
+  assert.deepEqual(
+    seen.filter(([u]) => u.includes("workers.dev")).map(([, id]) => id),
+    [null],
+  )
+})

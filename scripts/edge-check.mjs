@@ -5,6 +5,8 @@
 // address, a moderator action for the purge timing) says so and is skipped, never counted as passed.
 //   node scripts/edge-check.mjs <base-url> [--dev] [--workers-dev <url>]
 //   --dev: sign in through the development stand-in (/__dev/login), as a moderator and as a stranger.
+// Behind Access (staging), CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET in the environment, a service token's, go
+// with every request; they are read from the environment only, never from an argument.
 import { pathToFileURL } from "node:url"
 import { CSP, SECURITY_HEADERS } from "../worker/lib/security-headers.ts"
 
@@ -13,8 +15,14 @@ const PAGES = ["/", "/favicon.svg", "/admin/", "/api/v1/health", "/place/car-wal
 const AUTHENTICATED = ["/api/admin/queue", "/api/ops/summary", "/api/v1/submissions/p_00000000000000000000000000"]
 const IDENTITIES = { moderator: "dev@example.test", stranger: "not-a-moderator@example.test" }
 
-export async function edgeChecks(base, { fetch = globalThis.fetch, dev = false, workersDev = null } = {}) {
+export async function edgeChecks(base, { fetch: send = globalThis.fetch, dev = false, workersDev = null, access = null } = {}) {
   const url = (path) => new URL(path, base).toString()
+  // Past Access with a service token, on every request but the workers.dev probe (which must be refused on its own).
+  const fetch = (u, init = {}) =>
+    send(
+      u,
+      access ? { ...init, headers: { ...init.headers, "CF-Access-Client-Id": access.id, "CF-Access-Client-Secret": access.secret } } : init,
+    )
   const results = []
   const record = (check, failures, detail) =>
     results.push({ check, status: failures.length ? "fail" : "pass", detail: failures.length ? failures : detail })
@@ -69,7 +77,7 @@ export async function edgeChecks(base, { fetch = globalThis.fetch, dev = false, 
   else {
     let open = null
     try {
-      const res = await fetch(new URL("/api/v1/health", workersDev).toString(), { redirect: "manual" })
+      const res = await send(new URL("/api/v1/health", workersDev).toString(), { redirect: "manual" })
       if (res.status < 400) open = `answered ${res.status}`
     } catch {
       // Unreachable is closed.
@@ -87,7 +95,9 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     process.exit(2)
   }
   const at = args.indexOf("--workers-dev")
-  const results = await edgeChecks(base, { dev: args.includes("--dev"), workersDev: at >= 0 ? args[at + 1] : null })
+  const { CF_ACCESS_CLIENT_ID: id, CF_ACCESS_CLIENT_SECRET: secret } = process.env
+  const access = id && secret ? { id, secret } : null
+  const results = await edgeChecks(base, { dev: args.includes("--dev"), workersDev: at >= 0 ? args[at + 1] : null, access })
   for (const r of results) console.log(`${r.status.padEnd(4)}  ${r.check}: ${Array.isArray(r.detail) ? r.detail.join("; ") : r.detail}`)
   process.exit(results.some((r) => r.status === "fail") ? 1 : 0)
 }

@@ -8,6 +8,7 @@ import { pathToFileURL } from "node:url"
 import { parse } from "yaml"
 
 const PRODUCTION = ["release.yml", "rollback.yml"]
+const STAGING = "staging.yml"
 const SHA_REF = "${{ needs.verify.outputs.sha }}"
 
 const runs = (job) => (job.steps ?? []).map((s) => (typeof s.run === "string" ? s.run : ""))
@@ -35,17 +36,25 @@ export function policyProblems(workflows) {
       const body = text({ env: job.env, steps: job.steps, with: job.with })
       if (env === "production" && !production) say(`job ${id} uses the production environment`)
       if (env && env !== "production") say(`job ${id} uses an unknown environment '${env}'`)
-      const secrets = [...body.matchAll(/secrets\.([A-Za-z_][A-Za-z0-9_]*)/g)].map((m) => m[1]).filter((s) => s !== "GITHUB_TOKEN")
-      if (secrets.length && env !== "production") say(`job ${id} reads ${secrets.join(", ")} outside the production environment`)
+      const secrets = [...body.matchAll(/\$\{\{\s*secrets\.([A-Za-z_][A-Za-z0-9_]*)/g)].map((m) => m[1]).filter((s) => s !== "GITHUB_TOKEN")
+      // Staging's own secrets (STAGING_*, scoped to the staging account) in staging.yml; any other only in production's.
+      const staging = name === STAGING && secrets.every((s) => s.startsWith("STAGING_"))
+      if (secrets.length && env !== "production" && !staging)
+        say(`job ${id} reads ${secrets.join(", ")} outside the production environment`)
+      if (production && secrets.some((s) => s.startsWith("STAGING_"))) say(`job ${id} reads staging secrets in a production workflow`)
       // An input or event field written into a script is a script injection; it goes through env instead.
       for (const run of runs(job))
         if (/\$\{\{\s*(inputs\.|github\.event\.)/.test(run)) say(`job ${id} writes an input into a script; pass it through env`)
       const deploys = runs(job).some((r) =>
         /\bwrangler\s+(deploy|rollback|versions\s+(deploy|upload)|d1\s+(migrations\s+apply|execute|time-travel\s+restore))\b/.test(r),
       )
-      if (deploys && !production) say(`job ${id} changes production from outside release.yml and rollback.yml`)
+      const toStaging = name === STAGING && job.env?.CLOUDFLARE_ENV === "staging" && !runs(job).some((r) => /--env\s+(?!staging\b)/.test(r))
+      if (deploys && !production && !toStaging) say(`job ${id} changes production from outside release.yml and rollback.yml`)
     }
     if (name === "release.yml") problems.push(...releaseProblems(w).map((p) => `${name}: ${p}`))
+    if (name === STAGING) problems.push(...stagingProblems(w, triggers).map((p) => `${name}: ${p}`))
+    if (name === "ci.yml" && text(w.on?.push?.branches) !== text(["main"]))
+      say("CI runs once per commit: on pushes to main and on pull requests")
     if (name === "rollback.yml") problems.push(...rollbackProblems(w).map((p) => `${name}: ${p}`))
   }
   for (const name of PRODUCTION) if (!(name in workflows)) problems.push(`${name} is missing`)
@@ -90,6 +99,38 @@ function releaseProblems(w) {
     if (at.some((i) => i < 0) || at.some((i, k) => k && i < at[k - 1]))
       problems.push(
         `job ${id} must run, in order: release:check, the Time Travel bookmark, the migrations, the deploy (tagged with the release and its commit), the production checks`,
+      )
+  }
+  return problems
+}
+
+/** Staging deploys only what CI passed on main, the very commit, checked before and after. */
+function stagingProblems(w, triggers) {
+  const problems = []
+  if (
+    text(triggers) !== text(["workflow_run"]) ||
+    text(w.on.workflow_run?.workflows) !== text(["ci"]) ||
+    text(w.on.workflow_run?.branches) !== text(["main"])
+  )
+    problems.push("staging runs only after CI completes on main (workflow_run of ci, branches main)")
+  for (const [id, job] of Object.entries(w.jobs ?? {})) {
+    if (!/workflow_run\.conclusion == 'success'/.test(String(job.if)) || !/workflow_run\.event == 'push'/.test(String(job.if)))
+      problems.push(`job ${id} must run only when CI passed on a push`)
+    if (job.environment) problems.push(`job ${id} uses an environment: staging has none (GitHub Free)`)
+    if (job.env?.CLOUDFLARE_ENV !== "staging") problems.push(`job ${id} must set CLOUDFLARE_ENV to staging`)
+    const checkout = (job.steps ?? []).find((s) => String(s.uses ?? "").startsWith("actions/checkout"))
+    if (checkout?.with?.ref !== "${{ github.event.workflow_run.head_sha }}") problems.push(`job ${id} must check out the commit CI passed`)
+    const steps = runs(job)
+    const at = [
+      /test "\$\(git rev-parse HEAD\)" = "\$SHA"/,
+      /staging-check\.mjs --deploy/,
+      /wrangler d1 migrations apply/,
+      /wrangler deploy --tag "staging-/,
+      /edge-check\.mjs/,
+    ].map((p) => steps.findIndex((r) => p.test(r)))
+    if (at.some((i) => i < 0) || at.some((i, k) => k && i < at[k - 1]))
+      problems.push(
+        `job ${id} must confirm the commit, check the staging config, migrate, deploy tagged with the commit, then run the edge checks`,
       )
   }
   return problems

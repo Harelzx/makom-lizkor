@@ -1,10 +1,13 @@
-# Every push and pull request: the static checks, the Worker's and the browser code's tests, the scripts' tests, the
+# Each commit on main, and each pull request: the static checks, the Worker's and the browser code's tests, the scripts' tests, the
 # access registry and the workflow policy, then the browser suite on the dev server. No environment and no secrets:
 # CI never reaches production (spec 12.2), and scripts/ci-policy.mjs fails the run if a change makes it.
 name: ci
 
+# One run per commit: pushes to main, and pull requests (a branch's push isn't run again). GitHub Free's minutes are
+# the budget; staging.yml follows a passing run on main instead of building again.
 on:
   push:
+    branches: [main]
   pull_request:
 
 permissions:

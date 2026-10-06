@@ -85,6 +85,40 @@ Red checks where a test's sensitivity was in doubt (logs in `runs/*-c1*-mutation
 - Phase 5: one bucket (`EXPORTS`) for the sealed exports and the photo copies (spec names two), so one lock covers both; exports chosen table by table (no `tribute_events`, no abuse codes, no job tables); the export runs only after the same pass's deletion run finished ok; export age and pruning read from the bucket listing (ULID in the key); the drill and its key are optional bindings (`DRILL_DB`, `DRILL_PRIVATE_KEY`, not in `wrangler.jsonc`); decision ledger entries carry the revision id; a replay gap or an approval of a missing revision hides the place whole (precautionary); the unapproved-photo job acts at 29 days against the notice's 30; the review reminder counts pending revisions, not only those with photos; the task 5 timeline uses a simulated clock over the real values (staging decides shortened values vs real time).
 - a46 corrections: one pure reconcile rule with two adapters (memory, D1 diff) rather than two implementations; request closures stay out of the ledger, bounded instead (open at the point: point + 90 d); ~~an unrecorded run's end is start + 16 min~~ (superseded by a47/a48: started_at is the scheduled time, so any run with no recorded end leaves every point unverified, Route B; never fabricate or clear a completion to enable Route A); the export audit's moment is each export's `created_at` less a day (the deletion job's batch backlog); unverified addresses blank email and hash only, the contact row keeps its own date.
 
+## GitHub and staging (Harel, 2026-10-06, 22:50 Israel time)
+
+**What Harel authorized:**
+
+- connecting the private repository `https://github.com/Harelzx/makom-lizkor`;
+- pushing the reviewed, merged `main`, now and later (no force, no history rewrite);
+- local preparation of staging;
+- read-only discovery of the Cloudflare connection.
+
+**What he did not authorize:** a GitHub Pro upgrade, paid Actions usage, purchases, a production deploy, or any cloud change without a concrete request.
+
+**Done:**
+
+- **Repository:**
+  - verified the destination (owner Harelzx, private, empty);
+  - scanned `main`'s history: no credentials, no private data; `.env` holds only Cloudflare's public test sitekey, and `.dev.vars` was never tracked;
+  - `origin` added, and `main` at `30343b6` pushed; it is the default branch.
+- **CI:** no CI has run yet. The workflows are in Phase 6, which is not merged.
+- **GitHub Free, private repository (GitHub docs):** no environment secrets, reviewers or deployment branches. Pro and Team add environment secrets and branches, but no reviewers.
+  - So production credentials are not stored in GitHub, and `release.yml` can't deploy to production. Production release is a decision for Harel.
+  - Staging uses repository secrets `STAGING_*`, scoped to the staging account only. The spec (12.2, 18) and the Phase 6 plan were corrected.
+- **Cloudflare through MCP:**
+  - the account it reaches is empty: no Workers, D1 or KV. R2 is not enabled ("Please enable R2 through the Cloudflare Dashboard").
+  - The tools can manage Workers, D1, KV, R2 and Hyperdrive, and search the docs. They don't say which account they're bound to, and expose nothing for Access, DNS, tokens or billing.
+  - Their D1 create has no jurisdiction, so it can't create an EU database.
+  - Wrangler on this machine is not signed in, and should stay that way.
+- **Staging locally:**
+  - `env.staging` in `wrangler.jsonc`: own Worker name, D1 and R2 (eu); `ENVIRONMENT=staging`; no development secret.
+  - `scripts/staging-check.mjs` with tests.
+  - `.github/workflows/staging.yml`: after CI passes on a push to main; deploys the same commit with `CLOUDFLARE_ENV=staging`; secrets through `--secrets-file`; edge-check through Access with a service token.
+  - `ci.yml` runs once per commit.
+  - `ci-policy` covers all of this.
+- **Still unverified in the cloud:** `--var` and `--secrets-file` with the build's generated config.
+
 ## Agent deny rules (Phase 6 task 6)
 
 `.claude/settings.json` gained `permissions.deny` only; its hooks are unchanged (`scripts/agent-settings.test.mjs` checks both). Every session in this repository picks the rules up, the privacy session included:
