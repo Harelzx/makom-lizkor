@@ -1,11 +1,13 @@
-// Builds src/data/places.json from the research files in data-src/.
+// Builds src/data/places.json, and the curated fixtures in fixtures/curated.json, from the research files in data-src/.
 //   oct7.json      researched memorial sites (only scope "oct7" and "mixed" reach the map)
 //   extra.json     community points and sites added by hand, same schema
 //   revival.json   return status and revival milestones per community, merged by id
 //   photos.json    Wikimedia Commons photos with TASL credits, matched to places in photo-map.json
 //   exclude.txt    ids kept out of the map, with a reason
 // Every record is validated; failures are printed and left out, never silently fixed.
-import { existsSync, readFileSync, writeFileSync } from "node:fs"
+import { execFileSync } from "node:child_process"
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { curatedFixtures } from "./curated-fixtures.mjs"
 
 const read = (f, fallback) => (existsSync(`data-src/${f}`) ? JSON.parse(readFileSync(`data-src/${f}`, "utf8")) : fallback)
 const KINDS = ["community", "monument", "bench", "lookout", "grove", "garden", "plaque", "shelter", "site", "museum", "other"]
@@ -115,6 +117,11 @@ writeFileSync(
     1,
   ),
 )
+// The same places as the records the importer sends to the admin route (phase 7). retrieved_at for most sources is
+// the day data-src/ was last committed; the file keeps that date, so its check never needs the git history.
+const dataSrcDate = execFileSync("git", ["log", "-1", "--format=%cs", "--", "data-src"], { encoding: "utf8" }).trim()
+mkdirSync("fixtures", { recursive: true })
+writeFileSync("fixtures/curated.json", JSON.stringify(curatedFixtures(out, { dataSrcDate, revivalAsOf: revival.as_of }), null, 1))
 const by = (k) => out.reduce((m, p) => ((m[p[k]] = (m[p[k]] ?? 0) + 1), m), {})
 console.log(`places: ${out.length}`, by("kind"), by("region"), by("precision"))
 console.log(`communities with revival: ${out.filter((p) => p.revival).length}, with photos: ${out.filter((p) => p.photos.length).length}`)

@@ -19,7 +19,10 @@ export const CURATED_KINDS = [
   "other",
 ] as const
 
-const link = z.object({ label_he: z.string().min(1).max(200), url: z.url({ protocol: /^https$/ }).max(500) }).strict()
+// A Hebrew address percent-encodes each letter in six characters: a real Commons file link runs past 600.
+const URL_MAX = 2048
+
+const link = z.object({ label_he: z.string().min(1).max(200), url: z.url({ protocol: /^https$/ }).max(URL_MAX) }).strict()
 
 /** A community's return after the attack (spec: the community pages), with its own sources. */
 export const Revival = z
@@ -43,7 +46,7 @@ export const CuratedFields = z
     coord_source: z.enum(["osm", "wikidata", "manual"]),
     coord_source_url: z
       .url({ protocol: /^https$/ })
-      .max(500)
+      .max(URL_MAX)
       .optional(),
     region: z.enum(["envelope", "country"]),
     revival: Revival.optional(),
@@ -59,11 +62,11 @@ export const CuratedPhotoMeta = z
     license: z.string().min(1).max(100),
     license_url: z
       .url({ protocol: /^https$/ })
-      .max(500)
+      .max(URL_MAX)
       .optional(),
     commons_url: z
       .url({ protocol: /^https$/ })
-      .max(500)
+      .max(URL_MAX)
       .optional(),
     subject_he: z.string().max(300).optional(),
   })
@@ -79,7 +82,7 @@ export const PlaceSource = z
     license: z.string().max(100).optional(),
     url: z
       .url({ protocol: /^https$/ })
-      .max(500)
+      .max(URL_MAX)
       .optional(),
     retrieved_at: z.string().max(40).optional(),
     // A date taken from the repository, not one seen when the source was read (a50).
