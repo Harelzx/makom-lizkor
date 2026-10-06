@@ -96,9 +96,9 @@ describe("replaying the ledger onto a restored database (spec 8.2, 8.3)", () => 
     expect(await ogState(env.IMPORT_TEST, withdrawn.id)).toBeNull()
 
     // Twice is once.
-    const before = JSON.stringify(await env.IMPORT_TEST.prepare("SELECT * FROM field_suppressions ORDER BY id").all())
+    const before = JSON.stringify((await env.IMPORT_TEST.prepare("SELECT * FROM field_suppressions ORDER BY id").all()).results)
     expect(await replayLedger(env.IMPORT_TEST, env.LEDGER, new Date(), payload.created_at)).toMatchObject({ applied: 0 })
-    expect(JSON.stringify(await env.IMPORT_TEST.prepare("SELECT * FROM field_suppressions ORDER BY id").all())).toBe(before)
+    expect(JSON.stringify((await env.IMPORT_TEST.prepare("SELECT * FROM field_suppressions ORDER BY id").all()).results)).toBe(before)
     expect((await readFeed(env.IMPORT_TEST, "0")).places).toEqual(restored)
   })
 
