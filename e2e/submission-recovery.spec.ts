@@ -188,11 +188,14 @@ test("two tabs adding places at once keep each other's places, keys and tracking
   await expect
     .poll(async () => (await stored(tabs[1])).filter((p) => (p.name === x || p.name === y) && p.token).length, { timeout: 20_000 })
     .toBe(2)
+  const tokens = Object.fromEntries((await stored(tabs[1])).map((p) => [p.name, p.token]))
   await tabs[0].reload()
   const after = await stored(tabs[0])
   for (const name of [x, y]) {
     expect(after.filter((p) => p.name === name)).toHaveLength(1)
-    expect(after.find((p) => p.name === name)!.key).toBe(keys[name])
+    // Each keeps the tracking link its own retry learned; the key, no longer needed once sent, is dropped.
+    expect(after.find((p) => p.name === name)!.token).toBe(tokens[name])
+    expect(after.find((p) => p.name === name)!.key).toBeUndefined()
   }
   expect(await queued(browser, x)).toBe(1)
   expect(await queued(browser, y)).toBe(1)
