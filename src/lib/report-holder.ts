@@ -1,5 +1,5 @@
 import { sendReport, type ReportSend } from "@/lib/api"
-import { forget, remember, type PendingReport } from "@/lib/report-outbox"
+import { forget, isStored, remember, type PendingReport } from "@/lib/report-outbox"
 
 /**
  * What a try leaves the form showing. A refusal before any write speaks for that try alone: after an earlier try whose
@@ -64,7 +64,13 @@ export function createHolder(clock: () => number = Date.now) {
     return true
   }
   const tryOnce = async (r: PendingReport) => {
-    const next = await attempt(r, state.uncertain, clock())
+    let next: Attempt
+    try {
+      next = await attempt(r, state.uncertain, clock())
+    } catch {
+      // Whatever broke, the request may have gone: it stays kept, and is said to be unconfirmed.
+      next = { view: "pending", reason: "unknown" }
+    }
     if (!holds(r.key)) return
     if (next.view === "pending") set({ uncertain: true, shown: next })
     else set({ kept: null, uncertain: false, shown: next })
@@ -77,7 +83,7 @@ export function createHolder(clock: () => number = Date.now) {
     },
     /** A request sent from here earlier, found again: whether it arrived isn't known. */
     restore(r: PendingReport) {
-      if (!state.kept && !state.busy) set({ kept: r, uncertain: true, stored: true, shown: { view: "restored" } })
+      if (!state.kept && !state.busy) set({ kept: r, uncertain: true, stored: isStored(r.key), shown: { view: "restored" } })
     },
     /** The browser's copy couldn't be read, so an earlier request may exist unseen: said, never shown as none. */
     unread() {

@@ -17,6 +17,9 @@ type Outbox = Record<string, PendingReport>
  * finds a request again within this page (a card closed and opened, another place visited), never after a reload.
  */
 const memory = new Map<string, PendingReport>()
+// The ones this browser refused to keep: found again in this page, they still say a reload loses them.
+const pageOnly = new Set<string>()
+export const isStored = (key: string) => !pageOnly.has(key)
 let version = 0
 const listeners = new Set<() => void>()
 const changed = () => {
@@ -52,8 +55,10 @@ export async function remember(r: PendingReport): Promise<"stored" | "memory"> {
   changed()
   try {
     await changeReportOutbox<PendingReport>((all) => ({ ...all, [r.key]: r }))
+    pageOnly.delete(r.key)
     return "stored"
   } catch {
+    pageOnly.add(r.key)
     return "memory"
   }
 }

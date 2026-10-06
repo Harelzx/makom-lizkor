@@ -139,12 +139,12 @@ it("a removal asked for while a try is out is refused; the try's unknown answer 
   expect((await pendingReport("p_1", t0)).report).toEqual(r)
 })
 
-it("a try that throws still frees the form, and the request stays kept for another try", async () => {
+it("a try that throws still frees the form, says the request is unconfirmed, and keeps it for another try", async () => {
   const h = createHolder(() => t0)
   const r = fresh()
   net.answers = ["throw"]
-  await expect(h.start(r)).rejects.toThrow()
-  expect(h.get()).toMatchObject({ kept: r, busy: false })
+  await h.start(r)
+  expect(h.get()).toMatchObject({ kept: r, busy: false, uncertain: true, shown: { view: "pending", reason: "unknown" } })
   net.answers = [{ ok: true, ticket: "r_2", outcome: "received" }]
   await h.resend()
   expect(h.get().shown).toMatchObject({ view: "result", outcome: "received" })
@@ -189,4 +189,13 @@ it("a removal the browser refused keeps the request held, so it can be asked for
   disk.broken = false
   await h.discard()
   expect(h.get()).toMatchObject({ kept: null, shown: { view: "discarded", cleared: true } })
+})
+
+it("a request the browser wouldn't keep, found again in the page, still says a reload loses it", async () => {
+  disk.broken = true
+  const r = fresh()
+  await createHolder(() => t0).start(r)
+  const again = createHolder(() => t0)
+  again.restore(r)
+  expect(again.get().stored).toBe(false)
 })
