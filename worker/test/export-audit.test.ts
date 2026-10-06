@@ -3,8 +3,10 @@ import { env } from "cloudflare:workers"
 import { beforeAll, describe, expect, it } from "vitest"
 import { auditExports, runDrill } from "../db/drill"
 import { runExport } from "../db/exports"
+import { writeLedger } from "../lib/ledger"
 import { sendMail } from "../lib/mail"
 import { admin, approve } from "./helpers"
+import { call } from "./app"
 import { send } from "./submission-helpers"
 
 // The weekly check of every retained export (spec 8.4; adviser 20261006T153309Z-ef1427c3, F5-B2): opened in memory with
@@ -24,7 +26,13 @@ beforeAll(async () => {
   pub = JSON.stringify([await crypto.subtle.exportKey("jwk", pair.publicKey)])
   drillKey = JSON.stringify(await crypto.subtle.exportKey("jwk", pair.privateKey))
 })
-const exportAt = (at: Date) => runExport({ db: env.DB, media: env.MEDIA, exports: env.EXPORTS, keys: pub }, "rr_test", at)
+// One export a day: the table's record of the last one would hold back the next, so each export here is a fresh day's.
+const exportAt = async (at: Date) => {
+  await env.DB.prepare("DELETE FROM exports").run()
+  const id = await runExport({ db: env.DB, media: env.MEDIA, exports: env.EXPORTS, keys: pub }, "rr_test", at)
+  expect(id).toBeTruthy()
+  return id
+}
 
 describe("the weekly audit of retained exports", () => {
   it("finds a contact kept past its date in a recent export, allows a hidden memorial's content, and writes nothing", async () => {
@@ -48,7 +56,7 @@ describe("the weekly audit of retained exports", () => {
     await env.DB.prepare("DELETE FROM contacts WHERE place_id = ?").bind(overdue.id).run()
     await exportAt(now)
 
-    expect(await auditExports({ exports: env.EXPORTS, drillKey })).toEqual({ contacts: 1 })
+    expect(await auditExports({ exports: env.EXPORTS, drillKey, ledger: env.LEDGER }, new Date())).toEqual({ contacts: 1 })
 
     // Run weekly with the drill, which loads only today's export; the moderators hear the count, nothing else.
     await env.DB.prepare("DELETE FROM drill_runs").run()
@@ -68,6 +76,46 @@ describe("the weekly audit of retained exports", () => {
     for (const o of (await env.EXPORTS.list({ prefix: "exports/" })).objects) await env.EXPORTS.delete(o.key)
     await send("גן דמו בגיבוי תקין", { email: "fine-demo@example.test" })
     await exportAt(new Date())
-    expect(await auditExports({ exports: env.EXPORTS, drillKey })).toEqual({})
+    expect(await auditExports({ exports: env.EXPORTS, drillKey, ledger: env.LEDGER }, new Date())).toEqual({})
+  })
+
+  it("finds a place a withdrawal took more than 35 days ago, still whole in a recent export; allows one withdrawn since (a47 F5-B2)", async () => {
+    for (const o of (await env.EXPORTS.list({ prefix: "exports/" })).objects) await env.EXPORTS.delete(o.key)
+    const now = new Date()
+    // A database that lost a withdrawal the ledger recorded 40 days ago: the place and its sender's details came back.
+    const lost = await send("גן דמו שמשיכתו אבדה", { submitter_name: "שולח דמו", email: "lost-withdrawal-demo@example.test" })
+    expect((await approve(lost.id)).status).toBe(200)
+    const seq = (await env.DB.prepare("SELECT ledger_seq FROM places WHERE id = ?").bind(lost.id).first<number>("ledger_seq"))!
+    const at = new Date(now.getTime() - 40 * DAY).toISOString()
+    for (const phase of ["intent", "commit"] as const)
+      await writeLedger(env.LEDGER, {
+        op: `t_lost_${lost.id}`,
+        place: lost.id,
+        phase,
+        kind: "withdraw",
+        actor: "submitter",
+        seq_from: seq,
+        seq_to: seq + 1,
+        rev_from: 0,
+        rev_to: 1,
+        removal: true,
+        at,
+        decided_at: at,
+      })
+    // Withdrawn after the export: rightly still in it until the export's own end.
+    const later = await send("גן דמו שנמשך אחרי הגיבוי", { email: "later-withdrawal-demo@example.test" })
+    expect((await approve(later.id)).status).toBe(200)
+    await exportAt(now)
+    const withdrawn = await call(`http://local/api/v1/submissions/${later.id}/withdraw`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${later.trackingToken}` },
+    })
+    expect(withdrawn.status).toBe(200)
+
+    // The lost place's content revision and its contact; nothing of the place withdrawn since.
+    expect(await auditExports({ exports: env.EXPORTS, drillKey, ledger: env.LEDGER }, new Date(now.getTime() + 3600_000))).toEqual({
+      revisions: 1,
+      contacts: 1,
+    })
   })
 })

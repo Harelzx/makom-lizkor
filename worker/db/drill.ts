@@ -1,10 +1,12 @@
 import { ulid } from "../lib/ids"
 import type { SendMail } from "../lib/mail"
 import { sha256, unseal, type Manifest } from "../lib/sealed"
-import { EXPORT_TABLES } from "./exports"
+import { decidedAt, type LedgerEntry } from "../lib/ledger"
+import { EXPORT_KEEP_DAYS, EXPORT_TABLES } from "./exports"
 import { filterForImport, importExport, type ExportPayload } from "./import"
+import { reconcileTables } from "./reconcile"
 import { readLedger, replayLedger } from "./replay"
-import { tellModerators } from "./retention"
+import { BLANK_COLUMNS, tellModerators } from "./retention"
 
 const DAY_MS = 86_400_000
 /** A drill loads only an export this fresh (spec 7): an older one would keep its rows in the drill database's history. */
@@ -37,16 +39,32 @@ async function openExport(data: Uint8Array, manifest: Manifest, key: string) {
   return JSON.parse(await new Response(new Blob([plain]).stream().pipeThrough(new DecompressionStream("gzip"))).text()) as ExportPayload
 }
 
+/** What counts as a person's data in each exported table: a row present, or one of these columns holding a value. */
+const PERSONAL: Partial<Record<(typeof EXPORT_TABLES)[number], { row?: boolean; columns: string[] }>> = {
+  revisions: { columns: Object.keys(BLANK_COLUMNS).filter((c) => c !== "on_private_property") },
+  contacts: { row: true, columns: ["name", "email", "email_verify_hash"] },
+  reports: { columns: ["relationship", "explanation", "email", "explanation_hash", "reporter_key", "handling_note"] },
+  field_suppressions: { columns: ["reason", "basis_detail", "basis_note"] },
+  audit_log: { row: true, columns: [] },
+}
+const filled = (v: unknown) => v !== null && v !== undefined && v !== ""
+
 /**
- * Every retained export checked for personal data it should never have held (spec 8.4): each one opened in memory
- * with the drill key, and the deletion rules (filterForImport, the job's own) applied at the moment it was made, less a
- * day's grace for a deletion run's backlog. What they would change was due before the export and still in it: counted
- * by table, nothing else. Content kept on purpose (a hidden memorial, say) is no deletion rule's to change, so it is
- * never counted. Nothing is written to any database: an older export never reaches the drill's.
+ * Every retained export checked for personal data it should never hold (spec 8.4; advisers a46, a47). Each one is
+ * opened in memory with the drill key, and brought to its moment: the ledger's decisions made by then (withdrawals,
+ * erasures, refusals, with their own dates) and the deletion rules at that date (filterForImport, the job's own). Its
+ * moment is when it was made, less a day's grace for the deletion job's batches, or 35 days before now if later: past
+ * that, nothing deleted may still be in any export. A person's data that the export holds and its moment wouldn't is
+ * counted, by table; content kept on purpose (a hidden memorial) and tombstones are never counted. Nothing is written
+ * to any database: an older export never reaches the drill's.
  */
-export async function auditExports(d: { exports: R2Bucket; drillKey: string }): Promise<Record<string, number>> {
+export async function auditExports(
+  d: { exports: R2Bucket; drillKey: string; ledger: R2Bucket | Map<string, LedgerEntry[]> },
+  now: Date,
+): Promise<Record<string, number>> {
   const found: Record<string, number> = {}
   const count = (k: string, n = 1) => (found[k] = (found[k] ?? 0) + n)
+  const ledger = d.ledger instanceof Map ? d.ledger : await readLedger(d.ledger)
   const manifests: string[] = []
   let cursor: string | undefined
   do {
@@ -59,11 +77,21 @@ export async function auditExports(d: { exports: R2Bucket; drillKey: string }): 
       const manifest = (await (await d.exports.get(key))!.json()) as Manifest
       const data = new Uint8Array(await (await d.exports.get(manifest.data.key))!.arrayBuffer())
       const payload = await openExport(data, manifest, d.drillKey)
-      const kept = filterForImport(payload.tables, new Date(Date.parse(payload.created_at) - DAY_MS))
+      const moment = new Date(Math.max(Date.parse(payload.created_at) - DAY_MS, now.getTime() - EXPORT_KEEP_DAYS * DAY_MS))
+      const decided = new Map(
+        [...ledger].map(([place, entries]) => [place, entries.filter((e) => Date.parse(decidedAt(e)) <= moment.getTime())]),
+      )
+      const due = filterForImport(reconcileTables(payload.tables, decided, moment, payload.created_at).tables, moment)
       for (const t of EXPORT_TABLES) {
-        const same = new Set(kept[t].map((r) => JSON.stringify(r)))
-        const changed = (payload.tables[t] ?? []).filter((r) => !same.has(JSON.stringify(r))).length
-        if (changed) count(t, changed)
+        const personal = PERSONAL[t]
+        if (!personal) continue
+        const kept = new Map(due[t].map((r) => [r.id, r]))
+        const held = (payload.tables[t] ?? []).filter((r) => {
+          const k = kept.get(r.id)
+          if (!k) return !!personal.row
+          return personal.columns.some((c) => filled(r[c]) && r[c] !== k[c])
+        }).length
+        if (held) count(t, held)
       }
     } catch {
       count("unreadable")
@@ -135,7 +163,7 @@ export async function runDrill(d: DrillEnv, now: Date): Promise<string | null> {
     await empty(d.drillDb).catch(() => (failure ??= "cleanup"))
   }
   // Then every export still kept, in memory (spec 8.4): what one holds past its date is told by table and count.
-  const stale = await auditExports({ exports: d.exports, drillKey: d.drillKey }).catch(() => ({ unreadable: 1 }))
+  const stale = await auditExports({ exports: d.exports, drillKey: d.drillKey, ledger: d.ledger }, now).catch(() => ({ unreadable: 1 }))
   if (Object.keys(stale).length) {
     console.error(JSON.stringify({ level: "error", event: "export_audit", found: stale }))
     await tellModerators(
