@@ -8,13 +8,15 @@ export type OpEnv = { db: D1Database; media: R2Bucket; ledger: R2Bucket; purge: 
 /** Ids and codes only, like the ledger they feed: field names, file keys, a basis code, a report's id. */
 export type OpDetail = {
   fields?: string[]
+  /** The suppression rows the decision creates or lifts, for the ledger. */
+  targets?: string[]
   /** The files the decision concerns, for the ledger. */
   media?: string[]
   basis?: string
   report?: string
-  /** After the database step: public files to move to held/ (a hidden photo stays stored, not served). */
+  /** After the database step: public files to take out of view (their held/ copy stays, so nothing is lost). */
   toHeld?: string[]
-  /** After the database step: held copies a restoration made public again. */
+  /** After the database step: held photos a restoration serves again. */
   dropHeld?: string[]
   /** After the database step: files the decision made obsolete, removed if nothing live names them. */
   retire?: string[]
@@ -63,13 +65,19 @@ type OpRow = {
   ledger_commit: "pending" | "written" | "failed"
   purge: "none" | "pending" | "done" | "failed" | "abandoned"
   purge_tries: number
+  abort: "none" | "pending" | "written" | "failed"
   created_at: string
+  updated_at: string
 }
 
 /** A purge is tried this many times in all; after that the edge copy's short lifetime is the bound (spec 5). */
 const PURGE_TRIES = 3
 /** An operation still pending after this long stopped before its database step: no live request is behind it. */
 const INTERRUPTED_MS = 2 * 60_000
+/** Operations one scheduled run takes on; the least recently tried first, so none waits behind ones that keep failing. */
+const RESUME_BATCH = 100
+/** Passes placePhoto makes before leaving the photo to the next run: each one re-reads the state after its own writes. */
+const PLACE_PASSES = 4
 
 const tagsFor = (placeId: string) => ["feed", "tributes", `place:${placeId}`]
 const heldKey = (key: string) => key.replace(/^public\//, "held/")
@@ -90,6 +98,7 @@ function entry(op: OpRow, phase: LedgerEntry["phase"], at: string, late = false)
     removal: !!op.removal,
     ...(phase === "commit" && op.result_status ? { status: op.result_status } : {}),
     ...(detail.fields?.length ? { fields: detail.fields } : {}),
+    ...(detail.targets?.length ? { targets: detail.targets } : {}),
     ...(media.length ? { media } : {}),
     ...(detail.basis ? { basis: detail.basis } : {}),
     at,
@@ -138,8 +147,11 @@ export async function runOp(env: OpEnv, spec: OpSpec, now: Date): Promise<{ outc
     )
     .run()
   const refuse = async (reason: string) => {
+    // The abort is owed from the moment of refusal: stored with it, so a Worker that stops here leaves it to the job.
     await env.db
-      .prepare("UPDATE visibility_ops SET state = 'refused', refused_reason = ?2, updated_at = ?3 WHERE id = ?1 AND state = 'pending'")
+      .prepare(
+        "UPDATE visibility_ops SET state = 'refused', refused_reason = ?2, abort = 'pending', updated_at = ?3 WHERE id = ?1 AND state = 'pending'",
+      )
       .bind(id, reason, at)
       .run()
     await abortRecorded(env, id, at)
@@ -202,39 +214,61 @@ export async function runOp(env: OpEnv, spec: OpSpec, now: Date): Promise<{ outc
   return { outcome: "ok", id }
 }
 
-/** The steps after the database step, each on its own, so one that fails never holds back the others. */
+/**
+ * The steps after the database step, each on its own, so one that fails never holds back the others. Two finishers
+ * may run at once (a slow request and the scheduled job): each step's result is stored only if it moves the step
+ * forward, never back, and every purge attempt is counted.
+ */
 export async function finishOp(env: OpEnv, id: string, now: Date) {
   const op = await readOp(env.db, id)
   if (!op || op.state !== "applied") return
   const at = now.toISOString()
+  // Tried now, whatever comes of it: the job takes the least recently tried first.
+  await env.db.prepare("UPDATE visibility_ops SET updated_at = ?2 WHERE id = ?1").bind(id, at).run()
   const detail = JSON.parse(op.detail) as OpDetail
-  let { intent, media, ledger_commit, purge, purge_tries } = op
+  const steps: D1PreparedStatement[] = []
 
   // An intent the ledger refused at the time: written now, marked late, before its commit.
-  if (intent === "failed" && (await writeLedger(env.ledger, entry(op, "intent", at, true)))) intent = "late"
-  if (media === "pending" || media === "failed") {
+  if (op.intent === "failed" && (await writeLedger(env.ledger, entry(op, "intent", at, true))))
+    steps.push(env.db.prepare("UPDATE visibility_ops SET intent = 'late' WHERE id = ?1 AND intent = 'failed'").bind(id))
+  if (op.media === "pending" || op.media === "failed") {
+    let ok = true
     try {
       // Where the published photo belongs is read from the place as it is now, not replayed from this decision: a
       // later hide or restoration may already own the file, and must not be undone by finishing an older one.
       if (detail.toHeld?.length || detail.dropHeld?.length) await placePhoto(env, op.place_id)
       if (detail.retire?.length) await retirePhotos(env.db, env.media, detail.retire)
-      media = "done"
     } catch {
-      media = "failed"
+      ok = false
     }
-  }
-  if (ledger_commit !== "written") ledger_commit = (await writeLedger(env.ledger, entry(op, "commit", at))) ? "written" : "failed"
-  if (purge === "pending" || purge === "failed") {
-    const ok = await env.purge(tagsFor(op.place_id)).catch(() => false)
-    purge_tries += 1
-    purge = ok ? "done" : purge_tries >= PURGE_TRIES ? "abandoned" : "failed"
-  }
-  await env.db
-    .prepare(
-      "UPDATE visibility_ops SET intent = ?2, media = ?3, ledger_commit = ?4, purge = ?5, purge_tries = ?6, updated_at = ?7 WHERE id = ?1",
+    steps.push(
+      ok
+        ? env.db.prepare("UPDATE visibility_ops SET media = 'done' WHERE id = ?1 AND media IN ('pending', 'failed')").bind(id)
+        : env.db.prepare("UPDATE visibility_ops SET media = 'failed' WHERE id = ?1 AND media = 'pending'").bind(id),
     )
-    .bind(id, intent, media, ledger_commit, purge, purge_tries, at)
-    .run()
+  }
+  if (op.ledger_commit !== "written") {
+    const written = await writeLedger(env.ledger, entry(op, "commit", at))
+    steps.push(
+      env.db
+        .prepare("UPDATE visibility_ops SET ledger_commit = ?2 WHERE id = ?1 AND ledger_commit != 'written'")
+        .bind(id, written ? "written" : "failed"),
+    )
+  }
+  if (op.purge === "pending" || op.purge === "failed") {
+    const ok = await env.purge(tagsFor(op.place_id)).catch(() => false)
+    // Counted in the database, not from this finisher's copy, so two finishers' failed tries both count.
+    steps.push(
+      env.db
+        .prepare(
+          `UPDATE visibility_ops SET purge_tries = purge_tries + 1,
+             purge = CASE WHEN ?2 = 1 THEN 'done' WHEN purge_tries + 1 >= ?3 THEN 'abandoned' ELSE 'failed' END
+           WHERE id = ?1 AND purge IN ('pending', 'failed')`,
+        )
+        .bind(id, ok ? 1 : 0, PURGE_TRIES),
+    )
+  }
+  if (steps.length) await env.db.batch(steps)
 }
 
 /**
@@ -244,30 +278,43 @@ export async function finishOp(env: OpEnv, id: string, now: Date) {
  * moderator's to make again (removals that stopped show in the admin as interrupted).
  */
 export async function resumeOps(env: OpEnv, now: Date) {
+  const at = now.toISOString()
   const { results } = await env.db
     .prepare(
       `SELECT * FROM visibility_ops
        WHERE (state = 'applied' AND (intent = 'failed' OR media IN ('pending', 'failed') OR ledger_commit != 'written'
                                      OR purge IN ('pending', 'failed')))
           OR (state = 'pending' AND created_at <= ?1)
-       ORDER BY created_at LIMIT 100`,
+          OR (state = 'refused' AND abort IN ('pending', 'failed'))
+       ORDER BY updated_at, id LIMIT ?2`,
     )
-    .bind(new Date(now.getTime() - INTERRUPTED_MS).toISOString())
+    .bind(new Date(now.getTime() - INTERRUPTED_MS).toISOString(), RESUME_BATCH)
     .all<OpRow>()
   for (const op of results) {
-    if (op.state === "applied") {
-      await finishOp(env, op.id, now)
-      continue
-    }
-    const refused = await env.db
-      .prepare(
-        "UPDATE visibility_ops SET state = 'refused', refused_reason = 'interrupted', updated_at = ?2 WHERE id = ?1 AND state = 'pending'",
-      )
-      .bind(op.id, now.toISOString())
-      .run()
-    if (refused.meta.changes === 1) {
-      await abortRecorded(env, op.id, now.toISOString())
-      await cleanPrepared(env, op.place_id, JSON.parse(op.detail) as OpDetail)
+    // One operation's failure is its own: it is tried again on a later run, and the rest go on now.
+    try {
+      if (op.state === "applied") await finishOp(env, op.id, now)
+      else if (op.state === "refused") await abortRecorded(env, op.id, at, true)
+      else {
+        const refused = await env.db
+          .prepare(
+            `UPDATE visibility_ops SET state = 'refused', refused_reason = 'interrupted', abort = 'pending', updated_at = ?2
+             WHERE id = ?1 AND state = 'pending'`,
+          )
+          .bind(op.id, at)
+          .run()
+        if (refused.meta.changes === 1) {
+          await abortRecorded(env, op.id, at)
+          await cleanPrepared(env, op.place_id, JSON.parse(op.detail) as OpDetail)
+        }
+      }
+    } catch (err) {
+      console.error(JSON.stringify({ level: "error", event: "op_resume_failed", op: op.id, error: (err as Error).name }))
+      await env.db
+        .prepare("UPDATE visibility_ops SET updated_at = ?2 WHERE id = ?1")
+        .bind(op.id, at)
+        .run()
+        .catch(() => undefined)
     }
   }
 }
@@ -275,11 +322,16 @@ export async function resumeOps(env: OpEnv, now: Date) {
 /**
  * A refused operation gets an abort in the ledger, so a replay knows it never happened. Written whatever the stored
  * intent state says: the intent may have reached the ledger just before a crash recorded it, and an abort with no
- * intent beside it is harmless.
+ * intent beside it is harmless. One the ledger refused stays owed, and the job writes it, marked late.
  */
-async function abortRecorded(env: OpEnv, id: string, at: string) {
+async function abortRecorded(env: OpEnv, id: string, at: string, late = false) {
   const op = await readOp(env.db, id)
-  if (op) await writeLedger(env.ledger, entry(op, "abort", at))
+  if (!op) return
+  const written = await writeLedger(env.ledger, entry(op, "abort", at, late))
+  await env.db
+    .prepare("UPDATE visibility_ops SET abort = ?2, updated_at = ?3 WHERE id = ?1 AND abort IN ('pending', 'failed')")
+    .bind(id, written ? "written" : "failed", at)
+    .run()
 }
 
 /**
@@ -298,29 +350,51 @@ async function cleanPrepared(env: OpEnv, placeId: string, detail: OpDetail) {
 }
 
 /**
- * Puts the published photo of a place where its state says it belongs: held/ while a photo or whole-place hide is
- * active (or the place isn't published), public/ otherwise. Idempotent, and decided from the state now, so any number
- * of late or repeated calls agree.
+ * Puts the published photo of a place where its state says it belongs: served from public/ when the place is
+ * published and no photo or whole-place hide is active, out of public/ otherwise. held/ keeps a copy for as long as
+ * the photo is published, and nothing here ever deletes it, so however decisions overlap there is always a copy to
+ * restore from (only retiring or erasing the photo removes it).
+ *
+ * Several of these can run at once for one place (a slow request and the job, two decisions in a row), and a delete
+ * already on its way can't be called back. So each pass re-reads the state after its own writes, and the call ends
+ * only when a pass finds the files already where the state says: a finisher whose delete lands late sees the result on
+ * its next pass and puts the copy back. A photo that still hasn't settled after a few passes throws, so its
+ * operation's file step stays unfinished and the job runs it again.
  */
 export async function placePhoto(env: OpEnv, placeId: string) {
-  const row = await env.db
-    .prepare(
-      `SELECT p.status, r.photo_key,
-         EXISTS (SELECT 1 FROM field_suppressions s WHERE s.place_id = p.id AND s.lifted_at IS NULL AND s.field IN ('photo', 'whole')) AS hidden
-       FROM places p LEFT JOIN revisions r ON r.id = p.published_revision_id WHERE p.id = ?`,
-    )
-    .bind(placeId)
-    .first<{ status: string; photo_key: string | null; hidden: number }>()
-  const key = row?.photo_key
-  if (!row || !key?.startsWith("public/")) return
-  if (row.status !== "published" || row.hidden) await move(env.media, key, heldKey(key))
-  else await move(env.media, heldKey(key), key)
+  for (let pass = 0; pass < PLACE_PASSES; pass++) {
+    const row = await env.db
+      .prepare(
+        `SELECT p.status, r.photo_key,
+           EXISTS (SELECT 1 FROM field_suppressions s WHERE s.place_id = p.id AND s.lifted_at IS NULL AND s.field IN ('photo', 'whole')) AS hidden
+         FROM places p LEFT JOIN revisions r ON r.id = p.published_revision_id WHERE p.id = ?`,
+      )
+      .bind(placeId)
+      .first<{ status: string; photo_key: string | null; hidden: number }>()
+    const key = row?.photo_key
+    if (!row || !key?.startsWith("public/")) return
+    const served = row.status === "published" && !row.hidden
+    const held = heldKey(key)
+    let changed = false
+    // The kept copy first, from the served one, before anything can take the served one away.
+    if (!(await env.media.head(held))) changed = (await copy(env.media, key, held)) || changed
+    if (served) {
+      if (!(await env.media.head(key))) changed = (await copy(env.media, held, key)) || changed
+    } else if (await env.media.head(key)) {
+      // Only once the kept copy is there: a photo is never left with no copy at all.
+      if (!(await env.media.head(held))) throw new Error("photo_unsettled")
+      await env.media.delete(key)
+      changed = true
+    }
+    if (!changed) return
+  }
+  throw new Error("photo_unsettled")
 }
 
-/** Moves a file, idempotently: done if it is already where it should be. */
-async function move(media: R2Bucket, from: string, to: string) {
+/** Copies a file if it is there; false when there was nothing to copy. */
+async function copy(media: R2Bucket, from: string, to: string) {
   const object = await media.get(from)
-  if (!object) return
+  if (!object) return false
   await media.put(to, await object.arrayBuffer(), { httpMetadata: object.httpMetadata })
-  await media.delete(from)
+  return true
 }

@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers"
 import { beforeEach, describe, expect, it } from "vitest"
-import { ledgerKey, type LedgerEntry } from "../lib/ledger"
-import { resumeOps, runOp, type OpEnv, type OpSpec } from "../db/ops"
+import { ledgerKey, replayDecision, type LedgerEntry } from "../lib/ledger"
+import { finishOp, resumeOps, runOp, type OpEnv, type OpSpec } from "../db/ops"
 import { approve, submit } from "./helpers"
 
 const now = new Date("2026-10-06T08:00:00.000Z")
@@ -98,7 +98,13 @@ describe("a decision as a durable operation", () => {
     })
     const result = await runOp({ ...opEnv, db, ledger }, hide(p.id, p.rev), now)
     expect(result.outcome).toBe("ok")
-    expect(seen).toEqual(["put intent op-stored=true", "batch intent-present=true", "put commit op-stored=false"])
+    // The last batch stores how the finishing steps went, after the commit.
+    expect(seen).toEqual([
+      "put intent op-stored=true",
+      "batch intent-present=true",
+      "put commit op-stored=false",
+      "batch intent-present=true",
+    ])
   })
 
   it("moves the place's chain one step with the decision, and commits what actually happened", async () => {
@@ -276,7 +282,7 @@ describe("review findings on the engine", () => {
       get(target, prop) {
         if (prop === "prepare")
           return (sql: string) => {
-            if (sql.startsWith("UPDATE visibility_ops SET intent = ?2, media = ?3")) throw new Error("d1 down")
+            if (sql.includes("purge_tries = purge_tries + 1")) throw new Error("d1 down")
             return target.prepare(sql)
           }
         const value = Reflect.get(target, prop)
@@ -285,5 +291,131 @@ describe("review findings on the engine", () => {
     })
     expect((await runOp({ ...opEnv, db }, hide(p.id, p.rev), now)).outcome).toBe("ok")
     expect(await place(p.id)).toMatchObject({ status: "hidden" })
+  })
+})
+
+describe("a refused operation's abort is never lost (F4-O1)", () => {
+  /** A removal that loses its race after its intent is written: refused, so it needs an abort. */
+  const losing = (placeId: string, rev: number) =>
+    hide(placeId, rev, {
+      statements: (tid) => [env.DB.prepare("UPDATE places SET last_transition_id = ?2 WHERE id = ?1 AND 0").bind(placeId, tid)],
+    })
+  const abortKey = (placeId: string, seq: number, id: string) => ledgerKey({ place: placeId, seq_from: seq, op: id, phase: "abort" })
+  const replayed = async (placeId: string, from: number) => {
+    const { objects } = await env.LEDGER.list({ prefix: `ledger/${placeId}/` })
+    const entries = await Promise.all(objects.map(async (o) => (await env.LEDGER.get(o.key))!.json<LedgerEntry>()))
+    return replayDecision(entries, from).apply.map((e) => e.op)
+  }
+
+  it("an abort the ledger refused is written by the next scheduled run, and the refused removal stops replaying", async () => {
+    const p = await published()
+    const down = { ...opEnv, ledger: refusing((key) => key.endsWith("-abort.json")) }
+    const { outcome, id } = await runOp(down, losing(p.id, p.rev), now)
+    expect(outcome).toBe("conflict")
+    expect(await op(id!)).toMatchObject({ state: "refused", abort: "failed" })
+    // Until it is repaired, the record reads as a removal that may have happened.
+    expect(await replayed(p.id, p.ledger_seq)).toContain(id)
+
+    await resumeOps(opEnv, later(1))
+    expect(await op(id!)).toMatchObject({ state: "refused", abort: "written" })
+    expect(await entryOf(abortKey(p.id, p.ledger_seq, id!))).toMatchObject({ phase: "abort", late: true })
+    expect(await replayed(p.id, p.ledger_seq)).not.toContain(id)
+  })
+
+  it("a refusal recorded just before the Worker stopped, with no abort yet, gets its abort from the scheduled run", async () => {
+    const p = await published()
+    const { id } = await runOp(opEnv, losing(p.id, p.rev), now)
+    // As if the Worker stopped between storing the refusal and writing the abort.
+    await env.DB.prepare("UPDATE visibility_ops SET abort = 'pending' WHERE id = ?").bind(id).run()
+    await env.LEDGER.delete(abortKey(p.id, p.ledger_seq, id!))
+    await resumeOps(opEnv, later(1))
+    expect(await op(id!)).toMatchObject({ abort: "written" })
+    expect(await entryOf(abortKey(p.id, p.ledger_seq, id!))).toBeTruthy()
+  })
+})
+
+describe("finishing an operation is safe to run twice at once, and fair to every operation (F4-O3)", () => {
+  /** A database whose reads of `sql` fail. */
+  const failing = (match: string) =>
+    new Proxy(env.DB, {
+      get(target, prop) {
+        if (prop === "prepare")
+          return (sql: string) => {
+            if (sql.startsWith(match)) throw new Error("d1 down")
+            return target.prepare(sql)
+          }
+        const value = Reflect.get(target, prop)
+        return typeof value === "function" ? value.bind(target) : value
+      },
+    })
+
+  it("a slower finisher that failed can't undo what a faster one completed", async () => {
+    const p = await published()
+    const { id } = await runOp(opEnv, hide(p.id, p.rev), now)
+    await env.DB.prepare(
+      "UPDATE visibility_ops SET detail = ?2, media = 'pending', ledger_commit = 'pending', purge = 'pending', purge_tries = 0 WHERE id = ?1",
+    )
+      .bind(id, JSON.stringify({ fields: ["whole"], toHeld: [`public/${p.id}/x.jpg`] }))
+      .run()
+    // The slow one: its file step fails, then it waits at the ledger, and its commit and purge fail too.
+    let open!: () => void
+    const gate = new Promise<void>((r) => (open = r))
+    let waited = 0
+    const slowLedger = new Proxy(env.LEDGER, {
+      get(target, prop) {
+        if (prop === "put") return async () => (waited++, await gate, Promise.reject(new Error("down")))
+        const value = Reflect.get(target, prop)
+        return typeof value === "function" ? value.bind(target) : value
+      },
+    })
+    const slow = finishOp(
+      { db: failing("SELECT p.status, r.photo_key"), media: env.MEDIA, ledger: slowLedger, purge: async () => false },
+      id!,
+      later(1),
+    )
+    await finishOp(opEnv, id!, later(1))
+    expect(await op(id!)).toMatchObject({ media: "done", ledger_commit: "written", purge: "done" })
+    open()
+    await slow
+    expect(waited).toBe(1)
+    expect(await op(id!)).toMatchObject({ media: "done", ledger_commit: "written", purge: "done" })
+  })
+
+  it("two finishers whose purges both fail count two tries, not one", async () => {
+    const p = await published()
+    const { id } = await runOp(opEnv, hide(p.id, p.rev), now)
+    await env.DB.prepare("UPDATE visibility_ops SET purge = 'pending', purge_tries = 0 WHERE id = ?").bind(id).run()
+    // Both finishers read the operation, then both purges fail together.
+    let arrived = 0
+    let open!: () => void
+    const gate = new Promise<void>((r) => (open = r))
+    const purge = async () => {
+      if (++arrived === 2) open()
+      await gate
+      return false
+    }
+    await Promise.all([finishOp({ ...opEnv, purge }, id!, later(1)), finishOp({ ...opEnv, purge }, id!, later(1))])
+    expect(arrived).toBe(2)
+    expect(await op(id!)).toMatchObject({ purge: "failed", purge_tries: 2 })
+  })
+
+  it("operations that keep failing don't hold back the ones behind them, and one that throws doesn't stop the run", async () => {
+    const p = await published()
+    const old = "2026-10-06T07:00:00.000Z"
+    const row = (id: string, detail = '{"fields":["whole"]}') =>
+      env.DB.prepare(
+        `INSERT INTO visibility_ops (id, place_id, kind, actor, removal, expected_rev, seq_from, detail, state, intent, media,
+           ledger_commit, purge, created_at, updated_at)
+         VALUES (?1, ?2, 'suppress', 'moderator', 1, 1, 0, ?3, 'applied', 'written', 'none', 'failed', 'none', ?4, ?4)`,
+      ).bind(id, p.id, detail, old)
+    const stuck = Array.from({ length: 100 }, (_, i) => `t_starve_${String(i).padStart(3, "0")}`)
+    await env.DB.batch([...stuck.map((id) => row(id)), row("t_starve_100_poison", "not json"), row("t_starve_101")])
+    // The ledger keeps refusing the first hundred's commits, as long as the test runs.
+    const ledger = refusing((key) => stuck.some((id) => key.includes(id)))
+    await resumeOps({ ...opEnv, ledger }, later(1))
+    expect(await op("t_starve_101")).toMatchObject({ ledger_commit: "failed" })
+    await resumeOps({ ...opEnv, ledger }, later(2))
+    expect(await op("t_starve_101")).toMatchObject({ ledger_commit: "written" })
+    expect(await op("t_starve_000")).toMatchObject({ ledger_commit: "failed" })
   })
 })

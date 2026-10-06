@@ -212,6 +212,8 @@ export async function precaution(
   const whole = elements.includes("whole")
   const photo = (whole || elements.includes("photo")) && place.photo_key?.startsWith("public/") ? [place.photo_key] : []
   const happened = "EXISTS (SELECT 1 FROM places WHERE id = ?1 AND last_transition_id = ?2)"
+  // Named before the decision, so the ledger records which rows it creates.
+  const targets = elements.map(() => `s_${ulid(now.getTime())}`)
   const { outcome } = await runOp(
     env,
     {
@@ -222,7 +224,7 @@ export async function precaution(
       removal: true,
       public: true,
       onIntentFailure: "refuse",
-      detail: { fields: elements, report: ticket, toHeld: photo, media: photo },
+      detail: { fields: elements, targets, report: ticket, toHeld: photo, media: photo },
       statements: (tid) => {
         const t = clockNow()
         const landed = t.toISOString()
@@ -235,7 +237,7 @@ export async function precaution(
              WHERE id = ?1 AND rev = ?5 AND status = 'published' AND ${SAFE}`,
             )
             .bind(...binds(tid, t).map((v, i) => (i === 3 ? (whole ? 1 : 0) : v))),
-          ...elements.map((field) =>
+          ...elements.map((field, k) =>
             db
               .prepare(
                 `INSERT INTO field_suppressions (id, place_id, field, report_id, kind, revision_n, created_at, created_by, notes_ceiling_at,
@@ -243,7 +245,7 @@ export async function precaution(
                SELECT ?3, ?1, ?4, ?5, 'precautionary', ?6, ?7, 'automatic', ?8, MIN(?8, (SELECT purge_after FROM reports WHERE id = ?5))
                WHERE ${happened}`,
               )
-              .bind(report.place_id, tid, `s_${ulid(t.getTime())}`, field, ticket, place.n, landed, notesCeiling(t)),
+              .bind(report.place_id, tid, targets[k], field, ticket, place.n, landed, notesCeiling(t)),
           ),
           db.prepare(`UPDATE feed_state SET n = n + 1, changed_at = ?3 WHERE id = 1 AND ${happened}`).bind(report.place_id, tid, landed),
           db

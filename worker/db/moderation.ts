@@ -59,6 +59,8 @@ export async function suppress(
   const photo = (whole || i.fields.includes("photo")) && place.photo_key?.startsWith("public/") ? [place.photo_key] : []
   const at = now.toISOString()
   const happened = "EXISTS (SELECT 1 FROM places WHERE id = ?1 AND last_transition_id = ?2)"
+  // Named before the decision, so the ledger records which rows it creates.
+  const targets = i.fields.map(() => `s_${ulid(now.getTime())}`)
   const { outcome } = await runOp(
     env,
     {
@@ -69,7 +71,7 @@ export async function suppress(
       removal: true,
       public: true,
       onIntentFailure: "proceed",
-      detail: { fields: i.fields, report: i.reportId, toHeld: photo, media: photo },
+      detail: { fields: i.fields, targets, report: i.reportId, toHeld: photo, media: photo },
       statements: (tid) => [
         db
           .prepare(
@@ -79,7 +81,7 @@ export async function suppress(
              WHERE id = ?1 AND rev = ?5 AND status IN ('published', 'hidden')`,
           )
           .bind(i.placeId, tid, at, whole ? 1 : 0, i.expectedRev),
-        ...i.fields.map((field) =>
+        ...i.fields.map((field, k) =>
           db
             .prepare(
               `INSERT INTO field_suppressions (id, place_id, field, report_id, kind, revision_n, created_at, created_by, reason,
@@ -87,18 +89,7 @@ export async function suppress(
                SELECT ?3, ?1, ?4, ?5, 'manual', ?6, ?7, ?8, ?9, ?10, MIN(?10, COALESCE((SELECT purge_after FROM reports WHERE id = ?5), ?10))
                WHERE ${happened}`,
             )
-            .bind(
-              i.placeId,
-              tid,
-              `s_${ulid(now.getTime())}`,
-              field,
-              i.reportId ?? null,
-              place.revision_n,
-              at,
-              i.actor,
-              i.reason,
-              notesCeiling(now),
-            ),
+            .bind(i.placeId, tid, targets[k], field, i.reportId ?? null, place.revision_n, at, i.actor, i.reason, notesCeiling(now)),
         ),
         db.prepare(`UPDATE feed_state SET n = n + 1, changed_at = ?3 WHERE id = 1 AND ${happened}`).bind(i.placeId, tid, at),
         db
@@ -196,7 +187,7 @@ export async function lift(
       public: true,
       // A restoration never happens unrecorded (spec 8.2).
       onIntentFailure: "refuse",
-      detail: { fields: [sup.field], basis: basisCode, report: sup.report_id ?? undefined },
+      detail: { fields: [sup.field], targets: [suppressionId], basis: basisCode, report: sup.report_id ?? undefined },
       // The held file is copied back before the decision, and served only once the database says it is public again.
       prepare: async () => {
         if (!photo) return

@@ -71,6 +71,25 @@ describe("replay rules (spec 8.2)", () => {
     expect(replayDecision([entry("a", "commit", "approve", 0)], 0).erased).toBe(false)
   })
 
+  it("a withdrawal or an erasure that was refused (abort only, or intent then abort) blocks nothing (F4-O4)", () => {
+    expect(replayDecision([entry("w", "abort", "withdraw", 3)], 3).erased).toBe(false)
+    expect(replayDecision([entry("w", "intent", "withdraw", 3), entry("w", "abort", "withdraw", 3)], 3).erased).toBe(false)
+    expect(replayDecision([entry("e", "intent", "erase", 3), entry("e", "abort", "erase", 3)], 3).erased).toBe(false)
+  })
+
+  it("from a restore point past the start: decisions the restore point already holds are neither applied nor counted as a gap, but an erasure among them still blocks (F4-O4)", () => {
+    const history = [entry("a", "commit", "approve", 0), entry("b", "commit", "suppress", 1), entry("c", "commit", "lift", 2)]
+    const r = replayDecision(history, 2)
+    expect(ops(r)).toEqual(["c:commit"])
+    expect(r.quarantine).toBe(false)
+    expect(replayDecision(history, 3)).toEqual({ apply: [], quarantine: false, erased: false })
+    // A withdrawal the restore point already holds is still a withdrawal: its files never come back.
+    expect(replayDecision([entry("w", "commit", "withdraw", 0), entry("x", "commit", "erase", 1)], 2).erased).toBe(true)
+    expect(replayDecision([entry("w", "commit", "withdraw", 0)], 1).erased).toBe(true)
+    // A removal intent from before the restore point, never committed, lost its step to a decision the point holds.
+    expect(ops(replayDecision([entry("a", "commit", "approve", 0), entry("h", "intent", "suppress", 0)], 1))).toEqual([])
+  })
+
   it("orders the chain by the place's own sequence, not by when entries were written or listed", () => {
     const r = replayDecision([entry("b", "commit", "lift", 1), entry("a", "commit", "suppress", 0)], 0)
     expect(ops(r)).toEqual(["a:commit", "b:commit"])

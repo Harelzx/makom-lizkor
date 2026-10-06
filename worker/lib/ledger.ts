@@ -1,8 +1,8 @@
 /**
  * The ledger (spec 8.2): every decision, written as an intent before it reaches the database and as a commit after,
  * outside D1, so a restore from backup can replay what was decided since. It holds ids and codes only: the place, the
- * operation, the step of the place's chain, the kind, field names and file keys. Never what anyone wrote, never a
- * contact detail, so keeping it for the life of the project keeps nothing personal.
+ * operation, the step of the place's chain, the kind, field names, file keys and suppression ids. Never what anyone
+ * wrote, never a contact detail. How long it is kept is a retention decision of its own (Phase 5), not settled here.
  */
 
 export type OpKind = "approve" | "reject" | "return" | "withdraw" | "suppress" | "lift" | "erase"
@@ -25,10 +25,12 @@ export type LedgerEntry = {
   /** On a commit: the place's status after the decision. */
   status?: string
   fields?: string[]
+  /** The suppression rows a hide created or a restoration lifted, so two hides of one field replay apart. */
+  targets?: string[]
   media?: string[]
   basis?: string
   at: string
-  /** An intent written after the decision, because the bucket refused it at the time (a removal that went ahead). */
+  /** Written after the fact: an intent the bucket refused at the time (a removal that went ahead), or an abort repaired. */
   late?: boolean
 }
 
@@ -58,7 +60,12 @@ const ERASING: OpKind[] = ["withdraw", "erase"]
  *   can't come back through a replay that skips the safeguards it failed.
  * - A publication, a restoration or anything else with an intent and no commit is not.
  * - A step missing from the committed chain quarantines the place: its elements stay hidden until a moderator looks.
- * - A withdrawal or an erasure, as intent or commit, blocks the place and its files from ever coming back.
+ * - A withdrawal or an erasure that took effect (committed, or an intent with no abort) blocks the place and its files
+ *   from ever coming back. One that was refused blocks nothing.
+ *
+ * `entries` may hold the place's whole history; `fromSeq` is the chain step the restore point holds. Decisions the
+ * restore point already holds (a commit with seq_to <= fromSeq, or an uncommitted removal from before fromSeq, whose
+ * step a held decision took) are not applied again and don't count as a gap, but an erasure among them still blocks.
  *
  * Phase 5's restore runs this; it is pure so the rules are tested apart from any bucket.
  */
@@ -71,9 +78,13 @@ export function replayDecision(entries: LedgerEntry[], fromSeq: number): { apply
   }
   const committed: LedgerEntry[] = []
   const removals: LedgerEntry[] = []
+  let erased = false
   for (const { intent, commit, abort } of byOp.values()) {
-    if (commit) committed.push(commit)
-    else if (intent?.removal && !abort) removals.push(intent)
+    const effective = commit ?? (intent?.removal && !abort ? intent : undefined)
+    if (!effective) continue
+    if (ERASING.includes(effective.kind)) erased = true
+    if (commit && commit.seq_to > fromSeq) committed.push(commit)
+    else if (!commit && effective.seq_from >= fromSeq) removals.push(effective)
   }
   committed.sort((a, b) => a.seq_from - b.seq_from)
   removals.sort((a, b) => a.seq_from - b.seq_from)
@@ -83,5 +94,5 @@ export function replayDecision(entries: LedgerEntry[], fromSeq: number): { apply
     if (c.seq_from !== step) quarantine = true
     step = c.seq_to
   }
-  return { apply: [...committed, ...removals], quarantine, erased: entries.some((e) => ERASING.includes(e.kind)) }
+  return { apply: [...committed, ...removals], quarantine, erased }
 }
