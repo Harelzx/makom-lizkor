@@ -19,8 +19,16 @@ export async function fakeSiteverify(_secret: string, token: string): Promise<Si
   return { success: token === "pass", hostname: "example.com", action: "submit" }
 }
 
+/** Every purge the Worker asked for, in order; `purgeFails` makes the edge refuse them. */
+export const purges: string[][] = []
+export const edge = { purgeFails: false }
+
 // Mail goes to dev_outbox, as in development, so the tests read what would be sent.
-const app = createApp({ verifyTurnstile: fakeSiteverify, sendMail })
+const app = createApp({
+  verifyTurnstile: fakeSiteverify,
+  sendMail,
+  purge: async (_env, _ctx, tags) => (purges.push(tags), !edge.purgeFails),
+})
 
 /** The Worker as the tests see it: real routes and bindings, the fake siteverify. */
 export const call = (url: string, init: RequestInit = {}, e: Env = env) => app.fetch(new Request(url, init), e, createExecutionContext())

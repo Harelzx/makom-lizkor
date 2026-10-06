@@ -8,7 +8,7 @@ import { devToken } from "./helpers"
 
 // What a deploy gets: the top-level vars of wrangler.jsonc, without the development values from .dev.vars.
 const production = { ...env, ENVIRONMENT: "production", DEV_ACCESS_SECRET: "", MODERATORS: "", ACCESS_TEAM_DOMAIN: "", ACCESS_AUD: "" }
-const app = createApp({ verifyTurnstile: fakeSiteverify, sendMail })
+const app = createApp({ verifyTurnstile: fakeSiteverify, sendMail, purge: async () => true })
 const call = (path: string, init: RequestInit = {}, e: Env = production) =>
   app.fetch(new Request(`http://local${path}`, init), e, createExecutionContext())
 

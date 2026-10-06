@@ -1,6 +1,7 @@
 import type { Feed, PublicPlace, RevisionInput, SubmissionInput } from "@/shared/contract"
 import { newToken, placeId, sameHash, sha256Hex, ulid } from "../lib/ids"
 import { stripJpeg } from "../lib/jpeg"
+import { runOp, type OpEnv } from "./ops"
 
 // An approximation of a month; phase 5 replaces it with calendar months read from RETENTION (src/config.ts).
 const MONTH_MS = 30 * 24 * 3600 * 1000
@@ -304,41 +305,55 @@ export async function submissionStatus(db: D1Database, id: string, token: string
  * done: withdrawn now or before · missing: no place for this link · busy: the place kept changing under three tries in a
  * row, so the holder of a valid link is told to try again rather than that the link is wrong.
  */
-export async function withdraw(db: D1Database, id: string, token: string, now: Date): Promise<"done" | "missing" | "busy"> {
+export async function withdraw(env: OpEnv, id: string, token: string, now: Date): Promise<"done" | "missing" | "busy"> {
+  const db = env.db
   for (let attempt = 0; attempt < 3; attempt++) {
     const row = await tracked(db, id, token)
     if (!row) return "missing"
     if (row.status === "withdrawn" || row.status === "erased") return "done"
-    const tid = `t_${ulid(now.getTime())}`
     const at = now.toISOString()
     const happened = "EXISTS (SELECT 1 FROM places WHERE id = ?1 AND last_transition_id = ?2)"
-    const [placeUpdate] = await db.batch([
-      db
-        .prepare(
-          `UPDATE places SET status = 'withdrawn', rev = rev + 1, last_transition_id = ?2, status_changed_at = ?3, published_revision_id = NULL,
-             submit_body_hash = NULL
-           WHERE id = ?1 AND rev = ?4`,
-        )
-        .bind(id, tid, at, row.rev),
-      db
-        .prepare(
-          `UPDATE revisions SET state = 'withdrawn', kind = NULL, name_he = NULL, lat = NULL, lng = NULL, location_precision = NULL,
-             on_private_property = 0, location_permission_at = NULL, access_note_he = NULL, place_he = NULL, in_memory_of = NULL,
-             story_he = NULL, link_url = NULL, decision_note = NULL, photo_key = NULL, photo_alt = NULL, photo_credit = NULL, decided_at = ?3
-           WHERE place_id = ?1 AND ${happened}`,
-        )
-        .bind(id, tid, at),
-      db.prepare(`DELETE FROM contacts WHERE place_id = ?1 AND ${happened}`).bind(id, tid),
-      db
-        .prepare(`UPDATE feed_state SET n = n + 1, changed_at = ?3 WHERE id = 1 AND ?4 = 'published' AND ${happened}`)
-        .bind(id, tid, at, row.status),
-      db
-        .prepare(
-          `INSERT INTO audit_log (id, at, actor, action, entity_id, fields) SELECT ?3, ?4, 'submitter', 'withdraw', ?1, 'status' WHERE ${happened}`,
-        )
-        .bind(id, tid, `a_${ulid(now.getTime())}`, at),
-    ])
-    if (placeUpdate.meta.changes === 1) return "done"
+    // The sender's own removal: it goes ahead even if the ledger can't record it now, and is repaired later (spec 8.2).
+    const { outcome } = await runOp(
+      env,
+      {
+        placeId: id,
+        kind: "withdraw",
+        actor: "submitter",
+        expectedRev: row.rev,
+        removal: true,
+        public: row.status === "published" || row.status === "hidden",
+        onIntentFailure: "proceed",
+        statements: (tid) => [
+          db
+            .prepare(
+              `UPDATE places SET status = 'withdrawn', rev = rev + 1, last_transition_id = ?2, status_changed_at = ?3, published_revision_id = NULL,
+                 submit_body_hash = NULL
+               WHERE id = ?1 AND rev = ?4`,
+            )
+            .bind(id, tid, at, row.rev),
+          db
+            .prepare(
+              `UPDATE revisions SET state = 'withdrawn', kind = NULL, name_he = NULL, lat = NULL, lng = NULL, location_precision = NULL,
+                 on_private_property = 0, location_permission_at = NULL, access_note_he = NULL, place_he = NULL, in_memory_of = NULL,
+                 story_he = NULL, link_url = NULL, decision_note = NULL, photo_key = NULL, photo_alt = NULL, photo_credit = NULL, decided_at = ?3
+               WHERE place_id = ?1 AND ${happened}`,
+            )
+            .bind(id, tid, at),
+          db.prepare(`DELETE FROM contacts WHERE place_id = ?1 AND ${happened}`).bind(id, tid),
+          db
+            .prepare(`UPDATE feed_state SET n = n + 1, changed_at = ?3 WHERE id = 1 AND ?4 = 'published' AND ${happened}`)
+            .bind(id, tid, at, row.status),
+          db
+            .prepare(
+              `INSERT INTO audit_log (id, at, actor, action, entity_id, fields) SELECT ?3, ?4, 'submitter', 'withdraw', ?1, 'status' WHERE ${happened}`,
+            )
+            .bind(id, tid, `a_${ulid(now.getTime())}`, at),
+        ],
+      },
+      now,
+    )
+    if (outcome === "ok") return "done"
     // A moderator decided at the same moment: read the place again and withdraw what it is now.
   }
   return "busy"
@@ -368,7 +383,7 @@ export async function listQueue(db: D1Database) {
  * never takes a published place down: rejecting or returning it leaves the published revision live, and approving it
  * swaps the published revision and retires the old one.
  */
-export async function transition(
+export function transitionStatements(
   db: D1Database,
   t: {
     placeId: string
@@ -380,13 +395,13 @@ export async function transition(
     /** For an approval: the key its photo will be served from (preparePhoto), set in the same step. */
     photoKey?: string | null
   },
+  tid: string,
   now: Date,
-): Promise<"ok" | "conflict"> {
-  const tid = `t_${ulid(now.getTime())}`
+): D1PreparedStatement[] {
   const at = now.toISOString()
   const happened = "EXISTS (SELECT 1 FROM places WHERE id = ?1 AND last_transition_id = ?2)"
   const state = { approve: "approved", reject: "rejected", return: "returned" }[t.action]
-  const [placeUpdate] = await db.batch([
+  return [
     db
       .prepare(
         `UPDATE places SET rev = rev + 1, last_transition_id = ?2, status_changed_at = ?4,
@@ -419,8 +434,7 @@ export async function transition(
     db
       .prepare(`INSERT INTO audit_log (id, at, actor, action, entity_id, fields) SELECT ?3, ?4, ?5, ?6, ?1, 'status' WHERE ${happened}`)
       .bind(t.placeId, tid, `a_${ulid(now.getTime())}`, at, t.actor, t.action),
-  ])
-  return placeUpdate.meta.changes === 1 ? "ok" : "conflict"
+  ]
 }
 
 /**
@@ -679,7 +693,8 @@ export async function retirePhotos(db: D1Database, media: R2Bucket, keys: (strin
         .first()
       if (!named) obsolete.push(key)
     }
-    await deleteKeys(media, obsolete)
+    // A photo hidden while it was published sits in held/ under the same name: it goes with its public key.
+    await deleteKeys(media, [...obsolete, ...obsolete.filter((k) => k.startsWith("public/")).map((k) => k.replace(/^public\//, "held/"))])
   } catch (err) {
     console.error(JSON.stringify({ level: "error", event: "photo_cleanup", error: (err as Error).name }))
   }
@@ -702,16 +717,16 @@ async function keysUnder(media: R2Bucket, prefix: string): Promise<string[]> {
   return keys
 }
 
-/** Whether any file of a place is still stored, in quarantine or public. */
+/** Whether any file of a place is still stored, in quarantine, public or held. */
 export async function photosRemain(media: R2Bucket, placeId: string): Promise<boolean> {
-  for (const prefix of [`quarantine/${placeId}/`, `public/${placeId}/`])
+  for (const prefix of [`quarantine/${placeId}/`, `public/${placeId}/`, `held/${placeId}/`])
     if ((await media.list({ prefix, limit: 1 })).objects.length) return true
   return false
 }
 
-/** Every file of a place, in quarantine and public alike: a withdrawal erases them all at once. */
+/** Every file of a place, in quarantine, public and held alike: a withdrawal erases them all at once. */
 export async function erasePhotos(media: R2Bucket, placeId: string) {
-  for (const prefix of [`quarantine/${placeId}/`, `public/${placeId}/`]) {
+  for (const prefix of [`quarantine/${placeId}/`, `public/${placeId}/`, `held/${placeId}/`]) {
     await deleteKeys(media, await keysUnder(media, prefix))
   }
 }

@@ -1,6 +1,7 @@
 import { Hono } from "hono"
 import { problem } from "./lib/http"
 import { sendMail, type SendMail } from "./lib/mail"
+import { edgePurge, type Purge } from "./lib/purge"
 import { siteverify, type VerifyTurnstile } from "./lib/turnstile"
 import { admin } from "./routes/admin"
 import { dev } from "./routes/dev"
@@ -11,7 +12,7 @@ import { submissions } from "./routes/submissions"
 import { tributes } from "./routes/tributes"
 
 /** What the routes reach outside the Worker; the tests pass stand-ins, the deployed Worker the real ones. */
-export type Deps = { verifyTurnstile: VerifyTurnstile; sendMail: SendMail }
+export type Deps = { verifyTurnstile: VerifyTurnstile; sendMail: SendMail; purge: Purge }
 export type AppEnv = { Bindings: Env; Variables: Deps }
 
 export function createApp(deps: Deps) {
@@ -19,6 +20,7 @@ export function createApp(deps: Deps) {
   app.use("*", async (c, next) => {
     c.set("verifyTurnstile", deps.verifyTurnstile)
     c.set("sendMail", deps.sendMail)
+    c.set("purge", deps.purge)
     await next()
   })
 
@@ -62,4 +64,4 @@ export function createApp(deps: Deps) {
   return app
 }
 
-export default createApp({ verifyTurnstile: siteverify, sendMail })
+export default createApp({ verifyTurnstile: siteverify, sendMail, purge: edgePurge })

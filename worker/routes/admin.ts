@@ -2,12 +2,14 @@ import { zValidator } from "@hono/zod-validator"
 import { Hono } from "hono"
 import { z } from "zod"
 import { text } from "@/shared/contract"
-import { listQueue, photosBefore, preparePhoto, retirePhotos, transition, verifiedContact } from "../db/places"
+import { runOp } from "../db/ops"
+import { listQueue, photosBefore, preparePhoto, transitionStatements, verifiedContact } from "../db/places"
 import { decisionMail } from "../lib/messages"
 import type { AppEnv } from "../index"
 import { moderator } from "../lib/access"
 import { clock } from "../lib/clock"
 import { PRIVATE, problem } from "../lib/http"
+import { opEnv } from "../lib/purge"
 
 export const admin = new Hono<{ Bindings: Env; Variables: AppEnv["Variables"] & { actor: string } }>()
 
@@ -46,21 +48,37 @@ admin.post(
       (await c.env.DB.prepare("SELECT status FROM places WHERE id = ?").bind(placeId).first<string>("status")) === "published"
     // The files this decision may make obsolete, as they are before it.
     const before = await photosBefore(c.env.DB, placeId, body.revisionId)
-    // An approval publishes the photo in the same step as the place; the copy is made first.
-    const photo = body.action === "approve" ? await preparePhoto(c.env.DB, c.env.MEDIA, placeId, body.revisionId) : undefined
-    const result = await transition(c.env.DB, { placeId, ...body, actor: c.get("actor"), photoKey: photo?.key }, clock(c.req.raw, c.env))
-    if (result !== "ok") {
-      // Nothing was decided: the copy this attempt made goes again (a failure here is left for the sweep).
-      if (photo?.fresh && photo.key) await c.env.MEDIA.delete(photo.key).catch(() => undefined)
-      return problem(c, 409, "changed_meanwhile")
-    }
-    const obsolete =
-      body.action === "approve"
-        ? [before.source, before.published !== photo?.key ? before.published : null]
-        : body.action === "reject"
-          ? [before.source]
-          : []
-    await retirePhotos(c.env.DB, c.env.MEDIA, obsolete)
+    const now = clock(c.req.raw, c.env)
+    let photo: { key: string | null; fresh: boolean } | undefined
+    // Recorded before it happens: no decision is made that the ledger can't hold (spec 8.2). An approval publishes the
+    // photo in the same step as the place, so its copy is made first; one that never lands is removed again.
+    const { outcome } = await runOp(
+      opEnv(c),
+      {
+        placeId,
+        kind: body.action,
+        actor: "moderator",
+        expectedRev: body.expectedRev,
+        removal: false,
+        public: body.action === "approve",
+        onIntentFailure: "refuse",
+        prepare: async () => {
+          if (body.action === "reject") return { retire: [before.source].filter((k): k is string => !!k) }
+          if (body.action !== "approve") return
+          photo = await preparePhoto(c.env.DB, c.env.MEDIA, placeId, body.revisionId)
+          return {
+            prepared: photo.fresh && photo.key ? [photo.key] : [],
+            media: photo.key ? [photo.key] : [],
+            retire: [before.source, before.published !== photo.key ? before.published : null].filter((k): k is string => !!k),
+          }
+        },
+        statements: (tid) => transitionStatements(c.env.DB, { placeId, ...body, actor: c.get("actor"), photoKey: photo?.key }, tid, now),
+      },
+      now,
+    )
+    if (outcome === "ledger_unwritten") return problem(c, 503, "ledger_unavailable", {}, { "Retry-After": "30" })
+    if (outcome === "prepare_failed") return problem(c, 503, "media_unavailable", {}, { "Retry-After": "30" })
+    if (outcome !== "ok") return problem(c, 409, "changed_meanwhile")
     // A verified address hears about the decision; a mail that can't go now never undoes the decision.
     const contact = await verifiedContact(c.env.DB, c.req.param("id"))
     if (contact)

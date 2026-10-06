@@ -11,7 +11,12 @@
     "run_worker_first": ["/api/*", "/__dev/*", "/media/*", "/place/*"],
   },
   "d1_databases": [
-    { "binding": "DB", "database_name": "makom-dev", "database_id": "00000000-0000-0000-0000-000000000000", "migrations_dir": "migrations" },
+    {
+      "binding": "DB",
+      "database_name": "makom-dev",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations",
+    },
   ],
   // What a deploy ships: production, with no moderators until the deploy names them and no development secret.
   // Locally, .dev.vars (read by the dev server and the tests, never deployed) turns development on.
@@ -29,7 +34,12 @@
     "PUBLIC_ORIGIN": "",
   },
   // Photos: quarantine/ until a moderator approves, public/ after. No public bucket; the Worker serves public/ only.
-  "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "makom-media", "jurisdiction": "eu" }],
+  // The ledger: every decision, ids and codes only, written before and after it (spec 8.2). Bucket lock is an account
+  // setting, applied with the retention work before launch.
+  "r2_buckets": [
+    { "binding": "MEDIA", "bucket_name": "makom-media", "jurisdiction": "eu" },
+    { "binding": "LEDGER", "bucket_name": "makom-ledger", "jurisdiction": "eu" },
+  ],
   // A coarse outer cap per visitor's address, counted by Cloudflare at the edge: nothing about the address is stored.
   "ratelimits": [
     { "name": "SUBMIT_LIMIT", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } },
