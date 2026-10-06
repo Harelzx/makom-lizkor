@@ -1,4 +1,5 @@
 import { RETENTION } from "@/config"
+import { runDrill } from "./db/drill"
 import { alertDeletion, checkDeletion, pruneExports, runExport } from "./db/exports"
 import { resumeOps, type OpEnv } from "./db/ops"
 import { sweepPhotos } from "./db/photos"
@@ -17,7 +18,8 @@ const BACKSTOP_CLAIM_MS = 10 * 60_000
  * - the retention job (db/retention.ts): abandoned submissions erased, and what reached its purge date emptied;
  * - the photo sweep (db/photos.ts): files nothing live names, once no writer can still be in flight;
  * - the nightly export (db/exports.ts), once a day and only after a deletion run of the same pass finished; exports and
- *   the photo copies only they list deleted at 35 days; the deletion check, told to the moderators once a day;
+ *   the photo copies only they list deleted at 35 days; the weekly restore drill (db/drill.ts); the deletion check,
+ *   told to the moderators once a day;
  * - operations left unfinished are finished, or refused as interrupted (resumeOps);
  * - the 24-hour backstop (spec 6) looks once at each complete request the automatic path held back, with every
  *   safeguard checked again at the moment it runs, and then leaves the request to people; a look that couldn't
@@ -58,6 +60,14 @@ export async function runJobs(env: Env, deps: { sendMail: SendMail; purge: Purge
       await runExport({ db: env.DB, media: env.MEDIA, exports: env.EXPORTS, keys: env.EXPORT_PUBLIC_KEYS }, retention.id, now)
   })
   await part("export_prune", () => pruneExports({ db: env.DB, exports: env.EXPORTS }, now))
+  // Only where a drill database and its key are configured (production; never the development server).
+  const drill = env as Env & { DRILL_DB?: D1Database; DRILL_PRIVATE_KEY?: string }
+  await part("drill", () =>
+    runDrill(
+      { db: env.DB, exports: env.EXPORTS, drillDb: drill.DRILL_DB, drillKey: drill.DRILL_PRIVATE_KEY, env, sendMail: deps.sendMail },
+      now,
+    ),
+  )
   await part("deletion_check", async () =>
     alertDeletion(
       env.DB,
