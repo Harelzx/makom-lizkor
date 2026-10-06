@@ -51,6 +51,8 @@ export const RETENTION = {
   rejectedTextDays: 30,
   /** a photo that wasn't approved */
   rejectedPhotoDays: 30,
+  /** when the job deletes such a photo: a day early, so a late or backlogged pass still keeps "within" the promise */
+  unapprovedPhotoJobDays: 29,
   /** anemone count rows: the daily code, the place, the day and the time */
   tributeDays: 8,
   /** the audit trail (who decided what, when; never a value): kept this long, pending legal approval (spec 7) */

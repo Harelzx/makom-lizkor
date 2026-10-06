@@ -44,7 +44,7 @@ export function retentionCutoffs(now: Date) {
     rejected: ago(RETENTION.rejectedTextDays),
     noteClosed: ago(RETENTION.contactAfterCloseDays),
     noteCeiling: ago(RETENTION.contactMaxMonths * 30),
-    photo: now.getTime() - RETENTION.rejectedPhotoDays * DAY_MS,
+    photo: now.getTime() - RETENTION.unapprovedPhotoJobDays * DAY_MS,
     tribute: ago(RETENTION.tributeDays),
     audit: ago(RETENTION.auditMonths * 30),
   }
@@ -284,7 +284,8 @@ export const uploadedAt = (key: string) =>
   )
 
 /**
- * A photo still waiting in quarantine/ RETENTION.rejectedPhotoDays after its upload, its submission or correction
+ * A photo still waiting in quarantine/ RETENTION.unapprovedPhotoJobDays after its upload (a day inside the notice's
+ * RETENTION.rejectedPhotoDays, so a late pass still keeps the promise), its submission or correction
  * undecided (or returned), goes: the revision stops naming it first, and the place's rev moves on, so a moderator's
  * view that still showed it conflicts instead of approving a photo that is gone; then the file. A file whose deletion
  * fails is named by nothing, and the photo sweep takes it.

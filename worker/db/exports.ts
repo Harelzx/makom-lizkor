@@ -227,7 +227,7 @@ export async function checkDeletion(env: { db: D1Database; exports: R2Bucket; ke
     tributes: n(7),
     audit: n(8),
     unapproved_photos: (counts[9].results as { k: string }[]).filter(
-      (r) => uploadedAt(r.k) <= now.getTime() - (RETENTION.rejectedPhotoDays + 1) * DAY_MS,
+      (r) => uploadedAt(r.k) <= now.getTime() - RETENTION.rejectedPhotoDays * DAY_MS,
     ).length,
   }
   const cutoff = now.getTime() - EXPORT_KEEP_DAYS * DAY_MS

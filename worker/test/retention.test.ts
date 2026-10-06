@@ -658,15 +658,16 @@ describe("anemones, the audit trail and unapproved photos (task 4)", () => {
     expect(left.results.map((r) => r.id)).toEqual(["a_new_t4"])
   })
 
-  it("a photo not approved within RETENTION.rejectedPhotoDays of its upload goes, and the moderators' view of the place moves on", async () => {
+  it("a photo not approved goes a day inside the notice's RETENTION.rejectedPhotoDays, and the moderators' view of the place moves on", async () => {
+    expect(RETENTION.unapprovedPhotoJobDays).toBeLessThan(RETENTION.rejectedPhotoDays)
     const { id, trackingToken } = await send("ספסל דמו שתמונתו לא אושרה")
     expect((await upload(id, trackingToken)).status).toBe(200)
     const photo = () => env.DB.prepare("SELECT photo_key FROM revisions WHERE place_id = ?").bind(id).first<string | null>("photo_key")
     const key = (await photo())!
     const revBefore = (await env.DB.prepare("SELECT rev FROM places WHERE id = ?").bind(id).first<number>("rev"))!
-    await runRetention(opEnv(), later(RETENTION.rejectedPhotoDays - 1))
+    await runRetention(opEnv(), later(RETENTION.unapprovedPhotoJobDays - 1))
     expect(await photo()).toBe(key)
-    await runRetention(opEnv(), later(RETENTION.rejectedPhotoDays + 1))
+    await runRetention(opEnv(), new Date(later(RETENTION.unapprovedPhotoJobDays).getTime() + 60_000))
     expect(await photo()).toBeNull()
     expect(await env.MEDIA.head(key)).toBeNull()
     expect(await env.DB.prepare("SELECT rev FROM places WHERE id = ?").bind(id).first<number>("rev")).toBe(revBefore + 1)
