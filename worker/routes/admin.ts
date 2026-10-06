@@ -2,7 +2,7 @@ import { zValidator } from "@hono/zod-validator"
 import { Hono } from "hono"
 import { z } from "zod"
 import { ELEMENTS, text } from "@/shared/contract"
-import { attention, BASIS_CODES, lift, listReports, placeView, readContact, setReportStatus, suppress } from "../db/moderation"
+import { attention, BASIS_CODES, lift, listReports, parseCursor, placeView, readContact, setReportStatus, suppress } from "../db/moderation"
 import { runOp } from "../db/ops"
 import { listQueue, photosBefore, preparePhoto, transitionStatements, verifiedContact } from "../db/places"
 import { decisionMail } from "../lib/messages"
@@ -176,7 +176,9 @@ admin.post("/suppressions/:id/lift", zValidator("json", Lift, invalid), async (c
 
 admin.get("/reports", async (c) => {
   const status = c.req.query("status")
-  return c.json({ items: await listReports(c.env.DB, status === "closed" || status === "all" ? status : "open") })
+  const cursor = parseCursor(c.req.query("cursor"))
+  if (cursor === "invalid") return problem(c, 400, "invalid_input")
+  return c.json(await listReports(c.env.DB, status === "closed" || status === "all" ? status : "open", cursor))
 })
 
 admin.get("/reports/:id/contact", async (c) => {
@@ -199,4 +201,9 @@ for (const [path, to, needsNote] of [
   })
 }
 
-admin.get("/attention", async (c) => c.json({ ops: await attention(c.env.DB) }))
+admin.get("/attention", async (c) => {
+  const cursor = parseCursor(c.req.query("cursor"))
+  if (cursor === "invalid") return problem(c, 400, "invalid_input")
+  const { items, next } = await attention(c.env.DB, cursor)
+  return c.json({ ops: items, next })
+})

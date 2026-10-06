@@ -232,8 +232,27 @@ export async function lift(
   return outcome
 }
 
-/** The moderators' queue of requests: what was asked and by whom (by kind), never the address unless asked for. */
-export async function listReports(db: D1Database, status: "open" | "closed" | "all") {
+/** A page of a moderator list, newest first; `next` continues after the last item, null at the end. */
+export const PAGE = 50
+export type Cursor = { at: string; id: string }
+const CURSOR = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z)\|([A-Za-z0-9_-]{1,64})$/
+/** A cursor as the lists hand it out (`<time>|<id>`); anything else is refused rather than read as the first page. */
+export function parseCursor(raw: string | undefined): Cursor | null | "invalid" {
+  if (!raw) return null
+  const m = CURSOR.exec(raw)
+  return m ? { at: m[1], id: m[2] } : "invalid"
+}
+const nextOf = (rows: Record<string, unknown>[], timeKey: string) => {
+  if (rows.length <= PAGE) return { items: rows, next: null }
+  const last = rows[PAGE - 1]
+  return { items: rows.slice(0, PAGE), next: `${last[timeKey]}|${last.id}` }
+}
+
+/**
+ * The moderators' queue of requests: what was asked and by whom (by kind), never the address unless asked for. Paged
+ * by (received_at, id), newest first, so every request stays reachable however many there are.
+ */
+export async function listReports(db: D1Database, status: "open" | "closed" | "all", cursor: Cursor | null) {
   const where = status === "all" ? "1 = 1" : status === "closed" ? "rep.status = 'closed'" : "rep.status IN ('open', 'in_review')"
   const { results } = await db
     .prepare(
@@ -241,10 +260,12 @@ export async function listReports(db: D1Database, status: "open" | "closed" | "a
          rep.email IS NOT NULL AS has_contact, rep.complete, rep.outcome, rep.status, rep.received_at, rep.backstop_at, rep.alerts,
          rep.alerted_at, rep.handled_by, rep.handling_note, rep.closed_at, r.name_he AS place_name, p.status AS place_status, p.rev AS place_rev
        FROM reports rep LEFT JOIN places p ON p.id = rep.place_id LEFT JOIN revisions r ON r.id = p.published_revision_id
-       WHERE ${where} ORDER BY rep.received_at DESC LIMIT 200`,
+       WHERE ${where} AND (?1 IS NULL OR rep.received_at < ?1 OR (rep.received_at = ?1 AND rep.id < ?2))
+       ORDER BY rep.received_at DESC, rep.id DESC LIMIT ?3`,
     )
-    .all()
-  return results
+    .bind(cursor?.at ?? null, cursor?.id ?? null, PAGE + 1)
+    .all<Record<string, unknown>>()
+  return nextOf(results, "received_at")
 }
 
 /** The requester's address, for a moderator who needs to write to them; every reading is recorded (spec 10). */
@@ -305,8 +326,11 @@ export async function setReportStatus(
   return changed.meta.changes === 1
 }
 
-/** Operations a moderator should see: removals that stopped before they landed, records to repair, purges given up. */
-export async function attention(db: D1Database) {
+/**
+ * Operations a moderator should see: removals that stopped before they landed, records to repair, purges given up.
+ * Paged like the requests, so none is out of reach.
+ */
+export async function attention(db: D1Database, cursor: Cursor | null) {
   const { results } = await db
     .prepare(
       `SELECT id, place_id, kind, actor, created_at,
@@ -315,10 +339,12 @@ export async function attention(db: D1Database) {
               WHEN media = 'failed' THEN 'media_failed'
               ELSE 'purge_abandoned' END AS problem
        FROM visibility_ops
-       WHERE (state = 'refused' AND refused_reason = 'interrupted' AND removal = 1)
-          OR (state = 'applied' AND (intent = 'failed' OR ledger_commit = 'failed' OR media = 'failed' OR purge = 'abandoned'))
-       ORDER BY created_at DESC LIMIT 100`,
+       WHERE ((state = 'refused' AND refused_reason = 'interrupted' AND removal = 1)
+          OR (state = 'applied' AND (intent = 'failed' OR ledger_commit = 'failed' OR media = 'failed' OR purge = 'abandoned')))
+         AND (?1 IS NULL OR created_at < ?1 OR (created_at = ?1 AND id < ?2))
+       ORDER BY created_at DESC, id DESC LIMIT ?3`,
     )
-    .all()
-  return results
+    .bind(cursor?.at ?? null, cursor?.id ?? null, PAGE + 1)
+    .all<Record<string, unknown>>()
+  return nextOf(results, "created_at")
 }

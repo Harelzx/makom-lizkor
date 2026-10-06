@@ -54,3 +54,40 @@ test("a family's request hides the name as a precaution; a restoration is refuse
   await expect.poll(async () => (await inFeed(request, id))?.name_he).toBe(name)
   await ctx.close()
 })
+
+test("the moderators' page reaches older requests a page at a time", async ({ browser }) => {
+  const ctx = await browser.newContext()
+  await ctx.request.post("/__dev/login", { data: { email: "dev@example.test" } })
+  const mod = await ctx.newPage()
+  const request = (id: string, name: string, at: string) => ({
+    id,
+    place_id: `p_${id}`,
+    origin: "contribution",
+    elements: '["name_he"]',
+    requester_type: "other",
+    relationship: null,
+    explanation: "דמו",
+    has_contact: 0,
+    outcome: "received",
+    status: "open",
+    received_at: at,
+    handling_note: null,
+    place_name: name,
+  })
+  // The list answered here, one request a page, so the test controls where the first page ends.
+  await mod.route("**/api/admin/reports**", (route) => {
+    const cursor = new URL(route.request().url()).searchParams.get("cursor")
+    return route.fulfill({
+      json: cursor
+        ? { items: [request("r_old", "ספסל דמו ישן", "2029-01-01T00:00:00.000Z")], next: null }
+        : { items: [request("r_new", "ספסל דמו חדש", "2029-01-02T00:00:00.000Z")], next: "2029-01-02T00:00:00.000Z|r_new" },
+    })
+  })
+  await mod.goto("/admin/")
+  await expect(mod.getByRole("article", { name: "בקשה על ספסל דמו חדש" })).toBeVisible()
+  await expect(mod.getByRole("article", { name: "בקשה על ספסל דמו ישן" })).toHaveCount(0)
+  await mod.getByRole("button", { name: "בקשות ישנות יותר" }).click()
+  await expect(mod.getByRole("article", { name: "בקשה על ספסל דמו ישן" })).toBeVisible()
+  await expect(mod.getByRole("button", { name: "בקשות ישנות יותר" })).toHaveCount(0)
+  await ctx.close()
+})

@@ -242,14 +242,25 @@ async function fetchPlace(report: Report): Promise<PlaceView | null> {
   return res?.ok ? ((await res.json()) as PlaceView) : null
 }
 
-/** The open requests and the operations needing attention, or the Hebrew reason they can't be shown. */
-async function fetchReports(): Promise<{ reports: Report[]; attention: Attention[] } | string> {
+type Page<T> = { items: T[]; next: string | null }
+
+/** One page of a list, newest first; `next` continues it, null at its end. */
+async function fetchPage<T>(path: string, key: "items" | "ops", cursor: string | null): Promise<Page<T> | null> {
+  const res = await fetch(cursor ? `${path}${path.includes("?") ? "&" : "?"}cursor=${encodeURIComponent(cursor)}` : path).catch(() => null)
+  if (!res?.ok) return null
+  const body = (await res.json()) as Record<string, unknown> & { next: string | null }
+  return { items: body[key] as T[], next: body.next }
+}
+
+/** The first page of open requests and of operations needing attention, or the Hebrew reason they can't be shown. */
+async function fetchReports(): Promise<{ reports: Page<Report>; attention: Page<Attention> } | string> {
   try {
-    const [r, a] = await Promise.all([fetch("/api/admin/reports"), fetch("/api/admin/attention")])
+    const r = await fetch("/api/admin/reports")
     if (!r.ok) return r.status === 401 ? "צריך להתחבר." : "אין הרשאה."
+    const first = (await r.json()) as { items: Report[]; next: string | null }
     return {
-      reports: ((await r.json()) as { items: Report[] }).items,
-      attention: a.ok ? ((await a.json()) as { ops: Attention[] }).ops : [],
+      reports: { items: first.items, next: first.next },
+      attention: (await fetchPage<Attention>("/api/admin/attention", "ops", null)) ?? { items: [], next: null },
     }
   } catch {
     return "אין חיבור לשרת."
@@ -383,8 +394,8 @@ function ReportCard({ report, reload, fail }: { report: Report; reload: () => Pr
 
 /** Requests to remove or correct, newest first, and the operations that need a person's eye. */
 export function Reports() {
-  const [reports, setReports] = useState<Report[] | null>(null)
-  const [attention, setAttention] = useState<Attention[]>([])
+  const [reports, setReports] = useState<Page<Report> | null>(null)
+  const [attention, setAttention] = useState<Page<Attention>>({ items: [], next: null })
   const [error, setError] = useState("")
   const show = useCallback((r: Awaited<ReturnType<typeof fetchReports>>) => {
     if (typeof r === "string") return setError(r)
@@ -399,6 +410,17 @@ export function Reports() {
       live = false
     }
   }, [show])
+  // Older entries come a page at a time, so nothing waiting is ever out of reach.
+  const moreReports = async () => {
+    const page = reports?.next ? await fetchPage<Report>("/api/admin/reports", "items", reports.next) : null
+    if (page) setReports({ items: [...(reports?.items ?? []), ...page.items], next: page.next })
+    else setError("אין חיבור לשרת.")
+  }
+  const moreAttention = async () => {
+    const page = attention.next ? await fetchPage<Attention>("/api/admin/attention", "ops", attention.next) : null
+    if (page) setAttention({ items: [...attention.items, ...page.items], next: page.next })
+    else setError("אין חיבור לשרת.")
+  }
   return (
     <section id="reports" aria-labelledby="reports-title">
       <h2 id="reports-title" className="text-title-2 text-ink-1">
@@ -409,21 +431,31 @@ export function Reports() {
           {error}
         </p>
       )}
-      {attention.length > 0 && (
+      {attention.items.length > 0 && (
         <ul aria-label="דורש תשומת לב" className="mt-3 flex flex-col gap-1">
-          {attention.map((a) => (
+          {attention.items.map((a) => (
             <li key={a.id} className="text-caption text-ink-1">
               {PROBLEM[a.problem]} · {a.place_id}
             </li>
           ))}
         </ul>
       )}
-      {reports?.length === 0 && <p className="mt-4 text-ink-2">אין בקשות פתוחות.</p>}
+      {attention.next && (
+        <Button variant="ghost" className="pressable mt-1" onClick={moreAttention}>
+          פעולות נוספות שדורשות תשומת לב
+        </Button>
+      )}
+      {reports?.items.length === 0 && <p className="mt-4 text-ink-2">אין בקשות פתוחות.</p>}
       <div className="mt-4 grid gap-4">
-        {reports?.map((r) => (
+        {reports?.items.map((r) => (
           <ReportCard key={r.id} report={r} reload={load} fail={setError} />
         ))}
       </div>
+      {reports?.next && (
+        <Button variant="outline" className="pressable mt-4" onClick={moreReports}>
+          בקשות ישנות יותר
+        </Button>
+      )}
     </section>
   )
 }
