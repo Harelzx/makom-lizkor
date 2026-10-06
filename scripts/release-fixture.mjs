@@ -36,6 +36,7 @@ export function fixtureRepo() {
       return git("rev-parse", "HEAD")
     },
     branch: (name, from) => git("checkout", "-q", "-b", name, from),
+    tag: (name, at) => git("tag", name, at),
     remove: () => rmSync(dir, { recursive: true, force: true }),
   }
 }

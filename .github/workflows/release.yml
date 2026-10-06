@@ -1,7 +1,7 @@
 # A release to production (spec 14.2). The agent prepares a draft GitHub release whose target is one commit, with the
 # manifest attached (manifest.json, from scripts/release-manifest.mjs); the owner reads it and runs this workflow with
-# the release's tag. That is the only manual step. Everything below names that one commit: the manifest's hash is
-# rebuilt for it, CI and staging must have passed on it, and it is what is checked out, checked and deployed (a49).
+# the release's tag. That is the only manual step. Everything below names that one commit: the manifest is rebuilt
+# for it and compared whole, CI and staging must have passed on it, and it is what is checked out, checked and deployed (a49).
 #
 # release:check gates this path; it does not by itself stop a deploy made some other way (a49).
 #
@@ -81,9 +81,9 @@ jobs:
           from=""
           if [ -n "$previous" ]; then from=$(git rev-list -n 1 "$previous"); fi
           gh release download "$RELEASE" --pattern manifest.json --dir "$RUNNER_TEMP"
-          expected=$(node scripts/release-manifest.mjs "$SHA" $from --hash)
-          attached=$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).hash)' "$RUNNER_TEMP/manifest.json")
-          test "$expected" = "$attached"
+          # The attachment compared field by field with the one rebuilt here, and an existing release tag must name
+          # this commit (a51, P6-MANIFEST-1).
+          node scripts/release-manifest.mjs "$SHA" $from --verify "$RUNNER_TEMP/manifest.json" --tag "$RELEASE"
 
   release:
     needs: verify

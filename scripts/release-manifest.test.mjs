@@ -1,7 +1,7 @@
 // node --test scripts/release-manifest.test.mjs
 import assert from "node:assert/strict"
 import { after, test } from "node:test"
-import { manifest, manifestHash, OPS_SCHEMA, opsFieldsAdded, render } from "./release-manifest.mjs"
+import { attachedProblems, manifest, manifestHash, OPS_SCHEMA, opsFieldsAdded, render } from "./release-manifest.mjs"
 import { fixtureRepo } from "./release-fixture.mjs"
 
 const repo = fixtureRepo()
@@ -120,4 +120,23 @@ test("a first release lists every file as added", () => {
   assert.equal(m.from, null)
   assert.ok(m.files.every((f) => f.status === "A"))
   assert.equal(m.migrations.length, 1)
+})
+
+test("binds the attachment by its whole content and the release tag by its commit, not by a declared hash (P6-MANIFEST-1)", () => {
+  const m = manifest({ cwd: repo.dir, to: second, from: first })
+  const attached = { ...m, hash: manifestHash(m) }
+  const check = (a, tag = null) => attachedProblems({ cwd: repo.dir, to: second, from: first, attached: a, tag })
+  // As generated: it passes.
+  assert.deepEqual(check(structuredClone(attached)), [])
+  // Edited, keeping the hash it declares: its migrations, its risks, or the commit it names.
+  assert.deepEqual(check({ ...attached, migrations: [] }), ["the attached manifest differs from this commit's: migrations"])
+  assert.deepEqual(check({ ...attached, risks: [] }), ["the attached manifest differs from this commit's: risks"])
+  assert.deepEqual(check({ ...attached, to: first }), ["the attached manifest differs from this commit's: to"])
+  // A release tag that already exists must name this very commit (rollback finds releases by tag).
+  repo.tag("release-2026-11-02", second)
+  assert.deepEqual(check(attached, "release-2026-11-02"), [])
+  repo.tag("release-2026-11-03", first)
+  assert.deepEqual(check(attached, "release-2026-11-03"), [`the tag release-2026-11-03 names ${first}, not ${second}`])
+  // A tag not made yet is fine: publishing the release makes it at the target.
+  assert.deepEqual(check(attached, "release-2026-11-04"), [])
 })

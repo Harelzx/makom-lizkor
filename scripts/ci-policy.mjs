@@ -82,7 +82,8 @@ function releaseProblems(w) {
       ["the commit being on main", /merge-base --is-ancestor "\$sha" origin\/main/],
       ["CI on that commit", /--workflow ci\.yml --commit "\$SHA" --status success/],
       ["staging on that commit", /--workflow staging\.yml --commit "\$SHA" --status success/],
-      ["the manifest's hash for that commit", /release-manifest\.mjs "\$SHA"[^\n]*--hash/],
+      ["the attached manifest's content for that commit", /release-manifest\.mjs "\$SHA"[^\n]*--verify "\$RUNNER_TEMP\/manifest\.json"/],
+      ["the release tag's commit", /release-manifest\.mjs "\$SHA"[^\n]*--verify[^\n]*--tag "\$RELEASE"/],
     ])
       if (!pattern.test(all)) problems.push(`verify doesn't check ${what}`)
     if (verify.outputs?.sha !== "${{ steps.bind.outputs.sha }}") problems.push("verify must output the bound commit as sha")

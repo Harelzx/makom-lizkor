@@ -87,7 +87,19 @@ test("the release binds one commit through every step", () => {
     withChange("release.yml", "--workflow staging.yml --commit", "--workflow staging.yml --any"),
     "doesn't check staging on that commit",
   )
-  fails(withChange("release.yml", '"$SHA" $from --hash', "HEAD $from --hash"), "the manifest's hash for that commit")
+  // The attachment compared whole, and the release tag's commit (P6-MANIFEST-1): a declared hash proves nothing.
+  fails(
+    withChange("release.yml", '"$SHA" $from --verify "$RUNNER_TEMP/manifest.json" --tag "$RELEASE"', '"$SHA" $from --hash'),
+    "the attached manifest's content for that commit",
+  )
+  fails(
+    withChange(
+      "release.yml",
+      '"$SHA" $from --verify "$RUNNER_TEMP/manifest.json" --tag "$RELEASE"',
+      '"$SHA" $from --verify "$RUNNER_TEMP/manifest.json"',
+    ),
+    "the release tag's commit",
+  )
   fails(withChange("release.yml", 'git merge-base --is-ancestor "$sha" origin/main', "true"), "the commit being on main")
   fails(withChange("release.yml", '--tag "$RELEASE" --message "release $RELEASE $SHA"', ""), "must run, in order")
 })
