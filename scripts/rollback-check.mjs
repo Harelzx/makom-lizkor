@@ -1,7 +1,7 @@
 // Whether rolling the Worker's code back from the deployed commit to an earlier one is safe (spec 14.2, adviser a49):
 // the old code must still work on today's schema, and the rollback must not take back a deletion safeguard. Only the
 // code goes back: a rollback never restores data (rollback.yml runs no Time Travel, no migration, no bucket command).
-// A refusal means fix forward, or the owner decides in the dashboard.
+// A refusal means fix forward, or a separately authorized recovery decision.
 //   node scripts/rollback-check.mjs <target-sha> <deployed-sha>
 import { execFileSync } from "node:child_process"
 import { pathToFileURL } from "node:url"
@@ -129,6 +129,19 @@ export function rollbackProblems({ cwd = process.cwd(), target, deployed }) {
   for (const file of touched) problems.push(`${file} changed since the target: rolling back could undo a deletion safeguard`)
   if (crons(cwd, t) !== crons(cwd, d)) problems.push("wrangler.jsonc: the job schedule changed since the target")
   return problems
+}
+
+/**
+ * Against a release older than the target, whose migrations the database has been through: each must still be in the
+ * target as it was applied, or the target's code was written for a schema the database never had (a53).
+ */
+export function appliedMigrationProblems({ cwd = process.cwd(), target, earlier }) {
+  return git(cwd, ["diff", "--name-status", "--no-renames", earlier, target, "--", "migrations"])
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => line.split("\t"))
+    .filter(([status]) => status !== "A")
+    .map(([, file]) => `${file}: applied by that release, changed or removed in the target`)
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {

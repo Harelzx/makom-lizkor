@@ -10,7 +10,7 @@
 # Production credentials are therefore kept out of GitHub entirely, so this workflow can't deploy until the owner
 # chooses the production release path; it fails closed (no credentials, and no staging.yml run on the commit).
 name: release
-# Named for its release, so a rollback can tell which release an attempt was, even once its record has expired.
+# Named for its release, so a rollback finds each attempt's own record (release-attempt-<release>-<attempt>).
 run-name: release ${{ inputs.release }}
 
 on:
