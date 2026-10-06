@@ -1,6 +1,7 @@
 import { Hono } from "hono"
 import { problem } from "./lib/http"
 import { sendMail, type SendMail } from "./lib/mail"
+import { runJobs } from "./jobs"
 import { edgePurge, type Purge } from "./lib/purge"
 import { siteverify, type VerifyTurnstile } from "./lib/turnstile"
 import { admin } from "./routes/admin"
@@ -72,4 +73,13 @@ export function createApp(deps: Deps) {
   return app
 }
 
-export default createApp({ verifyTurnstile: siteverify, sendMail, purge: edgePurge })
+const deps = { verifyTurnstile: siteverify, sendMail, purge: edgePurge }
+const app = createApp(deps)
+
+export default {
+  fetch: app.fetch,
+  // Every 15 minutes (wrangler.jsonc): unfinished decisions, the 24-hour backstop, reminders, the abuse codes.
+  scheduled(controller, env, ctx) {
+    ctx.waitUntil(runJobs(env, deps, ctx, new Date(controller.scheduledTime)))
+  },
+} satisfies ExportedHandler<Env>

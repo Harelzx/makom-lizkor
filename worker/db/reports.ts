@@ -37,7 +37,9 @@ export async function reportKnown(db: D1Database, key: string) {
 /**
  * Stores a request once per key. A retry with the same body gets the stored ticket and outcome and creates nothing; the
  * same key with a different body is refused. Everything the requester wrote, and their address, is kept to the earlier
- * of 12 months or 90 days after the case closes (spec 7); the keyed hashes used to spot spam go with it.
+ * of 12 months or 90 days after the case closes (spec 7). The two abuse codes (keyed hashes of the address and of the
+ * explanation) are cleared much sooner, after RETENTION.reportAbuseCodeHours, by the scheduled job (worker/jobs.ts);
+ * the body and key hashes, which recognise a retry, stay with the request.
  */
 export async function insertReport(
   db: D1Database,
@@ -130,6 +132,18 @@ export async function precaution(env: OpEnv, ticket: string, now: Date): Promise
     .bind(report.place_id)
     .first<{ rev: number; n: number; photo_key: string | null }>()
   if (!place) return "held_back"
+  // The safeguards read first, so a routine refusal writes nothing to the ledger; the same conditions are checked
+  // again inside the place's own update, where requests at the same moment can't pass them together.
+  const open = await db
+    .prepare(
+      `SELECT (SELECT COUNT(DISTINCT report_id) FROM field_suppressions WHERE kind = 'precautionary' AND created_at > ?1) < ?3
+          AND (SELECT COUNT(DISTINCT report_id) FROM field_suppressions WHERE kind = 'precautionary' AND created_at > ?2) < ?4
+          AND NOT EXISTS (SELECT 1 FROM field_suppressions WHERE place_id = ?5 AND kind = 'precautionary' AND created_at > ?2)
+          AND (SELECT COUNT(*) FROM reports WHERE complete = 1 AND received_at > ?1) < ?6 AS open`,
+    )
+    .bind(hourAgo, dayAgo, REPORT_GUARDS.perHour, REPORT_GUARDS.perDay, report.place_id, REPORT_GUARDS.breakerPerHour)
+    .first<number>("open")
+  if (!open) return "held_back"
   const elements = JSON.parse(report.elements) as Element[]
   const whole = elements.includes("whole")
   const photo = (whole || elements.includes("photo")) && place.photo_key?.startsWith("public/") ? [place.photo_key] : []

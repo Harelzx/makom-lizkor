@@ -48,6 +48,9 @@
     // Removal requests: a few a minute is plenty for a person; the database counts the day's (REPORT_GUARDS).
     { "name": "REPORT_LIMIT", "namespace_id": "1003", "simple": { "limit": 5, "period": 60 } },
   ],
+  // The scheduled jobs (worker/jobs.ts): unfinished decisions, the 24-hour backstop, reminders to moderators, and the
+  // removal requests' abuse codes, cleared after RETENTION.reportAbuseCodeHours.
+  "triggers": { "crons": ["*/15 * * * *"] },
   // Our own JSON log lines only; no automatic per-request records (they carry URLs and headers).
   "observability": { "logs": { "enabled": true, "invocation_logs": false } },
 }

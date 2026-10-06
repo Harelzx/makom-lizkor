@@ -67,5 +67,4 @@ export const PENDING_PROMISES: string[] = [
   // The purge call is built (phase 4: one per change, tags feed, tributes and place:<id>); what remains is seeing the
   // edge drop the share page and the photo on staging, and measuring how long it takes.
   "a withdrawn, erased or hidden place's share page and photo are purged from the edge cache (Cache-Tag place:<id>; verified on staging)",
-  "a removal request's abuse codes (address and explanation HMACs) are cleared after RETENTION.reportAbuseCodeHours, always within reportAbuseCodeMaxHours (phase 4, task 5)",
 ]

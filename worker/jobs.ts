@@ -1,3 +1,4 @@
+import { RETENTION } from "@/config"
 import { resumeOps } from "./db/ops"
 import { alertReport, precaution } from "./db/reports"
 import type { SendMail } from "./lib/mail"
@@ -12,8 +13,10 @@ const HOUR_MS = 3600 * 1000
  * - the 24-hour backstop (spec 6) looks once at each complete request the automatic path held back, with every
  *   safeguard checked again at the moment it runs, and then leaves the request to people;
  * - moderators are reminded every 6 hours of each open request until one records handling it;
- * - the spam codes (keyed hashes of the reporter's address and of the explanation) are cleared a day after the
- *   request, once the backstop no longer needs them: they exist only for the day's counts.
+ * - the two abuse codes (keyed hashes of the reporter's address and of the explanation) are cleared
+ *   RETENTION.reportAbuseCodeHours after the request, once the backstop has had its look: they exist only for the
+ *   day's counts. The notice promises them gone within reportAbuseCodeMaxHours, which leaves room for late runs.
+ *   Nothing else is cleared here: the request, and its replay detection, stay to the request's own deletion date.
  * A part that fails is logged by name and never stops the others.
  */
 export async function runJobs(env: Env, deps: { sendMail: SendMail; purge: Purge }, ctx: unknown, now: Date) {
@@ -30,7 +33,9 @@ export async function runJobs(env: Env, deps: { sendMail: SendMail; purge: Purge
   await part("resume_ops", () => resumeOps(opEnv, now))
 
   await part("backstop", async () => {
-    const { results } = await env.DB.prepare("SELECT id FROM reports WHERE backstop_at IS NOT NULL AND backstop_at <= ? ORDER BY backstop_at LIMIT 50")
+    const { results } = await env.DB.prepare(
+      "SELECT id FROM reports WHERE backstop_at IS NOT NULL AND backstop_at <= ? ORDER BY backstop_at LIMIT 50",
+    )
       .bind(at)
       .all<{ id: string }>()
     for (const { id } of results) {
@@ -51,12 +56,12 @@ export async function runJobs(env: Env, deps: { sendMail: SendMail; purge: Purge
     for (const { id } of results) await alertReport(env.DB, env, deps.sendMail, id, now, origin)
   })
 
-  await part("spam_codes", () =>
+  await part("abuse_codes", () =>
     env.DB.prepare(
       `UPDATE reports SET reporter_key = NULL, explanation_hash = NULL
        WHERE received_at <= ? AND backstop_at IS NULL AND (reporter_key IS NOT NULL OR explanation_hash IS NOT NULL)`,
     )
-      .bind(new Date(now.getTime() - 24 * HOUR_MS).toISOString())
+      .bind(new Date(now.getTime() - RETENTION.reportAbuseCodeHours * HOUR_MS).toISOString())
       .run(),
   )
 }

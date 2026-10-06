@@ -308,7 +308,7 @@ describe("review findings: where a hidden photo's file is", () => {
     await hide(s.id, ["photo"])
     const { resumeOps } = await import("../db/ops")
     await resumeOps({ db: env.DB, media: env.MEDIA, ledger: env.LEDGER, purge: async () => true }, new Date(Date.now() + 3600_000))
-    expect(await stored(s.photo.replace(/^public\//, "held/")) || (await stored(s.photo))).toBe(true)
+    expect((await stored(s.photo.replace(/^public\//, "held/"))) || (await stored(s.photo))).toBe(true)
     expect(await served(s.photo)).toBe(404)
   })
 

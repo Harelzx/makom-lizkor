@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers"
 import { beforeEach, describe, expect, it } from "vitest"
 import type { ReportInput } from "@/shared/contract"
 import { runJobs } from "../jobs"
+import { RETENTION } from "@/config"
 import { REPORT_GUARDS } from "../lib/guards"
 import { sendMail } from "../lib/mail"
 import { call, purges } from "./app"
@@ -11,9 +12,11 @@ const HOUR = 3600_000
 let day = 0
 const start = () => new Date(Date.UTC(2027, 5, 1 + day, 9, 0, 0))
 const after = (hours: number) => new Date(start().getTime() + hours * HOUR)
-beforeEach(() => {
+beforeEach(async () => {
   day += 3
   purges.splice(0)
+  // Each test watches its own requests: the earlier tests' requests are closed, or the job would remind about them too.
+  await env.DB.prepare("UPDATE reports SET status = 'closed', backstop_at = NULL").run()
 })
 
 const deps = { sendMail, purge: async (_e: Env, _c: unknown, tags: string[]) => (purges.push(tags), true) }
@@ -44,10 +47,14 @@ async function report(body: Partial<ReportInput> & { placeId: string }, at = sta
   })
   return res.json<{ ticket: string; outcome: string }>()
 }
-const row = (ticket: string) => env.DB.prepare("SELECT * FROM reports WHERE id = ?").bind(ticket).first<Record<string, string | number | null>>()
+const row = (ticket: string) =>
+  env.DB.prepare("SELECT * FROM reports WHERE id = ?").bind(ticket).first<Record<string, string | number | null>>()
 const hidden = async (placeId: string) =>
-  (await env.DB.prepare("SELECT COUNT(*) AS n FROM field_suppressions WHERE place_id = ? AND lifted_at IS NULL").bind(placeId).first<number>("n"))! > 0
-const mails = async () => (await env.DB.prepare("SELECT COUNT(*) AS n FROM dev_outbox WHERE to_address = 'dev@example.test'").first<number>("n"))!
+  (await env.DB.prepare("SELECT COUNT(*) AS n FROM field_suppressions WHERE place_id = ? AND lifted_at IS NULL")
+    .bind(placeId)
+    .first<number>("n"))! > 0
+const mails = async () =>
+  (await env.DB.prepare("SELECT COUNT(*) AS n FROM dev_outbox WHERE to_address = 'dev@example.test'").first<number>("n"))!
 const handle = (ticket: string, note = "פניתי למשפחה") =>
   env.DB.prepare("UPDATE reports SET status = 'in_review', handling_note = ? WHERE id = ?").bind(note, ticket).run()
 
@@ -81,7 +88,9 @@ describe("the 24-hour backstop (spec 6)", () => {
     const others = []
     for (let i = 0; i < REPORT_GUARDS.breakerPerHour; i++) others.push(await published())
     for (const p of others) await report({ placeId: p, requesterType: "other" }, after(REPORT_GUARDS.backstopHours - 0.5))
-    await env.DB.prepare("UPDATE reports SET complete = 1 WHERE received_at = ?").bind(after(REPORT_GUARDS.backstopHours - 0.5).toISOString()).run()
+    await env.DB.prepare("UPDATE reports SET complete = 1 WHERE received_at = ?")
+      .bind(after(REPORT_GUARDS.backstopHours - 0.5).toISOString())
+      .run()
     await jobs(after(REPORT_GUARDS.backstopHours))
     expect((await row(ticket))!).toMatchObject({ outcome: "received", backstop_at: null })
     // An hour later the breaker would allow it, but the backstop has had its look.
@@ -133,7 +142,7 @@ describe("urgent review reminders", () => {
 })
 
 describe("housekeeping", () => {
-  it("clears the spam codes (keyed hashes of the address and the explanation) a day after the request, once the backstop is done", async () => {
+  it("clears the two abuse codes (keyed hashes of the address and the explanation) after RETENTION.reportAbuseCodeHours, and nothing else", async () => {
     const id = await published()
     await call("http://local/api/v1/reports", {
       method: "POST",
@@ -144,14 +153,27 @@ describe("housekeeping", () => {
         "X-Test-Now": start().toISOString(),
         "CF-Connecting-IP": "198.51.100.7",
       },
-      body: JSON.stringify({ placeId: id, elements: ["name_he"], requesterType: "other", explanation: "טעות בשם", noticeVersion: "notice.report@2026-10-1" }),
+      body: JSON.stringify({
+        placeId: id,
+        elements: ["name_he"],
+        requesterType: "other",
+        explanation: "טעות בשם",
+        noticeVersion: "notice.report@2026-10-1",
+      }),
     })
     const ticket = (await env.DB.prepare("SELECT id FROM reports WHERE place_id = ?").bind(id).first<string>("id"))!
     expect((await row(ticket))!.reporter_key).not.toBeNull()
-    await jobs(after(23))
+    // Cleared at the job's hours, which leave room for a late run within what the notice promises.
+    expect(RETENTION.reportAbuseCodeHours).toBeLessThan(RETENTION.reportAbuseCodeMaxHours)
+    await jobs(after(RETENTION.reportAbuseCodeHours - 1))
     expect((await row(ticket))!.reporter_key).not.toBeNull()
-    await jobs(after(24))
-    expect((await row(ticket))!).toMatchObject({ reporter_key: null, explanation_hash: null })
+    await jobs(after(RETENTION.reportAbuseCodeHours))
+    const cleared = (await row(ticket))!
+    expect(cleared).toMatchObject({ reporter_key: null, explanation_hash: null })
+    // Replay detection and the request itself stay with it until its own deletion date.
+    expect(cleared.body_hash).not.toBeNull()
+    expect(cleared.submit_key_hash).not.toBeNull()
+    expect(cleared.explanation).toBe("טעות בשם")
   })
 
   it("finishes operations left unfinished, and retries a failed purge", async () => {

@@ -257,3 +257,12 @@ describe("review findings", () => {
     expect(await row(ticket)).toMatchObject({ complete: 0, origin: "contribution" })
   })
 })
+
+it("a request a safeguard holds back writes nothing to the ledger: a routine refusal is not a decision", async () => {
+  const id = await published()
+  expect((await (await report({ placeId: id })).json<{ outcome: string }>()).outcome).toBe("hidden_for_review")
+  const before = (await env.LEDGER.list({ prefix: `ledger/${id}/` })).objects.length
+  const second = await report({ placeId: id, elements: ["story_he"], explanation: "גם הסיפור צריך לרדת, הוא פוגע במשפחה שלנו מאוד." })
+  expect((await second.json<{ outcome: string }>()).outcome).toBe("received")
+  expect((await env.LEDGER.list({ prefix: `ledger/${id}/` })).objects.length).toBe(before)
+})
