@@ -8,15 +8,38 @@ import { pathToFileURL } from "node:url"
 
 const git = (cwd, args) => execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] })
 
-/** SQL the code before it can't live with: removed or renamed objects, a required column it doesn't write, or a new
- * trigger or unique index that may refuse what it writes. */
+/** SQL the code before it can't live with, statement by statement: removed or renamed objects, a required column it
+ * doesn't write (SQLite takes ADD with or without COLUMN), or a new trigger or unique index that may refuse what it
+ * writes. */
 const INCOMPATIBLE = [
-  [/\bDROP\s+(TABLE|COLUMN|INDEX|TRIGGER|VIEW)\b/i, "drops something"],
-  [/\bRENAME\b/i, "renames something"],
-  [/\bADD\s+COLUMN\b[^;]*\bNOT\s+NULL\b(?![^;]*\bDEFAULT\b)/i, "adds a required column without a default"],
-  [/\bCREATE\s+TRIGGER\b/i, "adds a trigger"],
-  [/\bCREATE\s+UNIQUE\s+INDEX\b/i, "adds a unique index"],
+  [/^DROP\b|^ALTER TABLE \S+ DROP\b/i, "drops something"],
+  [/^ALTER TABLE \S+ RENAME\b/i, "renames something"],
+  [/^ALTER TABLE \S+ ADD\b(?!.*\bDEFAULT\b).*\bNOT NULL\b/i, "adds a required column without a default"],
+  [/^CREATE TRIGGER\b/i, "adds a trigger"],
+  [/^CREATE UNIQUE INDEX\b/i, "adds a unique index"],
 ]
+/** What the check knows to be compatible; any other statement is refused, not passed (a51). */
+const KNOWN = [/^CREATE TABLE\b/i, /^CREATE INDEX\b/i, /^ALTER TABLE \S+ ADD\b/i, /^INSERT\b/i, /^UPDATE\b/i]
+
+/** Each statement of a migration, comments gone, a trigger's body kept inside its statement, spacing even; read without regard to case. */
+const statements = (sql) =>
+  sql
+    .replace(/--.*$/gm, "")
+    .replace(/\bBEGIN\b[\s\S]*?\bEND\b/gi, "BEGIN END")
+    .split(";")
+    .map((st) => st.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+
+function sqlProblems(sql) {
+  const found = new Set()
+  for (const st of statements(sql)) {
+    const hit = INCOMPATIBLE.filter(([pattern]) => pattern.test(st))
+    for (const [, what] of hit) found.add(what)
+    if (!hit.length && !KNOWN.some((k) => k.test(st)))
+      found.add(`has a statement the check doesn't recognize (${st.split(" ").slice(0, 3).join(" ")})`)
+  }
+  return [...found]
+}
 
 /** The code that deletes on schedule, purges on takedown, or keeps a restore from bringing back what was deleted:
  * rolling back across a change to it could undo a deletion fix. */
@@ -31,6 +54,8 @@ export const SAFEGUARDS = [
   "worker/db/restore.ts",
   "worker/jobs.ts",
   "worker/lib/purge.ts",
+  // The retention policy's values: the deletion job, the export audit and the import filter read their deadlines here.
+  "src/config.ts",
 ]
 const crons = (cwd, rev) => {
   try {
@@ -56,9 +81,8 @@ export function rollbackProblems({ cwd = process.cwd(), target, deployed }) {
       problems.push(`${file}: a released migration was changed or removed`)
       continue
     }
-    const sql = git(cwd, ["show", `${d}:${file}`]).replace(/--.*$/gm, "")
-    for (const [pattern, what] of INCOMPATIBLE)
-      if (pattern.test(sql)) problems.push(`${file} ${what}: the earlier code may fail on today's schema`)
+    for (const what of sqlProblems(git(cwd, ["show", `${d}:${file}`])))
+      problems.push(`${file} ${what}: the earlier code may fail on today's schema`)
   }
   const touched = git(cwd, ["diff", "--name-only", t, d, "--", ...SAFEGUARDS])
     .split("\n")

@@ -13,6 +13,7 @@ const start = () => {
     "migrations/0001_init.sql": "CREATE TABLE places (id TEXT PRIMARY KEY);\n",
     "worker/db/retention.ts": "export const days = 30\n",
     "worker/routes/feed.ts": "export const feed = 1\n",
+    "src/config.ts": "export const RETENTION = { returnedDays: 30 }\n",
     "wrangler.jsonc": '{ "triggers": { "crons": ["*/15 * * * *"] } }\n',
   })
   return { repo, base }
@@ -34,6 +35,12 @@ test("refuses when today's schema would break the earlier code", () => {
     "ALTER TABLE places DROP COLUMN id;": "drops something",
     "ALTER TABLE places RENAME TO sites;": "renames something",
     "ALTER TABLE places ADD COLUMN must TEXT NOT NULL;": "adds a required column without a default",
+    // SQLite's ADD without COLUMN is the same statement (a51, P6-ROLLBACK-2).
+    "ALTER TABLE places ADD required TEXT NOT NULL;": "adds a required column without a default",
+    "alter table places add   required text not null;": "adds a required column without a default",
+    // What the check can't read, it refuses rather than passes.
+    "CREATE VIEW v AS SELECT id FROM places;": "has a statement the check doesn't recognize (CREATE VIEW v)",
+    "PRAGMA foreign_keys = ON;": "has a statement the check doesn't recognize (PRAGMA foreign_keys =)",
     "CREATE TRIGGER t BEFORE INSERT ON places BEGIN SELECT 1; END;": "adds a trigger",
     "CREATE UNIQUE INDEX u ON places(id);": "adds a unique index",
   }
@@ -67,6 +74,14 @@ test("refuses to go back across a change to a deletion safeguard or the job sche
     "wrangler.jsonc: the job schedule changed since the target",
   ])
   assert.ok(SAFEGUARDS.includes("worker/db/retention.ts") && SAFEGUARDS.includes("worker/jobs.ts"))
+})
+
+test("refuses to go back across a change to the retention policy's values, which the deletion jobs read (P6-ROLLBACK-2)", () => {
+  const { repo, base } = start()
+  const now = repo.commit("policy", { "src/config.ts": "export const RETENTION = { returnedDays: 14 }\n" })
+  assert.deepEqual(rollbackProblems({ cwd: repo.dir, target: base, deployed: now }), [
+    "src/config.ts changed since the target: rolling back could undo a deletion safeguard",
+  ])
 })
 
 test("refuses a target that isn't an earlier commit of the deployed one", () => {
