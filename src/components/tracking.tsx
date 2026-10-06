@@ -20,7 +20,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { CONSENT_TEXT, noticeHtml } from "@/data/legal"
 import { reviseSubmission, trackSubmission, withdrawSubmission, type Draft, type Tracked } from "@/lib/api"
-import { savedHere } from "@/lib/correction"
+import { refusedHere, savedHere } from "@/lib/correction"
 import { FINAL, settleOwnCopy } from "@/lib/own-copy"
 import { CURRENT_SUBMISSION_NOTICE } from "@/shared/contract"
 import { useStore } from "@/store"
@@ -164,6 +164,10 @@ export function Tracking() {
       // and a retry refused). It counts as saved only if the newest text on the server is the very text sent from
       // here; otherwise it stays in the form, with the current state shown.
       const now = await trackSubmission(tracking.id, tracking.token)
+      if (refusedHere(now, sent, current.result.rev)) {
+        setState({ key, result: now!, failed: false })
+        return void toast("התיקון הגיע, אבל לא אושר", { description: "הוא נשאר כאן. אפשר לראות למטה את מצב ההצעה ולשלוח שוב." })
+      }
       if (!savedHere(now, sent, current.result.rev)) {
         if (now) setState({ key, result: now, failed: false })
         return void toast(now ? (r === "conflict" ? "ההצעה השתנתה בינתיים" : "התיקון שלכם לא מופיע בשרת") : "לא ברור אם התיקון נשמר", {

@@ -42,3 +42,20 @@ it("a successful withdrawal answer that doesn't say withdrawn establishes nothin
     expect(await withdrawSubmission("p_1", "t"), body).toBe("failed")
   }
 })
+
+it("a status outside the contract, or a malformed field that decides completion, is a failure to read", async () => {
+  const bad = [
+    { status: "archived", name_he: null },
+    { status: "withdrawn", name_he: null, files: "maybe" },
+    { status: "withdrawn", name_he: 3 },
+    { status: "pending", name_he: "x", rev: "2" },
+    { status: "published", name_he: "x", draft: "text" },
+    { status: "returned", name_he: "x", note: 5 },
+  ]
+  for (const body of bad) {
+    answer(200, JSON.stringify(body), "application/json")
+    expect(await trackSubmission("p_1", "t"), JSON.stringify(body)).toBeUndefined()
+  }
+  answer(200, JSON.stringify({ status: "withdrawn", name_he: null, files: "pending" }), "application/json")
+  expect(await trackSubmission("p_1", "t")).toMatchObject({ files: "pending" })
+})

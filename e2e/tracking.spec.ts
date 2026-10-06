@@ -11,6 +11,8 @@ async function submit(b: Browser, name: string): Promise<Page> {
   await page.getByRole("button", { name: "הוספת מקום" }).first().click()
   const dialog = page.getByRole("dialog")
   await dialog.getByRole("button", { name: "המיקום הנוכחי שלי" }).click()
+  // The location arrives asynchronously and grows the form; pressing on before it would land where the button was.
+  await expect(dialog.getByText("סומן מיקום", { exact: false })).toBeVisible({ timeout: 15_000 })
   await dialog.getByRole("button", { name: "המשך" }).click()
   await dialog.getByLabel("שם המקום").fill(name)
   await dialog.getByRole("button", { name: "המשך" }).click()
@@ -345,4 +347,29 @@ test("a link that ended with its withdrawal doesn't offer to finish the photo's 
   await expect(view.getByText("התמונה כבר לא מוצגת", { exact: false })).toBeVisible()
   await expect(view.getByText("מהמכשיר ששלח את ההצעה", { exact: false })).toBeVisible()
   await expect(view.getByRole("button", { name: "להשלים את מחיקת התמונה" })).toHaveCount(0)
+})
+
+test("a failed withdrawal followed by a malformed status confirms nothing and keeps the link", async ({ browser }) => {
+  test.setTimeout(120_000)
+  const name = `ספסל דמו מצב פגום ${Date.now()}`
+  const page = await submit(browser, name)
+  await page.getByRole("button", { name: "מעקב אחרי ההצעה" }).click()
+  const view = page.getByRole("dialog", { name: "מצב ההצעה" })
+  await expect(view.getByText("ממתינה לבדיקה")).toBeVisible(DAY)
+  // The withdrawal fails, and the status that follows says "withdrawn" in a shape the API never sends.
+  await page.route("**/api/v1/submissions/*/withdraw", (route) => route.fulfill({ status: 503, body: "" }))
+  await page.route(/\/api\/v1\/submissions\/[^/]+$/, (route) =>
+    route.request().method() === "GET"
+      ? route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ status: "withdrawn", name_he: null, files: "maybe" }),
+        })
+      : route.continue(),
+  )
+  await view.getByRole("button", { name: "משיכת ההצעה" }).click()
+  await page.getByRole("alertdialog").getByRole("button", { name: "למשוך ולמחוק" }).click()
+  await expect(page.getByText("לא הצלחנו לוודא שההצעה נמשכה")).toBeVisible()
+  await expect(view.getByText("נמשכה.", { exact: false })).toHaveCount(0)
+  expect(await storedToken(page, name)).toBeTruthy()
 })

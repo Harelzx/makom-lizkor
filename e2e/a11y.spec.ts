@@ -60,6 +60,8 @@ test.describe("desktop", () => {
     await page.waitForTimeout(800)
     await audit(page)
     await dialog.getByRole("button", { name: "המיקום הנוכחי שלי" }).click()
+    // The location arrives asynchronously and grows the form; pressing on before it would land where the button was.
+    await expect(dialog.getByText("סומן מיקום", { exact: false })).toBeVisible({ timeout: 15_000 })
     await page.getByRole("button", { name: "המשך" }).click()
     await expect(page.getByRole("dialog", { name: /מה יש שם/ })).toBeVisible()
     await page.waitForTimeout(500)

@@ -143,14 +143,18 @@ export async function saveSnapshot(feed: unknown): Promise<void> {
 }
 
 /**
- * Contributions this browser learned are not public (their share page answered 404 or 410): kept off its offline copy
- * of the feed, across reloads. Changed in one transaction each; a live feed removes only the ids it lists again (the
- * server's word), so two tabs never clear each other's marks. Without storage it is simply empty.
+ * Contributions this browser learned are not public (their share page answered 404 or 410), each with when it learned
+ * it: kept off its offline copy of the feed, across reloads. Changed in one transaction each. A live feed lifts a mark
+ * only if it lists the place again and was asked for after the mark was made, so a response already on its way when
+ * the removal was learned can't undo it, and two tabs never clear each other's newer marks. Empty without storage.
  */
-export async function markUnlisted(id: string): Promise<void> {
+type Unlisted = Record<string, number>
+const marks = (stored: unknown): Unlisted => (stored && typeof stored === "object" && !Array.isArray(stored) ? (stored as Unlisted) : {})
+
+export async function markUnlisted(id: string, at = Date.now()): Promise<void> {
   try {
     const s = db()
-    if (s) await update<string[]>("unlisted", (old) => (old?.includes(id) ? old : [...(old ?? []), id]), s)
+    if (s) await update<Unlisted>("unlisted", (old) => ({ ...marks(old), [id]: Math.max(at, marks(old)[id] ?? 0) }), s)
   } catch {
     /* the page itself still keeps it off while it is open */
   }
@@ -159,18 +163,23 @@ export async function markUnlisted(id: string): Promise<void> {
 export async function loadUnlisted(): Promise<string[]> {
   try {
     const s = db()
-    return (s ? await get<string[]>("unlisted", s) : undefined) ?? []
+    return Object.keys(marks(s ? await get("unlisted", s) : undefined))
   } catch {
     return []
   }
 }
 
-/** A live feed lists these again: they are public after all, and leave the list. */
-export async function relistPublished(ids: string[]): Promise<void> {
+/** A live feed asked for at `askedAt` lists these places: marks made before then are lifted (public after all). */
+export async function relistPublished(ids: string[], askedAt: number): Promise<void> {
   try {
     const s = db()
     const listed = new Set(ids)
-    if (s) await update<string[]>("unlisted", (old) => (old ?? []).filter((id) => !listed.has(id)), s)
+    if (s)
+      await update<Unlisted>(
+        "unlisted",
+        (old) => Object.fromEntries(Object.entries(marks(old)).filter(([id, at]) => !(listed.has(id) && at < askedAt))),
+        s,
+      )
   } catch {
     /* nothing to undo without storage */
   }

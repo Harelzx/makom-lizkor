@@ -10,7 +10,16 @@ const NOT_SAVED = new Set(["rejected", "returned", "superseded"])
  * normalized, spaces folded), in a revision newer than the one the form was opened on, and not turned down since.
  */
 export function savedHere(now: Tracked | null | undefined, sent: Partial<Record<keyof Draft, string>>, openedRev: number): boolean {
-  if (!now?.draft || now.rev === openedRev || NOT_SAVED.has(now.revision_state ?? "")) return false
+  return sameText(now, sent, openedRev) && !NOT_SAVED.has(now!.revision_state ?? "")
+}
+
+/** This very correction reached the server, but was turned down, sent back or replaced since: it arrived, unaccepted. */
+export function refusedHere(now: Tracked | null | undefined, sent: Partial<Record<keyof Draft, string>>, openedRev: number): boolean {
+  return sameText(now, sent, openedRev) && NOT_SAVED.has(now!.revision_state ?? "")
+}
+
+function sameText(now: Tracked | null | undefined, sent: Partial<Record<keyof Draft, string>>, openedRev: number): boolean {
+  if (!now?.draft || now.rev === openedRev) return false
   const same = (a?: string | null, b?: string, multiline = false) => (a ?? "") === (b ? (cleanText(b, { multiline }) ?? b) : "")
   return (["name_he", "place_he", "in_memory_of", "story_he", "link_url"] as const).every((k) =>
     same(now.draft![k], sent[k], k === "story_he"),

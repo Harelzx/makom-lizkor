@@ -77,3 +77,30 @@ it("reads a mapped IPv4 address as IPv4, and never fails on an address it can't 
   // Distinct unparseable strings stay distinct visitors rather than collapsing into one.
   expect(await rateKey("s", "1::2::3")).not.toBe(await rateKey("s", "1::2::4"))
 })
+
+it("a submission sent again under its key skips the bot check but still counts against the address's limit", async () => {
+  const { keys, limiter } = recording()
+  const key = crypto.randomUUID().replaceAll("-", "")
+  const post = (e: Env, turnstile: string) =>
+    call(
+      "http://local/api/v1/submissions",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Idempotency-Key": key, "Turnstile-Token": turnstile, "CF-Connecting-IP": IP },
+        body: JSON.stringify({
+          kind: "bench",
+          name_he: "ספסל דמו מגבלת חזרה",
+          lat: 31.42,
+          lng: 34.49,
+          consent_version: CURRENT_SUBMISSION_NOTICE,
+        }),
+      },
+      e,
+    )
+  expect((await post({ ...env, SUBMIT_LIMIT: limiter }, "pass")).status).toBe(201)
+  // Sent again with no fresh token: the first try was checked, so no token is needed; the limiter is asked again.
+  expect((await post({ ...env, SUBMIT_LIMIT: limiter }, "")).status).toBe(200)
+  expect(keys).toHaveLength(2)
+  const full = { limit: async () => ({ success: false }) } as unknown as RateLimit
+  expect((await post({ ...env, SUBMIT_LIMIT: full }, "")).status).toBe(429)
+})

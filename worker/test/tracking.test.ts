@@ -88,7 +88,8 @@ describe("a withdrawal that keeps losing a race", () => {
       get(target, key) {
         if (key === "batch")
           return async (statements: D1PreparedStatement[]) => {
-            if (losses-- > 0) await target.prepare("UPDATE places SET rev = rev + 1 WHERE id = ?").bind(id).run()
+            // Only the withdrawal's own write (five statements); the link lookup reads in a batch of two.
+            if (statements.length > 2 && losses-- > 0) await target.prepare("UPDATE places SET rev = rev + 1 WHERE id = ?").bind(id).run()
             return target.batch(statements)
           }
         const value = Reflect.get(target, key)

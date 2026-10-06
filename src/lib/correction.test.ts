@@ -1,5 +1,5 @@
 import { expect, it } from "vitest"
-import { savedHere } from "@/lib/correction"
+import { refusedHere, savedHere } from "@/lib/correction"
 
 const sent = { name_he: "ספסל  דמו", story_he: "שורה\nשנייה" }
 const draft = (name_he: string, story_he: string) => ({ name_he, story_he, place_he: null, in_memory_of: null, link_url: null })
@@ -18,7 +18,12 @@ it("the newest text on the server, as it stores it, is this correction: saved", 
 })
 
 it("the same text, but refused, returned or replaced since, isn't reported as saved", () => {
-  for (const state of ["rejected", "returned", "superseded"]) expect(savedHere(now(state), sent, 2)).toBe(false)
+  for (const state of ["rejected", "returned", "superseded"]) {
+    expect(savedHere(now(state), sent, 2)).toBe(false)
+    // …and it is told as arrived but not accepted, not as missing.
+    expect(refusedHere(now(state), sent, 2)).toBe(true)
+  }
+  expect(refusedHere(now("pending"), sent, 2)).toBe(false)
 })
 
 it("other text, an unchanged revision, or no status at all, isn't saved", () => {

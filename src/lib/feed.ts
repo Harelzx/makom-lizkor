@@ -46,6 +46,8 @@ export function startFeedSync(): () => void {
   const check = async (retry = true): Promise<void> => {
     if (busy || document.visibilityState !== "visible") return
     busy = true
+    // When this look at the server began: a removal learned after it is newer than anything it brings back.
+    const askedAt = Date.now()
     try {
       const { v } = (await (await fetch("/api/v1/version", { cache: "no-store" })).json()) as { v: string }
       const mine = useStore.getState().feedVersion
@@ -64,8 +66,12 @@ export function startFeedSync(): () => void {
         useStore.getState().setRemote(feed.v, feed.places.map(toPlace))
         // The newest feed replaces the offline copy whole: nothing hidden since lingers in it.
         void saveSnapshot(feed)
-        // Places a share page had said weren't public, which this feed lists: the server's word now holds.
-        void relistPublished(feed.places.map((p) => p.id))
+        // Places a share page had said weren't public, which this feed lists: the server's word holds, unless the
+        // removal was learned after this feed was asked for.
+        void relistPublished(
+          feed.places.map((p) => p.id),
+          askedAt,
+        )
       }
     } catch {
       /* offline or the server is down: the map keeps what it already shows */

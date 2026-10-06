@@ -66,6 +66,34 @@ export type Tracked = {
 }
 
 /** The status the server holds for a submission; null when the link is wrong, undefined when the server can't be reached. */
+/** The statuses the API reports to a sender (worker/db/places.ts), and nothing else. */
+const STATUSES = new Set(["pending", "returned", "published", "rejected", "hidden", "withdrawn", "erased"])
+const optional = (v: unknown, type: string) => v === undefined || typeof v === type
+const text = (v: unknown) => v === null || v === undefined || typeof v === "string"
+/**
+ * Whether an answer has the shape the API sends: a known status, and the fields that decide completion and recovery
+ * (files, which is only ever "pending") in their own types. Anything else is read as no answer.
+ */
+function isTracked(b: unknown): b is Tracked {
+  if (!b || typeof b !== "object") return false
+  const t = b as Record<string, unknown>
+  const draft = t.draft as Record<string, unknown> | undefined
+  return (
+    typeof t.status === "string" &&
+    STATUSES.has(t.status) &&
+    text(t.name_he) &&
+    optional(t.rev, "number") &&
+    optional(t.revision_state, "string") &&
+    optional(t.note, "string") &&
+    (t.files === undefined || t.files === "pending") &&
+    (draft === undefined ||
+      (typeof draft === "object" &&
+        draft !== null &&
+        typeof draft.name_he === "string" &&
+        ["place_he", "in_memory_of", "story_he", "link_url"].every((k) => text(draft[k]))))
+  )
+}
+
 export async function trackSubmission(id: string, token: string): Promise<Tracked | null | undefined> {
   try {
     const res = await fetch(`/api/v1/submissions/${encodeURIComponent(id)}`, {
@@ -79,8 +107,8 @@ export async function trackSubmission(id: string, token: string): Promise<Tracke
       return ((await res.json().catch(() => null)) as { code?: string } | null)?.code === "not_found" ? null : undefined
     if (!res.ok) return undefined
     // A status, or nothing known: null is kept for the API's own "not found" above, since it lets the device's link go.
-    const body = (await res.json().catch(() => null)) as Tracked | null
-    return body && typeof body === "object" && typeof body.status === "string" ? body : undefined
+    const body = (await res.json().catch(() => null)) as unknown
+    return isTracked(body) ? body : undefined
   } catch {
     return undefined
   }

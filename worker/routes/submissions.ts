@@ -35,15 +35,23 @@ const KEY = /^[A-Za-z0-9_-]{22,64}$/
 const queueLimit = (c: Context<AppEnv>) => Number(c.env.QUEUE_LIMIT ?? 200)
 const queueFull = (c: Context<AppEnv>) => problem(c, 503, "queue_full", {}, { "Retry-After": "3600" })
 
+/** The coarse per-address cap, counted under a code derived from the address (rateKey), never the address itself. */
+async function overLimit(c: Context<AppEnv>): Promise<Response | null> {
+  const address = c.req.header("CF-Connecting-IP")
+  if (address && !(await c.env.SUBMIT_LIMIT.limit({ key: await rateKey(c.env.TRACKING_SECRET, address) })).success)
+    return problem(c, 429, "rate_limited", {}, { "Retry-After": "60" })
+  return null
+}
+
 /**
  * A full queue refuses a new submission before Turnstile is spent; the insert checks again, since requests at once all
  * pass this. A correction is checked only in its own update, so a stale one is told it's stale, full queue or not.
  */
 async function guard(c: Context<AppEnv>, action: "submit" | "revise"): Promise<Response | null> {
   if (action === "submit" && (await pendingCount(c.env.DB)) >= queueLimit(c)) return queueFull(c)
+  const limited = await overLimit(c)
+  if (limited) return limited
   const address = c.req.header("CF-Connecting-IP")
-  if (address && !(await c.env.SUBMIT_LIMIT.limit({ key: await rateKey(c.env.TRACKING_SECRET, address) })).success)
-    return problem(c, 429, "rate_limited", {}, { "Retry-After": "60" })
   const outcome = await checkTurnstile(c.env, c.get("verifyTurnstile"), c.req.header("Turnstile-Token"), action, address)
   if (outcome === "required") return problem(c, 403, "turnstile_required")
   if (outcome === "failed") return problem(c, 403, "turnstile_failed")
@@ -60,11 +68,10 @@ submissions.post(
     // Without the server's secret there is no tracking token to give, nor a way to count an address without keeping
     // it: refuse rather than hand out a weak one.
     if (!c.env.TRACKING_SECRET) return problem(c, 503, "not_configured")
-    // The same submission sent again (its answer was lost) was checked on its first try; Turnstile tokens are single-use.
-    if (!(await submissionKnown(c.env.DB, key))) {
-      const refused = await guard(c, "submit")
-      if (refused) return refused
-    }
+    // The same submission sent again (its answer was lost) was checked on its first try, and Turnstile tokens are
+    // single-use, so it skips the check; it still counts against the address's cap like any request.
+    const refused = (await submissionKnown(c.env.DB, key)) ? await overLimit(c) : await guard(c, "submit")
+    if (refused) return refused
     const token = await trackingTokenFor(c.env.TRACKING_SECRET, key)
     const r = await insertSubmission(
       c.env.DB,

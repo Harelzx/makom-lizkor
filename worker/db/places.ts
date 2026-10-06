@@ -145,19 +145,21 @@ export const canTrack = async (db: D1Database, id: string, token: string) => !!(
 
 /** The place, if `token` is its tracking capability; null for an unknown id and a wrong token alike. */
 async function tracked(db: D1Database, id: string, token: string) {
-  const row = await db
-    .prepare("SELECT status, rev, tracking_token_hash AS h FROM places WHERE id = ?")
-    .bind(id)
-    .first<{ status: string; rev: number; h: string | null }>()
-  if (!row) return null
+  // The same work whatever the answer: the token is hashed and both capabilities are read every time, so how long it
+  // takes doesn't tell an existing id from a wrong token. The tracking link sent to a verified email is the second
+  // capability for the same place, erased with the contact.
   const hash = await sha256Hex(token)
-  if (row.h && (await sameHash(row.h, hash))) return row
-  // The tracking link sent to a verified email is a second capability for the same place, erased with the contact.
-  const mailed = await db
-    .prepare("SELECT email_token_hash AS h FROM contacts WHERE place_id = ? AND email_token_hash IS NOT NULL")
-    .bind(id)
-    .first<{ h: string }>()
-  return mailed && (await sameHash(mailed.h, hash)) ? row : null
+  const [places, contacts] = await db.batch([
+    db.prepare("SELECT status, rev, tracking_token_hash AS h FROM places WHERE id = ?").bind(id),
+    db.prepare("SELECT email_token_hash AS h FROM contacts WHERE place_id = ? AND email_token_hash IS NOT NULL").bind(id),
+  ])
+  const row = places.results[0] as { status: string; rev: number; h: string | null } | undefined
+  const mailed = contacts.results[0] as { h: string } | undefined
+  // A missing hash is compared as a dummy of the same length, so the comparison takes its usual time too.
+  const none = "0".repeat(hash.length)
+  const byLink = await sameHash(row?.h ?? none, hash)
+  const byMail = await sameHash(mailed?.h ?? none, hash)
+  return row && ((row.h && byLink) || byMail) ? row : null
 }
 
 /**

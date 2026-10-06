@@ -15,6 +15,8 @@ test("an optional email is verified from the site, then receives a tracking link
   await page.getByRole("button", { name: "הוספת מקום" }).first().click()
   const dialog = page.getByRole("dialog")
   await dialog.getByRole("button", { name: "המיקום הנוכחי שלי" }).click()
+  // The location arrives asynchronously and grows the form; pressing on before it would land where the button was.
+  await expect(dialog.getByText("סומן מיקום", { exact: false })).toBeVisible({ timeout: 15_000 })
   await dialog.getByRole("button", { name: "המשך" }).click()
   await dialog.getByLabel("שם המקום").fill(name)
   await dialog.getByRole("button", { name: "המשך" }).click()
