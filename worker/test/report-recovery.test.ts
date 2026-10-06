@@ -325,35 +325,48 @@ describe("follow-up bc46a39c", () => {
     expect(await hiddenBy(ticket)).toBe(false)
   })
 
-  it("F4-A4: a round that fails as a whole opens nothing, so the next run opens it and sends", async () => {
+  it("F4-A4: a round whose recipient rows can't be written opens nothing, and the next run opens it whole", async () => {
     const { id } = await published()
-    const failingRound = {
-      ...env,
-      DB: new Proxy(env.DB, {
-        get(target, prop) {
-          if (prop === "batch")
-            return async (stmts: D1PreparedStatement[]) => {
-              if (stmts.length > 1 && String((stmts[1] as unknown as { statement?: string }).statement ?? "").includes("report_alerts"))
-                throw new Error("d1 down")
-              return target.batch(stmts)
-            }
-          const value = Reflect.get(target, prop)
-          return typeof value === "function" ? value.bind(target) : value
-        },
-      }),
+    // A fault inside the executed batch: writing any delivery fails, after the round's own update ran.
+    await env.DB.prepare(
+      "CREATE TRIGGER test_alerts_fault BEFORE INSERT ON report_alerts BEGIN SELECT RAISE(ABORT, 'test_fault'); END",
+    ).run()
+    let ticket: string
+    try {
+      ;({ ticket } = await (
+        await report({ placeId: id, requesterType: "other" }, { e: { ...env, MODERATORS: TWO } })
+      ).json<{ ticket: string }>())
+    } finally {
+      await env.DB.prepare("DROP TRIGGER test_alerts_fault").run()
     }
-    const { ticket } = await (await report({ placeId: id, requesterType: "other" }, { e: failingRound })).json<{ ticket: string }>()
-    const r = (await row(ticket))!
-    if (r.alerts === 0) {
-      expect(r.alerted_at).toBeNull()
-      await runJobs(env, deps, undefined, after(0.25))
-    }
+    // The fault fired: the round's update was rolled back with the failed deliveries.
+    expect((await row(ticket))!).toMatchObject({ alerts: 0, alerted_at: null })
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM report_alerts WHERE report_id = ?").bind(ticket).first<number>("n")).toBe(0)
+    await runJobs({ ...env, MODERATORS: TWO }, deps, undefined, after(0.25))
     expect((await row(ticket))!.alerts).toBe(1)
-    expect(
-      await env.DB.prepare("SELECT COUNT(*) AS n FROM report_alerts WHERE report_id = ? AND state = 'sent'")
-        .bind(ticket)
-        .first<number>("n"),
-    ).toBe(1)
+    const rows = await env.DB.prepare("SELECT recipient, state FROM report_alerts WHERE report_id = ? ORDER BY recipient")
+      .bind(ticket)
+      .all()
+    expect(rows.results).toEqual([
+      { recipient: "dev@example.test", state: "sent" },
+      { recipient: "mod2@example.test", state: "sent" },
+    ])
+  })
+
+  it("F4-A4: runs opening the same round at once open it once, with one delivery per moderator", async () => {
+    const { startAlertRound } = await import("../db/reports")
+    const { id } = await published()
+    const { ticket } = await (
+      await report({ placeId: id, requesterType: "other" }, { e: { ...env, MODERATORS: TWO } })
+    ).json<{ ticket: string }>()
+    const at = after(REPORT_GUARDS.reminderHours)
+    const opened = await Promise.all([1, 2, 3].map(() => startAlertRound(env.DB, { ...env, MODERATORS: TWO }, ticket, at)))
+    expect(opened.filter(Boolean)).toHaveLength(1)
+    expect((await row(ticket))!.alerts).toBe(2)
+    const round2 = await env.DB.prepare("SELECT recipient FROM report_alerts WHERE report_id = ? AND round = 2 ORDER BY recipient")
+      .bind(ticket)
+      .all()
+    expect(round2.results.map((r) => r.recipient)).toEqual(["dev@example.test", "mod2@example.test"])
   })
 
   it("F4-A4: a late failure from a send whose claim went stale can't undo another send's delivery", async () => {
@@ -407,5 +420,42 @@ describe("follow-up 5131154b", () => {
       .bind(hourAgo, ticket)
       .first<number>("n")
     expect(counted).toBe(1)
+  })
+})
+
+describe("follow-up bb965446", () => {
+  it("F4-A2: a claim taken over while the request is being hidden stops that hide; the new holder finishes it once", async () => {
+    const { precaution } = await import("../db/reports")
+    const { finishBackstop } = await import("../jobs")
+    const { id } = await published()
+    await report({ placeId: id, elements: ["story_he"] }, { at: after(-1) })
+    const { ticket } = await (await report({ placeId: id })).json<{ ticket: string }>()
+    await env.DB.prepare("UPDATE reports SET backstop_claim = 'A', backstop_claimed_at = ? WHERE id = ?")
+      .bind(after(24).toISOString(), ticket)
+      .run()
+    // A passes its checks; while its intent is being written, B takes the claim over. Everything else stays eligible.
+    const takeover = interleaving(() => env.DB.prepare("UPDATE reports SET backstop_claim = 'B' WHERE id = ?").bind(ticket).run())
+    const opEnvA = { db: takeover.DB, media: takeover.MEDIA, ledger: takeover.LEDGER, purge: async () => true }
+    const a = await precaution(opEnvA, ticket, after(24), { claim: "A", clock: () => after(24) })
+    expect(a).toBe("refused")
+    const byReport = () =>
+      env.DB.prepare("SELECT COUNT(*) AS n FROM field_suppressions WHERE report_id = ?").bind(ticket).first<number>("n")
+    expect(await byReport()).toBe(0)
+    // A's late completion or release changes nothing of B's.
+    await finishBackstop(env.DB, ticket, "A", a)
+    await finishBackstop(env.DB, ticket, "A", "retry")
+    expect((await row(ticket))!).toMatchObject({ backstop_claim: "B", backstop_at: after(24).toISOString() })
+    // B finishes it, once.
+    const opEnv = { db: env.DB, media: env.MEDIA, ledger: env.LEDGER, purge: async () => true }
+    const b = await precaution(opEnv, ticket, after(24), { claim: "B", clock: () => after(24) })
+    expect(b).toBe("hidden")
+    await finishBackstop(env.DB, ticket, "B", b)
+    expect((await row(ticket))!).toMatchObject({ backstop_at: null, backstop_claim: null, outcome: "hidden_for_review" })
+    const ops = () =>
+      env.DB.prepare("SELECT COUNT(*) AS n FROM visibility_ops WHERE place_id = ? AND kind = 'suppress'").bind(id).first<number>("n")
+    const before = await ops()
+    await runJobs(env, { sendMail, purge: async () => true }, undefined, after(24.5))
+    expect(await ops()).toBe(before)
+    expect(await byReport()).toBe(1)
   })
 })
