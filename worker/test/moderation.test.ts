@@ -25,11 +25,11 @@ type View = {
   suppressions: { id: string; field: string; report_id: string | null }[]
 }
 const view = async (id: string) => (await (await admin(`/api/admin/places/${id}`)).json<View>()) as View
-async function hide(id: string, fields: Element[], e: Env = env) {
+async function hide(id: string, fields: Element[], e: Env = env, reportId?: string) {
   const { rev } = await view(id)
   return admin(
     "/api/admin/suppressions",
-    { method: "POST", body: JSON.stringify({ placeId: id, fields, expectedRev: rev, reason: "בקשת משפחה בטלפון" }) },
+    { method: "POST", body: JSON.stringify({ placeId: id, fields, expectedRev: rev, reason: "בקשת משפחה בטלפון", reportId }) },
     undefined,
     e,
   )
@@ -53,7 +53,7 @@ const restoreBody = (extra: Record<string, unknown> = {}) => ({
 const name = async (id: string) => (await feed()).find((p) => p.id === id)?.name_he
 const down: Env = { ...env, LEDGER: { put: async () => Promise.reject(new Error("down")) } as unknown as R2Bucket }
 
-async function familyReport(placeId: string, elements: Element[] = ["name_he"]) {
+async function familyReport(placeId: string, elements: Element[] = ["name_he"], requesterType = "family") {
   const res = await call("http://local/api/v1/reports", {
     method: "POST",
     headers: {
@@ -65,7 +65,7 @@ async function familyReport(placeId: string, elements: Element[] = ["name_he"]) 
     body: JSON.stringify({
       placeId,
       elements,
-      requesterType: "family",
+      requesterType,
       relationship: "בן",
       explanation: "אבא שלי לא רצה שהשם שלו יופיע כאן, אנא הסירו אותו.",
       email: "son@example.test",
@@ -124,7 +124,11 @@ describe("restoring needs a documented basis (spec 6)", () => {
   it.each([
     ["rights_cleared without a reference to the evidence", { basisCode: "rights_cleared" }, "evidence_required"],
     ["legal_advice without the adviser's name and date", { basisCode: "legal_advice", adviserName: 'עו"ד דמו' }, "adviser_required"],
-    ["requester_withdrew without recording how it was verified", { basisCode: "requester_withdrew" }, "verification_required"],
+    [
+      "requester_withdrew without recording how it was verified",
+      { basisCode: "requester_withdrew", familyContact: { note: "הפונה כתב שהוא חוזר בו", date: "2027-01-02" } },
+      "verification_required",
+    ],
     ["content_corrected with no newer reviewed revision", { basisCode: "content_corrected", materialAbsent: true }, "correction_required"],
   ])("%s is refused", async (_name, change, code) => {
     const s = await published()
@@ -183,6 +187,40 @@ describe("restoring needs a documented basis (spec 6)", () => {
     )
     expect(ok.status).toBe(200)
   })
+
+  describe.each(["requester_withdrew", "family_requested_restore"])(
+    "%s needs a recorded contact whoever asked for the hide",
+    (basisCode) => {
+      const verified = { basisCode, verificationNote: "אושר מאותה כתובת שממנה נשלחה הבקשה" }
+      const contact = { note: "הבקשה עצמה, מאותה כתובת: המשפחה מבקשת להחזיר", date: "2027-01-02" }
+      async function refusedThenAccepted(id: string, supId: string) {
+        const res = await lift(id, supId, restoreBody(verified))
+        expect(res.status).toBe(422)
+        expect(await res.json()).toMatchObject({ code: "family_contact_required" })
+        expect(await name(id)).toBe("ספסל · ניר עוז")
+        expect((await view(id)).suppressions.map((x) => x.id)).toContain(supId)
+        expect((await lift(id, supId, restoreBody({ ...verified, familyContact: contact }))).status).toBe(200)
+        expect(await name(id)).toBe("ספסל דמו של משפחת כהן")
+      }
+
+      it("a moderator's hide with no request behind it", async () => {
+        const s = await published()
+        await hide(s.id, ["name_he"])
+        const [sup] = (await view(s.id)).suppressions
+        expect(sup.report_id).toBeNull()
+        await refusedThenAccepted(s.id, sup.id)
+      })
+
+      it("a moderator's hide linked to a request that was not the family's", async () => {
+        const s = await published()
+        const { ticket } = await familyReport(s.id, ["story_he"], "rights_holder")
+        expect((await hide(s.id, ["name_he"], env, ticket)).status).toBe(200)
+        const sup = (await view(s.id)).suppressions.find((x) => x.field === "name_he")!
+        expect(sup.report_id).toBe(ticket)
+        await refusedThenAccepted(s.id, sup.id)
+      })
+    },
+  )
 
   it("two overlapping hides: lifting one leaves the element hidden", async () => {
     const s = await published()

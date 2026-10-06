@@ -171,9 +171,11 @@ export async function lift(
   if (i.basisCode === "legal_advice" && (!i.adviserName || !i.adviceDate)) return { refused: "adviser_required" }
   if (i.basisCode === "content_corrected" && !(i.materialAbsent && (place.revision_n ?? 0) > (sup.revision_n ?? 0)))
     return { refused: "correction_required" }
-  if (sup.requester_type === "family" && !i.familyContact) return { refused: "family_contact_required" }
-  if ((i.basisCode === "requester_withdrew" || i.basisCode === "family_requested_restore") && !i.verificationNote)
-    return { refused: "verification_required" }
+  // A withdrawal or a family's own request to restore is a contact with them by its nature, so it is recorded
+  // whoever asked for the hide; the verified request itself can be that record.
+  const byRequester = i.basisCode === "requester_withdrew" || i.basisCode === "family_requested_restore"
+  if ((sup.requester_type === "family" || byRequester) && !i.familyContact) return { refused: "family_contact_required" }
+  if (byRequester && !i.verificationNote) return { refused: "verification_required" }
 
   const others = new Set((place.suppressions as { id: string; field: string }[]).filter((s) => s.id !== suppressionId).map((s) => s.field))
   const restorePlace = sup.field === "whole" && !others.has("whole")
