@@ -114,6 +114,8 @@ test("a place whose sending was cut off by closing the tab is sent on the next v
 })
 
 test("a full review queue stops the form politely, keeps the place, and waits before sending again", async ({ browser }) => {
+  // A visit, a form with a bot check, and an 8 s watch for a resend: past the 30 s default on a busy machine.
+  test.setTimeout(60_000)
   const page = await day(browser)
   let posts = 0
   await page.route("**/api/v1/submissions", (route) => {

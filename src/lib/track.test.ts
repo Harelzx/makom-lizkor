@@ -25,3 +25,20 @@ it("a withdrawal the server couldn't make for contention is a failure to retry, 
   answer(200, JSON.stringify({ status: "withdrawn", files: "pending" }), "application/json")
   expect(await withdrawSubmission("p_1", "t")).toBe("files_pending")
 })
+
+it("a successful answer that isn't a status is a failure to read, never 'opens nothing'", async () => {
+  for (const body of ["null", "{}", '"withdrawn"', "<!doctype html>", '{"status": 3}']) {
+    answer(200, body, "application/json")
+    expect(await trackSubmission("p_1", "t"), body).toBeUndefined()
+  }
+  answer(200, JSON.stringify({ status: "pending", name_he: "x", rev: 1 }), "application/json")
+  expect(await trackSubmission("p_1", "t")).toMatchObject({ status: "pending" })
+})
+
+it("a successful withdrawal answer that doesn't say withdrawn establishes nothing", async () => {
+  const { withdrawSubmission } = await import("@/lib/api")
+  for (const body of ["null", "{}", "<!doctype html>", '{"status": "pending"}', '{"status": "withdrawn", "files": "maybe"}']) {
+    answer(200, body, "application/json")
+    expect(await withdrawSubmission("p_1", "t"), body).toBe("failed")
+  }
+})

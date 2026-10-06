@@ -76,7 +76,10 @@ export async function trackSubmission(id: string, token: string): Promise<Tracke
     // anywhere else is a failure to read, not proof.
     if (res.status === 404)
       return ((await res.json().catch(() => null)) as { code?: string } | null)?.code === "not_found" ? null : undefined
-    return res.ok ? ((await res.json()) as Tracked) : undefined
+    if (!res.ok) return undefined
+    // A status, or nothing known: null is kept for the API's own "not found" above, since it lets the device's link go.
+    const body = (await res.json().catch(() => null)) as Tracked | null
+    return body && typeof body === "object" && typeof body.status === "string" ? body : undefined
   } catch {
     return undefined
   }
@@ -96,9 +99,12 @@ export async function withdrawSubmission(id: string, token: string): Promise<"wi
       signal: AbortSignal.timeout(8000),
     })
     if (!res.ok) return "failed"
-    // Erased only when the answer says so plainly; an unreadable answer leaves the files' fate unknown.
-    const body = (await res.json().catch(() => null)) as { status?: string; files?: string } | null
-    return body?.status === "withdrawn" && !body.files ? "withdrawn" : "files_pending"
+    // Only the answer the API gives establishes a withdrawal: withdrawn, with its files erased or still pending.
+    // Anything else (unreadable, empty, another status) establishes nothing, and the link is kept to try again.
+    const body = (await res.json().catch(() => null)) as { status?: unknown; files?: unknown } | null
+    if (body?.status !== "withdrawn") return "failed"
+    if (body.files === undefined) return "withdrawn"
+    return body.files === "pending" ? "files_pending" : "failed"
   } catch {
     return "failed"
   }

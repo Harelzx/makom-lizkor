@@ -72,16 +72,21 @@ export function deviceId(create = false): Promise<string | null> {
   return found
 }
 
+const valid = (id: unknown): id is string => typeof id === "string" && /^[0-9a-f]{32}$/.test(id)
+
 async function makeDevice(create = true): Promise<string | null> {
   try {
     const s = db()
     if (!s) return null
     const known = await get<string>("device", s)
-    if (known && /^[0-9a-f]{32}$/.test(known)) return known
+    if (valid(known)) return known
     if (!create) return null
     const id = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, "0")).join("")
-    await set("device", id, s)
-    return (await get<string>("device", s)) === id ? id : null
+    // In one transaction: an id another tab stored meanwhile is kept, so two tabs leaving their first anemone at once
+    // end up with the same one. Whatever is stored after it is the id, once it reads back.
+    await update<string>("device", (stored) => (valid(stored) ? stored : id), s)
+    const kept = await get<string>("device", s)
+    return valid(kept) ? kept : null
   } catch {
     return null
   }
