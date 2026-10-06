@@ -8,31 +8,68 @@ import { pathToFileURL } from "node:url"
 
 const git = (cwd, args) => execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] })
 
-/** SQL the code before it can't live with, statement by statement: removed or renamed objects, a required column it
- * doesn't write (SQLite takes ADD with or without COLUMN), or a new trigger or unique index that may refuse what it
- * writes. */
+/** SQL the code before it can't live with, statement by statement: removed or renamed objects, or a new trigger or
+ * unique index that may refuse what it writes. A column added is judged by its own grammar below. */
 const INCOMPATIBLE = [
   [/^DROP\b|^ALTER TABLE \S+ DROP\b/i, "drops something"],
   [/^ALTER TABLE \S+ RENAME\b/i, "renames something"],
-  [/^ALTER TABLE \S+ ADD\b(?!.*\bDEFAULT\b).*\bNOT NULL\b/i, "adds a required column without a default"],
   [/^CREATE TRIGGER\b/i, "adds a trigger"],
   [/^CREATE UNIQUE INDEX\b/i, "adds a unique index"],
 ]
 /** What the check knows to be compatible; any other statement is refused, not passed (a51). */
-const KNOWN = [/^CREATE TABLE\b/i, /^CREATE INDEX\b/i, /^ALTER TABLE \S+ ADD\b/i, /^INSERT\b/i, /^UPDATE\b/i]
+const KNOWN = [/^CREATE TABLE\b/i, /^CREATE INDEX\b/i, /^INSERT\b/i, /^UPDATE\b/i]
 
-/** Each statement of a migration, comments gone, a trigger's body kept inside its statement, spacing even; read without regard to case. */
-const statements = (sql) =>
-  sql
-    .replace(/--.*$/gm, "")
+/**
+ * The SQL as tokens can be read: comments removed (-- and /* *\/), each string literal masked as '?' (so a ; or a
+ * keyword inside one is not SQL), a trigger's body kept inside its statement, then split into statements with spacing
+ * even. Read without regard to case.
+ */
+function statements(sql) {
+  let out = ""
+  for (let i = 0; i < sql.length;) {
+    if (sql.startsWith("--", i)) i = sql.indexOf("\n", i) < 0 ? sql.length : sql.indexOf("\n", i)
+    else if (sql.startsWith("/*", i)) {
+      const end = sql.indexOf("*/", i + 2)
+      i = end < 0 ? sql.length : end + 2
+      out += " "
+    } else if (sql[i] === "'") {
+      // To the closing quote; two quotes in a row are one quote inside the literal.
+      let j = i + 1
+      while (j < sql.length && !(sql[j] === "'" && sql[j + 1] !== "'")) j += sql[j] === "'" ? 2 : 1
+      out += "'?'"
+      i = j + 1
+    } else out += sql[i++]
+  }
+  return out
     .replace(/\bBEGIN\b[\s\S]*?\bEND\b/gi, "BEGIN END")
     .split(";")
     .map((st) => st.replace(/\s+/g, " ").trim())
     .filter(Boolean)
+}
+
+/**
+ * A column added, by the only grammar the check accepts (a52): ALTER TABLE t ADD [COLUMN] c [type], then nothing, a
+ * DEFAULT of a plain literal, or NOT NULL with such a DEFAULT. Anything else, CHECK, UNIQUE, REFERENCES, COLLATE, a
+ * generated column, is refused: its compatibility with the earlier code's inserts isn't established.
+ */
+function addColumnProblem(st) {
+  const m = /^ALTER TABLE \S+ ADD (?:COLUMN )?\S+(?: (?:TEXT|INTEGER|REAL|BLOB|NUMERIC))?(?: (.*))?$/i.exec(st)
+  if (!m) return null
+  const rest = (m[1] ?? "").trim()
+  const LIT = "(?:-?\\d+(?:\\.\\d+)?|'\\?'|NULL)"
+  if (!rest || new RegExp(`^(?:DEFAULT ${LIT}(?: NOT NULL)?|NOT NULL DEFAULT ${LIT})$`, "i").test(rest)) return ""
+  if (/^NOT NULL$/i.test(rest)) return "adds a required column without a default"
+  return "adds a column with a constraint the check can't establish as compatible"
+}
 
 function sqlProblems(sql) {
   const found = new Set()
   for (const st of statements(sql)) {
+    const added = addColumnProblem(st)
+    if (added !== null) {
+      if (added) found.add(added)
+      continue
+    }
     const hit = INCOMPATIBLE.filter(([pattern]) => pattern.test(st))
     for (const [, what] of hit) found.add(what)
     if (!hit.length && !KNOWN.some((k) => k.test(st)))
