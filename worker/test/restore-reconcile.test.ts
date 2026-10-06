@@ -12,7 +12,7 @@ import { runRetention } from "../db/retention"
 import { sendMail } from "../lib/mail"
 import { unseal, type Manifest } from "../lib/sealed"
 import { call } from "./app"
-import { approve } from "./helpers"
+import { admin, approve } from "./helpers"
 import { decide, jpeg, queued, rev, revise, send, sendForm } from "./submission-helpers"
 
 // Restores after the whole-phase review (adviser 20261006T153309Z-ef1427c3): what a restore writes is reconciled with
@@ -254,5 +254,55 @@ describe("a restore reconciled with the ledger", () => {
     )
     // The restored copy can't tell which description goes with the new photo: no photo, and hidden until a moderator looks.
     expect(restored).toEqual({ status: "hidden", photo_key: null, photo_alt: null })
+  })
+
+  it("an approval of a revision the restore point never had still closes the contact's date (a47 F5-R5)", async () => {
+    const s = await send("גן דמו שהוחזר ותוקן אחרי הייצוא", { email: "replaced-demo@example.test" })
+    expect((await decide(s.id, await queued(s.id), "return", "נא לתקן את השם")).status).toBe(200)
+    const payload = await exportNow()
+    // After the export: the sender's correction (a revision the export doesn't have) is approved, then hidden and lifted.
+    expect((await revise(s.id, s.trackingToken, await rev(s.id, s.trackingToken), "גן דמו שתוקן אחרי הייצוא")).status).toBe(200)
+    expect((await decide(s.id, await queued(s.id), "approve")).status).toBe(200)
+    const placeRev = async () => (await (await admin(`/api/admin/places/${s.id}`)).json<{ rev: number }>()).rev
+    const hidden = await admin("/api/admin/suppressions", {
+      method: "POST",
+      body: JSON.stringify({ placeId: s.id, fields: ["name_he"], expectedRev: await placeRev(), reason: "נימוק דמו להסתרה" }),
+    })
+    expect(hidden.status).toBe(200)
+    const sid = (await env.DB.prepare("SELECT id FROM field_suppressions WHERE place_id = ? AND lifted_at IS NULL")
+      .bind(s.id)
+      .first<string>("id"))!
+    const lifted = await admin(`/api/admin/suppressions/${sid}/lift`, {
+      method: "POST",
+      body: JSON.stringify({
+        expectedRev: await placeRev(),
+        basisCode: "review_supports_restore",
+        basisNote: "בדקנו מול אתר המועצה: השם פורסם שם ברשות המשפחה.",
+        confirm: { affirmativeBasis: true, notNonresponseOrDispute: true },
+      }),
+    })
+    expect(lifted.status).toBe(200)
+    const live = (await row(env.DB, "SELECT purge_after FROM contacts WHERE place_id = ?", s.id))!.purge_after as string
+
+    const check = async () => {
+      const restored = await row(env.IMPORT_TEST, "SELECT purge_after FROM contacts WHERE place_id = ?", s.id)
+      // Not later than the live date, whatever the restored copy lacks; and hidden for a moderator.
+      expect((restored!.purge_after as string) <= live).toBe(true)
+      expect(await row(env.IMPORT_TEST, "SELECT status FROM places WHERE id = ?", s.id)).toEqual({ status: "hidden" })
+      await replayLedger(env.IMPORT_TEST, env.LEDGER, new Date(), payload.created_at)
+      expect(await row(env.IMPORT_TEST, "SELECT purge_after FROM contacts WHERE place_id = ?", s.id)).toEqual(restored)
+      // The deletion job, at the live date, takes it.
+      const ops = { db: env.IMPORT_TEST, media: env.MEDIA, ledger: env.LEDGER, purge: async () => true }
+      await runRetention(ops, new Date(Date.parse(live) + 1000))
+      expect(await row(env.IMPORT_TEST, "SELECT 1 AS n FROM contacts WHERE place_id = ?", s.id)).toBeNull()
+    }
+    // Route B: the export's rows reconciled in memory.
+    expect(await restoreB(payload)).toMatchObject({ ok: true, reconciled: { quarantined: [s.id] } })
+    await check()
+    // Route A: the database as it stood, then the replay on D1.
+    for (const t of [...EXPORT_TABLES].reverse()) await env.IMPORT_TEST.prepare(`DELETE FROM ${t}`).run()
+    expect(await importExport(env.IMPORT_TEST, payload, new Date(), new Map())).toMatchObject({ ok: true })
+    await replayLedger(env.IMPORT_TEST, env.LEDGER, new Date(), payload.created_at)
+    await check()
   })
 })

@@ -61,6 +61,8 @@ export function reconcilePlace(original: PlaceRows, entries: LedgerEntry[], now:
     const at = decidedAt(e)
     const revision = e.revision ? rows.revisions.find((x) => x.id === e.revision) : undefined
     if (e.kind === "approve") {
+      // The sender's contact date follows the decision, whether or not the restored copy holds what it decided.
+      closeContacts(at)
       if (!revision) {
         quarantine = true
         continue
@@ -78,7 +80,6 @@ export function reconcilePlace(original: PlaceRows, entries: LedgerEntry[], now:
         photo === null ? { photo_alt: null, photo_credit: null } : {},
       )
       Object.assign(place, { status: e.status ?? "published", published_revision_id: revision.id, status_changed_at: at })
-      closeContacts(at)
     } else if (e.kind === "reject" || e.kind === "return") {
       if (revision) {
         const dropPhoto = e.kind === "reject" && typeof revision.photo_key === "string" && revision.photo_key.startsWith("quarantine/")
