@@ -55,7 +55,16 @@ test("a family's request hides the name as a precaution; a restoration is refuse
   await ctx.close()
 })
 
-test("the moderators' page reaches older requests a page at a time", async ({ browser }) => {
+/** An operation needing attention, as the admin API lists it. */
+const operation = (id: string, place: string, at: string) => ({
+  id,
+  place_id: place,
+  kind: "hide",
+  problem: "ledger_repair",
+  created_at: at,
+})
+
+test("the moderators' page reaches older requests and operations a page at a time, and stops at the end", async ({ browser }) => {
   const ctx = await browser.newContext()
   await ctx.request.post("/__dev/login", { data: { email: "dev@example.test" } })
   const mod = await ctx.newPage()
@@ -83,11 +92,47 @@ test("the moderators' page reaches older requests a page at a time", async ({ br
         : { items: [request("r_new", "ספסל דמו חדש", "2029-01-02T00:00:00.000Z")], next: "2029-01-02T00:00:00.000Z|r_new" },
     })
   })
+  // The operations needing attention, two pages of one, the same way.
+  await mod.route("**/api/admin/attention**", (route) => {
+    const cursor = new URL(route.request().url()).searchParams.get("cursor")
+    return route.fulfill({
+      json: cursor
+        ? { ops: [operation("op_old", "p_op_old", "2029-01-01T00:00:00.000Z")], next: null }
+        : { ops: [operation("op_new", "p_op_new", "2029-01-02T00:00:00.000Z")], next: "2029-01-02T00:00:00.000Z|op_new" },
+    })
+  })
   await mod.goto("/admin/")
   await expect(mod.getByRole("article", { name: "בקשה על ספסל דמו חדש" })).toBeVisible()
   await expect(mod.getByRole("article", { name: "בקשה על ספסל דמו ישן" })).toHaveCount(0)
   await mod.getByRole("button", { name: "בקשות ישנות יותר" }).click()
   await expect(mod.getByRole("article", { name: "בקשה על ספסל דמו ישן" })).toBeVisible()
   await expect(mod.getByRole("button", { name: "בקשות ישנות יותר" })).toHaveCount(0)
+
+  const attention = mod.getByRole("list", { name: "דורש תשומת לב" })
+  await expect(attention.getByRole("listitem")).toHaveText([/p_op_new/])
+  await mod.getByRole("button", { name: "פעולות נוספות שדורשות תשומת לב" }).click()
+  await expect(attention.getByRole("listitem")).toHaveText([/p_op_new/, /p_op_old/])
+  await expect(mod.getByRole("button", { name: "פעולות נוספות שדורשות תשומת לב" })).toHaveCount(0)
+  await ctx.close()
+})
+
+test("operations needing attention that fail to load say so, and come with a retry instead of reading as none", async ({ browser }) => {
+  const ctx = await browser.newContext()
+  await ctx.request.post("/__dev/login", { data: { email: "dev@example.test" } })
+  const mod = await ctx.newPage()
+  let fail = true
+  await mod.route("**/api/admin/attention**", (route) =>
+    fail
+      ? route.fulfill({ status: 503, json: { code: "unavailable" } })
+      : route.fulfill({ json: { ops: [operation("op_back", "p_op_back", "2029-01-03T00:00:00.000Z")], next: null } }),
+  )
+  await mod.goto("/admin/")
+  await expect(mod.getByRole("alert")).toHaveText(/הפעולות שדורשות תשומת לב לא נטענו/)
+  await expect(mod.getByRole("list", { name: "דורש תשומת לב" })).toHaveCount(0)
+  fail = false
+  await mod.getByRole("button", { name: "לנסות שוב לטעון את הפעולות" }).click()
+  await expect(mod.getByRole("list", { name: "דורש תשומת לב" }).getByRole("listitem")).toHaveText([/p_op_back/])
+  await expect(mod.getByRole("alert")).toHaveCount(0)
+  await expect(mod.getByRole("button", { name: "לנסות שוב לטעון את הפעולות" })).toHaveCount(0)
   await ctx.close()
 })
