@@ -166,7 +166,12 @@ export async function verifyEmail(
   token: string,
   now: Date,
   secret: string,
-): Promise<{ first: boolean; mail?: { to: string; placeId: string; emailToken: string; contactId: string } } | null> {
+): Promise<{
+  first: boolean
+  /** The tracking mail: sent by an earlier click, out of tries, or due (`mail` says what to send, when this click may). */
+  mailState: "earlier" | "stopped" | "due"
+  mail?: { to: string; placeId: string; emailToken: string; contactId: string }
+} | null> {
   const row = await db
     .prepare(
       `SELECT id, place_id, email, email_verified_at, email_verify_expires, tracking_mail_sent_at, tracking_mail_attempts
@@ -199,6 +204,7 @@ export async function verifyEmail(
   const due = !row.tracking_mail_sent_at && row.tracking_mail_attempts < MAIL_TRIES
   return {
     first,
+    mailState: row.tracking_mail_sent_at ? "earlier" : due ? "due" : "stopped",
     ...(due && (first || row.email_verified_at) ? { mail: { to: row.email, placeId: row.place_id, emailToken, contactId: row.id } } : {}),
   }
 }

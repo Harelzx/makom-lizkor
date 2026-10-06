@@ -132,7 +132,13 @@ export async function reviseSubmission(
 }
 
 /** "ok", "expired" when the link is wrong or older than its seven days, or "failed" when the server can't be reached. */
-export async function confirmEmail(token: string): Promise<"ok" | "again" | "expired" | "failed"> {
+/**
+ * ok: verified now and the tracking link sent · resent: verified before, the link sent now · again: verified and sent
+ * before · unsent: verified, but the link didn't go this time (a later click tries again) · stopped: it won't be tried
+ * again · expired · failed: no answer.
+ */
+export type Confirmed = "ok" | "resent" | "again" | "unsent" | "stopped" | "expired" | "failed"
+export async function confirmEmail(token: string): Promise<Confirmed> {
   try {
     const res = await fetch("/api/v1/email/verify", {
       method: "POST",
@@ -140,7 +146,13 @@ export async function confirmEmail(token: string): Promise<"ok" | "again" | "exp
       body: JSON.stringify({ token }),
       signal: AbortSignal.timeout(8000),
     })
-    if (res.ok) return ((await res.json()) as { first?: boolean }).first === false ? "again" : "ok"
+    if (res.ok) {
+      const { first, mail } = (await res.json()) as { first?: boolean; mail?: string }
+      if (mail === "failed") return "unsent"
+      if (mail === "stopped") return "stopped"
+      if (mail === "sent") return first ? "ok" : "resent"
+      return "again"
+    }
     return res.status === 404 ? "expired" : "failed"
   } catch {
     return "failed"

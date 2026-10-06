@@ -24,14 +24,21 @@ email.post(
     const r = await verifyEmail(c.env.DB, c.req.valid("json").token, now, c.env.TRACKING_SECRET)
     if (!r) return problem(c, 404, "not_found")
     // The tracking mail, if it hasn't gone out yet: this click, or a later one, tries again (five tries at most).
+    // `mail` tells the page what happened to it, so a visitor whose mail didn't go knows to try again: "failed" also
+    // when a click at the same moment holds the try (the next click learns how it went).
+    let mail: "sent" | "earlier" | "failed" | "stopped" = r.mailState === "due" ? "failed" : r.mailState
     if (r.mail && (await claimTrackingMail(c.env.DB, r.mail.contactId))) {
       const link = `${new URL(c.req.url).origin}/#/track/${r.mail.placeId}/${r.mail.emailToken}`
-      const sent = await c
-        .get("sendMail")(c.env, trackingMail(r.mail.to, link))
+      const sendMail = c.get("sendMail")
+      const sent = await Promise.resolve()
+        .then(() => sendMail(c.env, trackingMail(r.mail!.to, link)))
         .catch(() => false)
-      if (sent) await trackingMailSent(c.env.DB, r.mail.contactId, now)
+      if (sent) {
+        await trackingMailSent(c.env.DB, r.mail.contactId, now)
+        mail = "sent"
+      }
     }
     // `first`: whether this click verified the address, or it was verified before.
-    return c.json({ ok: true, first: r.first }, 200, PRIVATE)
+    return c.json({ ok: true, first: r.first, mail }, 200, PRIVATE)
   },
 )

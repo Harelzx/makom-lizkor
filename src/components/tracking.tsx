@@ -20,8 +20,9 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { CONSENT_TEXT, noticeHtml } from "@/data/legal"
 import { reviseSubmission, trackSubmission, withdrawSubmission, type Draft, type Tracked } from "@/lib/api"
+import { savedHere } from "@/lib/correction"
+import { FINAL, settleOwnCopy } from "@/lib/own-copy"
 import { CURRENT_SUBMISSION_NOTICE } from "@/shared/contract"
-import { cleanText } from "@/shared/text"
 import { useStore } from "@/store"
 
 /** What each state means to the person who sent the place. */
@@ -34,9 +35,6 @@ const STATUS: Record<string, string> = {
   withdrawn: "נמשכה. ההצעה, השם והמייל שלכם והתמונה נמחקו מהשרת",
   erased: "נמחקה",
 }
-
-/** Once withdrawn or erased, there is nothing left to take back. */
-const FINAL = new Set(["withdrawn", "erased"])
 
 /**
  * A submission's status, opened from its private tracking link or from the sender's own card. The link is the only
@@ -125,6 +123,8 @@ export function Tracking() {
     let live = true
     void trackSubmission(tracking.id, tracking.token).then((result) => {
       if (live) setState({ key: `${tracking.id}/${tracking.token}`, result, failed: result === undefined })
+      // Withdrawn from elsewhere, or its files erased since: the copy on this device catches up.
+      void settleOwnCopy(tracking.id, tracking.token, result)
     })
     return () => {
       live = false
@@ -136,6 +136,7 @@ export function Tracking() {
     if (!tracking) return
     const result = await trackSubmission(tracking.id, tracking.token)
     setState({ key: `${tracking.id}/${tracking.token}`, result, failed: result === undefined })
+    void settleOwnCopy(tracking.id, tracking.token, result)
   }
 
   const sendCorrection = async (d: Draft) => {
@@ -162,13 +163,7 @@ export function Tracking() {
       // and a retry refused). It counts as saved only if the newest text on the server is the very text sent from
       // here; otherwise it stays in the form, with the current state shown.
       const now = await trackSubmission(tracking.id, tracking.token)
-      // Compared as the server stores text (cleanText: normalized, spaces folded), not as typed.
-      const same = (a?: string | null, b?: string | null, multiline = false) => (a ?? "") === (b ? (cleanText(b, { multiline }) ?? b) : "")
-      const mine =
-        !!now?.draft &&
-        now.rev !== current.result.rev &&
-        (Object.keys(sent) as (keyof typeof sent)[]).every((k) => same(now.draft![k], sent[k], k === "story_he"))
-      if (!mine) {
+      if (!savedHere(now, sent, current.result.rev)) {
         if (now) setState({ key, result: now, failed: false })
         return void toast(now ? (r === "conflict" ? "ההצעה השתנתה בינתיים" : "התיקון שלכם לא מופיע בשרת") : "לא ברור אם התיקון נשמר", {
           description:
@@ -192,22 +187,15 @@ export function Tracking() {
     const now = await trackSubmission(tracking.id, tracking.token)
     setWorking(false)
     setConfirming(false)
-    if (now?.status === "withdrawn") setState({ key, result: now, failed: false })
-    else if (done === "failed" || now) return void toast("לא הצלחנו לוודא שההצעה נמשכה", { description: "נסו שוב בעוד רגע." })
-    // Withdrawn, but the status couldn't be read just now: say only what the answer established.
-    else
-      setState({
-        key,
-        result: { status: "withdrawn", name_he: null, ...(done === "withdrawn" ? {} : { files: "pending" }) },
-        failed: false,
-      })
+    if (now?.status !== "withdrawn" && (done === "failed" || now))
+      return void toast("לא הצלחנו לוודא שההצעה נמשכה", { description: "נסו שוב בעוד רגע." })
+    // Withdrawn; if the status couldn't be read just now (or this link ended with the withdrawal), say only what the
+    // answer established.
+    const shown: Tracked =
+      now?.status === "withdrawn" ? now : { status: "withdrawn", name_he: null, ...(done === "withdrawn" ? {} : { files: "pending" }) }
+    setState({ key, result: shown, failed: false })
     // The sender's own copy on this device, if it is here, says so too.
-    const own = useStore.getState().local.find((p) => p.local?.remoteId === tracking.id)
-    // …and the device stops keeping the tracking link once nothing is left to finish: while files wait to be erased,
-    // the link stays, so the card can still open this view and finish them.
-    const finished = now?.status === "withdrawn" && !now.files
-    if (own)
-      void useStore.getState().updateLocal(own.id, finished ? { send: "withdrawn", trackingToken: undefined } : { send: "withdrawn" })
+    await settleOwnCopy(tracking.id, tracking.token, shown)
   }
 
   return (

@@ -277,14 +277,21 @@ export function AddPlace() {
       const stored = await addLocal(place)
       const r = await submitPlace(submission, place.local!.submitKey!)
       if (r.ok) {
-        // Sent: the body (with any email and name) isn't needed for a retry any more, so the device stops keeping it.
-        await updateLocal(place.id, { send: "sent", remoteId: r.id, trackingToken: r.trackingToken, submission: undefined })
+        // Sent: the body (with any email and name) isn't needed for a retry any more, so the device stops keeping it,
+        // nor the key, which could ask the server for the tracking link again after a withdrawal.
+        await updateLocal(place.id, {
+          send: "sent",
+          remoteId: r.id,
+          trackingToken: r.trackingToken,
+          submission: undefined,
+          submitKey: undefined,
+        })
         // The photo follows the place; if it can't go now, the outbox sends it later.
         if (photo) {
           const sent = await uploadPhoto(r.id, r.trackingToken, photo, photoAlt.trim() || place.name_he, photoCredit.trim() || undefined)
           if (sent !== "temporary") await updateLocal(place.id, sent === "ok" ? { photoSent: true } : { photoError: "refused" })
         }
-      } else if (r.kind === "rejected") await updateLocal(place.id, { send: "rejected", sendError: r.code })
+      } else if (r.kind === "rejected") await updateLocal(place.id, { send: "rejected", sendError: r.code, submitKey: undefined })
       else
         await updateLocal(place.id, {
           send: "waiting",

@@ -50,3 +50,18 @@ it("a place removed while an earlier one is being sent is not sent", async () =>
   await run
   expect(sent.ids).toEqual(["local-1"])
 })
+
+it("a place once answered keeps no key that could ask the server for its tracking link again", async () => {
+  useStore.setState({ local: [waiting("local-3"), waiting("local-4")] })
+  sent.gate = null
+  const api = await import("@/lib/api")
+  vi.spyOn(api, "submitPlace").mockImplementation(async (input) =>
+    input.name_he === "local-3" ? { ok: true, id: "p_3", trackingToken: "t" } : { ok: false, kind: "rejected", code: "invalid" },
+  )
+  await retryWaiting()
+  const [sentPlace, refused] = useStore.getState().local
+  expect(sentPlace.local).toMatchObject({ send: "sent", remoteId: "p_3" })
+  expect(sentPlace.local?.submitKey).toBeUndefined()
+  expect(refused.local?.send).toBe("rejected")
+  expect(refused.local?.submitKey).toBeUndefined()
+})
