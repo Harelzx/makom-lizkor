@@ -2,6 +2,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest"
 
 // IndexedDB stood in for by one map; an update is one transaction, as idb-keyval's is.
 const idb = vi.hoisted(() => ({ map: new Map<string, unknown>() }))
+// A browser that has IndexedDB (Node has none, and the storage module asks before it opens one); idb-keyval stands in.
+vi.stubGlobal("indexedDB", {})
 vi.mock("idb-keyval", () => ({
   createStore: () => ({}),
   get: async (key: string) => idb.map.get(key),

@@ -32,7 +32,7 @@ function load(): Promise<Turnstile> {
 }
 
 /** A fresh, single-use token for this action; null when the check can't run now (the send is then retried later). */
-export async function turnstileToken(action: "submit" | "revise"): Promise<string | null> {
+export async function turnstileToken(action: "submit" | "revise" | "report"): Promise<string | null> {
   if (!SITEKEY) return null
   let t: Turnstile
   try {

@@ -1,5 +1,6 @@
 import { turnstileToken } from "@/lib/turnstile"
-import type { RevisionInput, SubmissionInput, TributeResult, TributeTotals } from "@/shared/contract"
+import { ReportResult } from "@/shared/contract"
+import type { ReportInput, RevisionInput, SubmissionInput, TributeResult, TributeTotals } from "@/shared/contract"
 
 export type SendResult =
   | { ok: true; id: string; trackingToken: string }
@@ -262,4 +263,63 @@ export async function getTributeTotals(): Promise<Record<string, number> | null>
   } catch {
     return null
   }
+}
+
+export type ReportSend =
+  | ({ ok: true } & ReportResult)
+  /** Refused before the server stored anything, for this try only: an earlier try's fate is not known from it. */
+  | { ok: false; kind: "not_sent"; code: string }
+  /** The key already holds a different request on the server: this one's delivery is not confirmed. */
+  | { ok: false; kind: "conflict" }
+  /** No answer that says: the server may have stored it (a lost answer, an error after the write). */
+  | { ok: false; kind: "unknown" }
+  /** Not sent: its window ended while this try was being prepared (the bot check can take a while). */
+  | { ok: false; kind: "expired" }
+
+/**
+ * The refusals the request route gives before it stores anything (worker/routes/reports.ts): the limiter, the body and
+ * key checks, configuration, the bot check, and an unknown place. Any other answer may come after the write.
+ */
+const BEFORE_WRITE: Record<number, string[]> = {
+  400: ["invalid_input"],
+  403: ["turnstile_required", "turnstile_failed"],
+  404: ["not_found"],
+  429: ["rate_limited"],
+  503: ["not_configured", "turnstile_unavailable"],
+}
+
+const TOKEN_WAIT_MS = 30_000
+
+/**
+ * A removal or correction request (spec 6), under the key its first try was given; a fresh bot check every try. Never
+ * sent at or after `deadline`, checked at the last moment before it goes.
+ */
+export async function sendReport(input: ReportInput, key: string, deadline = Infinity): Promise<ReportSend> {
+  // The bot check is bounded here too (its script can be slow to load): without a token the server refuses before storing.
+  const token = await Promise.race([
+    turnstileToken("report").catch(() => null),
+    new Promise<null>((r) => setTimeout(() => r(null), TOKEN_WAIT_MS)),
+  ])
+  if (Date.now() >= deadline) return { ok: false, kind: "expired" }
+  let res: Response
+  try {
+    res = await fetch("/api/v1/reports", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Idempotency-Key": key, ...(token ? { "Turnstile-Token": token } : {}) },
+      body: JSON.stringify(input),
+      signal: AbortSignal.timeout(10_000),
+    })
+  } catch {
+    return { ok: false, kind: "unknown" }
+  }
+  // Any body at all may come back (a proxy's page, JSON null, an array): only a recognised answer is read as one.
+  const body: unknown = await res.json().catch(() => null)
+  if (res.status === 202) {
+    const result = ReportResult.safeParse(body)
+    return result.success ? { ok: true, ...result.data } : { ok: false, kind: "unknown" }
+  }
+  const code = body && typeof body === "object" && "code" in body && typeof body.code === "string" ? body.code : undefined
+  if (res.status === 409 && code === "idempotency_key_reused") return { ok: false, kind: "conflict" }
+  if (code && BEFORE_WRITE[res.status]?.includes(code)) return { ok: false, kind: "not_sent", code }
+  return { ok: false, kind: "unknown" }
 }

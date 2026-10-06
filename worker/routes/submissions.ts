@@ -2,11 +2,10 @@ import { zValidator } from "@hono/zod-validator"
 import { Hono, type Context } from "hono"
 import { z } from "zod"
 import { RevisionInput, SubmissionInput, text } from "@/shared/contract"
+import { erasePhotos, photosRemain } from "../db/photos"
 import {
   attachPhoto,
   canTrack,
-  erasePhotos,
-  photosRemain,
   insertSubmission,
   trackingTokenFor,
   pendingCount,
@@ -17,6 +16,7 @@ import {
 } from "../db/places"
 import { clock } from "../lib/clock"
 import { PRIVATE, problem } from "../lib/http"
+import { opEnv } from "../lib/purge"
 import { rateKey } from "../lib/ids"
 import { verificationMail } from "../lib/messages"
 import { checkTurnstile } from "../lib/turnstile"
@@ -111,7 +111,7 @@ submissions.get("/:id", async (c) => {
 
 submissions.post("/:id/withdraw", async (c) => {
   const token = bearer(c.req.header("Authorization"))
-  const done = token ? await withdraw(c.env.DB, c.req.param("id"), token, clock(c.req.raw, c.env)) : "missing"
+  const done = token ? await withdraw(opEnv(c), c.req.param("id"), token, clock(c.req.raw, c.env)) : "missing"
   if (done === "missing") return problem(c, 404, "not_found")
   // The link is good but the place kept changing: nothing was withdrawn yet, and the same request again will do it.
   if (done === "busy") return problem(c, 503, "withdrawal_busy", {}, { "Retry-After": "1" })

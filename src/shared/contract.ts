@@ -109,6 +109,41 @@ export type TributeResult =
 /** The shared counts of published places, by id. */
 export type TributeTotals = { totals: Record<string, number> }
 
+/** What a removal or correction request may name on a place (spec 3.1, field_suppressions); "whole" is the place itself. */
+export const ELEMENTS = ["name_he", "in_memory_of", "story_he", "photo", "whole"] as const
+export type Element = (typeof ELEMENTS)[number]
+export const REQUESTER_TYPES = ["family", "rights_holder", "other"] as const
+
+/** The report notices a form may record, as for submissions: never removed, new ones at the end. */
+export const REPORT_NOTICES = ["notice.report@2026-10-1", "notice.report@2026-10-2", "notice.report@2026-10-3"] as const
+export const CURRENT_REPORT_NOTICE = REPORT_NOTICES[REPORT_NOTICES.length - 1]
+
+/**
+ * A request to remove or correct something on a place (spec 6, 10). Only what the form asks: no name, the email
+ * optional. Whether it is complete enough for the automatic path is decided on the server; an incomplete one is still
+ * accepted and reviewed by a person.
+ */
+export const ReportInput = z
+  .object({
+    placeId: z.string().min(1).max(64),
+    elements: z
+      .array(z.enum(ELEMENTS))
+      .min(1)
+      .max(ELEMENTS.length)
+      .refine((e) => new Set(e).size === e.length, { message: "duplicate_element" }),
+    requesterType: z.enum(REQUESTER_TYPES),
+    relationship: text({ max: 200 }).optional(),
+    explanation: text({ max: 2000, multiline: true }),
+    email: z.email().max(254).optional(),
+    noticeVersion: z.enum(REPORT_NOTICES),
+  })
+  .strict()
+export type ReportInput = z.infer<typeof ReportInput>
+
+/** hidden_for_review: the element is hidden as a precaution until a person decides; received: a person will review it. */
+export const ReportResult = z.object({ ticket: z.string().min(1), outcome: z.enum(["hidden_for_review", "received"]) })
+export type ReportResult = z.infer<typeof ReportResult>
+
 export const Feed = z.object({ v: z.string(), places: z.array(PublicPlace) })
 export type Feed = z.infer<typeof Feed>
 

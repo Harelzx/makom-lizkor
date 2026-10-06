@@ -1,17 +1,20 @@
 import { Hono } from "hono"
 import { problem } from "./lib/http"
 import { sendMail, type SendMail } from "./lib/mail"
+import { runJobs } from "./jobs"
+import { edgePurge, type Purge } from "./lib/purge"
 import { siteverify, type VerifyTurnstile } from "./lib/turnstile"
 import { admin } from "./routes/admin"
 import { dev } from "./routes/dev"
 import { email } from "./routes/email"
 import { feed } from "./routes/feed"
+import { reports } from "./routes/reports"
 import { share } from "./routes/share"
 import { submissions } from "./routes/submissions"
 import { tributes } from "./routes/tributes"
 
 /** What the routes reach outside the Worker; the tests pass stand-ins, the deployed Worker the real ones. */
-export type Deps = { verifyTurnstile: VerifyTurnstile; sendMail: SendMail }
+export type Deps = { verifyTurnstile: VerifyTurnstile; sendMail: SendMail; purge: Purge }
 export type AppEnv = { Bindings: Env; Variables: Deps }
 
 export function createApp(deps: Deps) {
@@ -19,6 +22,7 @@ export function createApp(deps: Deps) {
   app.use("*", async (c, next) => {
     c.set("verifyTurnstile", deps.verifyTurnstile)
     c.set("sendMail", deps.sendMail)
+    c.set("purge", deps.purge)
     await next()
   })
 
@@ -26,6 +30,7 @@ export function createApp(deps: Deps) {
   app.route("/api/v1/submissions", submissions)
   app.route("/api/v1/email", email)
   app.route("/api/v1/tributes", tributes)
+  app.route("/api/v1/reports", reports)
   app.route("/api/v1", feed)
   app.route("/api/admin", admin)
   app.route("/__dev", dev)
@@ -35,18 +40,24 @@ export function createApp(deps: Deps) {
   app.get("/media/public/*", async (c) => {
     const key = c.req.path.replace(/^\/media\//, "")
     // Only the photo of a revision published now: a file a lost race or a failed cleanup left behind serves nothing.
+    // And only while the photo isn't hidden, by itself or with its whole place (spec 6).
     const live = await c.env.DB.prepare(
-      "SELECT 1 FROM places p JOIN revisions r ON r.id = p.published_revision_id WHERE p.status = 'published' AND r.photo_key = ?",
+      `SELECT p.id FROM places p JOIN revisions r ON r.id = p.published_revision_id
+       WHERE p.status = 'published' AND r.photo_key = ?
+         AND NOT EXISTS (SELECT 1 FROM field_suppressions s WHERE s.place_id = p.id AND s.lifted_at IS NULL AND s.field IN ('photo', 'whole'))`,
     )
       .bind(key)
-      .first()
+      .first<string>("id")
     if (!live) return problem(c, 404, "not_found")
     const object = await c.env.MEDIA.get(key)
     if (!object) return problem(c, 404, "not_found")
-    // Short-lived: a photo taken down later (phase 4) must not live on in caches for long.
+    // A minute in the browser and at the edge (spec 5), tagged with its place: a takedown purges the edge copy, and
+    // the minute bounds it if the purge fails.
     return c.body(object.body, 200, {
       "Content-Type": "image/jpeg",
-      "Cache-Control": "public, max-age=300",
+      "Cache-Control": "public, max-age=60",
+      "Cloudflare-CDN-Cache-Control": "max-age=60",
+      "Cache-Tag": `place:${live}`,
       "X-Content-Type-Options": "nosniff",
       "Content-Security-Policy": "sandbox; default-src 'none'",
     })
@@ -62,4 +73,13 @@ export function createApp(deps: Deps) {
   return app
 }
 
-export default createApp({ verifyTurnstile: siteverify, sendMail })
+const deps = { verifyTurnstile: siteverify, sendMail, purge: edgePurge }
+const app = createApp(deps)
+
+export default {
+  fetch: app.fetch,
+  // Every 15 minutes (wrangler.jsonc): unfinished decisions, the 24-hour backstop, reminders, the abuse codes.
+  scheduled(controller, env, ctx) {
+    ctx.waitUntil(runJobs(env, deps, ctx, new Date(controller.scheduledTime)))
+  },
+} satisfies ExportedHandler<Env>

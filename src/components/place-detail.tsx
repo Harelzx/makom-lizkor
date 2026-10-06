@@ -8,8 +8,8 @@ import { KindIcon } from "@/components/kind-icon"
 import { Tribute } from "@/components/tribute"
 import { PhotoGallery } from "@/components/photo-figure"
 import { SafetyNote, useFocusOnOpen } from "@/components/kit"
+import { ReportRequest } from "@/components/report"
 import { KINDS } from "@/data/taxonomy"
-import { CONTACT_EMAIL } from "@/config"
 import { useStore } from "@/store"
 import { spring } from "@/lib/motion"
 import type { LocalFields, Place } from "@/types"
@@ -255,15 +255,10 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
             ) : (
               SOURCE[place.coord_source]
             )}
-            {" · "}
-            <a
-              className="underline underline-offset-2"
-              href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent("תיקון: " + place.name_he)}&body=${encodeURIComponent(`מזהה: ${place.id}\n`)}`}
-            >
-              מצאתם טעות?
-            </a>
           </p>
         )}
+        {/* A removal or a correction goes to a person through the request form (spec 6); places on this device only are the visitor's own. */}
+        {!local && <ReportRequest key={place.id} place={place} />}
       </footer>
     </motion.article>
   )

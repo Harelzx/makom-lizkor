@@ -1,6 +1,9 @@
+import { KINDS } from "@/data/taxonomy"
+import type { Kind } from "@/types"
 import type { Feed, PublicPlace, RevisionInput, SubmissionInput } from "@/shared/contract"
 import { newToken, placeId, sameHash, sha256Hex, ulid } from "../lib/ids"
 import { stripJpeg } from "../lib/jpeg"
+import { runOp, WATCH_FIRST_LOOK_MS, type OpEnv } from "./ops"
 
 // An approximation of a month; phase 5 replaces it with calendar months read from RETENTION (src/config.ts).
 const MONTH_MS = 30 * 24 * 3600 * 1000
@@ -19,7 +22,7 @@ const VERIFY_DAYS = 7
  * got, so two tabs re-sending at once, or a lost answer, never leave a device holding a token that stopped working.
  * Holding it still takes both the device's random key and the server's secret.
  */
-async function hmacHex(secret: string, message: string): Promise<string> {
+export async function hmacHex(secret: string, message: string): Promise<string> {
   const k = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"])
   const mac = new Uint8Array(await crypto.subtle.sign("HMAC", k, new TextEncoder().encode(message)))
   return [...mac].map((b) => b.toString(16).padStart(2, "0")).join("")
@@ -304,41 +307,62 @@ export async function submissionStatus(db: D1Database, id: string, token: string
  * done: withdrawn now or before · missing: no place for this link · busy: the place kept changing under three tries in a
  * row, so the holder of a valid link is told to try again rather than that the link is wrong.
  */
-export async function withdraw(db: D1Database, id: string, token: string, now: Date): Promise<"done" | "missing" | "busy"> {
+export async function withdraw(env: OpEnv, id: string, token: string, now: Date): Promise<"done" | "missing" | "busy"> {
+  const db = env.db
   for (let attempt = 0; attempt < 3; attempt++) {
     const row = await tracked(db, id, token)
     if (!row) return "missing"
     if (row.status === "withdrawn" || row.status === "erased") return "done"
-    const tid = `t_${ulid(now.getTime())}`
     const at = now.toISOString()
     const happened = "EXISTS (SELECT 1 FROM places WHERE id = ?1 AND last_transition_id = ?2)"
-    const [placeUpdate] = await db.batch([
-      db
-        .prepare(
-          `UPDATE places SET status = 'withdrawn', rev = rev + 1, last_transition_id = ?2, status_changed_at = ?3, published_revision_id = NULL,
-             submit_body_hash = NULL
-           WHERE id = ?1 AND rev = ?4`,
-        )
-        .bind(id, tid, at, row.rev),
-      db
-        .prepare(
-          `UPDATE revisions SET state = 'withdrawn', kind = NULL, name_he = NULL, lat = NULL, lng = NULL, location_precision = NULL,
-             on_private_property = 0, location_permission_at = NULL, access_note_he = NULL, place_he = NULL, in_memory_of = NULL,
-             story_he = NULL, link_url = NULL, decision_note = NULL, photo_key = NULL, photo_alt = NULL, photo_credit = NULL, decided_at = ?3
-           WHERE place_id = ?1 AND ${happened}`,
-        )
-        .bind(id, tid, at),
-      db.prepare(`DELETE FROM contacts WHERE place_id = ?1 AND ${happened}`).bind(id, tid),
-      db
-        .prepare(`UPDATE feed_state SET n = n + 1, changed_at = ?3 WHERE id = 1 AND ?4 = 'published' AND ${happened}`)
-        .bind(id, tid, at, row.status),
-      db
-        .prepare(
-          `INSERT INTO audit_log (id, at, actor, action, entity_id, fields) SELECT ?3, ?4, 'submitter', 'withdraw', ?1, 'status' WHERE ${happened}`,
-        )
-        .bind(id, tid, `a_${ulid(now.getTime())}`, at),
-    ])
-    if (placeUpdate.meta.changes === 1) return "done"
+    // The sender's own removal: it goes ahead even if the ledger can't record it now, and is repaired later (spec 8.2).
+    const { outcome } = await runOp(
+      env,
+      {
+        placeId: id,
+        kind: "withdraw",
+        actor: "submitter",
+        expectedRev: row.rev,
+        removal: true,
+        public: row.status === "published" || row.status === "hidden",
+        onIntentFailure: "proceed",
+        statements: (tid) => [
+          db
+            .prepare(
+              `UPDATE places SET status = 'withdrawn', rev = rev + 1, last_transition_id = ?2, status_changed_at = ?3, published_revision_id = NULL,
+                 submit_body_hash = NULL
+               WHERE id = ?1 AND rev = ?4`,
+            )
+            .bind(id, tid, at, row.rev),
+          db
+            .prepare(
+              `UPDATE revisions SET state = 'withdrawn', kind = NULL, name_he = NULL, lat = NULL, lng = NULL, location_precision = NULL,
+                 on_private_property = 0, location_permission_at = NULL, access_note_he = NULL, place_he = NULL, in_memory_of = NULL,
+                 story_he = NULL, link_url = NULL, decision_note = NULL, photo_key = NULL, photo_alt = NULL, photo_credit = NULL, decided_at = ?3
+               WHERE place_id = ?1 AND ${happened}`,
+            )
+            .bind(id, tid, at),
+          db.prepare(`DELETE FROM contacts WHERE place_id = ?1 AND ${happened}`).bind(id, tid),
+          // On the photo watch in the same step: the job erases whatever files this request or a late write leaves.
+          db
+            .prepare(
+              `INSERT INTO media_checks (place_id, due_at) SELECT ?1, ?3 WHERE ${happened}
+               ON CONFLICT (place_id) DO UPDATE SET due_at = MIN(due_at, excluded.due_at)`,
+            )
+            .bind(id, tid, new Date(now.getTime() + WATCH_FIRST_LOOK_MS).toISOString()),
+          db
+            .prepare(`UPDATE feed_state SET n = n + 1, changed_at = ?3 WHERE id = 1 AND ?4 = 'published' AND ${happened}`)
+            .bind(id, tid, at, row.status),
+          db
+            .prepare(
+              `INSERT INTO audit_log (id, at, actor, action, entity_id, fields) SELECT ?3, ?4, 'submitter', 'withdraw', ?1, 'status' WHERE ${happened}`,
+            )
+            .bind(id, tid, `a_${ulid(now.getTime())}`, at),
+        ],
+      },
+      now,
+    )
+    if (outcome === "ok") return "done"
     // A moderator decided at the same moment: read the place again and withdraw what it is now.
   }
   return "busy"
@@ -349,11 +373,11 @@ export async function listQueue(db: D1Database) {
   const { results } = await db
     .prepare(
       `SELECT p.id, p.rev, r.id AS revisionId, r.kind, r.name_he, r.lat, r.lng, r.location_precision, r.place_he, r.in_memory_of, r.story_he,
-         r.link_url, p.created_at, p.status = 'published' AS correction,
+         r.link_url, p.created_at, p.status IN ('published', 'hidden') AS correction, p.status = 'hidden' AS hidden,
          CASE WHEN r.photo_key IS NOT NULL THEN '/api/admin/media/' || r.photo_key END AS photo_url, r.photo_alt, r.photo_credit,
          r.access_note_he, r.on_private_property, r.location_permission_at IS NOT NULL AS location_permission
        FROM places p JOIN revisions r ON r.place_id = p.id AND r.state = 'pending'
-       WHERE p.status IN ('pending', 'published') ORDER BY r.created_at`,
+       WHERE p.status IN ('pending', 'published', 'hidden') ORDER BY r.created_at`,
     )
     .all()
   return results
@@ -364,11 +388,12 @@ export async function listQueue(db: D1Database) {
  * checks the transition id this request wrote, so the revisions, the feed version and the audit row move only
  * if this transition actually happened.
  *
- * The revision decided is a first submission (the place is pending) or a correction of a published place. A correction
- * never takes a published place down: rejecting or returning it leaves the published revision live, and approving it
+ * The revision decided is a first submission (the place is pending) or a correction of a published or hidden place.
+ * A hidden place stays hidden whatever is decided: its correction may be the basis for restoring it (content_corrected),
+ * but only a moderator's documented lift shows it again. A correction never takes a published place down: rejecting or returning it leaves the published revision live, and approving it
  * swaps the published revision and retires the old one.
  */
-export async function transition(
+export function transitionStatements(
   db: D1Database,
   t: {
     placeId: string
@@ -380,21 +405,22 @@ export async function transition(
     /** For an approval: the key its photo will be served from (preparePhoto), set in the same step. */
     photoKey?: string | null
   },
+  tid: string,
   now: Date,
-): Promise<"ok" | "conflict"> {
-  const tid = `t_${ulid(now.getTime())}`
+): D1PreparedStatement[] {
   const at = now.toISOString()
   const happened = "EXISTS (SELECT 1 FROM places WHERE id = ?1 AND last_transition_id = ?2)"
   const state = { approve: "approved", reject: "rejected", return: "returned" }[t.action]
-  const [placeUpdate] = await db.batch([
+  return [
     db
       .prepare(
         `UPDATE places SET rev = rev + 1, last_transition_id = ?2, status_changed_at = ?4,
-           status = CASE WHEN ?3 = 'approve' THEN 'published'
+           status = CASE WHEN status = 'hidden' THEN 'hidden'
+                         WHEN ?3 = 'approve' THEN 'published'
                          WHEN status = 'pending' THEN (CASE ?3 WHEN 'reject' THEN 'rejected' ELSE 'returned' END)
                          ELSE status END,
            published_revision_id = CASE WHEN ?3 = 'approve' THEN ?5 ELSE published_revision_id END
-         WHERE id = ?1 AND rev = ?6 AND status IN ('pending', 'published')
+         WHERE id = ?1 AND rev = ?6 AND status IN ('pending', 'published', 'hidden')
            AND EXISTS (SELECT 1 FROM revisions WHERE id = ?5 AND place_id = ?1 AND state = 'pending')`,
       )
       .bind(t.placeId, tid, t.action, at, t.revisionId, t.expectedRev),
@@ -419,8 +445,7 @@ export async function transition(
     db
       .prepare(`INSERT INTO audit_log (id, at, actor, action, entity_id, fields) SELECT ?3, ?4, ?5, ?6, ?1, 'status' WHERE ${happened}`)
       .bind(t.placeId, tid, `a_${ulid(now.getTime())}`, at, t.actor, t.action),
-  ])
-  return placeUpdate.meta.changes === 1 ? "ok" : "conflict"
+  ]
 }
 
 /**
@@ -444,7 +469,7 @@ export async function revise(
   // gone), otherwise the newest revision's.
   const photo = await db
     .prepare(
-      place.status === "published"
+      place.status === "published" || place.status === "hidden"
         ? "SELECT r.photo_key, r.photo_alt, r.photo_credit FROM places p JOIN revisions r ON r.id = p.published_revision_id WHERE p.id = ?"
         : "SELECT photo_key, photo_alt, photo_credit FROM revisions WHERE place_id = ? ORDER BY n DESC LIMIT 1",
     )
@@ -458,7 +483,7 @@ export async function revise(
       .prepare(
         `UPDATE places SET rev = rev + 1, last_transition_id = ?2, status_changed_at = ?3,
            status = CASE WHEN status = 'returned' THEN 'pending' ELSE status END
-         WHERE id = ?1 AND rev = ?4 AND status IN ('returned', 'published')
+         WHERE id = ?1 AND rev = ?4 AND status IN ('returned', 'published', 'hidden')
            AND NOT EXISTS (SELECT 1 FROM revisions WHERE place_id = ?1 AND state = 'pending')
            AND (SELECT COUNT(*) FROM revisions WHERE state = 'pending') < ?5`,
       )
@@ -499,7 +524,7 @@ export async function revise(
   // Full only if nothing else stood in the way: a stale view or a correction already waiting is a conflict either way.
   const open = await db
     .prepare(
-      `SELECT 1 FROM places WHERE id = ?1 AND rev = ?2 AND status IN ('returned', 'published')
+      `SELECT 1 FROM places WHERE id = ?1 AND rev = ?2 AND status IN ('returned', 'published', 'hidden')
          AND NOT EXISTS (SELECT 1 FROM revisions WHERE place_id = ?1 AND state = 'pending')`,
     )
     .bind(id, expectedRev)
@@ -507,8 +532,11 @@ export async function revise(
   return open && (await pendingCount(db)) >= queueLimit ? "queue_full" : "conflict"
 }
 
+// Each place carries the elements hidden now (the union of its active suppressions), applied in toPublic, so the feed,
+// the share page and anything else built from this projection hide exactly the same things.
 const PUBLIC_COLUMNS = `p.id, r.kind, r.name_he, r.lat, r.lng, r.location_precision, r.place_he, r.story_he, r.in_memory_of,
-  r.link_url, r.photo_key, r.photo_alt, r.photo_credit, r.access_note_he`
+  r.link_url, r.photo_key, r.photo_alt, r.photo_credit, r.access_note_he,
+  (SELECT GROUP_CONCAT(s.field) FROM field_suppressions s WHERE s.place_id = p.id AND s.lifted_at IS NULL) AS hidden_fields`
 
 /** One batch, so the version and the places come from the same moment. Only public fields leave the database. */
 export async function readFeed(db: D1Database, epoch: string): Promise<Feed> {
@@ -522,7 +550,7 @@ export async function readFeed(db: D1Database, epoch: string): Promise<Feed> {
 
 /**
  * One contribution as the public sees it, for its share page: published (its public fields, as in the feed), gone
- * (it was taken back or erased: the page says so, and nothing of it), or none (never public: unknown, pending,
+ * (it was taken back, erased or hidden: the page says so, and nothing of it), or none (never public: unknown, pending,
  * returned or refused, so the page doesn't even say it existed).
  */
 export async function publicPlace(
@@ -534,25 +562,42 @@ export async function publicPlace(
     .bind(id)
     .first<Record<string, string | number | null>>()
   if (row?.status === "published" && row.name_he) return { kind: "published", place: toPublic(row) }
-  return row && (row.status === "withdrawn" || row.status === "erased") ? { kind: "gone" } : { kind: "none" }
+  // Hidden reads as gone, like a withdrawal: the page says it was taken down, and nothing of it.
+  return row && (row.status === "withdrawn" || row.status === "erased" || row.status === "hidden") ? { kind: "gone" } : { kind: "none" }
+}
+
+/** A hidden name reads as the place's kind and community, with nothing personal (spec 3.3). */
+export function hiddenName(kind: string, community: string | null): string {
+  const label = KINDS[kind as Kind]?.label ?? KINDS.other.label
+  return community ? `${label} · ${community}` : label
 }
 
 function toPublic(r: Record<string, string | number | null>): PublicPlace {
+  const hidden = new Set(String(r.hidden_fields ?? "").split(","))
+  const personal = hidden.has("name_he") || hidden.has("in_memory_of")
   return {
     id: r.id as string,
     kind: r.kind as PublicPlace["kind"],
-    name_he: r.name_he as string,
+    name_he: hidden.has("name_he") ? hiddenName(r.kind as string, r.place_he as string | null) : (r.name_he as string),
     lat: r.lat as number,
     lng: r.lng as number,
     precision: r.location_precision === "approximate" ? "approx" : "exact",
     place_he: (r.place_he as string | null) ?? "",
-    summary_he: (r.story_he as string | null) ?? "",
-    in_memory_of: (r.in_memory_of as string | null) ?? undefined,
-    link_url: (r.link_url as string | null) ?? undefined,
+    summary_he: hidden.has("story_he") ? "" : ((r.story_he as string | null) ?? ""),
+    in_memory_of: hidden.has("in_memory_of") ? undefined : ((r.in_memory_of as string | null) ?? undefined),
+    // A link and a photo's description can repeat a hidden name or dedication: with either hidden, the link is left out
+    // and the photo is described by the same neutral words as the place.
+    link_url: personal ? undefined : ((r.link_url as string | null) ?? undefined),
     ...(r.access_note_he ? { access_note: r.access_note_he as string } : {}),
-    // Only a photo that reached public/ (approved with its place) is ever named in the feed.
-    ...(typeof r.photo_key === "string" && r.photo_key.startsWith("public/")
-      ? { photo: { url: `/media/${r.photo_key}`, alt: r.photo_alt as string, credit: (r.photo_credit as string | null) ?? undefined } }
+    // Only a photo that reached public/ (approved with its place) and isn't hidden is ever named in the feed.
+    ...(!hidden.has("photo") && typeof r.photo_key === "string" && r.photo_key.startsWith("public/")
+      ? {
+          photo: {
+            url: `/media/${r.photo_key}`,
+            alt: personal ? hiddenName(r.kind as string, r.place_he as string | null) : (r.photo_alt as string),
+            credit: (r.photo_credit as string | null) ?? undefined,
+          },
+        }
       : {}),
   }
 }
@@ -615,130 +660,4 @@ export async function attachPhoto(
   // file (named by no revision any more) is left for the sweep.
   if (rev.photo_key?.startsWith("quarantine/")) await media.delete(rev.photo_key).catch(() => undefined)
   return "ok"
-}
-
-/**
- * Before an approval: the revision's photo copied from quarantine/ to public/, so the decision can publish the place and
- * its photo in one step (the feed never names a photo that isn't there). Returns the key the approved revision will
- * hold: the new public one, the public one a correction inherited, or null when the photo was lost (published without
- * it rather than with a key that serves nothing). A copy that fails throws, and nothing is decided.
- *
- * `fresh` says the copy was made by this attempt, under a key of its own: if the decision then loses (another moderator
- * decided first), only that copy goes, never the one the winning approval published.
- */
-export async function preparePhoto(
-  db: D1Database,
-  media: R2Bucket,
-  placeId: string,
-  revisionId: string,
-): Promise<{ key: string | null; fresh: boolean }> {
-  const rev = await db.prepare("SELECT photo_key FROM revisions WHERE id = ?").bind(revisionId).first<{ photo_key: string | null }>()
-  const key = rev?.photo_key ?? null
-  if (!key || key.startsWith("public/")) return { key, fresh: false }
-  const object = await media.get(key)
-  if (!object) return { key: null, fresh: false }
-  const published = `public/${placeId}/${revisionId}-${ulid()}.jpg`
-  await media.put(published, await object.arrayBuffer(), { httpMetadata: { contentType: "image/jpeg" } })
-  return { key: published, fresh: true }
-}
-
-/**
- * The files a decision on a revision may make obsolete, read before it is made: the revision's own photo while it
- * waits in quarantine, and the photo of the revision published until now.
- */
-export async function photosBefore(db: D1Database, placeId: string, revisionId: string) {
-  const row = await db
-    .prepare(
-      `SELECT r.photo_key AS source, pub.photo_key AS published
-       FROM revisions r JOIN places p ON p.id = r.place_id LEFT JOIN revisions pub ON pub.id = p.published_revision_id
-       WHERE r.id = ? AND p.id = ?`,
-    )
-    .bind(revisionId, placeId)
-    .first<{ source: string | null; published: string | null }>()
-  return { source: row?.source?.startsWith("quarantine/") ? row.source : null, published: row?.published ?? null }
-}
-
-/**
- * After a decision is stored, exactly the files it made obsolete, and only if no open or published revision names
- * them now: an approval retires the quarantined original it copied and the photo published until now (unless the
- * revision kept it); a rejection, the refused photo (spec 3.3). A returned revision keeps its photo. Anything else a
- * place has (a newer correction's photo, another approval's copy in flight) is not this decision's to remove; what
- * nothing names is left to the sweep. Never throws: a file that can't go now is left for the sweep too.
- */
-export async function retirePhotos(db: D1Database, media: R2Bucket, keys: (string | null | undefined)[]) {
-  try {
-    const obsolete: string[] = []
-    for (const key of new Set(keys)) {
-      if (!key) continue
-      const named = await db
-        .prepare(
-          `SELECT 1 FROM revisions r JOIN places p ON p.id = r.place_id
-           WHERE r.photo_key = ? AND r.state IN ('pending', 'returned', 'approved') AND p.status NOT IN ('withdrawn', 'erased')`,
-        )
-        .bind(key)
-        .first()
-      if (!named) obsolete.push(key)
-    }
-    await deleteKeys(media, obsolete)
-  } catch (err) {
-    console.error(JSON.stringify({ level: "error", event: "photo_cleanup", error: (err as Error).name }))
-  }
-}
-
-/** R2 deletes at most 1000 keys per call (Workers API reference), so a long list goes in parts. */
-async function deleteKeys(media: R2Bucket, keys: string[]) {
-  for (let i = 0; i < keys.length; i += 1000) await media.delete(keys.slice(i, i + 1000))
-}
-
-/** Every key under a prefix, page after page: R2 cuts a long listing short and says where to go on. */
-async function keysUnder(media: R2Bucket, prefix: string): Promise<string[]> {
-  const keys: string[] = []
-  let cursor: string | undefined
-  do {
-    const page = await media.list({ prefix, cursor })
-    keys.push(...page.objects.map((o) => o.key))
-    cursor = page.truncated ? page.cursor : undefined
-  } while (cursor)
-  return keys
-}
-
-/** Whether any file of a place is still stored, in quarantine or public. */
-export async function photosRemain(media: R2Bucket, placeId: string): Promise<boolean> {
-  for (const prefix of [`quarantine/${placeId}/`, `public/${placeId}/`])
-    if ((await media.list({ prefix, limit: 1 })).objects.length) return true
-  return false
-}
-
-/** Every file of a place, in quarantine and public alike: a withdrawal erases them all at once. */
-export async function erasePhotos(media: R2Bucket, placeId: string) {
-  for (const prefix of [`quarantine/${placeId}/`, `public/${placeId}/`]) {
-    await deleteKeys(media, await keysUnder(media, prefix))
-  }
-}
-
-/**
- * The files no live revision names any more: what a lost race or a failed cleanup left behind. Kept: every photo an
- * open revision (pending or returned) or a published one points to. A file younger than an hour is left alone, since an
- * approval copies its photo before it records it. Run by the nightly job (phase 5); safe to run at any time.
- */
-export async function sweepPhotos(db: D1Database, media: R2Bucket, now: Date) {
-  const { results } = await db
-    .prepare(
-      `SELECT r.photo_key FROM revisions r JOIN places p ON p.id = r.place_id
-       WHERE r.photo_key IS NOT NULL AND r.state IN ('pending', 'returned', 'approved') AND p.status NOT IN ('withdrawn', 'erased')`,
-    )
-    .all<{ photo_key: string }>()
-  const named = new Set(results.map((r) => r.photo_key))
-  const settled = now.getTime() - 3600 * 1000
-  for (const prefix of ["quarantine/", "public/"]) {
-    let cursor: string | undefined
-    do {
-      const page = await media.list({ prefix, cursor })
-      await deleteKeys(
-        media,
-        page.objects.filter((o) => !named.has(o.key) && o.uploaded.getTime() < settled).map((o) => o.key),
-      )
-      cursor = page.truncated ? page.cursor : undefined
-    } while (cursor)
-  }
 }

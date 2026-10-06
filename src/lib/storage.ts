@@ -8,7 +8,8 @@ let store: UseStore | null | undefined
 function db(): UseStore | null {
   if (store === undefined) {
     try {
-      store = createStore("makom-lizkor-v2", "v1")
+      // idb-keyval opens the database lazily, so a browser with no IndexedDB at all would only fail on first use.
+      store = typeof indexedDB === "undefined" ? null : createStore("makom-lizkor-v2", "v1")
     } catch {
       store = null
     }
@@ -120,6 +121,19 @@ export async function changeTributeOutbox(
   if (!s) throw new Error("storage_unavailable")
   let next: Record<string, TributeEntry> = {}
   await update<Record<string, TributeEntry>>("tributeOutbox", (stored) => (next = change(stored ?? {})), s)
+  return next
+}
+
+/**
+ * Removal and correction requests sent from this browser whose arrival isn't confirmed yet, by key: kept, as sent,
+ * from just before the first try until an answer for that key, or until the window from the first try ends (notice
+ * notice.report@2026-10-3), so a resend is the same request.
+ */
+export async function changeReportOutbox<T>(change: (stored: Record<string, T>) => Record<string, T>): Promise<Record<string, T>> {
+  const s = db()
+  if (!s) throw new Error("storage_unavailable")
+  let next: Record<string, T> = {}
+  await update<Record<string, T>>("reportOutbox", (stored) => (next = change(stored ?? {})), s)
   return next
 }
 

@@ -1,7 +1,9 @@
 import { call } from "./app"
 import { expect, it } from "vitest"
-import { CURRENT_SUBMISSION_NOTICE, SUBMISSION_NOTICES } from "@/shared/contract"
-import { NOTICES } from "@/data/legal"
+import { CURRENT_REPORT_NOTICE, CURRENT_SUBMISSION_NOTICE, REPORT_NOTICES, SUBMISSION_NOTICES } from "@/shared/contract"
+import { NOTICES, noticeHtml } from "@/data/legal"
+import { DISCARD_LABEL } from "@/data/reports"
+import { RETENTION } from "@/config"
 
 const submit = (consent_version: string) =>
   call("http://local/api/v1/submissions", {
@@ -62,4 +64,31 @@ it("never drops a version a form has shown, and keeps each one's text", () => {
   }
   // New versions go at the end: the order is the order they were shown.
   expect(SUBMISSION_NOTICES.slice(0, SHOWN.length)).toEqual(SHOWN)
+})
+
+// The report notices a request may have recorded. As for submissions, never removed and new ones at the end.
+const REPORTS_SHOWN = ["notice.report@2026-10-1", "notice.report@2026-10-2", "notice.report@2026-10-3"]
+
+it("keeps every report notice a request may have recorded, in the order they were shown, and the form shows the newest", () => {
+  for (const v of REPORTS_SHOWN) {
+    expect(REPORT_NOTICES).toContain(v)
+    expect(Object.keys(NOTICES)).toContain(v)
+  }
+  expect(REPORT_NOTICES.slice(0, REPORTS_SHOWN.length)).toEqual(REPORTS_SHOWN)
+  expect(REPORT_NOTICES.at(-1)).toBe(CURRENT_REPORT_NOTICE)
+  expect(CURRENT_REPORT_NOTICE).toBe("notice.report@2026-10-3")
+})
+
+it("the report notice says what the browser keeps and for how long, from the configured hours, and names the button that lets it go", () => {
+  const text = noticeHtml(CURRENT_REPORT_NOTICE)
+  expect(text).toContain("בדפדפן שלכם")
+  expect(text).toContain(`רק עד ${RETENTION.reportOutboxHours} שעות מהשליחה הראשונה`)
+  expect(text).toContain("וממשיך לנסות למחוק אותה כל עוד הוא פתוח")
+  expect(text).toContain("היא עשויה להופיע בו שוב")
+  expect(text).toContain("נשארת בטופס כפי שנשלחה")
+  expect(text).toContain("בקשה חדשה על אותו מקום")
+  expect(text).toContain(`«${DISCARD_LABEL}»`)
+  expect(text).toContain("לא נשלחת שוב מעצמה")
+  expect(text).toContain("נשמרת רק בדף הפתוח")
+  expect(text).not.toContain("{{")
 })

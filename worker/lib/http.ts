@@ -9,7 +9,7 @@ export const PRIVATE = { "Cache-Control": "private, no-store" } as const
  */
 export function problem(
   c: Context,
-  status: 400 | 401 | 403 | 404 | 409 | 411 | 413 | 415 | 429 | 500 | 503,
+  status: 400 | 401 | 403 | 404 | 409 | 410 | 411 | 413 | 415 | 422 | 429 | 500 | 503,
   code: string,
   extra: Record<string, unknown> = {},
   headers: Record<string, string> = {},

@@ -117,7 +117,11 @@ describe("a tracking mail that couldn't be sent", () => {
     const { createExecutionContext } = await import("cloudflare:test")
     let down = true
     let tries = 0
-    const flaky = createApp({ verifyTurnstile: fakeSiteverify, sendMail: async (e, m) => (tries++, down ? false : sendMail(e, m)) })
+    const flaky = createApp({
+      verifyTurnstile: fakeSiteverify,
+      sendMail: async (e, m) => (tries++, down ? false : sendMail(e, m)),
+      purge: async () => true,
+    })
     const verifyVia = (token: string, at = 0) =>
       flaky.fetch(
         new Request("http://local/api/v1/email/verify", {
@@ -159,7 +163,7 @@ describe("a tracking mail that couldn't be sent", () => {
     const { fakeSiteverify } = await import("./app")
     const { createExecutionContext } = await import("cloudflare:test")
     let tries = 0
-    const dead = createApp({ verifyTurnstile: fakeSiteverify, sendMail: async () => (tries++, false) })
+    const dead = createApp({ verifyTurnstile: fakeSiteverify, sendMail: async () => (tries++, false), purge: async () => true })
     const to = `dead${Date.now()}@example.test`
     await send("ספסל דמו מייל מת", to)
     const verifyToken = linkIn((await mails(to))[0].text, "verify")!

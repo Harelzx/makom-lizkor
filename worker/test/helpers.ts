@@ -46,3 +46,14 @@ export async function approve(id: string) {
     body: JSON.stringify({ action: "approve", revisionId: item.revisionId, expectedRev: item.rev }),
   })
 }
+
+// The site's page as the static assets serve it: the share route rewrites a copy of it.
+const SITE = `<!doctype html><html lang="he"><head><meta charset="UTF-8" /><title>מקום לזכור</title>
+<meta name="description" content="תיאור האתר" /><meta property="og:title" content="מקום לזכור · שלוש שנים" />
+<meta property="og:description" content="תיאור האתר" /><meta property="og:image" content="/og.png" />
+</head><body><div id="root"></div></body></html>`
+/** The bindings with a stand-in for the built site, which the Worker tests don't have. */
+export const withSite: Env = {
+  ...env,
+  ASSETS: { fetch: async () => new Response(SITE, { headers: { "Content-Type": "text/html" } }) } as unknown as Fetcher,
+}

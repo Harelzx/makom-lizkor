@@ -17,6 +17,8 @@ interface Item {
   link_url: string | null
   /** 1 when this is a correction of a place that is already published (the published version stays live meanwhile). */
   correction: number
+  /** 1 when that place is hidden now: approving the correction doesn't show it again. */
+  hidden: number
   photo_url: string | null
   photo_alt: string | null
   photo_credit: string | null
@@ -138,10 +140,11 @@ export function Queue() {
   }
 
   return (
-    // The site's body never scrolls (the map fills it), so the queue scrolls on its own.
-    <main className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-2xl p-6">
-        <h1 className="text-title-2 text-ink-1">הצעות שממתינות לבדיקה</h1>
+    <section aria-labelledby="queue-title">
+      <div>
+        <h2 id="queue-title" className="text-title-2 text-ink-1">
+          הצעות שממתינות לבדיקה
+        </h2>
         {error && (
           <p role="alert" className="mt-3 text-label text-destructive">
             {error}
@@ -151,7 +154,11 @@ export function Queue() {
         <div className="mt-6 grid gap-4">
           {items?.map((item) => (
             <article key={item.id} aria-label={item.name_he} className="rounded-2xl border border-line p-4">
-              {!!item.correction && <p className="text-caption text-ink-2">תיקון למקום שכבר מופיע באתר</p>}
+              {!!item.correction && (
+                <p className="text-caption text-ink-2">
+                  {item.hidden ? "תיקון למקום שמוסתר כרגע: אישור לא יחזיר אותו לאתר" : "תיקון למקום שכבר מופיע באתר"}
+                </p>
+              )}
               <h2 className="text-label font-bold text-ink-1">{item.name_he}</h2>
               <p className="text-caption text-ink-2">
                 {[KINDS[item.kind].label, item.place_he, item.in_memory_of && `לזכר ${item.in_memory_of}`].filter(Boolean).join(" · ")}
@@ -202,6 +209,6 @@ export function Queue() {
           ))}
         </div>
       </div>
-    </main>
+    </section>
   )
 }

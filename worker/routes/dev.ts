@@ -1,8 +1,11 @@
 import { Hono } from "hono"
 import { SignJWT } from "jose"
+import type { AppEnv } from "../index"
+import { runJobs } from "../jobs"
+import { clock } from "../lib/clock"
 
 /** Development only: stands in for the Access sign-in, so the admin page and e2e tests can log in locally. */
-export const dev = new Hono<{ Bindings: Env }>()
+export const dev = new Hono<AppEnv>()
 
 dev.post("/login", async (c) => {
   if (c.env.ENVIRONMENT !== "development" || !c.env.DEV_ACCESS_SECRET) return c.notFound()
@@ -25,4 +28,11 @@ dev.get("/mail", async (c) => {
     .bind(to)
     .all()
   return c.json(results, 200, { "Cache-Control": "private, no-store" })
+})
+
+/** Development only: runs the scheduled jobs now, at the X-Test-Now clock, as the cron does every 15 minutes. */
+dev.post("/cron", async (c) => {
+  if (c.env.ENVIRONMENT !== "development") return c.notFound()
+  await runJobs(c.env, { sendMail: c.get("sendMail"), purge: c.get("purge") }, c.executionCtx, clock(c.req.raw, c.env))
+  return c.json({ ok: true }, 200, { "Cache-Control": "private, no-store" })
 })

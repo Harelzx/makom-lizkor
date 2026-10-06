@@ -2,7 +2,8 @@
 import { env } from "cloudflare:workers"
 import { describe, expect, it } from "vitest"
 import { CURRENT_SUBMISSION_NOTICE } from "@/shared/contract"
-import { revise as reviseDirect, sweepPhotos } from "../db/places"
+import { sweepPhotos } from "../db/photos"
+import { revise as reviseDirect } from "../db/places"
 import { call } from "./app"
 import { decide, feed, jpeg, objects, queued, rev, revise, send, upload } from "./submission-helpers"
 
@@ -290,7 +291,9 @@ describe("phase 2 close-out", () => {
     expect((await call(`http://local${url}`)).status).toBe(200)
   })
 
-  it("an erasure with more files than one delete may name deletes them all, a thousand at a time", async () => {
+  // Its own budget: the 1005 files it needs cost about 1.4 s alone (1.75 s since a withdrawal is a recorded decision),
+  // and 5 to 6.5 s with the whole suite running in parallel on a loaded machine (measured 2026-10-06), past the default 5.
+  it("an erasure with more files than one delete may name deletes them all, a thousand at a time", { timeout: 15_000 }, async () => {
     const { id, trackingToken } = await send("ספסל דמו אלף קבצים")
     await Promise.all(Array.from({ length: 1005 }, (_, i) => env.MEDIA.put(`quarantine/${id}/many-${i}.jpg`, "x")))
     // R2 deletes at most 1000 keys per call (Workers API reference); the stand-in refuses more, as R2 would.

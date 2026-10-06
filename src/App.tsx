@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react"
+import { toast } from "sonner"
 import { Toaster } from "@/components/ui/sonner"
 import { useStore } from "@/store"
 import { Intro } from "@/components/intro"
@@ -13,6 +14,8 @@ const About = lazy(() => import("@/components/about").then((m) => ({ default: m.
 const AddPlace = lazy(() => import("@/components/add-place").then((m) => ({ default: m.AddPlace })))
 const Tracking = lazy(() => import("@/components/tracking").then((m) => ({ default: m.Tracking })))
 const VerifyEmail = lazy(() => import("@/components/verify-email").then((m) => ({ default: m.VerifyEmail })))
+// Requests about places no longer shown; loaded once the day begins, never in the opening's bundle.
+const PendingReports = lazy(() => import("@/components/pending-reports").then((m) => ({ default: m.PendingReports })))
 
 /** Keep the URL and the selection in step, so a place can be linked and shared. */
 function useHashRoute() {
@@ -63,12 +66,23 @@ function useHashRoute() {
   // a place approved since it was saved would fall back wrongly.
   const feedVersion = useStore((s) => s.feedVersion)
   const feedLive = useStore((s) => s.feedLive)
+  // The contribution whose card was last shown with its place, so its disappearing can be told from a bad link. Only
+  // recorded here: a selection is never checked against the feed already held, which may predate the place.
+  const shown = useRef<string | null>(null)
+  const remote = useStore((s) => s.remote)
+  useEffect(() => {
+    if (selectedId?.startsWith("p_") && remote.some((p) => p.id === selectedId)) shown.current = selectedId
+  }, [selectedId, remote])
   useEffect(() => {
     const s = useStore.getState()
     const id = s.selectedId
     if (!feedVersion || !feedLive || !id?.startsWith("p_") || s.remote.some((p) => p.id === id)) return
     history.replaceState(null, "", "#/")
     s.select(null)
+    // A place taken out of view while its card was open (hidden, or withdrawn by its sender) closes quietly, saying
+    // only that it isn't shown now: never why, and never as if the visitor had done something wrong.
+    if (shown.current === id) toast("המקום הזה אינו מוצג כרגע")
+    shown.current = null
     void import("@/map/controller").then((m) => m.flyToEnvelope(2400))
   }, [feedVersion, feedLive])
   useEffect(() => {
@@ -177,6 +191,7 @@ export default function App() {
         {addLoaded && <AddPlace />}
         {trackingLoaded && <Tracking />}
         {verifying && <VerifyEmail />}
+        {phase === "day" && <PendingReports />}
       </Suspense>
       <Celebration />
       <Toaster position="top-center" />

@@ -42,6 +42,9 @@ export const RETENTION = {
   reportAbuseCodeHours: 24,
   /** what the notice promises for them: the job's hours plus room for a late run (every 15 minutes in production) */
   reportAbuseCodeMaxHours: 25,
+  /** a removal request kept in the visitor's own browser for a resend, from its first try, until what happened to it
+   * is known; never longer. Past it the request is cleared in an open page, or on the next visit if the site was closed */
+  reportOutboxHours: 24,
   /** a photo that wasn't approved */
   rejectedPhotoDays: 30,
   /** anemone count rows: the daily code, the place, the day and the time */
@@ -64,6 +67,7 @@ export const PENDING_PROMISES: string[] = [
   "a returned submission not corrected within 30 days is erased (phase 5)",
   "anemone count rows are deleted after RETENTION.tributeDays (phase 5)",
   "a photo file whose deletion failed on withdrawal or rejection is swept from storage (phase 5)",
-  "a withdrawn, erased or hidden place's share page is purged from the edge cache (Cache-Tag place:<id>; phase 4)",
-  "a removal request's abuse codes (address and explanation HMACs) are cleared after RETENTION.reportAbuseCodeHours, always within reportAbuseCodeMaxHours (phase 4, task 5)",
+  // The purge call is built (phase 4: one per change, tags feed, tributes and place:<id>); what remains is seeing the
+  // edge drop the share page and the photo on staging, and measuring how long it takes.
+  "a withdrawn, erased or hidden place's share page and photo are purged from the edge cache (Cache-Tag place:<id>; verified on staging)",
 ]
