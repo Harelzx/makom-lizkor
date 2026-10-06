@@ -4,7 +4,7 @@ import { beforeAll, describe, expect, it } from "vitest"
 import { EXPORT_TABLES, runExport } from "../db/exports"
 import { importExport, type ExportPayload } from "../db/import"
 import { readFeed } from "../db/places"
-import { replayLedger, restorePhotos } from "../db/replay"
+import { readLedger, replayLedger, restorePhotos } from "../db/replay"
 import { ogState } from "../lib/og"
 import { sha256, unseal, type Manifest } from "../lib/sealed"
 import { call } from "./app"
@@ -70,9 +70,10 @@ describe("replaying the ledger onto a restored database (spec 8.2, 8.3)", () => 
     const gapCommits = (await env.LEDGER.list({ prefix: `ledger/${gap.id}/` })).objects.filter((o) => o.key.endsWith("-commit.json"))
     await env.LEDGER.delete(gapCommits[gapCommits.length - 2].key)
 
-    expect(await importExport(env.IMPORT_TEST, payload, new Date())).toMatchObject({ ok: true })
-    const result = await replayLedger(env.IMPORT_TEST, env.LEDGER, new Date())
-    expect(result.quarantined).toEqual([gap.id])
+    const imported = await importExport(env.IMPORT_TEST, payload, new Date(), await readLedger(env.LEDGER))
+    expect(imported).toMatchObject({ ok: true, reconciled: { quarantined: [gap.id] } })
+    // The import applied the ledger already: the replay after it finds nothing left to do.
+    expect(await replayLedger(env.IMPORT_TEST, env.LEDGER, new Date(), payload.created_at)).toMatchObject({ applied: 0, quarantined: [] })
 
     // What the public sees is what it saw before the loss, but for the place whose record has a gap: hidden until a
     // moderator looks.
@@ -96,7 +97,7 @@ describe("replaying the ledger onto a restored database (spec 8.2, 8.3)", () => 
 
     // Twice is once.
     const before = JSON.stringify(await env.IMPORT_TEST.prepare("SELECT * FROM field_suppressions ORDER BY id").all())
-    expect(await replayLedger(env.IMPORT_TEST, env.LEDGER, new Date())).toMatchObject({ applied: 0 })
+    expect(await replayLedger(env.IMPORT_TEST, env.LEDGER, new Date(), payload.created_at)).toMatchObject({ applied: 0 })
     expect(JSON.stringify(await env.IMPORT_TEST.prepare("SELECT * FROM field_suppressions ORDER BY id").all())).toBe(before)
     expect((await readFeed(env.IMPORT_TEST, "0")).places).toEqual(restored)
   })
@@ -134,8 +135,8 @@ describe("replaying the ledger onto a restored database (spec 8.2, 8.3)", () => 
     for (const id of [shown.id, held.id, gone.id])
       for (const prefix of ["public/", "held/", "quarantine/"])
         for (const o of (await env.MEDIA.list({ prefix: `${prefix}${id}/` })).objects) await env.MEDIA.delete(o.key)
-    expect(await importExport(env.IMPORT_TEST, payload, new Date())).toMatchObject({ ok: true })
-    await replayLedger(env.IMPORT_TEST, env.LEDGER, new Date())
+    expect(await importExport(env.IMPORT_TEST, payload, new Date(), await readLedger(env.LEDGER))).toMatchObject({ ok: true })
+    await replayLedger(env.IMPORT_TEST, env.LEDGER, new Date(), payload.created_at)
     const result = await restorePhotos(env.IMPORT_TEST, env.MEDIA, env.EXPORTS, lastManifest)
     expect(result).toMatchObject({ restored: 2 })
     expect(await sha256(new Uint8Array(await (await env.MEDIA.get(shownKey))!.arrayBuffer()))).toBe(await sha256(shownBytes))

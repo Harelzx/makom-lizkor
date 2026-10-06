@@ -131,7 +131,7 @@ describe("a restore through the filtered import (spec 7, Route B)", () => {
       expect(all).toContain(text)
 
     const target = recording(env.IMPORT_TEST)
-    expect(await importExport(target.db, payload, R)).toMatchObject({ ok: true })
+    expect(await importExport(target.db, payload, R, new Map())).toMatchObject({ ok: true })
     const written = JSON.stringify(target.bound)
     for (const text of [
       "ספסל דמו שהוחזר ונמחק בייבוא",
@@ -179,15 +179,18 @@ describe("a restore through the filtered import (spec 7, Route B)", () => {
 
   it("goes only into an empty database of the export's own schema", async () => {
     const payload = await exported()
-    expect(await importExport(env.IMPORT_TEST, { ...payload, schema: "0001_places.sql" }, R)).toEqual({ ok: false, reason: "schema" })
-    expect(await importExport(env.IMPORT_TEST, payload, R)).toMatchObject({ ok: true })
-    expect(await importExport(env.IMPORT_TEST, payload, R)).toEqual({ ok: false, reason: "not_empty" })
+    expect(await importExport(env.IMPORT_TEST, { ...payload, schema: "0001_places.sql" }, R, new Map())).toEqual({
+      ok: false,
+      reason: "schema",
+    })
+    expect(await importExport(env.IMPORT_TEST, payload, R, new Map())).toMatchObject({ ok: true })
+    expect(await importExport(env.IMPORT_TEST, payload, R, new Map())).toEqual({ ok: false, reason: "not_empty" })
   })
 
   it("refuses a column the database doesn't have, before writing anything", async () => {
     const payload = await exported()
     payload.tables.places[0] = { ...payload.tables.places[0], "status = 'published' --": 1 }
-    expect(await importExport(env.IMPORT_TEST, payload, R)).toEqual({ ok: false, reason: "columns" })
+    expect(await importExport(env.IMPORT_TEST, payload, R, new Map())).toEqual({ ok: false, reason: "columns" })
     expect(await env.IMPORT_TEST.prepare("SELECT COUNT(*) AS n FROM places").first<number>("n")).toBe(0)
   })
 })

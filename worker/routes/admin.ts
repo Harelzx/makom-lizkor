@@ -51,7 +51,7 @@ admin.post(
     // The files this decision may make obsolete, as they are before it.
     const before = await photosBefore(c.env.DB, placeId, body.revisionId)
     const now = clock(c.req.raw, c.env)
-    let photo: { key: string | null; fresh: boolean } | undefined
+    let photo: { key: string | null; fresh: boolean; source: string | null } | undefined
     // Recorded before it happens: no decision is made that the ledger can't hold (spec 8.2). An approval publishes the
     // photo in the same step as the place, so its copy is made first; one that never lands is removed again.
     const { outcome } = await runOp(
@@ -79,6 +79,7 @@ admin.post(
             prepared: photo.fresh && photo.key ? [photo.key] : [],
             toHeld: photoHidden && photo.fresh && photo.key ? [photo.key] : [],
             media: photo.key ? [photo.key] : [],
+            source: photo.source,
             retire: [before.source, before.published !== photo.key ? before.published : null].filter((k): k is string => !!k),
           }
         },

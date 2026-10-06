@@ -29,6 +29,11 @@ export type LedgerEntry = {
   targets?: string[]
   media?: string[]
   basis?: string
+  /**
+   * On an approval: the photo key the revision named when it was approved (null for none), so a replay can tell
+   * whether the restored copy holds the same photo, and the description and credit that go with it.
+   */
+  source?: string | null
   /** On an approval, a refusal or a return: the revision decided (an id, never its content). */
   revision?: string
   /** When the entry was written: for a record repaired later (a late intent, a commit the job wrote), after the fact. */

@@ -1,4 +1,6 @@
+import type { LedgerEntry } from "../lib/ledger"
 import { EXPORT_TABLES, type ExportTable } from "./exports"
+import { reconcileTables, type ReconcileSummary } from "./reconcile"
 import { BLANK_COLUMNS, retentionCutoffs, uploadedAt } from "./retention"
 
 type Row = Record<string, unknown>
@@ -64,15 +66,22 @@ export function filterForImport(tables: Record<string, Row[]>, now: Date): Recor
 const CHUNK = 50
 
 /**
- * The filtered import into a new, empty database migrated to the export's schema (spec 8.3 B, step 3). Refused, with
- * nothing written, for another schema, a database that already holds places, or a column the database doesn't have.
- * Not atomic across batches: a failed import leaves a partial new database, which the procedure discards.
+ * The filtered import into a new, empty database migrated to the export's schema (spec 8.3 B, step 3). The ledger is
+ * applied to the export's rows first, in memory (reconcileTables), then the deletion rules (filterForImport), and only
+ * then is anything written: a place withdrawn or a decision taken after the export never reaches the new database's
+ * history in its earlier state. Refused, with nothing written, for another schema, a database that already holds
+ * places, or a column the database doesn't have. Not atomic across batches: a failed import leaves a partial new
+ * database, which the procedure discards.
  */
 export async function importExport(
   db: D1Database,
   payload: ExportPayload,
   now: Date,
-): Promise<{ ok: true; counts: Record<string, number> } | { ok: false; reason: "format" | "schema" | "not_empty" | "columns" }> {
+  ledger: Map<string, LedgerEntry[]>,
+): Promise<
+  | { ok: true; counts: Record<string, number>; reconciled: ReconcileSummary }
+  | { ok: false; reason: "format" | "schema" | "not_empty" | "columns" }
+> {
   if (payload.format !== 1 || typeof payload.tables !== "object") return { ok: false, reason: "format" }
   const [schema, places, ...columns] = await db.batch([
     db.prepare("SELECT name FROM d1_migrations ORDER BY id DESC LIMIT 1"),
@@ -81,7 +90,8 @@ export async function importExport(
   ])
   if ((schema.results[0] as { name: string } | undefined)?.name !== payload.schema) return { ok: false, reason: "schema" }
   if ((places.results[0] as { n: number }).n !== 0) return { ok: false, reason: "not_empty" }
-  const rows = filterForImport(payload.tables, now)
+  const reconciled = reconcileTables(payload.tables, ledger, now, payload.created_at)
+  const rows = filterForImport(reconciled.tables, now)
   const statements: D1PreparedStatement[] = [db.prepare("DELETE FROM feed_state")]
   for (const [i, t] of EXPORT_TABLES.entries()) {
     const known = new Set((columns[i].results as { name: string }[]).map((c) => c.name))
@@ -94,5 +104,5 @@ export async function importExport(
     }
   }
   for (let i = 0; i < statements.length; i += CHUNK) await db.batch(statements.slice(i, i + CHUNK))
-  return { ok: true, counts: Object.fromEntries(EXPORT_TABLES.map((t) => [t, rows[t].length])) }
+  return { ok: true, counts: Object.fromEntries(EXPORT_TABLES.map((t) => [t, rows[t].length])), reconciled: reconciled.summary }
 }

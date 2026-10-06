@@ -3,7 +3,7 @@ import type { SendMail } from "../lib/mail"
 import { sha256, unseal, type Manifest } from "../lib/sealed"
 import { EXPORT_TABLES } from "./exports"
 import { importExport, type ExportPayload } from "./import"
-import { replayLedger } from "./replay"
+import { readLedger, replayLedger } from "./replay"
 import { tellModerators } from "./retention"
 
 const DAY_MS = 86_400_000
@@ -76,14 +76,16 @@ export async function runDrill(d: DrillEnv, now: Date): Promise<string | null> {
       if (!rows || rows.length !== m.rows || (await sha256(new TextEncoder().encode(JSON.stringify(rows)))) !== m.sha256)
         fail("table_checksum")
     }
+    // The ledger is applied to the export before anything is written, as a restore does.
+    const ledger = await readLedger(d.ledger).catch(() => fail("ledger"))
     await empty(d.drillDb)
-    const imported = await importExport(d.drillDb, payload, now)
+    const imported = await importExport(d.drillDb, payload, now, ledger!)
     if (!imported.ok) fail(`import_${imported.reason}`)
     const counted = await d.drillDb.batch(EXPORT_TABLES.map((t) => d.drillDb!.prepare(`SELECT COUNT(*) AS n FROM ${t}`)))
     for (const [i, t] of EXPORT_TABLES.entries())
       if ((counted[i].results[0] as { n: number }).n !== (imported as { counts: Record<string, number> }).counts[t]) fail("row_counts")
     // Then the decisions since the export, as a restore replays them.
-    await replayLedger(d.drillDb, d.ledger, now).catch(() => fail("replay"))
+    await replayLedger(d.drillDb, ledger!, now, payload.created_at).catch(() => fail("replay"))
     for (const f of manifest!.files) {
       const copy = await d.exports.get(`photos/${f.sha256}`)
       if (!copy) fail("file_missing")

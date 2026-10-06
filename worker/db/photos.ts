@@ -21,15 +21,15 @@ export async function preparePhoto(
   media: R2Bucket,
   placeId: string,
   revisionId: string,
-): Promise<{ key: string | null; fresh: boolean }> {
+): Promise<{ key: string | null; fresh: boolean; source: string | null }> {
   const rev = await db.prepare("SELECT photo_key FROM revisions WHERE id = ?").bind(revisionId).first<{ photo_key: string | null }>()
-  const key = rev?.photo_key ?? null
-  if (!key || key.startsWith("public/")) return { key, fresh: false }
-  const object = await media.get(key)
-  if (!object) return { key: null, fresh: false }
+  const source = rev?.photo_key ?? null
+  if (!source || source.startsWith("public/")) return { key: source, fresh: false, source }
+  const object = await media.get(source)
+  if (!object) return { key: null, fresh: false, source }
   const published = `public/${placeId}/${revisionId}-${ulid()}.jpg`
   await media.put(published, await object.arrayBuffer(), { httpMetadata: { contentType: "image/jpeg" } })
-  return { key: published, fresh: true }
+  return { key: published, fresh: true, source }
 }
 
 /**
