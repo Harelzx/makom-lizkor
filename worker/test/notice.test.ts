@@ -1,3 +1,4 @@
+import { env } from "cloudflare:workers"
 import { call } from "./app"
 import { expect, it } from "vitest"
 import { CURRENT_REPORT_NOTICE, CURRENT_SUBMISSION_NOTICE, REPORT_NOTICES, SUBMISSION_NOTICES } from "@/shared/contract"
@@ -115,4 +116,47 @@ it("version 12 keeps the text it was shown with; version 13 says how each tracki
   expect(thirteen).toContain("וקישור המעקב שנשלח אליכם במייל כבר לא ייפתח")
   expect(thirteen).toContain("ומפסיק לעבוד כשהוא נמחק")
   expect(CURRENT_SUBMISSION_NOTICE).toBe("notice.submission@2026-10-13")
+})
+
+it("a submission made under version 12 is kept under 12, its retry is the same submission, and its link still works", async () => {
+  // A form loaded before version 13 went up still sends 12 (adviser 20261006T153309Z-ef1427c3, F5-N1).
+  const twelve = "notice.submission@2026-10-12"
+  const key = crypto.randomUUID().replaceAll("-", "")
+  const body = JSON.stringify({
+    kind: "bench",
+    name_he: "ספסל דמו בגרסה 12",
+    lat: 31.42,
+    lng: 34.49,
+    email: "twelve-demo@example.test",
+    consent_version: twelve,
+  })
+  const post = () =>
+    call("http://local/api/v1/submissions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Idempotency-Key": key, "Turnstile-Token": "pass" },
+      body,
+    })
+  const first = await post()
+  expect(first.status).toBe(201)
+  const again = await post()
+  expect(again.status).toBe(200)
+  const a = await first.json<{ id: string }>()
+  const b = await again.json<{ id: string; trackingToken: string }>()
+  expect(b.id).toBe(a.id)
+  const recorded = await env.DB.prepare(
+    "SELECT r.consent_version AS revision, c.consent_version AS contact, (SELECT COUNT(*) FROM revisions WHERE place_id = ?1) AS n FROM revisions r JOIN contacts c ON c.place_id = r.place_id WHERE r.place_id = ?1",
+  )
+    .bind(b.id)
+    .first()
+  expect(recorded).toEqual({ revision: twelve, contact: twelve, n: 1 })
+  // The tracking link version 12 described still follows and withdraws it.
+  const status = await call(`http://local/api/v1/submissions/${b.id}`, { headers: { Authorization: `Bearer ${b.trackingToken}` } })
+  expect(status.status).toBe(200)
+  // And the text it was shown is still there to read.
+  expect(noticeHtml(twelve)).toContain("קישור המעקב")
+  const mails = await env.DB.prepare("SELECT COUNT(*) AS n FROM dev_outbox WHERE to_address = ?")
+    .bind("twelve-demo@example.test")
+    .first("n")
+  // One address check, sent once: the retry is the same submission, not a second mail.
+  expect(mails).toBe(1)
 })
