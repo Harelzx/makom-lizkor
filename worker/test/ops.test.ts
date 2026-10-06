@@ -522,3 +522,120 @@ describe("refused cleanups that keep failing don't hold back the rest (F4-O3)", 
     expect(await op("t_clean_000")).toMatchObject({ media: "failed" })
   })
 })
+
+describe("a refusal and a preparation racing each other leave the cleanup owed (F4-B)", () => {
+  /** A door the test opens. */
+  function gate() {
+    let open!: () => void
+    let arrived!: () => void
+    const opened = new Promise<void>((r) => (open = r))
+    const arrival = new Promise<void>((r) => (arrived = r))
+    return { open, arrival, wait: async () => (arrived(), await opened) }
+  }
+  /** The job's database, pausing after it has read the operations it will work on. */
+  function pausingAfterRead(door: ReturnType<typeof gate>) {
+    return new Proxy(env.DB, {
+      get(target, prop) {
+        if (prop === "prepare")
+          return (sql: string) => {
+            const stmt = target.prepare(sql)
+            if (!sql.includes("ORDER BY updated_at, id LIMIT")) return stmt
+            return {
+              bind: (...args: unknown[]) => {
+                const bound = stmt.bind(...args)
+                return {
+                  // The rows as read before the pause: the job works on this snapshot.
+                  all: async () => {
+                    const read = await bound.all()
+                    await door.wait()
+                    return read
+                  },
+                }
+              },
+            }
+          }
+        const value = Reflect.get(target, prop)
+        return typeof value === "function" ? value.bind(target) : value
+      },
+    })
+  }
+  /** A bucket that refuses to delete `key` the first time it is asked. */
+  function failingOnce(key: string) {
+    let failed = false
+    return new Proxy(env.MEDIA, {
+      get(target, prop) {
+        if (prop === "delete")
+          return async (keys: string | string[]) => {
+            if (!failed && [keys].flat().includes(key)) {
+              failed = true
+              throw new Error("down")
+            }
+            return target.delete(keys)
+          }
+        const value = Reflect.get(target, prop)
+        return typeof value === "function" ? value.bind(target) : value
+      },
+    })
+  }
+  /** A decision that prepares a copy of its own, nothing names, when the test lets it. */
+  const preparing = (placeId: string, rev: number, key: string, door: ReturnType<typeof gate>) =>
+    hide(placeId, rev, {
+      kind: "approve",
+      removal: false,
+      onIntentFailure: "refuse",
+      prepare: async () => {
+        await door.wait()
+        await env.MEDIA.put(key, new Uint8Array([0xff, 0xd8, 0xff]))
+        return { prepared: [key] }
+      },
+    })
+  const stoppedBeforeCas = new Proxy(env.DB, {
+    get(target, prop) {
+      if (prop === "batch") return async () => Promise.reject(new Error("worker stopped"))
+      const value = Reflect.get(target, prop)
+      return typeof value === "function" ? value.bind(target) : value
+    },
+  })
+
+  it("the job read the operation before its copy was recorded, and refuses it after: the copy is still cleaned up, on a later run if the first try fails", async () => {
+    const p = await published()
+    const key = `public/${p.id}/prepared-stale.jpg`
+    const preparer = gate()
+    const reader = gate()
+    // The request stops before its database step, once its copy is recorded.
+    const request = runOp({ ...opEnv, db: stoppedBeforeCas }, preparing(p.id, p.rev, key, preparer), now).catch((e: Error) => e)
+    await preparer.arrival
+    const job = resumeOps({ ...opEnv, db: pausingAfterRead(reader), media: failingOnce(key) }, later(3))
+    await reader.arrival
+    preparer.open()
+    expect(String(await request)).toContain("worker stopped")
+    const [stored] = (
+      await env.DB.prepare("SELECT id, detail FROM visibility_ops WHERE place_id = ?").bind(p.id).all<{ id: string; detail: string }>()
+    ).results.filter((r) => r.detail.includes(key))
+    reader.open()
+    await job
+    expect(await op(stored.id)).toMatchObject({ state: "refused", refused_reason: "interrupted", media: "failed" })
+    expect(await env.MEDIA.head(key)).not.toBeNull()
+    await resumeOps(opEnv, later(4))
+    expect(await op(stored.id)).toMatchObject({ media: "done" })
+    expect(await env.MEDIA.head(key)).toBeNull()
+  })
+
+  it("the reverse: refused as interrupted before its copy was recorded, the request records it after: the cleanup is owed, and done", async () => {
+    const p = await published()
+    const key = `public/${p.id}/prepared-late.jpg`
+    const preparer = gate()
+    const request = runOp({ ...opEnv, media: failingOnce(key) }, preparing(p.id, p.rev, key, preparer), now)
+    await preparer.arrival
+    await resumeOps(opEnv, later(3))
+    preparer.open()
+    const { outcome, id } = await request
+    expect(outcome).toBe("conflict")
+    expect(await op(id!)).toMatchObject({ state: "refused", media: "failed" })
+    expect(await env.MEDIA.head(key)).not.toBeNull()
+    await resumeOps(opEnv, later(4))
+    expect(await op(id!)).toMatchObject({ media: "done" })
+    expect(await env.MEDIA.head(key)).toBeNull()
+    expect(await place(p.id)).toMatchObject({ status: "published", rev: p.rev })
+  })
+})

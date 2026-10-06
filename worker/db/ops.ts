@@ -70,6 +70,9 @@ type OpRow = {
   updated_at: string
 }
 
+/** The cleanup a refusal owes, from the operation's prepared copies as stored at that moment, never from an earlier read. */
+const CLEANUP_OWED = "CASE WHEN json_array_length(detail, '$.prepared') > 0 THEN 'pending' ELSE 'none' END"
+
 /** A purge is tried this many times in all; after that the edge copy's short lifetime is the bound (spec 5). */
 const PURGE_TRIES = 3
 /** An operation still pending after this long stopped before its database step: no live request is behind it. */
@@ -163,10 +166,10 @@ export async function runOp(env: OpEnv, spec: OpSpec, now: Date): Promise<{ outc
     await env.db
       .prepare(
         `UPDATE visibility_ops SET state = 'refused', refused_reason = ?2, abort = 'pending',
-           media = CASE WHEN ?4 = 1 THEN 'pending' ELSE 'none' END, updated_at = ?3
+           media = ${CLEANUP_OWED}, updated_at = ?3
          WHERE id = ?1 AND state = 'pending'`,
       )
-      .bind(id, reason, at, detail.prepared?.length ? 1 : 0)
+      .bind(id, reason, at)
       .run()
     await abortRecorded(env, id, at)
     await preparedCleaned(env, id, now)
@@ -190,9 +193,15 @@ export async function runOp(env: OpEnv, spec: OpSpec, now: Date): Promise<{ outc
       await refuse("prepare_failed")
       return { outcome: "prepare_failed", id }
     }
-    // What was prepared is stored before the database step, so an interruption can still clean it up.
+    // What was prepared is stored before the database step, so an interruption can still clean it up. If the job
+    // refused the operation as interrupted meanwhile, the copies stored now are owed a cleanup all the same.
     await env.db
-      .prepare("UPDATE visibility_ops SET detail = ?2, media = ?3 WHERE id = ?1")
+      .prepare(
+        `UPDATE visibility_ops SET detail = ?2,
+           media = CASE WHEN state = 'refused' THEN CASE WHEN json_array_length(?2, '$.prepared') > 0 THEN 'pending' ELSE media END
+                   ELSE ?3 END
+         WHERE id = ?1`,
+      )
       .bind(id, JSON.stringify(detail), afterMedia())
       .run()
   }
@@ -335,10 +344,10 @@ export async function resumeOps(env: OpEnv, now: Date) {
         const refused = await env.db
           .prepare(
             `UPDATE visibility_ops SET state = 'refused', refused_reason = 'interrupted', abort = 'pending',
-               media = CASE WHEN ?3 = 1 THEN 'pending' ELSE 'none' END, updated_at = ?2
+               media = ${CLEANUP_OWED}, updated_at = ?2
              WHERE id = ?1 AND state = 'pending'`,
           )
-          .bind(op.id, at, (JSON.parse(op.detail) as OpDetail).prepared?.length ? 1 : 0)
+          .bind(op.id, at)
           .run()
         if (refused.meta.changes === 1) {
           await abortRecorded(env, op.id, at)
