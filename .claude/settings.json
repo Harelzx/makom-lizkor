@@ -1,4 +1,28 @@
 {
+  "permissions": {
+    "deny": [
+      "Bash(wrangler deploy *)",
+      "Bash(wrangler versions deploy *)",
+      "Bash(wrangler rollback *)",
+      "Bash(wrangler tail *)",
+      "Bash(wrangler login *)",
+      "Bash(npx wrangler deploy *)",
+      "Bash(npx wrangler versions deploy *)",
+      "Bash(npx wrangler rollback *)",
+      "Bash(npx wrangler tail *)",
+      "Bash(npx wrangler login *)",
+      "Bash(gh workflow run release*)",
+      "Bash(gh workflow run rollback*)",
+      "Bash(gh workflow run * release*)",
+      "Bash(gh workflow run * rollback*)",
+      "Bash(gh api *actions/workflows/release*)",
+      "Bash(gh api *actions/workflows/rollback*)",
+      "Bash(gh release edit *--draft=false*)",
+      "Bash(git tag *release-*)",
+      "Bash(git push *release-*)",
+      "Bash(git push *--tags*)"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {
