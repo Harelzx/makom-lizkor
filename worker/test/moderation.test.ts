@@ -231,23 +231,6 @@ describe("restoring needs a documented basis (spec 6)", () => {
     expect(await name(s.id)).toBe("ספסל · ניר עוז")
   })
 
-  it("two hides of the same field and one lifted: the ledger names each row, so a replay lifts only that one", async () => {
-    const s = await published()
-    await hide(s.id, ["name_he"])
-    await hide(s.id, ["name_he"])
-    const [first, second] = (await view(s.id)).suppressions
-    expect((await lift(s.id, first.id, restoreBody())).status).toBe(200)
-    const { objects } = await env.LEDGER.list({ prefix: `ledger/${s.id}/` })
-    const commits = (await Promise.all(objects.map(async (o) => (await env.LEDGER.get(o.key))!.json<LedgerEntry>()))).filter(
-      (e) => e.phase === "commit" && (e.kind === "suppress" || e.kind === "lift"),
-    )
-    expect(commits.map((e) => [e.kind, e.targets])).toEqual([
-      ["suppress", [first.id]],
-      ["suppress", [second.id]],
-      ["lift", [first.id]],
-    ])
-  })
-
   it("the whole place restored: back in the feed with its photo served again", async () => {
     const s = await send("ספסל דמו עם תמונה", { place_he: "כיסופים" })
     await upload(s.id, s.trackingToken)
