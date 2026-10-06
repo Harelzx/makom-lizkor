@@ -10,7 +10,7 @@ import { noticeHtml } from "@/data/legal"
 import { DISCARD_LABEL, ELEMENT_LABEL, REQUESTER_LABEL } from "@/data/reports"
 import { newSubmitKey } from "@/lib/api"
 import { ease } from "@/lib/motion"
-import { discard, dismiss, entry, heldFor, hydrate, readFailed, resend, start } from "@/lib/report-holder"
+import { discard, dismiss, entry, heldFor, hydrate, latestFor, readFailed, resend, start } from "@/lib/report-holder"
 import { freeze } from "@/lib/report-outbox"
 import { CURRENT_REPORT_NOTICE, REQUESTER_TYPES, type Element, type ReportInput } from "@/shared/contract"
 import type { Place } from "@/types"
@@ -50,31 +50,26 @@ function elementsOf(place: Place): Element[] {
  */
 export function ReportRequest({ place }: { place: Place }) {
   const uid = useId()
-  const [open, setOpen] = useState(false)
+  const [opened, setOpened] = useState(false)
   const [draft, setDraft] = useState<Fields>(EMPTY)
   useReports()
-  // The request this card shows, by key: the page holds it (src/lib/report-holder.ts), so it outlives the card closing.
-  const [key, setKey] = useState<string | null>(null)
-  const s = entry(key)
   // A request sent from here earlier comes back first; nothing can be sent until that is known.
   const [restoring, setRestoring] = useState(true)
+  // The page holds the requests (src/lib/report-holder.ts), so the card always shows its place's newest one, whenever it
+  // appears (read again after a failure, answered while the card was closed) and until the visitor closes its answer.
+  const s = restoring ? undefined : latestFor(place.id)
   const curated = place.coord_source !== "contribution"
   // While a request is kept, the form shows it as it was sent, and only it.
   const kept = s?.r ?? null
   const busy = !!s?.busy
+  const open = opened || !!kept || s?.shown?.view === "result"
   const f = kept ? fieldsOf(kept.payload) : draft
   const change = (patch: Partial<Fields>) => setDraft((d) => ({ ...d, ...patch }))
 
   useEffect(() => {
     let live = true
     void hydrate().then(() => {
-      if (!live) return
-      const held = heldFor(place.id)
-      if (held) {
-        setKey(held.key)
-        setOpen(true)
-      }
-      setRestoring(false)
+      if (live) setRestoring(false)
     })
     return () => {
       live = false
@@ -90,7 +85,8 @@ export function ReportRequest({ place }: { place: Place }) {
   const send = async () => {
     if (restoring || busy) return
     if (kept) return void resend(kept.key)
-    if (!ready || !draft.requester) return
+    // Never a new request in place of one still held for this place (another view may have found it meanwhile).
+    if (heldFor(place.id) || !ready || !draft.requester) return
     const r = freeze(
       place.id,
       {
@@ -106,16 +102,22 @@ export function ReportRequest({ place }: { place: Place }) {
     )
     // The fields show the kept request from here on. The draft goes, and comes back only when this first try is refused
     // before anything was stored; an expired or removed request leaves an empty form.
-    if (key) dismiss(key)
-    setKey(r.key)
+    if (s) dismiss(s.key)
     setDraft(EMPTY)
     await start(r)
-    if (entry(r.key)?.shown?.view === "editable") setDraft(fieldsOf(r.payload))
+    const after = entry(r.key)
+    if (after?.shown?.view === "editable" && !after.r) setDraft(fieldsOf(r.payload))
+  }
+
+  /** The visitor is done with an answer, or with the form: a settled request goes from the page. */
+  const close = () => {
+    if (s && !s.r) dismiss(s.key)
+    setOpened(false)
   }
 
   if (!open)
     return (
-      <button type="button" className="pressable self-start underline underline-offset-2" onClick={() => setOpen(true)}>
+      <button type="button" className="pressable self-start underline underline-offset-2" onClick={() => setOpened(true)}>
         בקשת הסרה או תיקון
       </button>
     )
@@ -126,9 +128,14 @@ export function ReportRequest({ place }: { place: Place }) {
         בקשת הסרה או תיקון
       </h3>
       {status ? (
-        <p role="status" className="text-body text-ink-1">
-          {status}
-        </p>
+        <>
+          <p role="status" className="text-body text-ink-1">
+            {status}
+          </p>
+          <Button variant="ghost" className="self-start" onClick={close}>
+            סגירה
+          </Button>
+        </>
       ) : (
         <>
           <p className="text-caption text-ink-2">כל בקשה נבדקת בידי אדם בדחיפות. אין צורך בשם, בתעודה מזהה או במסמכים.</p>
@@ -232,7 +239,7 @@ export function ReportRequest({ place }: { place: Place }) {
                 {DISCARD_LABEL}
               </Button>
             ) : (
-              <Button variant="ghost" onClick={() => setOpen(false)}>
+              <Button variant="ghost" onClick={close}>
                 ביטול
               </Button>
             )}

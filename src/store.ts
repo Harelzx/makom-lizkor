@@ -3,7 +3,7 @@ import seed from "@/data/places.json"
 import type { LocalFields, Place } from "@/types"
 import { importable } from "@/lib/export"
 import { changeLocal, loadLocal, loadTributes, markUnlisted, saveTributes } from "@/lib/storage"
-import { pruneReports } from "@/lib/report-outbox"
+import { superviseReports } from "@/lib/report-outbox"
 
 /** intro: 06:29, the dark map and the opening words · dawn: the sunrise is playing · day: the site itself */
 export type Phase = "intro" | "dawn" | "day"
@@ -170,8 +170,9 @@ export const useStore = create<State>((set, get) => ({
   introRun: 0,
 
   init: async () => {
-    // Removal requests kept past their window go the moment the site runs, even a visit that ends in the opening.
-    void pruneReports()
+    // Removal requests kept past their window go the moment the site runs, and at each deadline after, even in a visit
+    // that ends in the opening.
+    void superviseReports()
     const [stored, tributes] = await Promise.all([loadLocal(), loadTributes()])
     readable = stored !== null
     // A place still "sending" is from a visit that closed mid-send; nothing is sending it now, so it waits for a retry.

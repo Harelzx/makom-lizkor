@@ -175,6 +175,25 @@ async function casesAbout(browser: Browser, id: string) {
   return items.filter((r) => r.place_id === id).length
 }
 
+/** A store that refuses (to open, and to read or write) while the tab's `idb-refuses` flag is set, as a blocked one does. */
+async function refusingStore(ctx: BrowserContext) {
+  await ctx.addInitScript(() => {
+    const refuses = () => !!sessionStorage.getItem("idb-refuses")
+    const open = IDBFactory.prototype.open
+    IDBFactory.prototype.open = function (this: IDBFactory, ...args: Parameters<IDBFactory["open"]>) {
+      if (refuses()) throw new DOMException("blocked", "SecurityError")
+      return open.apply(this, args)
+    }
+    const transaction = IDBDatabase.prototype.transaction
+    IDBDatabase.prototype.transaction = function (this: IDBDatabase, ...args: Parameters<IDBDatabase["transaction"]>) {
+      if (refuses()) throw new DOMException("blocked", "InvalidStateError")
+      return transaction.apply(this, args)
+    }
+  })
+}
+const refuse = (page: Page, on: boolean) =>
+  page.evaluate((v) => (v ? sessionStorage.setItem("idb-refuses", "1") : sessionStorage.removeItem("idb-refuses")), on)
+
 /** Each request the page sends, by its key and body (the browser check's token is fresh each time, so it isn't compared). */
 function recordReports(page: Page, first: (route: Route, headers: Record<string, string>) => Promise<void>) {
   const sent: { key: string; body: string }[] = []
@@ -516,14 +535,7 @@ test("a request about a hidden place, in a browser whose store can't be read aft
   // Nine days on, clear of the quotas the other tests used (see the hidden-place test above).
   const later = { "x-test-now": new Date(Date.now() + 9 * 86_400_000).toISOString() }
   const { ctx, page, form } = await requestForm(browser, id, name, later)
-  // A store that refuses to open while a flag is set, as a blocked or broken IndexedDB does.
-  await ctx.addInitScript(() => {
-    const open = IDBFactory.prototype.open
-    IDBFactory.prototype.open = function (this: IDBFactory, ...args: Parameters<IDBFactory["open"]>) {
-      if (sessionStorage.getItem("idb-refuses")) throw new DOMException("blocked", "SecurityError")
-      return open.apply(this, args)
-    }
-  })
+  await refusingStore(ctx)
   const sent = recordReports(page, async (route, headers) => {
     await route.fetch({ headers })
     await route.abort("failed")
@@ -535,19 +547,125 @@ test("a request about a hidden place, in a browser whose store can't be read aft
   await form.getByRole("button", { name: "שליחת הבקשה" }).click()
   await expect(form.getByRole("alert")).toHaveText(/לא ברור אם הבקשה הגיעה אלינו/)
 
-  await page.evaluate(() => sessionStorage.setItem("idb-refuses", "1"))
+  await refuse(page, true)
   await page.goto(`/?unread=1#/place/${id}`)
   const box = page.getByRole("region", { name: "בקשה ששלחתם" })
   await expect(box.getByRole("alert")).toHaveText(/לא הצלחנו לבדוק/, DAY)
   await expect(page.getByText(name)).toHaveCount(0)
 
-  await page.evaluate(() => sessionStorage.removeItem("idb-refuses"))
+  await refuse(page, false)
   await box.getByRole("button", { name: "לבדוק שוב" }).click()
   await expect(box.getByRole("alert")).toHaveText(/על מקום שאינו מוצג כרגע/)
   await expect(page.getByText(/לא הצלחנו לבדוק/)).toHaveCount(0)
   await expect(page.getByText(name)).toHaveCount(0)
   await box.getByRole("button", { name: "שליחה שוב" }).click()
   await expect(box.getByRole("status")).toHaveText(HIDDEN)
+  expect(sent).toHaveLength(2)
+  expect(sent[1]).toEqual(sent[0])
+  expect(await casesAbout(browser, id)).toBe(1)
+  await ctx.close()
+})
+
+test("an answer that comes while the card is closed is there when it opens again, with no request sent again", async ({ browser }) => {
+  const name = `גן דמו לתשובה בזמן שהכרטיס סגור ${Date.now()}`
+  const { id } = await published(browser, name)
+  const { ctx, page, form } = await requestForm(browser, id, name)
+  let release!: () => void
+  const held = new Promise<void>((r) => (release = r))
+  // The first goes through, and its answer is held until the card is closed.
+  const sent = recordReports(page, async (route, headers) => {
+    const answer = await route.fetch({ headers })
+    await held
+    await route.fulfill({ response: answer })
+  })
+  await form.getByRole("checkbox", { name: "השם" }).check()
+  await form.getByRole("radio", { name: /^אחר/ }).check()
+  await form.getByLabel("מה לבדוק, ולמה").fill("השם של המקום כתוב באיות אחר מזה שבשלט. כדאי לבדוק.")
+  await form.getByRole("button", { name: "שליחת הבקשה" }).click()
+  await expect.poll(() => sent.length).toBe(1)
+  await page.evaluate(() => (location.hash = "#/"))
+  await expect(page.getByRole("heading", { name })).toHaveCount(0)
+  const answered = page.waitForResponse((r) => r.url().endsWith("/api/v1/reports"))
+  release()
+  await answered
+  await page.evaluate((p) => (location.hash = `#/place/${p}`), id)
+  await expect(page.getByRole("heading", { name })).toBeVisible()
+  await expect(page.getByRole("region", { name: "בקשת הסרה או תיקון" }).getByRole("status")).toHaveText(RECEIVED)
+  expect(sent).toHaveLength(1)
+  expect(await casesAbout(browser, id)).toBe(1)
+  await ctx.close()
+})
+
+test("a card open over a store that couldn't be read takes up its request once the page reads it again, locked, as it was sent", async ({
+  browser,
+}) => {
+  const name = `גן דמו לכרטיס שנקרא שוב ${Date.now()}`
+  const { id } = await published(browser, name)
+  const { ctx, page, form } = await requestForm(browser, id, name)
+  await refusingStore(ctx)
+  const sent = recordReports(page, async (route, headers) => {
+    await route.fetch({ headers })
+    await route.abort("failed")
+  })
+  const why = "התמונה במקום הזה היא של אתר אחר, כדאי לבדוק."
+  await form.getByRole("checkbox", { name: "השם" }).check()
+  await form.getByRole("radio", { name: /^אחר/ }).check()
+  await form.getByLabel("מה לבדוק, ולמה").fill(why)
+  await form.getByRole("button", { name: "שליחת הבקשה" }).click()
+  await expect(form.getByRole("alert")).toHaveText(/לא ברור אם הבקשה הגיעה אלינו/)
+
+  await refuse(page, true)
+  await page.goto(`/?again=1#/place/${id}`)
+  await expect(page.getByRole("heading", { name })).toBeVisible(DAY)
+  const box = page.getByRole("region", { name: "בקשה ששלחתם" })
+  await expect(box.getByRole("alert")).toHaveText(/לא הצלחנו לבדוק/)
+  await refuse(page, false)
+  await box.getByRole("button", { name: "לבדוק שוב" }).click()
+  // The card, open all along, now shows the request it couldn't read: not a new form.
+  const card = page.getByRole("region", { name: "בקשת הסרה או תיקון" })
+  await expect(card.getByLabel("מה לבדוק, ולמה")).toHaveValue(why)
+  await expect(card.getByLabel("מה לבדוק, ולמה")).toBeDisabled()
+  await card.getByRole("button", { name: "שליחה שוב" }).click()
+  await expect(card.getByRole("status")).toHaveText(RECEIVED)
+  expect(sent).toHaveLength(2)
+  expect(sent[1]).toEqual(sent[0])
+  expect(await casesAbout(browser, id)).toBe(1)
+  await ctx.close()
+})
+
+test("a first try refused before anything was stored, whose copy the browser won't remove, stays the only request: no new one in its place, and after a reload it goes as it was, one case", async ({
+  browser,
+}) => {
+  const name = `גן דמו לסירוב שלא נמחק ${Date.now()}`
+  const { id } = await published(browser, name)
+  const { ctx, page, form } = await requestForm(browser, id, name)
+  await refusingStore(ctx)
+  // The store's stand-in applies from the next load.
+  await page.reload()
+  await expect(page.getByRole("heading", { name })).toBeVisible(DAY)
+  await page.getByRole("button", { name: "בקשת הסרה או תיקון" }).click()
+  // Refused at the door (nothing reaches the server), and by then the store refuses to remove the copy.
+  const sent = recordReports(page, async (route) => {
+    await refuse(page, true)
+    await route.fulfill({ status: 403, json: { code: "turnstile_failed" } })
+  })
+  const why = "יש כאן טעות בשם המקום, כדאי לבדוק מול השלט."
+  await form.getByRole("checkbox", { name: "השם" }).check()
+  await form.getByRole("radio", { name: /^אחר/ }).check()
+  await form.getByLabel("מה לבדוק, ולמה").fill(why)
+  await form.getByRole("button", { name: "שליחת הבקשה" }).click()
+  await expect(form.getByRole("alert")).toHaveText(/בדיקת הדפדפן לא עברה.*עוד אי אפשר לכתוב במקומה בקשה חדשה/)
+  await expect(form.getByLabel("מה לבדוק, ולמה")).toHaveValue(why)
+  await expect(form.getByLabel("מה לבדוק, ולמה")).toBeDisabled()
+  await expect(form.getByRole("button", { name: "שליחת הבקשה" })).toHaveCount(0)
+
+  await refuse(page, false)
+  await page.reload()
+  await expect(page.getByRole("heading", { name })).toBeVisible(DAY)
+  const back = page.getByRole("region", { name: "בקשת הסרה או תיקון" })
+  await expect(back.getByLabel("מה לבדוק, ולמה")).toHaveValue(why)
+  await back.getByRole("button", { name: "שליחה שוב" }).click()
+  await expect(back.getByRole("status")).toHaveText(RECEIVED)
   expect(sent).toHaveLength(2)
   expect(sent[1]).toEqual(sent[0])
   expect(await casesAbout(browser, id)).toBe(1)

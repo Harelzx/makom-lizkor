@@ -75,3 +75,19 @@ it("past the window nothing is read, and a prune drops the browser's copy; a pru
   disk.mode = "broken"
   await expect(o.pruneReports(t0)).resolves.toBeUndefined()
 })
+
+it("from the moment the site runs, a stored request is dropped at its deadline, with no view of it ever loaded", async () => {
+  vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] })
+  try {
+    vi.setSystemTime(t0)
+    const r = o.freeze("p_1", payload, "g".repeat(22), t0)
+    await o.remember(r)
+    await o.superviseReports()
+    await vi.advanceTimersByTimeAsync(o.REPORT_WINDOW_MS - 1)
+    expect(Object.keys(disk.keys.reportOutbox as object)).toEqual([r.key])
+    await vi.advanceTimersByTimeAsync(1)
+    expect(disk.keys.reportOutbox).toEqual({})
+  } finally {
+    vi.useRealTimers()
+  }
+})

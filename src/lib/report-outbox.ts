@@ -68,3 +68,22 @@ export async function storedReports(now = Date.now()): Promise<{ reports: Pendin
     return { reports: [], complete: noStorage(e) }
   }
 }
+
+/**
+ * Keeps the browser's deadlines from the moment the site runs, before (and without) any view of the requests: a visit
+ * that never leaves the opening still drops a request whose window ends while it is open. The page's own copies are
+ * kept by src/lib/report-holder.ts once a view loads it.
+ */
+let next: ReturnType<typeof setTimeout> | undefined
+let listening = false
+export async function superviseReports(): Promise<void> {
+  if (!listening && typeof document !== "undefined") {
+    document.addEventListener("visibilitychange", () => void superviseReports())
+    listening = true
+  }
+  await pruneReports()
+  const { reports } = await storedReports()
+  clearTimeout(next)
+  const due = Math.min(...reports.map((r) => r.expiresAt))
+  if (due < Infinity) next = setTimeout(() => void superviseReports(), Math.max(0, due - Date.now()))
+}

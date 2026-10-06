@@ -1,7 +1,9 @@
 import { afterEach, expect, it, vi } from "vitest"
 import type { ReportInput } from "@/shared/contract"
 
-vi.mock("@/lib/turnstile", () => ({ turnstileToken: async () => "XXXX.DUMMY.TOKEN.XXXX" }))
+// The bot check answers at once, unless a test holds it back.
+const bot = vi.hoisted(() => ({ wait: null as Promise<string | null> | null }))
+vi.mock("@/lib/turnstile", () => ({ turnstileToken: async () => bot.wait ?? "XXXX.DUMMY.TOKEN.XXXX" }))
 const { sendReport } = await import("@/lib/api")
 
 const input: ReportInput = {
@@ -57,4 +59,41 @@ it("a try whose window ends while the browser check runs is not sent at all", as
   expect(posts).toBe(0)
   expect(await sendReport(input, "k".repeat(22), Date.now() + 60_000)).toMatchObject({ ok: true })
   expect(posts).toBe(1)
+})
+
+it("a window that ends while the bot check is still loading: nothing is sent, even when the check answers after", async () => {
+  vi.useFakeTimers({ toFake: ["Date", "setTimeout"] })
+  try {
+    let posts = 0
+    vi.stubGlobal("fetch", async () => (posts++, new Response("{}", { status: 202 })))
+    let answer!: (t: string) => void
+    bot.wait = new Promise((r) => (answer = r))
+    const sending = sendReport(input, "k".repeat(22), Date.now() + 1000)
+    await vi.advanceTimersByTimeAsync(2000)
+    answer("XXXX.DUMMY.TOKEN.XXXX")
+    expect(await sending).toEqual({ ok: false, kind: "expired" })
+    expect(posts).toBe(0)
+  } finally {
+    bot.wait = null
+    vi.useRealTimers()
+  }
+})
+
+it("a bot check that never finishes loading doesn't hold a try forever: after its bound the request goes without a token", async () => {
+  vi.useFakeTimers({ toFake: ["Date", "setTimeout"] })
+  try {
+    const sent: (string | null)[] = []
+    vi.stubGlobal("fetch", async (_: string, init: RequestInit) => {
+      sent.push(new Headers(init.headers).get("Turnstile-Token"))
+      return new Response(JSON.stringify({ code: "turnstile_required" }), { status: 403 })
+    })
+    bot.wait = new Promise(() => {})
+    const sending = sendReport(input, "k".repeat(22), Date.now() + 3600_000)
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(await sending).toEqual({ ok: false, kind: "not_sent", code: "turnstile_required" })
+    expect(sent).toEqual([null])
+  } finally {
+    bot.wait = null
+    vi.useRealTimers()
+  }
 })

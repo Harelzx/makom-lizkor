@@ -260,3 +260,74 @@ it("a closed answer is dismissed from the page; a held request can't be", async 
   h.dismiss(r.key)
   expect(h.entry(r.key)).toBeUndefined()
 })
+
+it("a first refusal whose copy couldn't be removed keeps that request, whole, in place of any new one; after a reload it is the one found", async () => {
+  const k1 = fresh()
+  const slow = deferred()
+  net.gate = slow.p
+  net.answers = [{ ok: false, kind: "not_sent", code: "turnstile_failed" }]
+  const sending = h.start(k1)
+  await vi.waitFor(() => expect(net.sent).toHaveLength(1))
+  disk.broken = true
+  slow.open()
+  await sending
+  net.gate = null
+  expect(h.entry(k1.key)).toMatchObject({ r: k1, shown: { view: "editable", code: "turnstile_failed", cleared: false } })
+  expect(await h.start(fresh())).toBe(false)
+  expect(net.sent).toHaveLength(1)
+  disk.broken = false
+  await reload()
+  await h.hydrate()
+  expect(h.heldFor("p_1")?.key).toBe(k1.key)
+})
+
+it("a settled request stays the place's latest, with its answer and without its content, until a view closes it", async () => {
+  const r = fresh()
+  net.answers = [{ ok: true, ticket: "r_4", outcome: "received" }]
+  await h.start(r)
+  expect(h.latestFor("p_1")).toMatchObject({ key: r.key, r: null, shown: { view: "result", outcome: "received" } })
+  h.dismiss(r.key)
+  expect(h.latestFor("p_1")).toBeUndefined()
+})
+
+it("a deadline that comes while a try waits (on the bot check or the network) lets the request go at once; that try's answer is kept only as what happened", async () => {
+  const r = fresh()
+  const slow = deferred()
+  net.gate = slow.p
+  net.answers = [{ ok: true, ticket: "r_5", outcome: "received" }]
+  const sending = h.start(r)
+  await vi.waitFor(() => expect(net.sent).toHaveLength(1))
+  await vi.advanceTimersByTimeAsync(r.expiresAt - Date.now())
+  expect(h.entry(r.key)).toMatchObject({ r: null, busy: true, shown: { view: "expired" } })
+  expect(h.heldFor("p_1")).toBeUndefined()
+  slow.open()
+  await sending
+  expect(h.entry(r.key)).toMatchObject({ r: null, busy: false, shown: { view: "result", outcome: "received" } })
+})
+
+it("an unanswered try past the deadline leaves the request let go, not revived", async () => {
+  const r = fresh()
+  const slow = deferred()
+  net.gate = slow.p
+  const sending = h.start(r)
+  await vi.waitFor(() => expect(net.sent).toHaveLength(1))
+  await vi.advanceTimersByTimeAsync(r.expiresAt - Date.now())
+  slow.open()
+  await sending
+  expect(h.entry(r.key)).toMatchObject({ r: null, shown: { view: "expired" } })
+})
+
+it("an expiry whose removal from the browser is slow lets the content go at once and says so only once it is done", async () => {
+  const r = fresh()
+  await h.start(r)
+  const slow = deferred()
+  disk.gate = slow.p
+  vi.setSystemTime(r.expiresAt)
+  const expiring = h.expire(r.key)
+  expect(h.entry(r.key)).toMatchObject({ r: null, shown: { view: "expired" } })
+  expect((h.entry(r.key)!.shown as { cleared?: boolean }).cleared).toBeUndefined()
+  slow.open()
+  await expiring
+  disk.gate = null
+  expect(h.entry(r.key)).toMatchObject({ shown: { view: "expired", cleared: true } })
+})

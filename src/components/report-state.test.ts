@@ -2,7 +2,7 @@ import { expect, it } from "vitest"
 import { messageOf } from "@/components/report-state"
 import type { Entry } from "@/lib/report-holder"
 
-const base: Entry = { key: "k", placeId: "p_1", r: null, expiresAt: 0, uncertain: true, stored: true, busy: false, shown: null }
+const base: Entry = { key: "k", placeId: "p_1", at: 0, r: null, expiresAt: 0, uncertain: true, stored: true, busy: false, shown: null }
 
 it("a request found again that this browser wouldn't keep says a reload loses it", () => {
   expect(messageOf({ ...base, stored: false, shown: { view: "restored" } }, false).alert).toMatch(/נשמרת רק בדף הפתוח/)

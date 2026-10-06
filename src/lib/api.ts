@@ -288,12 +288,18 @@ const BEFORE_WRITE: Record<number, string[]> = {
   503: ["not_configured", "turnstile_unavailable"],
 }
 
+const TOKEN_WAIT_MS = 30_000
+
 /**
  * A removal or correction request (spec 6), under the key its first try was given; a fresh bot check every try. Never
  * sent at or after `deadline`, checked at the last moment before it goes.
  */
 export async function sendReport(input: ReportInput, key: string, deadline = Infinity): Promise<ReportSend> {
-  const token = await turnstileToken("report").catch(() => null)
+  // The bot check is bounded here too (its script can be slow to load): without a token the server refuses before storing.
+  const token = await Promise.race([
+    turnstileToken("report").catch(() => null),
+    new Promise<null>((r) => setTimeout(() => r(null), TOKEN_WAIT_MS)),
+  ])
   if (Date.now() >= deadline) return { ok: false, kind: "expired" }
   let res: Response
   try {
