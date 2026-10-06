@@ -419,3 +419,68 @@ describe("finishing an operation is safe to run twice at once, and fair to every
     expect(await op("t_starve_000")).toMatchObject({ ledger_commit: "failed" })
   })
 })
+
+describe("purge retries are reserved before they are tried (F4-O3)", () => {
+  /** An applied operation whose purge has been tried `tries` times and failed. */
+  async function failedPurge(tries: number) {
+    const p = await published()
+    const { id } = await runOp(opEnv, hide(p.id, p.rev), now)
+    await env.DB.prepare("UPDATE visibility_ops SET purge = 'failed', purge_tries = ? WHERE id = ?").bind(tries, id).run()
+    return id!
+  }
+  /** A purge whose answer waits until the test gives it. */
+  function heldPurge() {
+    const answers: ((ok: boolean) => void)[] = []
+    let calls = 0
+    const purge = () => (calls++, new Promise<boolean>((r) => answers.push(r)))
+    return { purge, answers, calls: () => calls }
+  }
+  const settle = () => new Promise((r) => setTimeout(r, 20))
+
+  it("at the last try, two finishers at once make one purge call between them", async () => {
+    const id = await failedPurge(2)
+    let calls = 0
+    const purge = async () => (calls++, false)
+    await Promise.all([finishOp({ ...opEnv, purge }, id, later(1)), finishOp({ ...opEnv, purge }, id, later(1))])
+    expect(calls).toBe(1)
+    expect(await op(id)).toMatchObject({ purge: "abandoned", purge_tries: 3 })
+  })
+
+  it("a success that arrives after the last failure gave up still counts: the cache was cleared", async () => {
+    const id = await failedPurge(1)
+    const held = heldPurge()
+    const a = finishOp({ ...opEnv, purge: held.purge }, id, later(1))
+    const b = finishOp({ ...opEnv, purge: held.purge }, id, later(1))
+    while (held.calls() < 2) await settle()
+    held.answers[0](false)
+    await a
+    expect(await op(id)).toMatchObject({ purge: "abandoned", purge_tries: 3 })
+    held.answers[1](true)
+    await b
+    expect(await op(id)).toMatchObject({ purge: "done", purge_tries: 3 })
+  })
+
+  it("a failure that arrives after a success can't undo it", async () => {
+    const id = await failedPurge(1)
+    const held = heldPurge()
+    const a = finishOp({ ...opEnv, purge: held.purge }, id, later(1))
+    const b = finishOp({ ...opEnv, purge: held.purge }, id, later(1))
+    while (held.calls() < 2) await settle()
+    held.answers[0](true)
+    await a
+    held.answers[1](false)
+    await b
+    expect(await op(id)).toMatchObject({ purge: "done" })
+  })
+
+  it("a reserved try whose finisher stopped before its answer counts as failed: with no tries left the purge is given up, not retried", async () => {
+    const id = await failedPurge(3)
+    const placeId = (await op(id))!.place_id
+    let calls = 0
+    // Other tests' operations may be retried too: only this place's purges are counted.
+    const purge = async (tags: string[]) => (tags.includes(`place:${placeId}`) && calls++, true)
+    await resumeOps({ ...opEnv, purge }, later(1))
+    expect(calls).toBe(0)
+    expect(await op(id)).toMatchObject({ purge: "abandoned", purge_tries: 3 })
+  })
+})

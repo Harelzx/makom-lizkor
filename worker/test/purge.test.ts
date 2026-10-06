@@ -16,9 +16,9 @@ describe("the edge purge (L1)", () => {
 
   it("reports what the cache answered: success, a refusal, or a throw", async () => {
     let asked: unknown
-    const ok = withCache(async () => ((asked = tags), { success: true }))
+    const ok = { cache: { purge: async (options: unknown) => ((asked = options), { success: true }) } }
     expect(await edgePurge(as("production"), ok, tags)).toBe(true)
-    expect(asked).toEqual(tags)
+    expect(asked).toEqual({ tags })
     expect(
       await edgePurge(
         as("production"),

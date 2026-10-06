@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers"
 import { describe, expect, it } from "vitest"
-import { placePhoto, runOp, type OpEnv } from "../db/ops"
+import { placePhoto, resumeOps, runOp, type OpEnv } from "../db/ops"
 import { decide, queued, send, upload } from "./submission-helpers"
 
 /** A published place with a photo, as approval leaves it. */
@@ -33,8 +33,11 @@ const liftAll = (placeId: string) =>
     .bind(placeId)
     .run()
 
-/** The media bucket, with one kind of write on one key held at a gate until the test opens it. */
-function gated(op: "put" | "delete", key: string) {
+/**
+ * The media bucket, with one kind of write on one key held at a gate until the test opens it. With `dies`, the write
+ * lands and then the Worker making it stops: nothing after it in that call runs.
+ */
+function gated(op: "put" | "delete", key: string, dies = false) {
   let open!: () => void
   const gate = new Promise<void>((r) => (open = r))
   let reached = 0
@@ -49,7 +52,9 @@ function gated(op: "put" | "delete", key: string) {
             arrived()
             await gate
           }
-          return (target[op] as (...a: unknown[]) => unknown).call(target, k, ...rest)
+          const result = await (target[op] as (...a: unknown[]) => Promise<unknown>).call(target, k, ...rest)
+          if (dies && k === key) throw new Error("worker stopped")
+          return result
         }
       const value = Reflect.get(target, prop)
       return typeof value === "function" ? value.bind(target) : value
@@ -134,5 +139,92 @@ describe("moving a photo between public and held while decisions overlap (F4-O2)
     expect(late.reached()).toBe(1)
     expect(await stored(p.key)).toEqual(p.bytes)
     expect(await stored(p.held)).toEqual(p.bytes)
+  })
+})
+
+describe("a late write whose Worker then stopped is put right by the scheduled job, with no other decision (F4-O2)", () => {
+  const afterSettling = () => new Date(Date.now() + 3 * 60_000)
+  const due = (placeId: string) =>
+    env.DB.prepare("SELECT due_at FROM media_checks WHERE place_id = ?").bind(placeId).first<string>("due_at")
+
+  it("a hide's delete lands after the restoration finished, and the hide's Worker stops: the job serves the photo again", async () => {
+    const p = await withPhoto()
+    await hidePhoto(p.id)
+    const late = gated("delete", p.key, true)
+    const hiding = placePhoto(opEnv(late.media), p.id).catch((err: Error) => err)
+    await late.arrival
+    await liftAll(p.id)
+    await placePhoto(opEnv(), p.id)
+    late.open()
+    expect(String(await hiding)).toContain("worker stopped")
+    // The restoration is recorded as done, yet the photo it serves is gone: only the held copy is left.
+    expect(await stored(p.key)).toBeNull()
+    await resumeOps(opEnv(), afterSettling())
+    expect(await stored(p.key)).toEqual(p.bytes)
+    expect(await stored(p.held)).toEqual(p.bytes)
+    expect(await due(p.id)).toBeNull()
+  })
+
+  it("the reverse: a restoration's copy lands after a newer hide finished, and its Worker stops: the job takes it down", async () => {
+    const p = await withPhoto()
+    await hidePhoto(p.id)
+    await placePhoto(opEnv(), p.id)
+    await liftAll(p.id)
+    const late = gated("put", p.key, true)
+    const restoring = placePhoto(opEnv(late.media), p.id).catch((err: Error) => err)
+    await late.arrival
+    await hidePhoto(p.id)
+    await placePhoto(opEnv(), p.id)
+    late.open()
+    expect(String(await restoring)).toContain("worker stopped")
+    expect(await stored(p.key)).toEqual(p.bytes)
+    await resumeOps(opEnv(), afterSettling())
+    expect(await stored(p.key)).toBeNull()
+    expect(await stored(p.held)).toEqual(p.bytes)
+  })
+
+  it("a refused restoration whose cleanup delete lands late and whose Worker stops: the job serves the photo, and the cleanup is recorded done", async () => {
+    const p = await withPhoto()
+    await hidePhoto(p.id)
+    await placePhoto(opEnv(), p.id)
+    const { rev } = (await env.DB.prepare("SELECT rev FROM places WHERE id = ?").bind(p.id).first<{ rev: number }>())!
+    const late = gated("delete", p.key, true)
+    const loser = runOp(
+      opEnv(late.media),
+      {
+        placeId: p.id,
+        kind: "lift",
+        actor: "moderator",
+        expectedRev: rev,
+        removal: false,
+        public: true,
+        onIntentFailure: "refuse",
+        prepare: async () => {
+          await env.MEDIA.put(p.key, (await env.MEDIA.get(p.held))!.body)
+          return { prepared: [p.key], media: [p.key] }
+        },
+        statements: (tid) => [env.DB.prepare("UPDATE places SET last_transition_id = ?2 WHERE id = ?1 AND 0").bind(p.id, tid)],
+      },
+      new Date(),
+    )
+    await late.arrival
+    await liftAll(p.id)
+    await placePhoto(opEnv(), p.id)
+    late.open()
+    const { id } = await loser
+    expect(await stored(p.key)).toBeNull()
+    expect(await env.DB.prepare("SELECT media FROM visibility_ops WHERE id = ?").bind(id).first("media")).toBe("failed")
+    await resumeOps(opEnv(), afterSettling())
+    expect(await stored(p.key)).toEqual(p.bytes)
+    expect(await env.DB.prepare("SELECT media FROM visibility_ops WHERE id = ?").bind(id).first("media")).toBe("done")
+  })
+
+  it("a served photo with no copy left anywhere is a failure that stays visible, never a completed move", async () => {
+    const p = await withPhoto()
+    await env.MEDIA.delete([p.key, p.held])
+    await expect(placePhoto(opEnv(), p.id)).rejects.toThrow("photo_missing")
+    await resumeOps(opEnv(), afterSettling())
+    // Still due: the job keeps looking, later, rather than forgetting it.
+    expect(await due(p.id)).not.toBeNull()
   })
 })

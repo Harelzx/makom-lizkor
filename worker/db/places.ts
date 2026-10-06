@@ -701,9 +701,9 @@ export async function photosBefore(db: D1Database, placeId: string, revisionId: 
  * them now: an approval retires the quarantined original it copied and the photo published until now (unless the
  * revision kept it); a rejection, the refused photo (spec 3.3). A returned revision keeps its photo. Anything else a
  * place has (a newer correction's photo, another approval's copy in flight) is not this decision's to remove; what
- * nothing names is left to the sweep. Never throws: a file that can't go now is left for the sweep too.
+ * nothing names is left to the sweep. Never throws: false when a file couldn't go now, for a caller that retries.
  */
-export async function retirePhotos(db: D1Database, media: R2Bucket, keys: (string | null | undefined)[]) {
+export async function retirePhotos(db: D1Database, media: R2Bucket, keys: (string | null | undefined)[]): Promise<boolean> {
   try {
     const obsolete: string[] = []
     for (const key of new Set(keys)) {
@@ -719,8 +719,10 @@ export async function retirePhotos(db: D1Database, media: R2Bucket, keys: (strin
     }
     // A photo hidden while it was published sits in held/ under the same name: it goes with its public key.
     await deleteKeys(media, [...obsolete, ...obsolete.filter((k) => k.startsWith("public/")).map((k) => k.replace(/^public\//, "held/"))])
+    return true
   } catch (err) {
     console.error(JSON.stringify({ level: "error", event: "photo_cleanup", error: (err as Error).name }))
+    return false
   }
 }
 

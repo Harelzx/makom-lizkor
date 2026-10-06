@@ -78,6 +78,12 @@ const INTERRUPTED_MS = 2 * 60_000
 const RESUME_BATCH = 100
 /** Passes placePhoto makes before leaving the photo to the next run: each one re-reads the state after its own writes. */
 const PLACE_PASSES = 4
+/** A photo move's writes have all landed or stopped by then; the job looks at the photo again after it. */
+const MEDIA_SETTLE_MS = INTERRUPTED_MS
+/** A photo that wouldn't settle is looked at again this much later, behind the others. */
+const MEDIA_RETRY_MS = 15 * 60_000
+/** Photos one scheduled run looks at. */
+const MEDIA_BATCH = 50
 
 const tagsFor = (placeId: string) => ["feed", "tributes", `place:${placeId}`]
 const heldKey = (key: string) => key.replace(/^public\//, "held/")
@@ -148,14 +154,17 @@ export async function runOp(env: OpEnv, spec: OpSpec, now: Date): Promise<{ outc
     .run()
   const refuse = async (reason: string) => {
     // The abort is owed from the moment of refusal: stored with it, so a Worker that stops here leaves it to the job.
+    // So is the cleanup of anything it prepared, which the job retries if it can't be done now.
     await env.db
       .prepare(
-        "UPDATE visibility_ops SET state = 'refused', refused_reason = ?2, abort = 'pending', updated_at = ?3 WHERE id = ?1 AND state = 'pending'",
+        `UPDATE visibility_ops SET state = 'refused', refused_reason = ?2, abort = 'pending',
+           media = CASE WHEN ?4 = 1 THEN 'pending' ELSE 'none' END, updated_at = ?3
+         WHERE id = ?1 AND state = 'pending'`,
       )
-      .bind(id, reason, at)
+      .bind(id, reason, at, detail.prepared?.length ? 1 : 0)
       .run()
     await abortRecorded(env, id, at)
-    await cleanPrepared(env, spec.placeId, detail)
+    await preparedCleaned(env, id, now)
   }
 
   const stored = (await readOp(env.db, id))!
@@ -236,8 +245,8 @@ export async function finishOp(env: OpEnv, id: string, now: Date) {
     try {
       // Where the published photo belongs is read from the place as it is now, not replayed from this decision: a
       // later hide or restoration may already own the file, and must not be undone by finishing an older one.
-      if (detail.toHeld?.length || detail.dropHeld?.length) await placePhoto(env, op.place_id)
-      if (detail.retire?.length) await retirePhotos(env.db, env.media, detail.retire)
+      if (detail.toHeld?.length || detail.dropHeld?.length) await placePhoto(env, op.place_id, now)
+      if (detail.retire?.length && !(await retirePhotos(env.db, env.media, detail.retire))) ok = false
     } catch {
       ok = false
     }
@@ -256,17 +265,35 @@ export async function finishOp(env: OpEnv, id: string, now: Date) {
     )
   }
   if (op.purge === "pending" || op.purge === "failed") {
-    const ok = await env.purge(tagsFor(op.place_id)).catch(() => false)
-    // Counted in the database, not from this finisher's copy, so two finishers' failed tries both count.
-    steps.push(
-      env.db
-        .prepare(
-          `UPDATE visibility_ops SET purge_tries = purge_tries + 1,
-             purge = CASE WHEN ?2 = 1 THEN 'done' WHEN purge_tries + 1 >= ?3 THEN 'abandoned' ELSE 'failed' END
-           WHERE id = ?1 AND purge IN ('pending', 'failed')`,
-        )
-        .bind(id, ok ? 1 : 0, PURGE_TRIES),
-    )
+    // A try is reserved in the database before it is made, so finishers running at once never make more than
+    // PURGE_TRIES between them. A reserved try whose finisher stopped before its answer counts as failed: once none
+    // are left, the purge is given up and the edge copy's short lifetime is the bound.
+    await env.db
+      .prepare("UPDATE visibility_ops SET purge = 'abandoned' WHERE id = ?1 AND purge IN ('pending', 'failed') AND purge_tries >= ?2")
+      .bind(id, PURGE_TRIES)
+      .run()
+    const reserved = await env.db
+      .prepare(
+        `UPDATE visibility_ops SET purge_tries = purge_tries + 1
+         WHERE id = ?1 AND purge IN ('pending', 'failed') AND purge_tries < ?2 RETURNING purge_tries`,
+      )
+      .bind(id, PURGE_TRIES)
+      .first<{ purge_tries: number }>()
+    if (reserved) {
+      const ok = await env.purge(tagsFor(op.place_id)).catch(() => false)
+      steps.push(
+        ok
+          ? // The cache was cleared, whatever another try reported first.
+            env.db.prepare("UPDATE visibility_ops SET purge = 'done' WHERE id = ?1 AND purge != 'done'").bind(id)
+          : // A failure never undoes a success, and gives up only once every try is spent.
+            env.db
+              .prepare(
+                `UPDATE visibility_ops SET purge = CASE WHEN purge_tries >= ?2 THEN 'abandoned' ELSE 'failed' END
+                 WHERE id = ?1 AND purge IN ('pending', 'failed')`,
+              )
+              .bind(id, PURGE_TRIES),
+      )
+    }
   }
   if (steps.length) await env.db.batch(steps)
 }
@@ -285,7 +312,7 @@ export async function resumeOps(env: OpEnv, now: Date) {
        WHERE (state = 'applied' AND (intent = 'failed' OR media IN ('pending', 'failed') OR ledger_commit != 'written'
                                      OR purge IN ('pending', 'failed')))
           OR (state = 'pending' AND created_at <= ?1)
-          OR (state = 'refused' AND abort IN ('pending', 'failed'))
+          OR (state = 'refused' AND (abort IN ('pending', 'failed') OR media IN ('pending', 'failed')))
        ORDER BY updated_at, id LIMIT ?2`,
     )
     .bind(new Date(now.getTime() - INTERRUPTED_MS).toISOString(), RESUME_BATCH)
@@ -294,18 +321,21 @@ export async function resumeOps(env: OpEnv, now: Date) {
     // One operation's failure is its own: it is tried again on a later run, and the rest go on now.
     try {
       if (op.state === "applied") await finishOp(env, op.id, now)
-      else if (op.state === "refused") await abortRecorded(env, op.id, at, true)
-      else {
+      else if (op.state === "refused") {
+        if (op.abort === "pending" || op.abort === "failed") await abortRecorded(env, op.id, at, true)
+        if (op.media === "pending" || op.media === "failed") await preparedCleaned(env, op.id, now)
+      } else {
         const refused = await env.db
           .prepare(
-            `UPDATE visibility_ops SET state = 'refused', refused_reason = 'interrupted', abort = 'pending', updated_at = ?2
+            `UPDATE visibility_ops SET state = 'refused', refused_reason = 'interrupted', abort = 'pending',
+               media = CASE WHEN ?3 = 1 THEN 'pending' ELSE 'none' END, updated_at = ?2
              WHERE id = ?1 AND state = 'pending'`,
           )
-          .bind(op.id, at)
+          .bind(op.id, at, (JSON.parse(op.detail) as OpDetail).prepared?.length ? 1 : 0)
           .run()
         if (refused.meta.changes === 1) {
           await abortRecorded(env, op.id, at)
-          await cleanPrepared(env, op.place_id, JSON.parse(op.detail) as OpDetail)
+          await preparedCleaned(env, op.id, now)
         }
       }
     } catch (err) {
@@ -313,6 +343,34 @@ export async function resumeOps(env: OpEnv, now: Date) {
       await env.db
         .prepare("UPDATE visibility_ops SET updated_at = ?2 WHERE id = ?1")
         .bind(op.id, at)
+        .run()
+        .catch(() => undefined)
+    }
+  }
+  await reconcileMedia(env, now)
+}
+
+/**
+ * The photos due for another look, whatever their operations' steps say: a move that finished can still have been
+ * undone by another's write landing late, from a Worker that then stopped. Each is put where its place's state says;
+ * one that won't settle (or whose bytes are gone) is looked at again later, behind the others, and stays listed.
+ */
+export async function reconcileMedia(env: OpEnv, now: Date) {
+  const at = now.toISOString()
+  const { results } = await env.db
+    .prepare("SELECT place_id, due_at FROM media_checks WHERE due_at <= ?1 ORDER BY due_at, place_id LIMIT ?2")
+    .bind(at, MEDIA_BATCH)
+    .all<{ place_id: string; due_at: string }>()
+  for (const { place_id, due_at } of results) {
+    try {
+      await placePhoto(env, place_id, now, false)
+      // Unless a move registered meanwhile: then it is looked at again after that one.
+      await env.db.prepare("DELETE FROM media_checks WHERE place_id = ?1 AND due_at = ?2").bind(place_id, due_at).run()
+    } catch (err) {
+      console.error(JSON.stringify({ level: "error", event: "photo_unsettled", place: place_id, error: (err as Error).message }))
+      await env.db
+        .prepare("UPDATE media_checks SET due_at = ?3 WHERE place_id = ?1 AND due_at = ?2")
+        .bind(place_id, due_at, new Date(now.getTime() + MEDIA_RETRY_MS).toISOString())
         .run()
         .catch(() => undefined)
     }
@@ -337,16 +395,30 @@ async function abortRecorded(env: OpEnv, id: string, at: string, late = false) {
 /**
  * Copies made for a decision that never landed. A copy nothing names (an approval's own key) is removed; one the
  * published revision names (a restoration's) is put where the place's state says it belongs: an identical restoration
- * may have won meanwhile, and its photo must stay.
+ * may have won meanwhile, and its photo must stay. Recorded on the operation, so one that couldn't finish is retried by
+ * the job; the photo's own look-again (media_checks) covers a write that lands after this call has ended.
  */
-async function cleanPrepared(env: OpEnv, placeId: string, detail: OpDetail) {
-  if (!detail.prepared?.length) return
+async function preparedCleaned(env: OpEnv, id: string, now: Date) {
+  const op = await readOp(env.db, id)
+  if (!op || op.state !== "refused" || (op.media !== "pending" && op.media !== "failed")) return
+  const detail = JSON.parse(op.detail) as OpDetail
+  let ok = true
   try {
-    await retirePhotos(env.db, env.media, detail.prepared)
-    await placePhoto(env, placeId)
+    if (detail.prepared?.length) {
+      ok = await retirePhotos(env.db, env.media, detail.prepared)
+      await placePhoto(env, op.place_id, now)
+    }
   } catch {
-    // Left for the sweep: nothing serves a file the database doesn't make public.
+    ok = false
   }
+  await env.db
+    .prepare(
+      ok
+        ? "UPDATE visibility_ops SET media = 'done' WHERE id = ?1 AND media IN ('pending', 'failed')"
+        : "UPDATE visibility_ops SET media = 'failed' WHERE id = ?1 AND media = 'pending'",
+    )
+    .bind(id)
+    .run()
 }
 
 /**
@@ -361,7 +433,7 @@ async function cleanPrepared(env: OpEnv, placeId: string, detail: OpDetail) {
  * its next pass and puts the copy back. A photo that still hasn't settled after a few passes throws, so its
  * operation's file step stays unfinished and the job runs it again.
  */
-export async function placePhoto(env: OpEnv, placeId: string) {
+export async function placePhoto(env: OpEnv, placeId: string, now = new Date(), register = true) {
   for (let pass = 0; pass < PLACE_PASSES; pass++) {
     const row = await env.db
       .prepare(
@@ -373,16 +445,26 @@ export async function placePhoto(env: OpEnv, placeId: string) {
       .first<{ status: string; photo_key: string | null; hidden: number }>()
     const key = row?.photo_key
     if (!row || !key?.startsWith("public/")) return
+    // Registered before any write, so the job looks again once every write of this move has landed or stopped.
+    if (register && pass === 0)
+      await env.db
+        .prepare(
+          `INSERT INTO media_checks (place_id, due_at) VALUES (?1, ?2)
+           ON CONFLICT (place_id) DO UPDATE SET due_at = MAX(due_at, excluded.due_at)`,
+        )
+        .bind(placeId, new Date(now.getTime() + MEDIA_SETTLE_MS).toISOString())
+        .run()
     const served = row.status === "published" && !row.hidden
     const held = heldKey(key)
     let changed = false
     // The kept copy first, from the served one, before anything can take the served one away.
     if (!(await env.media.head(held))) changed = (await copy(env.media, key, held)) || changed
+    // Neither copy: the photo's bytes are gone. A failure that stays listed, never a move that completed.
+    if (!(await env.media.head(held))) throw new Error("photo_missing")
     if (served) {
       if (!(await env.media.head(key))) changed = (await copy(env.media, held, key)) || changed
     } else if (await env.media.head(key)) {
-      // Only once the kept copy is there: a photo is never left with no copy at all.
-      if (!(await env.media.head(held))) throw new Error("photo_unsettled")
+      // The kept copy is there (checked just above), so the photo is never left with no copy at all.
       await env.media.delete(key)
       changed = true
     }
