@@ -30,6 +30,23 @@ test.describe("desktop", () => {
     await audit(page)
   })
 
+  test("the removal or correction request, with its notice open and after it is sent", async ({ page }) => {
+    await page.goto("/#/place/nova-memorial-reim")
+    await expect(page.getByRole("heading", { name: "אתר ההנצחה לנרצחי פסטיבל נובה" })).toBeVisible()
+    await page.getByRole("button", { name: "בקשת הסרה או תיקון" }).click()
+    const form = page.getByRole("region", { name: "בקשת הסרה או תיקון" })
+    await form.getByRole("checkbox", { name: "הסיפור" }).check()
+    await form.getByRole("radio", { name: /^אחר/ }).check()
+    // Worded apart from the reports spec's requests: the same explanation twice in a day is a spam signal.
+    await form.getByLabel("מה לבדוק, ולמה").fill(`בדיקת נגישות של הטופס: התאריך בתיאור נראה שגוי (${Date.now()}).`)
+    await form.getByText("הודעת הפרטיות", { exact: true }).click()
+    await expect(form.getByText("אין בטופס שדה לשם", { exact: false })).toBeVisible()
+    await audit(page)
+    await form.getByRole("button", { name: "שליחת הבקשה" }).click()
+    await expect(form.getByRole("status")).toBeVisible()
+    await audit(page)
+  })
+
   test("About, with every section open", async ({ page }) => {
     await day(page)
     await page.getByRole("button", { name: "על הפרויקט" }).click()
