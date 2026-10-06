@@ -5,6 +5,7 @@ import { EXPORT_TABLES, runExport } from "../db/exports"
 import { importExport, type ExportPayload } from "../db/import"
 import { readFeed } from "../db/places"
 import { runRetention } from "../db/retention"
+import { ulid } from "../lib/ids"
 import { unseal, type Manifest } from "../lib/sealed"
 import { approve } from "./helpers"
 import { decide, queued, revise, rev, send } from "./submission-helpers"
@@ -115,6 +116,14 @@ describe("a restore through the filtered import (spec 7, Route B)", () => {
       .bind(iso(R, -91), noted.id)
       .run()
 
+    // An audit row and a waiting photo past their dates by the restore (24 months; 29 days from the upload).
+    await env.DB.prepare("INSERT INTO audit_log (id, at, actor, action, entity_id) VALUES (?, ?, 'automatic', 'erase', ?)")
+      .bind(`a_old_${live.id}`, iso(R, -721), live.id)
+      .run()
+    const waiting = await send("ספסל דמו שתמונתו חיכתה")
+    await env.DB.prepare("UPDATE revisions SET photo_key = ?, photo_alt = 'תיאור תמונה שחיכתה', photo_credit = 'צלם' WHERE place_id = ?")
+      .bind(`quarantine/${waiting.id}/r_x-${ulid(R.getTime() - 30 * DAY)}.jpg`, waiting.id)
+      .run()
     const payload = await exported()
     // The export holds every one of them: the filter is what keeps them out.
     const all = JSON.stringify(payload.tables)
@@ -136,6 +145,8 @@ describe("a restore through the filtered import (spec 7, Route B)", () => {
       "הסבר שעבר מועדו",
       "reporter@example.test",
       "הערת אישור שעבר מועדה",
+      `a_old_${live.id}`,
+      "תיאור תמונה שחיכתה",
     ])
       expect(written).not.toContain(text)
     // What was not due arrives whole.
@@ -159,7 +170,9 @@ describe("a restore through the filtered import (spec 7, Route B)", () => {
     })
     // The deletion job, run on the restored database at that moment, finds nothing it would delete.
     const run = await runRetention({ db: env.IMPORT_TEST, media: env.MEDIA, ledger: env.LEDGER, purge: async () => true }, R)
-    expect(run).toMatchObject({ ok: true, counts: { erased: 0, revisions: 0, decisionNotes: 0, contacts: 0, reports: 0, notes: 0 } })
+    // Every part of it, whatever parts the job has.
+    expect(run.ok).toBe(true)
+    expect(Object.entries(run.counts).filter(([, n]) => n !== 0)).toEqual([])
     // And the public map is the same as the one the export was taken from.
     expect((await readFeed(env.IMPORT_TEST, "0")).places).toEqual((await readFeed(env.DB, "0")).places)
   })

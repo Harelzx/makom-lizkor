@@ -1,5 +1,5 @@
 import { EXPORT_TABLES, type ExportTable } from "./exports"
-import { BLANK_COLUMNS, retentionCutoffs } from "./retention"
+import { BLANK_COLUMNS, retentionCutoffs, uploadedAt } from "./retention"
 
 type Row = Record<string, unknown>
 /** An export as unsealed: what runExport wrote, table by table. */
@@ -11,7 +11,8 @@ const due = (value: unknown, cutoff: string) => typeof value === "string" && val
  * What a restore may write (spec 7, Route B): the export with every deletion rule applied at the moment of the import,
  * the same rules and dates as the retention job (retentionCutoffs, BLANK_COLUMNS). A submission whose days ran out
  * arrives as a tombstone, a closed correction past its days empty, and contact details, a request's text, a hide's
- * notes and a moderator's note past their dates are never written. So the new database's own history never holds them.
+ * notes, a moderator's note, a waiting photo's name and audit rows past their dates are never written (anemones'
+ * records aren't exported at all). So the new database's own history never holds them.
  */
 export function filterForImport(tables: Record<string, Row[]>, now: Date): Record<ExportTable, Row[]> {
   const c = retentionCutoffs(now)
@@ -40,6 +41,9 @@ export function filterForImport(tables: Record<string, Row[]>, now: Date): Recor
     const closed = r.state === "approved" || r.state === "rejected" || r.state === "superseded"
     if (r.decision_note !== null && (due(r.decided_at, c.noteCeiling) || (closed && due(r.decided_at, c.noteClosed))))
       r.decision_note = null
+    // A photo still waiting past its days (its file isn't in the backup anyway).
+    if ((r.state === "pending" || r.state === "returned") && typeof r.photo_key === "string" && r.photo_key.startsWith("quarantine/"))
+      if (uploadedAt(r.photo_key) <= c.photo) Object.assign(r, { photo_key: null, photo_alt: null, photo_credit: null })
     return r
   })
   const contacts = (tables.contacts ?? []).filter((x) => !erased.has(x.place_id) && !due(x.purge_after, c.now))
@@ -51,7 +55,8 @@ export function filterForImport(tables: Record<string, Row[]>, now: Date): Recor
   const field_suppressions = (tables.field_suppressions ?? []).map((x) =>
     due(x.notes_purge_after, c.now) ? { ...x, reason: null, basis_detail: null, basis_note: x.basis_note === null ? null : "" } : x,
   )
-  const out = { places, revisions, contacts, reports, field_suppressions } as Record<string, Row[]>
+  const audit_log = (tables.audit_log ?? []).filter((x) => !due(x.at, c.audit))
+  const out = { places, revisions, contacts, reports, field_suppressions, audit_log } as Record<string, Row[]>
   return Object.fromEntries(EXPORT_TABLES.map((t) => [t, out[t] ?? tables[t] ?? []])) as Record<ExportTable, Row[]>
 }
 
