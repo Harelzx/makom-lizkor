@@ -1,7 +1,6 @@
 import { Hono, type Context } from "hono"
 import type { AppEnv } from "../index"
 import { publicPlace } from "../db/places"
-import { curatedPlace } from "../lib/curated"
 import { ogState } from "../lib/og"
 
 export const share = new Hono<AppEnv>()
@@ -22,7 +21,7 @@ share.get("/place/:id/", (c) => sharePage(c, c.req.param("id")))
 share.get("/place/*", (c) => sharePage(c, null))
 
 async function sharePage(c: Context<AppEnv>, id: string | null) {
-  const found = !id ? ({ kind: "none" } as const) : id.startsWith("p_") ? await publicPlace(c.env.DB, id) : curatedPlace(id)
+  const found = !id ? ({ kind: "none" } as const) : await publicPlace(c.env.DB, id)
   const site = await c.env.ASSETS.fetch(new Request(new URL("/", c.req.url)))
   // The page's own headers (any security headers the assets carry) stay; the length and validators no longer fit it.
   const headers = (set: Record<string, string>) => {
@@ -54,9 +53,8 @@ async function sharePage(c: Context<AppEnv>, id: string | null) {
   }
 
   const place = found.place
-  // A contribution's own image, named by the hash of what it shows now; the site's own places keep the general one
-  // until they move into the database (phase 7).
-  const og = id!.startsWith("p_") ? await ogState(c.env.DB, id!) : null
+  // The place's own image, named by the hash of what it shows now; the general one if it can't be projected.
+  const og = await ogState(c.env.DB, id!)
   const image = og ? `${origin}/media/og/${encodeURIComponent(id!)}/${og.hash}.png` : `${origin}/og.png`
   // Cut by characters, not UTF-16 units, so an emoji at the edge isn't split into a broken glyph.
   const words = Array.from(place.summary_he || place.place_he || "מקום לזכור")
@@ -82,8 +80,8 @@ async function sharePage(c: Context<AppEnv>, id: string | null) {
           head.append(`<meta property="og:url" content="${attr(url)}" />`, { html: true })
           head.append(`<link rel="canonical" href="${attr(url)}" />`, { html: true })
         }
-        // The site already ships its own places; an approved contribution's fields come with its page.
-        if ("id" in place && id!.startsWith("p_"))
+        // The place's public fields come with its page, so its card opens before the feed.
+        if ("id" in place)
           head.append(`<script type="application/json" id="place-data">${JSON.stringify(place).replace(/</g, LT)}</script>`, {
             html: true,
           })

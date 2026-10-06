@@ -1,5 +1,7 @@
 import { env } from "cloudflare:workers"
 import { describe, expect, it } from "vitest"
+import { CuratedInput } from "@/shared/curated"
+import { storeCurated } from "../db/curated"
 import { call } from "./app"
 import { admin } from "./helpers"
 import { body, curatedIn, multipart, newId, post, sources, uploadPhoto, viewRev, webp } from "./curated-helpers"
@@ -45,9 +47,17 @@ describe("a moderator's curated record", () => {
     expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM places WHERE id = ?").bind(id).first("n")).toBe(0)
   })
 
-  it("never edits a contribution", async () => {
+  it("never edits a contribution: its id is never a curated one, and the store refuses it even so", async () => {
     const { id } = await send("ספסל דמו לא לעריכה")
-    expect((await post(body(id, { expectedRev: await viewRev(id) }))).status).toBe(403)
+    const revisions = () => env.DB.prepare("SELECT COUNT(*) AS n FROM revisions WHERE place_id = ?").bind(id).first("n")
+    const before = await revisions()
+    const res = await post(body(id, { expectedRev: await viewRev(id) }))
+    expect(res.status).toBe(400)
+    expect(await res.json()).toMatchObject({ code: "invalid_input" })
+    // Past the route's own check (a contribution's id is p_ and a ULID), the store still never writes one.
+    const input = { ...CuratedInput.parse(body("demo-guard")), id }
+    expect(await storeCurated(env.DB, env.MEDIA, input, crypto.randomUUID(), new Date())).toEqual({ kind: "contribution" })
+    expect(await revisions()).toBe(before)
   })
 
   it("is edited at its current rev only, and a stale view is a conflict", async () => {

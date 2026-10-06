@@ -47,7 +47,7 @@ describe("the sources a curated record needs before it is published", () => {
     ])
   })
   it("don't count a source for a photo that isn't there", () => {
-    expect(curatedSourceProblems(withRevival, [], [...complete, source("photo", { photo_idx: 3 })])).toEqual(["photo:3:no_photo"])
+    expect(curatedSourceProblems(withRevival, [photo], [...complete, source("photo", { photo_idx: 3 })])).toEqual(["photo:3:no_photo"])
   })
   it("refuse a photo source without its index, and an index on any other field", () => {
     expect(PlaceSource.safeParse({ field: "photo", source: "commons", retrieved_approx: false }).success).toBe(false)

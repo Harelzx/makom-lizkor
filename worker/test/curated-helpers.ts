@@ -2,6 +2,8 @@ import { call } from "./app"
 import { admin, devToken } from "./helpers"
 import { feed } from "./submission-helpers"
 import type { PublicCuratedPlace } from "@/shared/contract"
+import fixtures from "../../fixtures/curated.json"
+import { importCurated } from "../../scripts/curated-import.mjs"
 
 // Curated records made through the moderators' route (phase 7), for the tests of that route and of their lifecycle.
 
@@ -58,3 +60,23 @@ export const curatedIn = async (id: string) => (await feed()).find((p) => p.id =
 export const viewRev = async (id: string) => (await (await admin(`/api/admin/places/${id}`)).json<{ rev: number }>()).rev
 let n = 0
 export const newId = () => `demo-curated-${Date.now().toString(36)}-${n++}`
+
+/** A real 1×1 WebP, so the share image's renderer has a picture it can decode. */
+export const TINY_WEBP = Uint8Array.from(atob("UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA=="), (c) => c.charCodeAt(0))
+
+/**
+ * Some of the site's own places, put into this test's database the way the dev server and the e2e state get them: the
+ * importer, through the moderators' route (phase 7, task 2). Insert-only, so calling it again is harmless.
+ */
+export async function seedCurated(ids: string[]) {
+  const records = fixtures.places.filter((p) => ids.includes(p.id))
+  if (records.length !== ids.length)
+    throw new Error(`not in fixtures/curated.json: ${ids.filter((id) => !records.some((r) => r.id === id))}`)
+  return importCurated({
+    fetch: async (url, init) => call(url, init),
+    base: "http://local",
+    records,
+    readPhoto: async (file) => ({ file: TINY_WEBP, thumb: TINY_WEBP, name: file }),
+    headers: { "Cf-Access-Jwt-Assertion": await devToken("dev@example.test") },
+  })
+}

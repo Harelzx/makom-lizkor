@@ -11,9 +11,11 @@ import { decide, feed, objects, queued, send, upload } from "./submission-helper
 const expectSecure = (res: Response) => {
   for (const [name, value] of Object.entries(SECURITY_HEADERS)) expect(res.headers.get(name), name).toBe(value)
 }
+import { seedCurated } from "./curated-helpers"
 
 describe("the security headers", () => {
   it("are on every kind of response: JSON, an error, a refusal, and the share page found or not", async () => {
+    await seedCurated(["nova-memorial-reim"])
     const responses = [
       await call("http://local/api/v1/health"),
       await call("http://local/api/v1/no-such-route"),

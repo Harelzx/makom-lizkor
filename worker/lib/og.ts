@@ -1,6 +1,7 @@
 import { initWasm, Resvg } from "@resvg/resvg-wasm"
 import wasm from "@resvg/resvg-wasm/index_bg.wasm"
 import { isCurated, type PublicPlace } from "@/shared/contract"
+import { CURATED_ID } from "@/shared/curated"
 import { publicPlace } from "../db/places"
 import { OG_FONTS } from "./og-font"
 import { log } from "./log"
@@ -161,7 +162,7 @@ export async function ogResponse(
   hash: string,
   render: (p: OgProjection, photo: Uint8Array | null) => Promise<Uint8Array> = renderOg,
 ): Promise<Response> {
-  if (!/^p_[0-9A-Z]{26}$/.test(id) || !/^[0-9a-f]{64}$/.test(hash)) return NOT_FOUND()
+  if (!(/^p_[0-9A-Z]{26}$/.test(id) || CURATED_ID.test(id)) || !/^[0-9a-f]{64}$/.test(hash)) return NOT_FOUND()
   const state = await ogState(env.db, id)
   if (!state || state.hash !== hash) return NOT_FOUND()
   const key = `og/${id}/${hash}.png`
