@@ -3,6 +3,9 @@
   "name": "makom-lizkor",
   "main": "./worker/index.ts",
   "compatibility_date": "2026-10-01",
+  // No side door around Access: the site is reached only at its own domain (spec 11; release:check, release-platform).
+  "workers_dev": false,
+  "preview_urls": false,
   // The SPA is served as static assets; only these paths run the Worker.
   "assets": {
     "binding": "ASSETS",
