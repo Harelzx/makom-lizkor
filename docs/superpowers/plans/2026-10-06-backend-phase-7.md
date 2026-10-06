@@ -79,6 +79,7 @@
     - בדיקות ה־Worker, בתהליך דרך `app.fetch`;
     - בייצור, האוטומציה, אחרי אישור של Harel.
   - **הסדר:** משימה 4 (הנתיב) לפני משימה 2 (ה־fixtures).
+- **תנאי מוקדם ב־staging (a51):** `scripts/edge-check.mjs` מצפה ש־`/place/car-wall-tkuma` יענה 200. אחרי שלב 7 זה מקום curated, ולכן ה־importer צריך לרוץ ב־staging לפני בדיקת הקצה, אחרת היא נכשלת. אותו seed מכין גם את שני הבעלים הסינתטיים (`EDGE_IDENTITIES`) שבדיקת הבידוד הפרטי דורשת.
 - **תמונות הנופים של About** אינן רשומות מקומות. הן עוברות מ־`public/photos` ל־`public/landscapes`, ו־`public/photos` כולו יוצא מה־build.
 
 ## משימה 1: הסכמה
