@@ -33,6 +33,17 @@ Latest: `20261006T083017Z-d685d7f0` (revise; partial packet, not phase or merge 
 
 Recent chain: b03acd0b → bc46a39c → 5131154b → bb965446 → 4889666d → d685d7f0, all "revise" with fixes made; each answer is in `reports/a18.json`…`a23.json` and in the bundle's `runtime/<id>/answer.json`.
 
+## Since the restart (2026-10-06 afternoon)
+
+- `71d0f91`: F4-A6 UI fix (pager). Adviser `20261006T092913Z-7957f9c9` (proceed): F4-A, F4-A2, F4-A4, F4-A6 closed. Note: `92f9dc29` was the revise before it; cite 7957f9c9 for the closures.
+- Packet 3 (engine/ledger) → `a26.json` (revise). Open in one corrective batch, delta from `71d0f91`:
+  - F4-O1 refused ops can't repair a missing abort (abortRecorded ignores write failure; resumeOps skips refused).
+  - F4-O2 placePhoto races: older hide's delete of public/ after a newer restore deleted held/ → both copies gone. Need fencing/safe cleanup, barrier tests both orders incl. prepare/cleanup.
+  - F4-O3 finishOp progress overwrites (non-monotonic, lost purge tries); resumeOps oldest-100 starvation; per-op failure isolation.
+  - F4-O4 replay: abort-only / intent+abort withdraw/erase must not count as erased; document/test the fromSeq window.
+  - Also: L1 wording (verify ctx.cache.purge in Cloudflare docs; missing support = success only in explicit local/test mode); remove the ledger comment's claim that ids are non-personal and justify lifetime retention.
+  - Packet 4 must add retirePhotos and prepare/cleanup callers, and show that lifting one of two same-field suppressions is reconstructible from the ledger (add target ids to LedgerEntry if needed). `ops-transitions.test.ts` moved to packet 4 for size.
+
 ## Open findings (one list, stable IDs)
 
 | id     | what                                                                                                                                                | class                                                | closure needed                                                                                                                           |
