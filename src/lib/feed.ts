@@ -1,5 +1,6 @@
 import { Feed, isNewer, PublicPlace } from "@/shared/contract"
 import { retryWaiting } from "@/lib/outbox"
+import { pruneReports } from "@/lib/report-outbox"
 import { loadSnapshot, loadUnlisted, relistPublished, saveSnapshot, unlistedGeneration } from "@/lib/storage"
 import { useStore } from "@/store"
 import type { Place } from "@/types"
@@ -105,6 +106,8 @@ export function startFeedSync(): () => void {
     useStore.getState().setRemote(snapshot.data.v, places, false)
   })
   onWake()
+  // Requests kept past their window go when the site runs; they are never sent again (notice notice.report@2026-10-3).
+  void pruneReports()
   return () => {
     clearInterval(timer)
     document.removeEventListener("visibilitychange", onWake)

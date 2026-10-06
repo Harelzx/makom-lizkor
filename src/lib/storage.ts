@@ -123,6 +123,19 @@ export async function changeTributeOutbox(
   return next
 }
 
+/**
+ * Removal and correction requests sent from this browser whose arrival isn't confirmed yet, by key: kept, as sent,
+ * from just before the first try until an answer for that key, or until the window from the first try ends (notice
+ * notice.report@2026-10-3), so a resend is the same request.
+ */
+export async function changeReportOutbox<T>(change: (stored: Record<string, T>) => Record<string, T>): Promise<Record<string, T>> {
+  const s = db()
+  if (!s) throw new Error("storage_unavailable")
+  let next: Record<string, T> = {}
+  await update<Record<string, T>>("reportOutbox", (stored) => (next = change(stored ?? {})), s)
+  return next
+}
+
 /** The last feed this browser received, kept whole: what the map shows with no connection (spec 5). */
 export async function loadSnapshot(): Promise<unknown> {
   try {

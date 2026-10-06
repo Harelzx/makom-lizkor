@@ -115,7 +115,7 @@ export type Element = (typeof ELEMENTS)[number]
 export const REQUESTER_TYPES = ["family", "rights_holder", "other"] as const
 
 /** The report notices a form may record, as for submissions: never removed, new ones at the end. */
-export const REPORT_NOTICES = ["notice.report@2026-10-1", "notice.report@2026-10-2"] as const
+export const REPORT_NOTICES = ["notice.report@2026-10-1", "notice.report@2026-10-2", "notice.report@2026-10-3"] as const
 export const CURRENT_REPORT_NOTICE = REPORT_NOTICES[REPORT_NOTICES.length - 1]
 
 /**

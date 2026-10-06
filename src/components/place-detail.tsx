@@ -258,7 +258,7 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
           </p>
         )}
         {/* A removal or a correction goes to a person through the request form (spec 6); places on this device only are the visitor's own. */}
-        {!local && <ReportRequest place={place} />}
+        {!local && <ReportRequest key={place.id} place={place} />}
       </footer>
     </motion.article>
   )

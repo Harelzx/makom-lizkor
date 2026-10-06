@@ -65,7 +65,7 @@ it("never drops a version a form has shown, and keeps each one's text", () => {
 })
 
 // The report notices a request may have recorded. As for submissions, never removed and new ones at the end.
-const REPORTS_SHOWN = ["notice.report@2026-10-1", "notice.report@2026-10-2"]
+const REPORTS_SHOWN = ["notice.report@2026-10-1", "notice.report@2026-10-2", "notice.report@2026-10-3"]
 
 it("keeps every report notice a request may have recorded, in the order they were shown, and the form shows the newest", () => {
   for (const v of REPORTS_SHOWN) {
@@ -74,5 +74,13 @@ it("keeps every report notice a request may have recorded, in the order they wer
   }
   expect(REPORT_NOTICES.slice(0, REPORTS_SHOWN.length)).toEqual(REPORTS_SHOWN)
   expect(REPORT_NOTICES.at(-1)).toBe(CURRENT_REPORT_NOTICE)
-  expect(CURRENT_REPORT_NOTICE).toBe("notice.report@2026-10-2")
+  expect(CURRENT_REPORT_NOTICE).toBe("notice.report@2026-10-3")
+})
+
+it("the report notice says the browser keeps a request until its arrival is known, for at most a day, and what a browser that keeps nothing means", () => {
+  const text = NOTICES[CURRENT_REPORT_NOTICE]
+  expect(text).toContain("בדפדפן שלכם")
+  expect(text).toContain("24 שעות")
+  expect(text).toContain("ולא נשלחת שוב מעצמה")
+  expect(text).toContain("נשמרת רק עד שתסגרו או תרעננו את הדף")
 })

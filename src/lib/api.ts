@@ -266,15 +266,26 @@ export async function getTributeTotals(): Promise<Record<string, number> | null>
 
 export type ReportSend =
   | ({ ok: true } & ReportResult)
-  | { ok: false; kind: "rejected"; code: string }
-  /** It didn't go: the check couldn't run, or the server said to come back. Sending again is safe. */
-  | { ok: false; kind: "temporary"; code?: string }
-  /** It went, and no answer came back: the server may have it. Sent again under the same key, it is never a second request. */
+  /** Refused before the server stored anything, for this try only: an earlier try's fate is not known from it. */
+  | { ok: false; kind: "not_sent"; code: string }
+  /** The key already holds a different request on the server: this one's delivery is not confirmed. */
+  | { ok: false; kind: "conflict" }
+  /** No answer that says: the server may have stored it (a lost answer, an error after the write). */
   | { ok: false; kind: "unknown" }
 
-const REPORT_REFUSED = new Set([400, 404, 409, 410, 422])
+/**
+ * The refusals the request route gives before it stores anything (worker/routes/reports.ts): the limiter, the body and
+ * key checks, configuration, the bot check, and an unknown place. Any other answer may come after the write.
+ */
+const BEFORE_WRITE: Record<number, string[]> = {
+  400: ["invalid_input"],
+  403: ["turnstile_required", "turnstile_failed"],
+  404: ["not_found"],
+  429: ["rate_limited"],
+  503: ["not_configured", "turnstile_unavailable"],
+}
 
-/** A removal or correction request (spec 6), under a key the form keeps for every try. */
+/** A removal or correction request (spec 6), under the key its first try was given; a fresh bot check every try. */
 export async function sendReport(input: ReportInput, key: string): Promise<ReportSend> {
   const token = await turnstileToken("report").catch(() => null)
   let res: Response
@@ -293,6 +304,7 @@ export async function sendReport(input: ReportInput, key: string): Promise<Repor
     return result?.ticket ? { ok: true, ...result } : { ok: false, kind: "unknown" }
   }
   const code = ((await res.json().catch(() => ({}))) as { code?: string }).code
-  if (REPORT_REFUSED.has(res.status)) return { ok: false, kind: "rejected", code: code ?? `http_${res.status}` }
-  return { ok: false, kind: "temporary", code }
+  if (res.status === 409 && code === "idempotency_key_reused") return { ok: false, kind: "conflict" }
+  if (code && BEFORE_WRITE[res.status]?.includes(code)) return { ok: false, kind: "not_sent", code }
+  return { ok: false, kind: "unknown" }
 }

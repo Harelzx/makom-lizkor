@@ -64,12 +64,16 @@ function useHashRoute() {
   // a place approved since it was saved would fall back wrongly.
   const feedVersion = useStore((s) => s.feedVersion)
   const feedLive = useStore((s) => s.feedLive)
-  // The contribution whose card was last shown with its place, so its disappearing can be told from a bad link.
+  // The contribution whose card was last shown with its place, so its disappearing can be told from a bad link. Only
+  // recorded here: a selection is never checked against the feed already held, which may predate the place.
   const shown = useRef<string | null>(null)
+  const remote = useStore((s) => s.remote)
+  useEffect(() => {
+    if (selectedId?.startsWith("p_") && remote.some((p) => p.id === selectedId)) shown.current = selectedId
+  }, [selectedId, remote])
   useEffect(() => {
     const s = useStore.getState()
     const id = s.selectedId
-    if (id?.startsWith("p_") && s.remote.some((p) => p.id === id)) shown.current = id
     if (!feedVersion || !feedLive || !id?.startsWith("p_") || s.remote.some((p) => p.id === id)) return
     history.replaceState(null, "", "#/")
     s.select(null)
@@ -78,7 +82,7 @@ function useHashRoute() {
     if (shown.current === id) toast("המקום הזה אינו מוצג כרגע")
     shown.current = null
     void import("@/map/controller").then((m) => m.flyToEnvelope(2400))
-  }, [feedVersion, feedLive, selectedId])
+  }, [feedVersion, feedLive])
   useEffect(() => {
     if (phase !== "day") return
     const next = selectedId ? `#/place/${encodeURIComponent(selectedId)}` : "#/"
