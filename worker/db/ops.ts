@@ -119,6 +119,8 @@ function entry(op: OpRow, phase: LedgerEntry["phase"], at: string, late = false)
     ...(detail.basis ? { basis: detail.basis } : {}),
     ...(detail.revision ? { revision: detail.revision } : {}),
     at,
+    // The database step ran with the moment the operation was stored (runOp uses one clock for both).
+    decided_at: op.created_at,
     ...(late ? { late: true } : {}),
   }
 }

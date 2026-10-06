@@ -1,4 +1,4 @@
-import { replayDecision, type LedgerEntry } from "../lib/ledger"
+import { decidedAt, replayDecision, type LedgerEntry } from "../lib/ledger"
 import { sha256, type Manifest } from "../lib/sealed"
 import { notesCeiling } from "./reports"
 import { BLANK_COLUMNS } from "./retention"
@@ -86,10 +86,10 @@ export async function replayLedger(db: D1Database, ledger: R2Bucket, now: Date) 
             .bind(placeId, revision.id),
           db
             .prepare("UPDATE revisions SET state = 'approved', decided_at = ?2, photo_key = COALESCE(?3, photo_key) WHERE id = ?1")
-            .bind(revision.id, e.at, photo),
+            .bind(revision.id, decidedAt(e), photo),
           db
             .prepare("UPDATE places SET status = ?2, published_revision_id = ?3, status_changed_at = ?4 WHERE id = ?1")
-            .bind(placeId, e.status ?? "published", revision.id, e.at),
+            .bind(placeId, e.status ?? "published", revision.id, decidedAt(e)),
         )
       } else if (e.kind === "reject" || e.kind === "return") {
         if (revision)
@@ -100,10 +100,12 @@ export async function replayLedger(db: D1Database, ledger: R2Bucket, now: Date) 
                    photo_key = CASE WHEN ?2 = 'rejected' AND photo_key LIKE 'quarantine/%' THEN NULL ELSE photo_key END
                  WHERE id = ?1`,
               )
-              .bind(revision.id, e.kind === "reject" ? "rejected" : "returned", e.at),
+              .bind(revision.id, e.kind === "reject" ? "rejected" : "returned", decidedAt(e)),
           )
         if (e.status)
-          statements.push(db.prepare("UPDATE places SET status = ?2, status_changed_at = ?3 WHERE id = ?1").bind(placeId, e.status, e.at))
+          statements.push(
+            db.prepare("UPDATE places SET status = ?2, status_changed_at = ?3 WHERE id = ?1").bind(placeId, e.status, decidedAt(e)),
+          )
       } else if (e.kind === "suppress") {
         for (const [i, id] of (e.targets ?? []).entries())
           statements.push(
@@ -117,8 +119,8 @@ export async function replayLedger(db: D1Database, ledger: R2Bucket, now: Date) 
                 placeId,
                 e.fields?.[i] ?? "whole",
                 e.actor === "automatic" ? "precautionary" : "manual",
-                e.at,
-                notesCeiling(new Date(e.at)),
+                decidedAt(e),
+                notesCeiling(new Date(decidedAt(e))),
               ),
           )
         const status = e.status ?? (e.fields?.includes("whole") ? "hidden" : null)
@@ -135,7 +137,7 @@ export async function replayLedger(db: D1Database, ledger: R2Bucket, now: Date) 
                    notes_purge_after = MIN(notes_purge_after, strftime('%Y-%m-%dT%H:%M:%fZ', ?2, '+90 days'))
                  WHERE id = ?1 AND lifted_at IS NULL`,
               )
-              .bind(id, e.at, e.basis ?? null),
+              .bind(id, decidedAt(e), e.basis ?? null),
           )
         if (e.status) statements.push(db.prepare("UPDATE places SET status = ?2 WHERE id = ?1").bind(placeId, e.status))
       }

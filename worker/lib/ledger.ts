@@ -31,12 +31,21 @@ export type LedgerEntry = {
   basis?: string
   /** On an approval, a refusal or a return: the revision decided (an id, never its content). */
   revision?: string
+  /** When the entry was written: for a record repaired later (a late intent, a commit the job wrote), after the fact. */
   at: string
+  /**
+   * When the decision itself was made, at the database step: what a replay dates it by, so a record repaired a week
+   * later never moves a deadline. Absent from entries written before it existed, which fall back to `at`.
+   */
+  decided_at?: string
   /** Written after the fact: an intent the bucket refused at the time (a removal that went ahead), or an abort repaired. */
   late?: boolean
 }
 
 /** One object per entry, under its place, named so a listing comes back in chain order. */
+/** The date a replay gives a decision. */
+export const decidedAt = (e: Pick<LedgerEntry, "at" | "decided_at">) => e.decided_at ?? e.at
+
 export const ledgerKey = (e: Pick<LedgerEntry, "place" | "seq_from" | "op" | "phase">) =>
   `ledger/${e.place}/${String(e.seq_from).padStart(8, "0")}-${e.op}-${e.phase}.json`
 
