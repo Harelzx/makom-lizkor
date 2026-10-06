@@ -14,9 +14,17 @@ import { submissions } from "./routes/submissions"
 import { tributes } from "./routes/tributes"
 import { ogResponse } from "./lib/og"
 import { log } from "./lib/log"
+import { ops } from "./routes/ops"
+import type { ErrorRates } from "./lib/ops-summary"
 
 /** What the routes reach outside the Worker; the tests pass stand-ins, the deployed Worker the real ones. */
-export type Deps = { verifyTurnstile: VerifyTurnstile; sendMail: SendMail; purge: Purge }
+export type Deps = {
+  verifyTurnstile: VerifyTurnstile
+  sendMail: SendMail
+  purge: Purge
+  /** Error rates for /api/ops from the structured logs; none connected yet (they read as unavailable). */
+  errorRates?: ErrorRates
+}
 export type AppEnv = { Bindings: Env; Variables: Deps }
 
 export function createApp(deps: Deps) {
@@ -25,6 +33,7 @@ export function createApp(deps: Deps) {
     c.set("verifyTurnstile", deps.verifyTurnstile)
     c.set("sendMail", deps.sendMail)
     c.set("purge", deps.purge)
+    c.set("errorRates", deps.errorRates)
     await next()
   })
 
@@ -35,6 +44,7 @@ export function createApp(deps: Deps) {
   app.route("/api/v1/reports", reports)
   app.route("/api/v1", feed)
   app.route("/api/admin", admin)
+  app.route("/api/ops", ops)
   app.route("/__dev", dev)
   app.route("/", share)
 

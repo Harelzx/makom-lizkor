@@ -27,6 +27,8 @@
     "ENVIRONMENT": "production",
     "EPOCH": "0",
     "MODERATORS": "",
+    // The diagnostic agent's Access service token client ids (spec 12.1), comma-separated; empty: no one.
+    "OPS_SERVICE_TOKENS": "",
     "ACCESS_TEAM_DOMAIN": "",
     "ACCESS_AUD": "",
     // The hostnames Turnstile may vouch for; set per deploy. The secret is a secret, never a var.
