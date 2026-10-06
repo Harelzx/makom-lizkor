@@ -91,49 +91,75 @@ export async function edgeChecks(
   const privateFailures = []
   const cacheStatuses = []
   const hits = []
-  const ask = async (path, headers, who, round) => {
+  // The owners' own probes, and whether each passed through the edge cache: only they can show no shared HIT (a52).
+  const ownerProbes = { total: 0, seen: 0 }
+  const ask = async (path, headers, who, round, owner = false) => {
     const res = await fetch(url(path), { headers })
-    await res.arrayBuffer()
+    // Read here and compared in memory only: never logged, never in the report.
+    const body = await res.text()
     if (res.headers.get("Cache-Control") !== "private, no-store")
       privateFailures.push(`${path} as ${who}: Cache-Control is ${res.headers.get("Cache-Control")}`)
     const status = res.headers.get("CF-Cache-Status")
     if (status) cacheStatuses.push(status)
     if (status === "HIT") hits.push(`${path} as ${who}, round ${round + 1}`)
-    return res.status
+    if (owner) {
+      ownerProbes.total++
+      if (status) ownerProbes.seen++
+    }
+    return { status: res.status, body }
   }
   for (const path of AUTHENTICATED)
     for (const [who, headers] of Object.entries(askers))
       for (let round = 0; round < 2; round++) {
-        const status = await ask(path, headers, who, round)
+        const { status } = await ask(path, headers, who, round)
         // Without a credential that admits it, an answer is a refusal: never the private content, never a crash.
         if ((who === "anonymous" || who === "wrong_bearer") && !refused(status)) answerFailures.push(`${path} as ${who}: ${status}`)
       }
 
-  // Two synthetic owners: each reads its own private address, and is refused at the other's (a cache keyed without
-  // the credential would hand one's answer to the next). Locally, the moderator and the stranger at the queue.
+  // Synthetic owners: each reads its own private address, its answer carrying its own marker and no other's, and is
+  // refused at the others' (a cache keyed without the credential would hand one's answer to the next). Against a
+  // deployment: two or more, each with an address and a marker of its own (a52). Locally (--dev), the moderator and
+  // the stranger at the queue, by status alone: the local partial mode.
   const isolation = []
   const owners =
     identities ??
-    (dev
+    (local && dev
       ? [
           { name: "moderator", path: "/api/admin/queue", headers: askers.moderator },
           { name: "stranger", path: null, headers: askers.stranger },
         ]
       : [])
   const readers = owners.filter((o) => o.path)
-  if (owners.length < 2 || !readers.length) unseen("private_isolation", "needs two synthetic owners of a private address (EDGE_IDENTITIES)")
+  const marked =
+    !identities ||
+    (readers.length === owners.length &&
+      owners.every((o) => o.marker) &&
+      new Set(owners.map((o) => o.marker)).size === owners.length &&
+      new Set(owners.map((o) => o.path)).size === owners.length)
+  if (owners.length < 2 || !readers.length || !marked)
+    unseen("private_isolation", "needs two synthetic owners, each with its own private address and marker (EDGE_IDENTITIES)")
   else {
-    for (const owner of readers)
+    for (const owner of readers) {
+      const found = { own: true, others: new Set() }
       for (let round = 0; round < 2; round++) {
-        const status = await ask(owner.path, owner.headers, owner.name, round)
+        const { status, body } = await ask(owner.path, owner.headers, owner.name, round, true)
         if (status !== 200) isolation.push(`${owner.name} could not read its own private address (${status})`)
+        else if (owner.marker) {
+          if (!body.includes(owner.marker)) found.own = false
+          for (const other of owners) if (other !== owner && body.includes(other.marker)) found.others.add(other.name)
+        }
       }
+      if (!found.own) isolation.push(`${owner.name}'s own answer didn't carry its marker`)
+      for (const name of found.others) isolation.push(`${owner.name}'s own answer carried ${name}'s marker`)
+    }
     for (const owner of readers)
       for (const other of owners.filter((o) => o !== owner)) {
-        const status = await ask(owner.path, other.headers, other.name, 0)
+        const { status, body } = await ask(owner.path, other.headers, other.name, 0)
         if (!refused(status)) isolation.push(`${other.name} read ${owner.name}'s private address (${status})`)
+        else if (owner.marker && body.includes(owner.marker))
+          isolation.push(`${other.name} was refused at ${owner.name}'s address with its answer`)
       }
-    record("private_isolation", isolation, `${owners.length} owners, each refused at the others' addresses`)
+    record("private_isolation", isolation, `${owners.length} owners, each with its own answer, refused at the others' addresses`)
   }
   results.unshift(
     {
@@ -152,22 +178,37 @@ export async function edgeChecks(
       detail: privateFailures.length ? privateFailures : `${AUTHENTICATED.length} addresses × ${Object.keys(askers).length} askers × 2`,
     },
   )
-  if (!cacheStatuses.length && !hits.length) unseen("no_shared_hit", "no CF-Cache-Status on any answer: the edge cache wasn't seen")
-  else record("no_shared_hit", hits, `${cacheStatuses.length} answers through the edge cache`)
+  // Shown only by the owners' own probes, each seen through the edge cache (a52); locally, by whatever passed through.
+  if (hits.length) record("no_shared_hit", hits, "")
+  else if (local ? !cacheStatuses.length : !ownerProbes.total || ownerProbes.seen < ownerProbes.total)
+    unseen("no_shared_hit", "the owners' own probes weren't all seen through the edge cache (CF-Cache-Status)")
+  else record("no_shared_hit", [], `${ownerProbes.seen} owner probes through the edge cache, no HIT`)
 
   unseen("purge_freshness", "needs the edge cache and a moderator's action on a synthetic place: the staging purge exercise")
 
   if (!workersDev) unseen("workers_dev_closed", "no workers.dev address given (--workers-dev)")
   else {
-    let answer = null
+    let res = null
     try {
-      answer = (await send(new URL("/api/v1/health", workersDev).toString(), { redirect: "manual" })).status
+      res = await send(new URL("/api/v1/health", workersDev).toString(), { redirect: "manual" })
     } catch {
       // Unreachable proves nothing: a network fault looks the same.
     }
-    if (answer === null) unseen("workers_dev_closed", `${workersDev} gave no answer: inconclusive`)
-    else if (answer >= 500) unseen("workers_dev_closed", `${workersDev} answered ${answer}: inconclusive`)
-    else record("workers_dev_closed", answer < 300 ? [`${workersDev} answered ${answer}`] : [], `${workersDev} refused (${answer})`)
+    // Closed is shown only by a refusal (401, 403) or a redirect to Cloudflare Access's sign-in (a52).
+    let toAccess = false
+    try {
+      toAccess =
+        !!res &&
+        res.status >= 300 &&
+        res.status < 400 &&
+        new URL(res.headers.get("Location") ?? "").hostname.endsWith(".cloudflareaccess.com")
+    } catch {
+      // No Location, or not an address: not Access.
+    }
+    if (!res) unseen("workers_dev_closed", `${workersDev} gave no answer: inconclusive`)
+    else if (res.status < 300) record("workers_dev_closed", [`${workersDev} answered ${res.status}`], "")
+    else if (res.status === 401 || res.status === 403 || toAccess) record("workers_dev_closed", [], `${workersDev} refused (${res.status})`)
+    else unseen("workers_dev_closed", `${workersDev} answered ${res.status}, not a recognized refusal: inconclusive`)
   }
   return results
 }

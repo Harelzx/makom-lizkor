@@ -37,16 +37,24 @@ const deployment =
                 : 401
               : 200
     if (u.pathname === "/" || u.pathname.startsWith("/place/")) headers.set("Content-Type", "text/html")
-    const res = { status, headers, body: u.pathname === "/api/v1/health" ? '{"ok":true}' : "{}" }
+    // An owner's own private answer carries its synthetic marker.
+    const body = u.pathname === "/api/v1/health" ? '{"ok":true}' : owner && status === 200 ? `{"marker":"marker-${owner}"}` : "{}"
+    const res = { status, headers, body }
     bend(u, init, res)
     return new Response(res.status === 204 ? null : res.body, { status: res.status, headers: res.headers })
   }
 const status = (results) => Object.fromEntries(results.map((r) => [r.check, r.status]))
 
 const OWNERS = [
-  { name: "a", path: "/api/v1/submissions/p_a", headers: { Authorization: "Bearer token-p_a" } },
-  { name: "b", path: "/api/v1/submissions/p_b", headers: { Authorization: "Bearer token-p_b" } },
+  { name: "a", path: "/api/v1/submissions/p_a", headers: { Authorization: "Bearer token-p_a" }, marker: "marker-p_a" },
+  { name: "b", path: "/api/v1/submissions/p_b", headers: { Authorization: "Bearer token-p_b" }, marker: "marker-p_b" },
 ]
+/** The owners' probes as they come through the edge cache. */
+const throughEdge = (bend = () => {}) =>
+  deployment((u, i, res) => {
+    if (u.pathname.startsWith("/api/")) res.headers.set("CF-Cache-Status", "DYNAMIC")
+    bend(u, i, res)
+  })
 
 test("locally (explicit), a deployment that keeps every rule passes what it can show, and skips the rest", async () => {
   const results = await edgeChecks("https://site.example", { fetch: deployment(), local: true, dev: true })
@@ -129,8 +137,7 @@ test("a HIT for an authenticated address fails once the edge cache is there", as
   const r = (await edgeChecks("https://site.example", { fetch })).find((x) => x.check === "no_shared_hit")
   assert.equal(r.status, "fail")
   assert.ok(r.detail.length >= 1)
-  const clean = deployment((u, _i, res) => u.pathname.startsWith("/api/") && res.headers.set("CF-Cache-Status", "DYNAMIC"))
-  assert.equal(status(await edgeChecks("https://site.example", { fetch: clean })).no_shared_hit, "pass")
+  assert.equal(status(await edgeChecks("https://site.example", { fetch: throughEdge(), identities: OWNERS })).no_shared_hit, "pass")
 })
 
 test("workers.dev answering fails; refused passes; unreachable proves nothing (P6-EDGE-1)", async () => {
@@ -141,7 +148,8 @@ test("workers.dev answering fails; refused passes; unreachable proves nothing (P
   const answering = (code) => async (input, init) =>
     String(input).includes("workers.dev") ? new Response(null, { status: code }) : open(input, init)
   assert.equal(await probe(answering(403)), "pass")
-  assert.equal(await probe(answering(302)), "pass")
+  // A redirect without a Location to Access proves nothing (a52).
+  assert.equal(await probe(answering(302)), "incomplete")
   assert.equal(await probe(answering(502)), "incomplete")
   const unreachable = async (input, init) =>
     String(input).includes("workers.dev") ? Promise.reject(new TypeError("fetch failed")) : open(input, init)
@@ -166,4 +174,72 @@ test("behind Access, the service token goes with every request, and never to the
     seen.filter(([u]) => u.includes("workers.dev")).map(([, id]) => id),
     [null],
   )
+})
+
+test("each owner's own answer must carry its own marker, and no other's (a52)", async () => {
+  const isolation = async (fetch) =>
+    (await edgeChecks("https://site.example", { fetch, identities: OWNERS })).find((r) => r.check === "private_isolation")
+  assert.equal((await isolation(throughEdge())).status, "pass")
+  // Swapped: each reads, at its own address, the other's answer.
+  const swapped = await isolation(
+    throughEdge(
+      (u, _i, res) =>
+        res.status === 200 &&
+        u.pathname.startsWith("/api/v1/submissions/") &&
+        (res.body = res.body.replace(/p_a|p_b/, (m) => (m === "p_a" ? "p_b" : "p_a"))),
+    ),
+  )
+  assert.equal(swapped.status, "fail")
+  assert.deepEqual(swapped.detail, [
+    "a's own answer didn't carry its marker",
+    "a's own answer carried b's marker",
+    "b's own answer didn't carry its marker",
+    "b's own answer carried a's marker",
+  ])
+  // A success with nothing of the owner in it.
+  const malformed = await isolation(
+    throughEdge((u, _i, res) => u.pathname === "/api/v1/submissions/p_b" && res.status === 200 && (res.body = "{}")),
+  )
+  assert.deepEqual(malformed.detail, ["b's own answer didn't carry its marker"])
+  // The report never holds a body or a marker's value beyond the owner's name.
+  assert.ok(!JSON.stringify(malformed).includes("marker-p_"))
+})
+
+test("against a deployment, two owners must each read their own address with a marker of their own (a52)", async () => {
+  const one = [OWNERS[0], { ...OWNERS[1], path: null }]
+  const noMarker = [OWNERS[0], { ...OWNERS[1], marker: undefined }]
+  const same = [OWNERS[0], { ...OWNERS[1], marker: OWNERS[0].marker }]
+  for (const identities of [one, noMarker, same])
+    assert.equal(status(await edgeChecks("https://site.example", { fetch: throughEdge(), identities })).private_isolation, "incomplete")
+})
+
+test("no shared HIT is shown only by the owners' own probes passing through the edge cache (a52)", async () => {
+  // A cache status on other answers, none on the owners' probes: nothing shown about them.
+  const others = deployment((u, _i, res) => u.pathname.startsWith("/api/admin") && res.headers.set("CF-Cache-Status", "DYNAMIC"))
+  assert.equal(status(await edgeChecks("https://site.example", { fetch: others, identities: OWNERS })).no_shared_hit, "incomplete")
+})
+
+test("only a refusal or a redirect to Access proves workers.dev closed (a52)", async () => {
+  const open = deployment()
+  const probe = async (res) =>
+    status(
+      await edgeChecks("https://site.example", {
+        fetch: async (input, init) => (String(input).includes("workers.dev") ? res() : open(input, init)),
+        workersDev: "https://w.example.workers.dev",
+      }),
+    ).workers_dev_closed
+  assert.equal(
+    await probe(
+      () => new Response(null, { status: 302, headers: { Location: "https://team.cloudflareaccess.com/cdn-cgi/access/login/w" } }),
+    ),
+    "pass",
+  )
+  assert.equal(await probe(() => new Response(null, { status: 401 })), "pass")
+  assert.equal(await probe(() => new Response(null, { status: 302 })), "incomplete")
+  assert.equal(await probe(() => new Response(null, { status: 302, headers: { Location: "https://elsewhere.example/" } })), "incomplete")
+  assert.equal(
+    await probe(() => new Response(null, { status: 302, headers: { Location: "https://cloudflareaccess.com.evil.example/" } })),
+    "incomplete",
+  )
+  assert.equal(await probe(() => new Response(null, { status: 404 })), "incomplete")
 })
