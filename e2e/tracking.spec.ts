@@ -244,3 +244,44 @@ test("a correction with doubled spaces, saved but unanswered, is still recognise
   await expect(view.getByRole("button", { name: "שליחה מחדש לבדיקה" })).toHaveCount(0)
   await expect(view.getByText("ממתינה לבדיקה")).toBeVisible()
 })
+
+test("when another window's different correction got in first and this one is refused, this one stays in the form", async ({ browser }) => {
+  test.setTimeout(120_000)
+  const { page, view } = await returnedAndFixing(browser, `ספסל דמו סירוב בגלל חלון אחר ${Date.now()}`)
+  await page.route("**/api/v1/submissions/*/revisions", async (route) => {
+    const sent = route.request().postDataJSON() as Record<string, unknown>
+    await page.request.post(route.request().url(), { headers: { ...route.request().headers() }, data: { ...sent, place_he: "כפר עזה" } })
+    // This window's own request now meets the other's correction: a real 409.
+    await route.continue()
+  })
+  await view.getByRole("button", { name: "שליחה מחדש לבדיקה" }).click()
+  await expect(page.getByText("ההצעה השתנתה בינתיים", { exact: false }).first()).toBeVisible()
+  await expect(view.getByLabel("יישוב או אזור")).toHaveValue("בארי")
+})
+
+test("a withdrawal whose photo erasure is still pending can be finished after a reload", async ({ browser }) => {
+  test.setTimeout(120_000)
+  const name = `ספסל דמו מחיקה תלויה ${Date.now()}`
+  const page = await submit(browser, name)
+  // The server withdraws it but can't erase its files yet (as R2 failing would leave it).
+  await page.route("**/api/v1/submissions/*/withdraw", async (route) => {
+    await route.fetch()
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ status: "withdrawn", files: "pending" }) })
+  })
+  await page.route(/\/api\/v1\/submissions\/[^/]+$/, async (route) => {
+    if (route.request().method() !== "GET") return route.continue()
+    const res = await route.fetch()
+    const body = (await res.json()) as Record<string, unknown>
+    await route.fulfill({ response: res, json: body.status === "withdrawn" ? { ...body, files: "pending" } : body })
+  })
+  await page.getByRole("button", { name: "מעקב אחרי ההצעה" }).click()
+  const view = page.getByRole("dialog", { name: "מצב ההצעה" })
+  await view.getByRole("button", { name: "משיכת ההצעה" }).click()
+  await page.getByRole("alertdialog").getByRole("button", { name: "למשוך ולמחוק" }).click()
+  await expect(view.getByText("התמונה כבר לא מוצגת", { exact: false })).toBeVisible()
+  // After a reload the way back is still there: the address reopens the place's card, which still opens the tracking
+  // view, and the view offers to finish.
+  await page.reload()
+  await page.getByRole("button", { name: "מעקב אחרי ההצעה" }).click()
+  await expect(page.getByRole("dialog", { name: "מצב ההצעה" }).getByRole("button", { name: "להשלים את מחיקת התמונה" })).toBeVisible()
+})

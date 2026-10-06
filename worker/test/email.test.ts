@@ -106,3 +106,64 @@ describe("an optional email", () => {
     expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM contacts WHERE email = ?").bind(to).first("n")).toBe(0)
   })
 })
+
+describe("a tracking mail that couldn't be sent", () => {
+  it("is sent by a later click on the confirmation page, with the same link, and only a few times", async () => {
+    const { createApp } = await import("../index")
+    const { sendMail } = await import("../lib/mail")
+    const { fakeSiteverify } = await import("./app")
+    const { createExecutionContext } = await import("cloudflare:test")
+    let down = true
+    let tries = 0
+    const flaky = createApp({ verifyTurnstile: fakeSiteverify, sendMail: async (e, m) => (tries++, down ? false : sendMail(e, m)) })
+    const verifyVia = (token: string) =>
+      flaky.fetch(
+        new Request("http://local/api/v1/email/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token }),
+        }),
+        env,
+        createExecutionContext(),
+      )
+    const to = `retry${Date.now()}@example.test`
+    const { id } = await send("ספסל דמו מייל שנכשל", to)
+    const verifyToken = linkIn((await mails(to))[0].text, "verify")!
+    expect((await verifyVia(verifyToken)).status).toBe(200)
+    expect((await mails(to)).length).toBe(1) // the verification mail only: the tracking mail failed
+    down = false
+    await verifyVia(verifyToken)
+    const tracking = (await mails(to)).filter((m) => m.text.includes("#/track/"))
+    expect(tracking).toHaveLength(1)
+    // The link works.
+    const token = linkIn(tracking[0].text, `track/${id}`)!
+    const status = await call(`http://local/api/v1/submissions/${id}`, { headers: { Authorization: `Bearer ${token}` } })
+    expect(status.status).toBe(200)
+    // Sent once: more clicks send nothing more.
+    const before = tries
+    await verifyVia(verifyToken)
+    expect(tries).toBe(before)
+  })
+
+  it("stops trying after five failed sends", async () => {
+    const { createApp } = await import("../index")
+    const { fakeSiteverify } = await import("./app")
+    const { createExecutionContext } = await import("cloudflare:test")
+    let tries = 0
+    const dead = createApp({ verifyTurnstile: fakeSiteverify, sendMail: async () => (tries++, false) })
+    const to = `dead${Date.now()}@example.test`
+    await send("ספסל דמו מייל מת", to)
+    const verifyToken = linkIn((await mails(to))[0].text, "verify")!
+    for (let i = 0; i < 8; i++)
+      await dead.fetch(
+        new Request("http://local/api/v1/email/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: verifyToken }),
+        }),
+        env,
+        createExecutionContext(),
+      )
+    expect(tries).toBe(5)
+  })
+})

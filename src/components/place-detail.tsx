@@ -203,7 +203,8 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
           <div className="flex flex-wrap items-center justify-between gap-2">
             {/* A place sent for review is on the server too; deleting this copy doesn't withdraw it, the tracking view does. */}
             <span>{SEND_STATE[sendState(local)]}</span>
-            {local.remoteId && local.trackingToken && local.send !== "withdrawn" && (
+            {/* A withdrawn place keeps its link only while its files wait to be erased: the view can finish them. */}
+            {local.remoteId && local.trackingToken && (
               <Button variant="ghost" size="xs" onClick={() => setTracking({ id: local.remoteId!, token: local.trackingToken! })}>
                 מעקב אחרי ההצעה
               </Button>
@@ -228,7 +229,13 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
                       ? "בביקור הבא הוא יחזור, ואם עדיין לא נשלח, יישלח לבדיקה. כדי לעצור אותו, מחקו אותו שוב אז."
                       : "הוא יחזור בביקור הבא. נסו שוב אז.",
                   })
-                toast(outcome === "unknown" ? "המקום הוסר מהרשימה" : "המקום נמחק מהמכשיר", { description: whatStands })
+                if (outcome === "unknown")
+                  return void toast("המקום הוסר מהרשימה, אבל לא ברור אם נמחק מהמכשיר", {
+                    description: inFlight
+                      ? "אם הוא עדיין שמור, הוא יחזור בביקור הבא ויישלח לבדיקה. כדי לעצור אותו, מחקו אותו שוב אז."
+                      : (whatStands ?? "אם הוא עדיין שמור, הוא יחזור בביקור הבא."),
+                  })
+                toast("המקום נמחק מהמכשיר", { description: whatStands })
               }}
             >
               <Trash2Icon data-icon="inline-start" />

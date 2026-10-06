@@ -157,9 +157,10 @@ export function Tracking() {
     if (r === "failed") return void toast("לא הצלחנו לשלוח את התיקון", { description: "התיקון לא נשמר ונשאר כאן. נסו שוב בעוד רגע." })
     if (r === "queue_full")
       return void toast("יש עכשיו יותר הצעות ממה שאפשר לבדוק", { description: "התיקון לא נשמר. נסו שוב בעוד כמה שעות." })
-    if (r === "uncertain") {
-      // No clear answer: the correction may have been saved. It counts as saved only if the newest text on the server
-      // is the very text sent from here (another tab may have sent a different one); otherwise it stays in the form.
+    if (r === "uncertain" || r === "conflict") {
+      // No clear answer, or the place changed meanwhile: the correction may still be the one saved (its answer lost
+      // and a retry refused). It counts as saved only if the newest text on the server is the very text sent from
+      // here; otherwise it stays in the form, with the current state shown.
       const now = await trackSubmission(tracking.id, tracking.token)
       // Compared as the server stores text (cleanText: normalized, spaces folded), not as typed.
       const same = (a?: string | null, b?: string | null, multiline = false) => (a ?? "") === (b ? (cleanText(b, { multiline }) ?? b) : "")
@@ -169,15 +170,14 @@ export function Tracking() {
         (Object.keys(sent) as (keyof typeof sent)[]).every((k) => same(now.draft![k], sent[k], k === "story_he"))
       if (!mine) {
         if (now) setState({ key, result: now, failed: false })
-        return void toast(now ? "התיקון שלכם לא מופיע בשרת" : "לא ברור אם התיקון נשמר", {
+        return void toast(now ? (r === "conflict" ? "ההצעה השתנתה בינתיים" : "התיקון שלכם לא מופיע בשרת") : "לא ברור אם התיקון נשמר", {
           description:
-            now && now.rev !== current.result.rev
+            now && (r === "conflict" || now.rev !== current.result.rev)
               ? "ההצעה השתנתה בינתיים, אולי מחלון אחר. התיקון שלכם נשאר כאן; בדקו את המצב לפני ששולחים שוב."
               : "התיקון נשאר כאן. נסו שוב בעוד רגע.",
         })
       }
     }
-    if (r === "conflict") toast("ההצעה השתנתה בינתיים", { description: "הנה המצב העדכני." })
     setFixing(false)
     await reload()
   }
@@ -203,8 +203,11 @@ export function Tracking() {
       })
     // The sender's own copy on this device, if it is here, says so too.
     const own = useStore.getState().local.find((p) => p.local?.remoteId === tracking.id)
-    // …and the device stops keeping the tracking link: there is nothing left to follow or withdraw.
-    if (own) void useStore.getState().updateLocal(own.id, { send: "withdrawn", trackingToken: undefined })
+    // …and the device stops keeping the tracking link once nothing is left to finish: while files wait to be erased,
+    // the link stays, so the card can still open this view and finish them.
+    const finished = now?.status === "withdrawn" && !now.files
+    if (own)
+      void useStore.getState().updateLocal(own.id, finished ? { send: "withdrawn", trackingToken: undefined } : { send: "withdrawn" })
   }
 
   return (

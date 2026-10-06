@@ -165,20 +165,63 @@ export async function verifyEmail(
   db: D1Database,
   token: string,
   now: Date,
-): Promise<{ first: true; to: string; placeId: string; emailToken: string } | { first: false } | null> {
+  secret: string,
+): Promise<{ first: boolean; mail?: { to: string; placeId: string; emailToken: string; contactId: string } } | null> {
   const row = await db
-    .prepare("SELECT id, place_id, email, email_verified_at, email_verify_expires FROM contacts WHERE email_verify_hash = ?")
+    .prepare(
+      `SELECT id, place_id, email, email_verified_at, email_verify_expires, tracking_mail_sent_at, tracking_mail_attempts
+       FROM contacts WHERE email_verify_hash = ?`,
+    )
     .bind(await sha256Hex(token))
-    .first<{ id: string; place_id: string | null; email: string | null; email_verified_at: string | null; email_verify_expires: string }>()
+    .first<{
+      id: string
+      place_id: string | null
+      email: string | null
+      email_verified_at: string | null
+      email_verify_expires: string
+      tracking_mail_sent_at: string | null
+      tracking_mail_attempts: number
+    }>()
   if (!row?.email || !row.place_id || row.email_verify_expires < now.toISOString()) return null
-  if (row.email_verified_at) return { first: false }
-  const emailToken = newToken()
-  const done = await db
-    .prepare("UPDATE contacts SET email_verified_at = ?, email_token_hash = ? WHERE id = ? AND email_verified_at IS NULL")
-    .bind(now.toISOString(), await sha256Hex(emailToken), row.id)
+  // The address's own tracking token, derived from the contact with the server's secret: a mail sent again carries the
+  // very link the first one would have, so no working link is ever replaced.
+  const emailToken = await hmacHex(secret, `email:${row.id}`)
+  let first = false
+  if (!row.email_verified_at) {
+    const done = await db
+      .prepare("UPDATE contacts SET email_verified_at = ?, email_token_hash = ? WHERE id = ? AND email_verified_at IS NULL")
+      .bind(now.toISOString(), await sha256Hex(emailToken), row.id)
+      .run()
+    // Two clicks at once: only the one that verified counts as first.
+    first = done.meta.changes === 1
+  }
+  // The tracking mail is due until one has gone out, and is tried five times at most.
+  const due = !row.tracking_mail_sent_at && row.tracking_mail_attempts < MAIL_TRIES
+  return {
+    first,
+    ...(due && (first || row.email_verified_at) ? { mail: { to: row.email, placeId: row.place_id, emailToken, contactId: row.id } } : {}),
+  }
+}
+
+const MAIL_TRIES = 5
+
+/**
+ * Records one try of the tracking mail: sent, or one more failure. Counted in the update itself, so clicks at once can't
+ * pass the limit together; false when this try isn't allowed any more.
+ */
+export async function claimTrackingMail(db: D1Database, contactId: string): Promise<boolean> {
+  const r = await db
+    .prepare(
+      `UPDATE contacts SET tracking_mail_attempts = tracking_mail_attempts + 1
+       WHERE id = ? AND tracking_mail_sent_at IS NULL AND tracking_mail_attempts < ?`,
+    )
+    .bind(contactId, MAIL_TRIES)
     .run()
-  // Two clicks at once: only the one that verified sends the tracking link.
-  return done.meta.changes === 1 ? { first: true, to: row.email, placeId: row.place_id, emailToken } : { first: false }
+  return r.meta.changes === 1
+}
+
+export async function trackingMailSent(db: D1Database, contactId: string, now: Date) {
+  await db.prepare("UPDATE contacts SET tracking_mail_sent_at = ? WHERE id = ?").bind(now.toISOString(), contactId).run()
 }
 
 /** The verified address to tell about a decision, with the place's current name; null when there is none to tell. */
