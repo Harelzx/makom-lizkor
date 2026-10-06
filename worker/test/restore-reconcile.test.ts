@@ -14,6 +14,10 @@ import { unseal, type Manifest } from "../lib/sealed"
 import { call } from "./app"
 import { admin, approve } from "./helpers"
 import { decide, jpeg, queued, rev, revise, send, sendForm } from "./submission-helpers"
+import type { PublicContribution, PublicPlace } from "@/shared/contract"
+
+/** A contribution's photo as the feed names it. */
+const photoIn = (places: PublicPlace[], id: string) => (places.find((x) => x.id === id) as PublicContribution | undefined)?.photo
 
 // Restores after the whole-phase review (adviser 20261006T153309Z-ef1427c3): what a restore writes is reconciled with
 // the ledger before it is written, and no deadline it writes is later than the one the live database held.
@@ -221,7 +225,7 @@ describe("a restore reconciled with the ledger", () => {
     expect((await uploadAs(p.id, p.trackingToken, jpeg(0x32), "תמונה ב")).status).toBe(200)
     await runRetention(opEnv(), new Date(Date.now() + 30 * DAY))
     expect((await decide(p.id, await queued(p.id), "approve")).status).toBe(200)
-    expect((await readFeed(env.DB, "0")).places.find((x) => x.id === p.id)?.photo).toBeUndefined()
+    expect(photoIn((await readFeed(env.DB, "0")).places, p.id)).toBeUndefined()
 
     await env.MEDIA.delete(a)
     expect(await restoreB(payload)).toMatchObject({ ok: true })
@@ -233,7 +237,7 @@ describe("a restore reconciled with the ledger", () => {
         p.id,
       ),
     ).toEqual({ photo_key: null, photo_alt: null })
-    expect((await readFeed(env.IMPORT_TEST, "0")).places.find((x) => x.id === p.id)?.photo).toBeUndefined()
+    expect(photoIn((await readFeed(env.IMPORT_TEST, "0")).places, p.id)).toBeUndefined()
     expect(await env.MEDIA.head(a)).toBeNull()
   })
 

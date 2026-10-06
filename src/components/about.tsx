@@ -12,6 +12,13 @@ import landscapes from "@/data/landscapes.json"
 import type { Photo } from "@/types"
 import { useStore } from "@/store"
 
+// The landscapes are the site's own pictures, not place records: they stay files beside the page.
+const landscapePhotos: Photo[] = landscapes.map(({ file, ...rest }) => ({
+  ...rest,
+  url: `/photos/${file}`,
+  thumb_url: `/photos/thumb/${file}`,
+}))
+
 export function About() {
   const open = useStore((s) => s.aboutOpen)
   const setOpen = useStore((s) => s.setAboutOpen)
@@ -75,7 +82,7 @@ export function About() {
           </p>
           {landscapes.length > 0 && (
             <PhotoGallery
-              photos={(landscapes as Photo[]).filter((p) => /שוקדה|בארי|דרום אדום/.test(p.subject_he)).slice(0, 6)}
+              photos={landscapePhotos.filter((p) => /שוקדה|בארי|דרום אדום/.test(p.subject_he)).slice(0, 6)}
               ratio="aspect-[16/10]"
             />
           )}

@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { CURATED_KINDS, PublicCurated } from "./curated"
 import { cleanText } from "./text"
 
 // No generated code: zod's probe for it (new Function) is an eval the site's policy refuses (spec 11), and the Worker's
@@ -86,7 +87,7 @@ export const RevisionInput = z
   .strict()
 export type RevisionInput = z.infer<typeof RevisionInput>
 
-export const PublicPlace = z.object({
+export const PublicContribution = z.object({
   id: z.string(),
   kind: z.enum(SUBMITTABLE_KINDS),
   name_he: z.string(),
@@ -102,7 +103,26 @@ export const PublicPlace = z.object({
   /** Approved with its place; served by the Worker from public/. */
   photo: z.object({ url: z.string(), alt: z.string(), credit: z.string().optional() }).optional(),
 })
+export type PublicContribution = z.infer<typeof PublicContribution>
+
+/** One of the operator's own places (phase 7): any kind, with its links, sources of coordinates and photos. */
+export const PublicCuratedPlace = z.object({
+  id: z.string(),
+  kind: z.enum(CURATED_KINDS),
+  name_he: z.string(),
+  lat: z.number(),
+  lng: z.number(),
+  precision: z.enum(["exact", "approx"]),
+  place_he: z.string(),
+  summary_he: z.string(),
+  curated: PublicCurated,
+})
+export type PublicCuratedPlace = z.infer<typeof PublicCuratedPlace>
+
+// Curated first: a curated monument would also read as a contribution, without its own fields.
+export const PublicPlace = z.union([PublicCuratedPlace, PublicContribution])
 export type PublicPlace = z.infer<typeof PublicPlace>
+export const isCurated = (p: PublicPlace): p is PublicCuratedPlace => "curated" in p && p.curated !== undefined
 
 /** One anemone on its way to the shared count (spec 4): the place, and this device's random id, kept on the device. */
 export const TributeInput = z.object({ placeId: z.string().min(1).max(64), deviceId: z.string().regex(/^[0-9a-f]{32}$/) }).strict()

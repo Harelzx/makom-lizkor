@@ -212,7 +212,7 @@ function PlaceMarker({ place, bloomDelay, selected }: { place: Place; bloomDelay
       </span>
       <span className="mk-label" aria-hidden="true">
         {/* on hover, a glimpse of the place itself, when there is a photo */}
-        {hovered && !selected && place.photos?.[0] && <img className="mk-thumb" src={`/photos/thumb/${place.photos[0].file}`} alt="" />}
+        {hovered && !selected && place.photos?.[0] && <img className="mk-thumb" src={place.photos[0].thumb_url} alt="" />}
         {place.name_he}
       </span>
     </button>

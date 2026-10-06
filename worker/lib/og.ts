@@ -1,6 +1,6 @@
 import { initWasm, Resvg } from "@resvg/resvg-wasm"
 import wasm from "@resvg/resvg-wasm/index_bg.wasm"
-import type { PublicPlace } from "@/shared/contract"
+import { isCurated, type PublicPlace } from "@/shared/contract"
 import { publicPlace } from "../db/places"
 import { OG_FONTS } from "./og-font"
 import { log } from "./log"
@@ -32,7 +32,8 @@ function project(place: PublicPlace): OgProjection {
     kind: place.kind,
     name_he: place.name_he,
     place_he: place.place_he,
-    photo: place.photo ? place.photo.url.replace(/^\/media\//, "") : null,
+    // A curated place shows its first photo, a contribution its one photo; a hidden photo isn't in the projection.
+    photo: (isCurated(place) ? place.curated.photos[0]?.url : place.photo?.url)?.replace(/^\/media\//, "") ?? null,
   }
 }
 

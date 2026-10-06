@@ -119,10 +119,14 @@ export async function restorePhotos(db: D1Database, media: R2Bucket, exports: R2
   const recorded = new Map(manifest.files.map((f) => [f.key.replace(/^held\//, "public/"), f.sha256]))
   const { results } = await db
     .prepare(
-      `SELECT r.photo_key AS key, EXISTS (SELECT 1 FROM field_suppressions s WHERE s.place_id = p.id AND s.lifted_at IS NULL
+      `SELECT k.key, EXISTS (SELECT 1 FROM field_suppressions s WHERE s.place_id = p.id AND s.lifted_at IS NULL
          AND s.field IN ('photo', 'whole')) AS hidden
-       FROM places p JOIN revisions r ON r.id = p.published_revision_id
-       WHERE p.status IN ('published', 'hidden') AND r.photo_key LIKE 'public/%'`,
+       FROM places p JOIN (
+         SELECT id AS rid, photo_key AS key FROM revisions
+         UNION ALL SELECT revision_id, key FROM revision_photos
+         UNION ALL SELECT revision_id, thumb_key FROM revision_photos
+       ) k ON k.rid = p.published_revision_id
+       WHERE p.status IN ('published', 'hidden') AND k.key LIKE 'public/%'`,
     )
     .all<{ key: string; hidden: number }>()
   for (const { key, hidden } of results) {
@@ -139,7 +143,7 @@ export async function restorePhotos(db: D1Database, media: R2Bucket, exports: R2
       result.damaged++
       continue
     }
-    await media.put(target, bytes, { httpMetadata: { contentType: "image/jpeg" } })
+    await media.put(target, bytes, { httpMetadata: { contentType: key.endsWith(".webp") ? "image/webp" : "image/jpeg" } })
     result.restored++
   }
   return result

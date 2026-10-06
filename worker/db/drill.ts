@@ -47,6 +47,8 @@ const PERSONAL: Partial<Record<(typeof EXPORT_TABLES)[number], { row?: boolean; 
   reports: { columns: ["relationship", "explanation", "email", "explanation_hash", "reporter_key", "handling_note"] },
   field_suppressions: { columns: ["reason", "basis_detail", "basis_note"] },
   audit_log: { row: true, columns: [] },
+  // revision_photos and place_sources hold no one's personal data: a photo's public credit and a field's source. They
+  // still go with an erased revision (retention.ts, filterForImport), which the timeline and restore tests check.
 }
 const filled = (v: unknown) => v !== null && v !== undefined && v !== ""
 

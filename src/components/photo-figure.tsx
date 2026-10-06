@@ -25,12 +25,7 @@ export function PhotoFigure({ photo, className, ratio = "aspect-[4/3]" }: { phot
   return (
     <figure className={cn("flex flex-col gap-2", className)}>
       <div className="overflow-hidden rounded-3xl bg-surface-3">
-        <Img
-          src={`/photos/${photo.file}`}
-          placeholder={`/photos/thumb/${photo.file}`}
-          alt={photo.subject_he}
-          className={cn("w-full", ratio)}
-        />
+        <Img src={photo.url} placeholder={photo.thumb_url} alt={photo.subject_he} className={cn("w-full", ratio)} />
       </div>
       <Credit photo={photo} />
     </figure>
@@ -60,9 +55,9 @@ export function PhotoGallery({ photos, className, ratio = "aspect-[4/3]" }: { ph
         >
           {photos.map((p) => (
             <Img
-              key={p.file}
-              src={`/photos/${p.file}`}
-              placeholder={`/photos/thumb/${p.file}`}
+              key={p.url}
+              src={p.url}
+              placeholder={p.thumb_url}
               alt={p.subject_he}
               className={cn("w-full shrink-0 snap-center", ratio)}
             />
@@ -72,7 +67,7 @@ export function PhotoGallery({ photos, className, ratio = "aspect-[4/3]" }: { ph
         <div className="absolute inset-x-0 bottom-1.5 flex justify-center">
           {photos.map((p, i) => (
             <button
-              key={p.file}
+              key={p.url}
               type="button"
               aria-label={`תמונה ${i + 1} מתוך ${photos.length}`}
               aria-current={i === index ? "true" : undefined}

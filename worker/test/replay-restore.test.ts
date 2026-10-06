@@ -9,6 +9,7 @@ import { ogResponse, ogState } from "../lib/og"
 import { sha256, unseal, type Manifest } from "../lib/sealed"
 import { call } from "./app"
 import { admin, approve } from "./helpers"
+import type { PublicContribution } from "@/shared/contract"
 import { decide, jpeg, queued, send, upload } from "./submission-helpers"
 
 let keys: CryptoKeyPair
@@ -80,7 +81,7 @@ describe("replaying the ledger onto a restored database (spec 8.2, 8.3)", () => 
     const live = (await readFeed(env.DB, "0")).places
     const restored = (await readFeed(env.IMPORT_TEST, "0")).places
     expect(restored).toEqual(without(live, gap.id))
-    expect(restored.find((p) => p.id === pending.id)?.photo?.url).toMatch(/^\/media\/public\//)
+    expect((restored.find((p) => p.id === pending.id) as PublicContribution | undefined)?.photo?.url).toMatch(/^\/media\/public\//)
     expect(restored.find((p) => p.id === hidden.id)?.summary_he).toBe("")
     const tomb = await env.IMPORT_TEST.prepare("SELECT status FROM places WHERE id = ?").bind(withdrawn.id).first<string>("status")
     expect(tomb).toBe("withdrawn")

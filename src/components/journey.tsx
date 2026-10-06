@@ -121,11 +121,7 @@ export function Journey() {
             <h3 className="text-title-2 text-balance text-ink-1">{stop.name_he}</h3>
             <p className="text-label font-normal text-ink-2">{stop.place_he}</p>
             {stop.photos?.[0] && (
-              <Img
-                src={`/photos/${stop.photos[0].file}`}
-                alt={stop.photos[0].subject_he}
-                className="aspect-[16/10] w-full rounded-3xl object-cover"
-              />
+              <Img src={stop.photos[0].url} alt={stop.photos[0].subject_he} className="aspect-[16/10] w-full rounded-3xl object-cover" />
             )}
             <p className="text-body-lg text-pretty text-ink-1">{stop.summary_he}</p>
           </motion.div>

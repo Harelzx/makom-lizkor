@@ -1,9 +1,16 @@
 import { create } from "zustand"
-import seed from "@/data/places.json"
+import seedRecords from "@/data/places.json"
 import type { LocalFields, Place } from "@/types"
 import { importable } from "@/lib/export"
 import { changeLocal, loadLocal, loadTributes, markUnlisted, saveTributes } from "@/lib/storage"
 import { superviseReports } from "@/lib/report-outbox"
+
+// The bundled records' photos as URLs, the shape places from the database have (phase 7 takes the bundle away).
+const seed = (seedRecords as unknown as (Omit<Place, "photos"> & { photos?: { file: string }[] })[]).map((p) =>
+  p.photos
+    ? { ...p, photos: p.photos.map(({ file, ...rest }) => ({ ...rest, url: `/photos/${file}`, thumb_url: `/photos/thumb/${file}` })) }
+    : p,
+) as Place[]
 
 /** intro: 06:29, the dark map and the opening words · dawn: the sunrise is playing · day: the site itself */
 export type Phase = "intro" | "dawn" | "day"
@@ -39,7 +46,7 @@ const linkedPlaceId = () => {
   const id = decoded(location.hash.split("/")[2])
   if (!id) return null
   // Local places and approved contributions (p_…) load after the first render, so their ids are trusted.
-  return id.startsWith("local-") || id.startsWith("p_") || (seed as Place[]).some((p) => p.id === id) ? id : null
+  return id.startsWith("local-") || id.startsWith("p_") || seed.some((p) => p.id === id) ? id : null
 }
 
 interface State {
@@ -145,7 +152,7 @@ export const useStore = create<State>((set, get) => ({
   // A share link to a place that isn't there skips the opening all the same: it came through a link, not the front door.
   phase: linkedToPlace() || sharedPath ? "day" : "intro",
   light: "morning",
-  seed: seed as Place[],
+  seed,
   remote: [],
   feedVersion: null,
   feedLive: false,

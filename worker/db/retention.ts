@@ -28,6 +28,8 @@ export const BLANK_COLUMNS: Record<string, null | 0> = {
   photo_key: null,
   photo_alt: null,
   photo_credit: null,
+  // A curated revision's own fields (phase 7); its photos and sources are rows of their own, deleted with it.
+  curated: null,
 }
 const BLANK_REVISION = Object.entries(BLANK_COLUMNS)
   .map(([c, v]) => `${c} = ${v === null ? "NULL" : v}`)
@@ -51,7 +53,7 @@ export function retentionCutoffs(now: Date) {
   }
 }
 const hasContent = (t: string) =>
-  `(${["name_he", "story_he", "place_he", "in_memory_of", "lat", "access_note_he", "link_url", "decision_note", "photo_key"]
+  `(${["name_he", "story_he", "place_he", "in_memory_of", "lat", "access_note_he", "link_url", "decision_note", "photo_key", "curated"]
     .map((c) => `${t}.${c} IS NOT NULL`)
     .join(" OR ")})`
 
@@ -237,6 +239,11 @@ async function eraseOne(env: OpEnv, row: { id: string; rev: number; status: "ret
           )
           .bind(row.id, tid, at, row.rev, reason, row.status),
         db.prepare(`UPDATE revisions SET ${BLANK_REVISION} WHERE place_id = ?1 AND ${happened}`).bind(row.id, tid),
+        // A curated revision's photos and their credits, and every revision's sources, go with the content (P7-REC-1).
+        db
+          .prepare(`DELETE FROM revision_photos WHERE revision_id IN (SELECT id FROM revisions WHERE place_id = ?1) AND ${happened}`)
+          .bind(row.id, tid),
+        db.prepare(`DELETE FROM place_sources WHERE place_id = ?1 AND ${happened}`).bind(row.id, tid),
         db.prepare(`DELETE FROM contacts WHERE place_id = ?1 AND ${happened}`).bind(row.id, tid),
         // On the photo watch, as a withdrawal is: it erases whatever files the place still has.
         db
@@ -274,13 +281,16 @@ async function blankClosedCorrections(env: OpEnv, now: Date) {
     .all<{ id: string; photo_key: string | null }>()
   for (const r of results) {
     // A returned correction left uncorrected is closed with its text: an upload or a correction can't land in an empty row.
-    await db
-      .prepare(
-        `UPDATE revisions SET ${BLANK_REVISION}, state = CASE state WHEN 'returned' THEN 'superseded' ELSE state END
-         WHERE id = ? AND state IN ('returned', 'rejected')`,
-      )
-      .bind(r.id)
-      .run()
+    await db.batch([
+      db
+        .prepare(
+          `UPDATE revisions SET ${BLANK_REVISION}, state = CASE state WHEN 'returned' THEN 'superseded' ELSE state END
+           WHERE id = ? AND state IN ('returned', 'rejected')`,
+        )
+        .bind(r.id),
+      db.prepare("DELETE FROM revision_photos WHERE revision_id = ?").bind(r.id),
+      db.prepare("DELETE FROM place_sources WHERE revision_id = ?").bind(r.id),
+    ])
     // Its photo waited in quarantine; once no revision names it, the file goes too.
     if (r.photo_key?.startsWith("quarantine/")) {
       const named = await db.prepare("SELECT 1 FROM revisions WHERE photo_key = ?").bind(r.photo_key).first()

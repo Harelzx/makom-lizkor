@@ -84,7 +84,7 @@ export function PlacesList() {
                     style={{ borderRadius: 12 }}
                     className="size-12 shrink-0 overflow-hidden"
                   >
-                    <Img src={`/photos/thumb/${p.photos[0].file}`} alt="" className="size-full object-cover" />
+                    <Img src={p.photos[0].thumb_url} alt="" className="size-full object-cover" />
                   </motion.span>
                 ) : (
                   <span className="grid size-12 shrink-0 place-items-center rounded-xl bg-surface-2 text-ink-3">
