@@ -286,8 +286,8 @@ export const uploadedAt = (key: string) =>
 /**
  * A photo still waiting in quarantine/ RETENTION.unapprovedPhotoJobDays after its upload (a day inside the notice's
  * RETENTION.rejectedPhotoDays, so a late pass still keeps the promise), its submission or correction
- * undecided (or returned), goes: the revision stops naming it first, and the place's rev moves on, so a moderator's
- * view that still showed it conflicts instead of approving a photo that is gone; then the file. A file whose deletion
+ * undecided (or returned), goes: the revision stops naming it and the place's rev moves on in one step, so a
+ * moderator's view that still showed it conflicts instead of approving a photo that is gone; then the file. A file whose deletion
  * fails is named by nothing, and the photo sweep takes it.
  */
 async function expireUnapprovedPhotos(env: OpEnv, now: Date) {
@@ -298,12 +298,18 @@ async function expireUnapprovedPhotos(env: OpEnv, now: Date) {
   let n = 0
   for (const r of results) {
     if (!(uploadedAt(r.photo_key) <= retentionCutoffs(now).photo)) continue
-    const cleared = await db
-      .prepare("UPDATE revisions SET photo_key = NULL, photo_alt = NULL, photo_credit = NULL WHERE id = ? AND photo_key = ?")
-      .bind(r.id, r.photo_key)
-      .run()
-    if (cleared.meta.changes !== 1) continue
-    await db.prepare("UPDATE places SET rev = rev + 1 WHERE id = ?").bind(r.place_id).run()
+    // One step (a batch is one transaction), both under the same condition: a decision that lands first leaves the
+    // photo where it is, and one made on the view that showed the photo conflicts once this has landed.
+    const still = "EXISTS (SELECT 1 FROM revisions WHERE id = ?2 AND photo_key = ?3 AND state IN ('pending', 'returned'))"
+    const [moved] = await db.batch([
+      db.prepare(`UPDATE places SET rev = rev + 1 WHERE id = ?1 AND ${still}`).bind(r.place_id, r.id, r.photo_key),
+      db
+        .prepare(
+          `UPDATE revisions SET photo_key = NULL, photo_alt = NULL, photo_credit = NULL WHERE id = ?2 AND place_id = ?1 AND ${still}`,
+        )
+        .bind(r.place_id, r.id, r.photo_key),
+    ])
+    if (moved.meta.changes !== 1) continue
     n++
     await env.media.delete(r.photo_key).catch(() => undefined)
   }
