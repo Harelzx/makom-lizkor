@@ -56,8 +56,14 @@ export async function unseal(data: Uint8Array, sealed: Pick<Sealed, "iv" | "reci
   const kid = await keyId(privateJwk)
   const mine = sealed.recipients.find((r) => r.kid === kid)
   if (!mine) throw new Error("not_a_recipient")
-  const { key_ops: _ops, ext: _ext, ...jwk } = privateJwk
-  const priv = await crypto.subtle.importKey("jwk", { ...jwk, alg: "RSA-OAEP-256" }, RSA, false, ["decrypt"])
+  // Whatever usages the key was saved with, it is imported here only to unwrap.
+  const priv = await crypto.subtle.importKey(
+    "jwk",
+    { ...privateJwk, key_ops: undefined, ext: undefined, alg: "RSA-OAEP-256" },
+    RSA,
+    false,
+    ["decrypt"],
+  )
   const raw = await crypto.subtle.decrypt(RSA, priv, unb64(mine.wrapped))
   const key = await crypto.subtle.importKey("raw", raw, "AES-GCM", false, ["decrypt"])
   return new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(sealed.iv) }, key, data))
