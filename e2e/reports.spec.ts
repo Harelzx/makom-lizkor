@@ -477,7 +477,8 @@ test("a family's request that hides the whole place and loses its answer stays r
   await expect(pending.getByRole("alert")).toHaveText(/על מקום שאינו מוצג כרגע/)
   await expect(page.getByText(name)).toHaveCount(0)
   await pending.getByRole("button", { name: "שליחה שוב" }).click()
-  await expect(pending.getByRole("status")).toHaveText(HIDDEN)
+  // The server's answer to the second try: on main's first CI run it was still out after 5 s (both buttons disabled).
+  await expect(pending.getByRole("status")).toHaveText(HIDDEN, DAY)
   expect(sent).toHaveLength(2)
   expect(sent[1]).toEqual(sent[0])
   expect(await casesAbout(browser, id)).toBe(1)

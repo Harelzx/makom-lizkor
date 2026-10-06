@@ -67,7 +67,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: npm run e2e
+      # Every spec but the frame-rate check: it measures the machine as much as the code, and a runner with no GPU
+      # fails it whatever the code does (main's first run, 2026-10-07: 3.4 long frames a second against 0.95). It is
+      # run locally, as its own stage (agent-evidence stages.sh perf-dev, perf-prod), and finding P1 stays open there.
+      - run: npm run e2e -- --grep-invert "keeps the frame rate"
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
