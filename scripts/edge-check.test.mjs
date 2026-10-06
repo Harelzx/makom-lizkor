@@ -1,11 +1,14 @@
 // node --test scripts/edge-check.test.mjs
-// The edge check's own rules, against a stand-in deployment: it must catch a missing header, a cacheable
-// authenticated answer and a shared HIT, and say "skip", not "pass", where it can't see.
+// The edge check's own rules, against a stand-in deployment: it must catch a wrong answer, a missing header, a cacheable
+// authenticated answer, a shared HIT and one owner's private answer reaching another. Where it can't see, it says
+// "incomplete" against a real deployment (which never qualifies a release), and "skip" only in the explicit local mode.
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import { CSP, SECURITY_HEADERS } from "../worker/lib/security-headers.ts"
-import { edgeChecks } from "./edge-check.mjs"
+import { edgeChecks, outcome } from "./edge-check.mjs"
 
+/** The stand-in sign-in names a session by the length of what was sent: the moderator's. */
+const MODERATOR = JSON.stringify({ email: "dev@example.test" }).length
 const GOOD = { ...SECURITY_HEADERS, "Content-Security-Policy-Report-Only": CSP }
 /** A deployment that answers everything well, with one thing changed by `bend`. */
 const deployment =
@@ -15,21 +18,94 @@ const deployment =
     const headers = new Headers(GOOD)
     if (u.pathname.startsWith("/api/")) headers.set("Cache-Control", "private, no-store")
     if (u.pathname === "/__dev/login") headers.set("Set-Cookie", `CF_Authorization=${init.body?.length}; Path=/; HttpOnly`)
-    const res = { status: u.pathname.startsWith("/api/admin") ? 401 : 200, headers }
+    const auth = new Headers(init.headers).get("Authorization") ?? new Headers(init.headers).get("Cookie") ?? ""
+    const owner = /^\/api\/v1\/submissions\/(\w+)$/.exec(u.pathname)?.[1]
+    const status =
+      u.pathname === "/api/v1/no-such-route"
+        ? 404
+        : u.pathname.startsWith("/api/admin")
+          ? auth.includes(`CF_Authorization=${MODERATOR}`)
+            ? 200
+            : auth.includes("CF_Authorization=")
+              ? 403
+              : 401
+          : u.pathname.startsWith("/api/ops")
+            ? 401
+            : owner
+              ? auth === `Bearer token-${owner}`
+                ? 200
+                : 401
+              : 200
+    if (u.pathname === "/" || u.pathname.startsWith("/place/")) headers.set("Content-Type", "text/html")
+    const res = { status, headers, body: u.pathname === "/api/v1/health" ? '{"ok":true}' : "{}" }
     bend(u, init, res)
-    return new Response(res.status === 204 ? null : "{}", { status: res.status, headers: res.headers })
+    return new Response(res.status === 204 ? null : res.body, { status: res.status, headers: res.headers })
   }
 const status = (results) => Object.fromEntries(results.map((r) => [r.check, r.status]))
 
-test("a deployment that keeps every rule passes what it can show, and skips the rest", async () => {
-  const results = await edgeChecks("https://site.example", { fetch: deployment(), dev: true })
+const OWNERS = [
+  { name: "a", path: "/api/v1/submissions/p_a", headers: { Authorization: "Bearer token-p_a" } },
+  { name: "b", path: "/api/v1/submissions/p_b", headers: { Authorization: "Bearer token-p_b" } },
+]
+
+test("locally (explicit), a deployment that keeps every rule passes what it can show, and skips the rest", async () => {
+  const results = await edgeChecks("https://site.example", { fetch: deployment(), local: true, dev: true })
   assert.deepEqual(status(results), {
+    responses: "pass",
     headers: "pass",
     private_no_store: "pass",
+    private_isolation: "pass",
     no_shared_hit: "skip",
     purge_freshness: "skip",
     workers_dev_closed: "skip",
   })
+  assert.equal(outcome(results), "pass")
+})
+
+test("against a real deployment, what it can't show is incomplete, never passed or skipped (P6-EDGE-1)", async () => {
+  const results = await edgeChecks("https://site.example", { fetch: deployment() })
+  assert.deepEqual(status(results), {
+    responses: "pass",
+    headers: "pass",
+    private_no_store: "pass",
+    private_isolation: "incomplete",
+    no_shared_hit: "incomplete",
+    purge_freshness: "incomplete",
+    workers_dev_closed: "incomplete",
+  })
+  assert.equal(outcome(results), "incomplete")
+})
+
+test("an unhealthy deployment fails, however right its headers (P6-EDGE-1)", async () => {
+  for (const bend of [
+    (u, _i, res) => u.pathname === "/api/v1/health" && (res.status = 500),
+    (u, _i, res) => u.pathname === "/api/v1/health" && (res.body = '{"ok":false}'),
+    (u, _i, res) => u.pathname === "/" && (res.status = 503),
+    (u, _i, res) => u.pathname === "/api/v1/no-such-route" && (res.status = 200),
+    // A private address answered without a credential.
+    (u, _i, res) => u.pathname === "/api/ops/summary" && (res.status = 200),
+  ]) {
+    const results = await edgeChecks("https://site.example", { fetch: deployment(bend), local: true })
+    assert.equal(status(results).responses, "fail", String(bend))
+    assert.equal(outcome(results), "fail")
+  }
+})
+
+test("two owners each get their own private answer, and never the other's (P6-EDGE-1)", async () => {
+  const ok = await edgeChecks("https://site.example", { fetch: deployment(), identities: OWNERS })
+  assert.equal(status(ok).private_isolation, "pass")
+  // A shared cache handing a's answer to whoever asks: b reads a's.
+  const leaking = deployment((u, _i, res) => u.pathname.startsWith("/api/v1/submissions/") && (res.status = 200))
+  const bad = (await edgeChecks("https://site.example", { fetch: leaking, identities: OWNERS })).find(
+    (r) => r.check === "private_isolation",
+  )
+  assert.equal(bad.status, "fail")
+  assert.deepEqual(bad.detail, ["b read a's private address (200)", "a read b's private address (200)"])
+  // One owner is not two.
+  assert.equal(
+    status(await edgeChecks("https://site.example", { fetch: deployment(), identities: OWNERS.slice(0, 1) })).private_isolation,
+    "incomplete",
+  )
 })
 
 test("a header missing on one address fails", async () => {
@@ -57,23 +133,24 @@ test("a HIT for an authenticated address fails once the edge cache is there", as
   assert.equal(status(await edgeChecks("https://site.example", { fetch: clean })).no_shared_hit, "pass")
 })
 
-test("workers.dev answering fails; unreachable passes", async () => {
+test("workers.dev answering fails; refused passes; unreachable proves nothing (P6-EDGE-1)", async () => {
   const open = deployment()
-  assert.equal(
-    status(await edgeChecks("https://site.example", { fetch: open, workersDev: "https://w.example.workers.dev" })).workers_dev_closed,
-    "fail",
-  )
-  const closed = async (input, init) =>
+  const probe = async (fetch) =>
+    status(await edgeChecks("https://site.example", { fetch, workersDev: "https://w.example.workers.dev" })).workers_dev_closed
+  assert.equal(await probe(open), "fail")
+  const answering = (code) => async (input, init) =>
+    String(input).includes("workers.dev") ? new Response(null, { status: code }) : open(input, init)
+  assert.equal(await probe(answering(403)), "pass")
+  assert.equal(await probe(answering(302)), "pass")
+  assert.equal(await probe(answering(502)), "incomplete")
+  const unreachable = async (input, init) =>
     String(input).includes("workers.dev") ? Promise.reject(new TypeError("fetch failed")) : open(input, init)
-  assert.equal(
-    status(await edgeChecks("https://site.example", { fetch: closed, workersDev: "https://w.example.workers.dev" })).workers_dev_closed,
-    "pass",
-  )
+  assert.equal(await probe(unreachable), "incomplete")
 })
 
 test("--dev without a working sign-in fails instead of checking less", async () => {
   const fetch = deployment((u, _i, res) => u.pathname === "/__dev/login" && res.headers.delete("Set-Cookie"))
-  assert.equal(status(await edgeChecks("https://site.example", { fetch, dev: true })).private_no_store, "fail")
+  assert.equal(status(await edgeChecks("https://site.example", { fetch, local: true, dev: true })).private_no_store, "fail")
 })
 
 test("behind Access, the service token goes with every request, and never to the workers.dev probe", async () => {
