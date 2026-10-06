@@ -151,6 +151,43 @@ describe("a CSP report", () => {
     expect(lines()).toEqual([])
   })
 
+  it("is read only up to its byte bound when it comes without a length, and the rest is never pulled (P6-CSP-2)", async () => {
+    let pulled = 0
+    let cancelled = false
+    const chunk = new TextEncoder().encode(`{"csp-report":{"blocked-uri":"${"x".repeat(1000)}`)
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled += chunk.length
+        controller.enqueue(chunk)
+        // A megabyte on offer; a bounded reader stops long before.
+        if (pulled > 1024 * 1024) controller.close()
+      },
+      cancel() {
+        cancelled = true
+      },
+    })
+    const res = await call("http://local/api/csp-report", {
+      method: "POST",
+      headers: { "Content-Type": "application/csp-report", "CF-Connecting-IP": "198.51.100.77" },
+      body: stream,
+      duplex: "half",
+    } as RequestInit)
+    expect(res.status).toBe(204)
+    expect(pulled).toBeLessThan(16 * 1024)
+    expect(cancelled).toBe(true)
+    expect(lines()).toEqual([])
+  })
+
+  it("is measured in bytes, so a report of short Hebrew text past 8 KB is refused, and an ordinary one is still logged", async () => {
+    // 5,000 letters, 10,000 bytes in UTF-8: under the bound by characters, over it by bytes.
+    expect((await report({ "csp-report": { "effective-directive": "img-src", "blocked-uri": "א".repeat(5000) } })).status).toBe(204)
+    expect(lines()).toEqual([])
+    expect(
+      (await report({ "csp-report": { "effective-directive": "img-src", "blocked-uri": "https://עברית.example/a.png" } })).status,
+    ).toBe(204)
+    expect(lines()).toEqual([{ level: "warn", event: "csp_report", directive: "img-src", source: "unknown" }])
+  })
+
   it("is capped per address, counted under a keyed code", async () => {
     const statuses: number[] = []
     for (let i = 0; i < 25; i++)
