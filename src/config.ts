@@ -53,6 +53,10 @@ export const RETENTION = {
   rejectedPhotoDays: 30,
   /** anemone count rows: the daily code, the place, the day and the time */
   tributeDays: 8,
+  /** the audit trail (who decided what, when; never a value): kept this long, pending legal approval (spec 7) */
+  auditMonths: 24,
+  /** an unapproved photo waiting this long reminds the moderators, daily, to decide (spec 7: the moderation target) */
+  reviewReminderDays: 14,
   verified: false,
 }
 

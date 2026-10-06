@@ -1,7 +1,7 @@
 import { RETENTION } from "@/config"
 import { ulid, ulidTime } from "../lib/ids"
 import type { SendMail } from "../lib/mail"
-import { tellModerators } from "./retention"
+import { tellModerators, uploadedAt } from "./retention"
 import { gzip, publicKeys, seal, sha256, type Manifest } from "../lib/sealed"
 
 /**
@@ -175,6 +175,7 @@ export async function pruneExports(env: { db: D1Database; exports: R2Bucket }, n
  * The nightly deletion check (spec 8.4), from the database and the bucket's own listing: what a deletion date has
  * passed by more than a day, and still holds. Counts by kind, nothing else.
  * - contacts, requests' text, hides' notes, moderators' notes past their dates; submissions past their 30 days;
+ *   anemones' records, audit rows and unapproved photos past theirs;
  * - export files older than 35 days, and photo copies no current manifest lists;
  * - no export in the last 26 hours, or no key to make one with.
  */
@@ -212,6 +213,9 @@ export async function checkDeletion(env: { db: D1Database; exports: R2Bucket; ke
       .prepare("SELECT COUNT(*) AS n FROM exports WHERE ok = 1 AND created_at > ?")
       .bind(new Date(now.getTime() - 26 * 3600_000).toISOString()),
     db.prepare("SELECT MIN(started_at) AS at FROM retention_runs"),
+    db.prepare("SELECT COUNT(*) AS n FROM tribute_events WHERE received_at <= ?").bind(before(RETENTION.tributeDays)),
+    db.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE at <= ?").bind(before(RETENTION.auditMonths * 30)),
+    db.prepare("SELECT photo_key AS k FROM revisions WHERE photo_key LIKE 'quarantine/%' AND state IN ('pending', 'returned')"),
   ])
   const n = (i: number) => (counts[i].results[0] as { n: number }).n
   const found: Record<string, number> = {
@@ -220,6 +224,11 @@ export async function checkDeletion(env: { db: D1Database; exports: R2Bucket; ke
     suppression_notes: n(2),
     decision_notes: n(3),
     submissions: n(4),
+    tributes: n(7),
+    audit: n(8),
+    unapproved_photos: (counts[9].results as { k: string }[]).filter(
+      (r) => uploadedAt(r.k) <= now.getTime() - (RETENTION.rejectedPhotoDays + 1) * DAY_MS,
+    ).length,
   }
   const cutoff = now.getTime() - EXPORT_KEEP_DAYS * DAY_MS
   const objects = await listExports(env.exports)

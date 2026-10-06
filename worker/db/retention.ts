@@ -1,5 +1,5 @@
 import { RETENTION } from "@/config"
-import { ulid } from "../lib/ids"
+import { ulid, ulidTime } from "../lib/ids"
 import type { SendMail } from "../lib/mail"
 import { runOp, WATCH_FIRST_LOOK_MS, type OpEnv } from "./ops"
 import { erasePhotos } from "./photos"
@@ -44,6 +44,9 @@ export function retentionCutoffs(now: Date) {
     rejected: ago(RETENTION.rejectedTextDays),
     noteClosed: ago(RETENTION.contactAfterCloseDays),
     noteCeiling: ago(RETENTION.contactMaxMonths * 30),
+    photo: now.getTime() - RETENTION.rejectedPhotoDays * DAY_MS,
+    tribute: ago(RETENTION.tributeDays),
+    audit: ago(RETENTION.auditMonths * 30),
   }
 }
 const hasContent = (t: string) =>
@@ -51,7 +54,17 @@ const hasContent = (t: string) =>
     .map((c) => `${t}.${c} IS NOT NULL`)
     .join(" OR ")})`
 
-export type RetentionCounts = { erased: number; revisions: number; decisionNotes: number; contacts: number; reports: number; notes: number }
+export type RetentionCounts = {
+  erased: number
+  revisions: number
+  decisionNotes: number
+  contacts: number
+  reports: number
+  notes: number
+  photos: number
+  tributes: number
+  audit: number
+}
 
 /**
  * The retention job (spec 3.3, 7): the first part of every scheduled run, before anything else, and safe to run twice
@@ -62,7 +75,9 @@ export type RetentionCounts = { erased: number; revisions: number; decisionNotes
  * - a correction to a published place that was returned or refused loses its own text after the same days (the place,
  *   and what it publishes, stay), and a returned one is closed: no photo or text can be added to it any more;
  * - a moderator's note goes RETENTION.contactAfterCloseDays after its decision once its revision is closed, or at its ceiling;
- * - contact details, a request's text and address, and moderators' notes on a hide go once their purge date passed.
+ * - contact details, a request's text and address, and moderators' notes on a hide go once their purge date passed;
+ * - a photo not approved within RETENTION.rejectedPhotoDays of its upload, anemones' records after
+ *   RETENTION.tributeDays, and audit rows after RETENTION.auditMonths.
  * A run is recorded, and counted as finished only when every part succeeded: a restore in place may go back no earlier
  * than the last finished run (spec 7, Route A).
  */
@@ -71,7 +86,17 @@ export async function runRetention(env: OpEnv, now: Date): Promise<{ id: string;
   const id = `rr_${ulid(now.getTime())}`
   const at = now.toISOString()
   await db.prepare("INSERT INTO retention_runs (id, started_at) VALUES (?, ?)").bind(id, at).run()
-  const counts: RetentionCounts = { erased: 0, revisions: 0, decisionNotes: 0, contacts: 0, reports: 0, notes: 0 }
+  const counts: RetentionCounts = {
+    erased: 0,
+    revisions: 0,
+    decisionNotes: 0,
+    contacts: 0,
+    reports: 0,
+    notes: 0,
+    photos: 0,
+    tributes: 0,
+    audit: 0,
+  }
   // Each part on its own: one that keeps failing (a bad row, say) never holds back the others. The run is finished
   // only when every part succeeded.
   let ok = true
@@ -132,6 +157,17 @@ export async function runRetention(env: OpEnv, now: Date): Promise<{ id: string;
           .bind(at)
           .run()
       ).meta.changes,
+  )
+  await part("photos", () => expireUnapprovedPhotos(env, now))
+  // The day's code of each anemone, with its place, day and time; the place's total stays.
+  await part(
+    "tributes",
+    async () =>
+      (await db.prepare("DELETE FROM tribute_events WHERE received_at <= ?").bind(retentionCutoffs(now).tribute).run()).meta.changes,
+  )
+  await part(
+    "audit",
+    async () => (await db.prepare("DELETE FROM audit_log WHERE at <= ?").bind(retentionCutoffs(now).audit).run()).meta.changes,
   )
   await env.db
     .prepare("UPDATE retention_runs SET finished_at = ?, ok = ?, counts = ? WHERE id = ?")
@@ -234,6 +270,63 @@ async function blankClosedCorrections(env: OpEnv, now: Date) {
     }
   }
   return results.length
+}
+
+/** When a waiting photo was uploaded: its key ends with the upload's ULID (attachPhoto). */
+export const uploadedAt = (key: string) =>
+  ulidTime(
+    key
+      .split("/")
+      .pop()
+      ?.split("-")
+      .pop()
+      ?.replace(/\.jpg$/, "") ?? "",
+  )
+
+/**
+ * A photo still waiting in quarantine/ RETENTION.rejectedPhotoDays after its upload, its submission or correction
+ * undecided (or returned), goes: the revision stops naming it first, and the place's rev moves on, so a moderator's
+ * view that still showed it conflicts instead of approving a photo that is gone; then the file. A file whose deletion
+ * fails is named by nothing, and the photo sweep takes it.
+ */
+async function expireUnapprovedPhotos(env: OpEnv, now: Date) {
+  const db = env.db
+  const { results } = await db
+    .prepare("SELECT id, place_id, photo_key FROM revisions WHERE photo_key LIKE 'quarantine/%' AND state IN ('pending', 'returned')")
+    .all<{ id: string; place_id: string; photo_key: string }>()
+  let n = 0
+  for (const r of results) {
+    if (!(uploadedAt(r.photo_key) <= retentionCutoffs(now).photo)) continue
+    const cleared = await db
+      .prepare("UPDATE revisions SET photo_key = NULL, photo_alt = NULL, photo_credit = NULL WHERE id = ? AND photo_key = ?")
+      .bind(r.id, r.photo_key)
+      .run()
+    if (cleared.meta.changes !== 1) continue
+    await db.prepare("UPDATE places SET rev = rev + 1 WHERE id = ?").bind(r.place_id).run()
+    n++
+    await env.media.delete(r.photo_key).catch(() => undefined)
+  }
+  return n
+}
+
+/**
+ * Submissions and corrections waiting for review longer than RETENTION.reviewReminderDays (spec 7: the moderation
+ * target; an unapproved photo goes at RETENTION.rejectedPhotoDays): the moderators are reminded, a count and nothing
+ * else, once a day while any wait.
+ */
+export async function remindOverdueReview(db: D1Database, env: Env, sendMail: SendMail, now: Date) {
+  const waiting = await db
+    .prepare("SELECT COUNT(*) AS n FROM revisions WHERE state = 'pending' AND created_at <= ?")
+    .bind(new Date(now.getTime() - RETENTION.reviewReminderDays * DAY_MS).toISOString())
+    .first<number>("n")
+  if (!waiting) return false
+  const sent = await db.prepare("SELECT sent_at FROM job_alerts WHERE job = 'review_overdue'").first<{ sent_at: string }>()
+  if (sent && sent.sent_at > new Date(now.getTime() - DAY_MS).toISOString()) return false
+  const text = [
+    `${waiting} הצעות או תיקונים ב"מקום לזכור" ממתינות לבדיקה יותר מ־${RETENTION.reviewReminderDays} יום.`,
+    `תמונה שלא אושרה נמחקת ${RETENTION.rejectedPhotoDays} יום אחרי שהועלתה.`,
+  ].join("\n")
+  return tellModerators(db, env, sendMail, "review_overdue", "מקום לזכור: הצעות ממתינות לבדיקה", text, now)
 }
 
 /** Hours without a finished run before the moderators hear of it, and between reminders while it lasts. */

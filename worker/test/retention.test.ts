@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest"
 import { RETENTION } from "@/config"
 import { CURRENT_SUBMISSION_NOTICE } from "@/shared/contract"
 import { runJobs } from "../jobs"
-import { alertStalledRetention, RETENTION_ALERT_HOURS, runRetention } from "../db/retention"
+import { alertStalledRetention, remindOverdueReview, RETENTION_ALERT_HOURS, runRetention } from "../db/retention"
 import { sendMail } from "../lib/mail"
 import { call } from "./app"
 import { admin, approve } from "./helpers"
@@ -621,5 +621,68 @@ describe("a contact's deadline (a43)", () => {
     })
     expect(res.status).toBe(200)
     expect(await env.DB.prepare("SELECT purge_after FROM contacts WHERE place_id = ?").bind(id).first()).toEqual(first)
+  })
+})
+
+// Task 4: what else the job deletes, and the moderators' reminder.
+describe("anemones, the audit trail and unapproved photos (task 4)", () => {
+  it("an anemone's record goes after RETENTION.tributeDays; the place's total stays", async () => {
+    const { id } = await send("גן דמו עם כלניות")
+    await approve(id)
+    const tribute = (key: string, at: string) =>
+      env.DB.prepare(
+        "INSERT INTO tribute_events (idempotency_key, request_nonce, place_id, day, device_key, received_at) VALUES (?, 'n', ?, ?, ?, ?)",
+      )
+        .bind(key, id, at.slice(0, 10), `d_${key}`, at)
+        .run()
+    await tribute(`old_${id}`, ago(RETENTION.tributeDays, -60_000))
+    await tribute(`new_${id}`, ago(RETENTION.tributeDays, 60_000))
+    await env.DB.prepare("INSERT INTO tribute_totals (place_id, total) VALUES (?, 2) ON CONFLICT (place_id) DO UPDATE SET total = 2")
+      .bind(id)
+      .run()
+    await runRetention(opEnv(), now)
+    const left = await env.DB.prepare("SELECT idempotency_key AS k FROM tribute_events WHERE place_id = ?").bind(id).all<{ k: string }>()
+    expect(left.results.map((r) => r.k)).toEqual([`new_${id}`])
+    expect(await env.DB.prepare("SELECT total FROM tribute_totals WHERE place_id = ?").bind(id).first<number>("total")).toBe(2)
+  })
+
+  it("an audit row goes after RETENTION.auditMonths", async () => {
+    const months = RETENTION.auditMonths * 30
+    await env.DB.prepare(
+      "INSERT INTO audit_log (id, at, actor, action, entity_id) VALUES ('a_old_t4', ?, 'automatic', 'erase', 'p_x'), ('a_new_t4', ?, 'automatic', 'erase', 'p_x')",
+    )
+      .bind(ago(months, -60_000), ago(months, 60_000))
+      .run()
+    await runRetention(opEnv(), now)
+    const left = await env.DB.prepare("SELECT id FROM audit_log WHERE id IN ('a_old_t4', 'a_new_t4')").all<{ id: string }>()
+    expect(left.results.map((r) => r.id)).toEqual(["a_new_t4"])
+  })
+
+  it("a photo not approved within RETENTION.rejectedPhotoDays of its upload goes, and the moderators' view of the place moves on", async () => {
+    const { id, trackingToken } = await send("ספסל דמו שתמונתו לא אושרה")
+    expect((await upload(id, trackingToken)).status).toBe(200)
+    const photo = () => env.DB.prepare("SELECT photo_key FROM revisions WHERE place_id = ?").bind(id).first<string | null>("photo_key")
+    const key = (await photo())!
+    const revBefore = (await env.DB.prepare("SELECT rev FROM places WHERE id = ?").bind(id).first<number>("rev"))!
+    await runRetention(opEnv(), later(RETENTION.rejectedPhotoDays - 1))
+    expect(await photo()).toBe(key)
+    await runRetention(opEnv(), later(RETENTION.rejectedPhotoDays + 1))
+    expect(await photo()).toBeNull()
+    expect(await env.MEDIA.head(key)).toBeNull()
+    expect(await env.DB.prepare("SELECT rev FROM places WHERE id = ?").bind(id).first<number>("rev")).toBe(revBefore + 1)
+  })
+
+  it("reminds the moderators once a day while anything has waited for review more than RETENTION.reviewReminderDays", async () => {
+    await send("ספסל דמו שממתין לבדיקה")
+    const told = () => env.DB.prepare("SELECT COUNT(*) AS n FROM dev_outbox WHERE subject LIKE '%ממתינות לבדיקה%'").first<number>("n")
+    const before = (await told())!
+    expect(await remindOverdueReview(env.DB, env, sendMail, later(RETENTION.reviewReminderDays - 1))).toBe(false)
+    expect(await remindOverdueReview(env.DB, env, sendMail, later(RETENTION.reviewReminderDays + 1))).toBe(true)
+    expect(await remindOverdueReview(env.DB, env, sendMail, later(RETENTION.reviewReminderDays + 1.5))).toBe(false)
+    expect(await told()).toBe(before + 1)
+    const body = await env.DB.prepare(
+      "SELECT body FROM dev_outbox WHERE subject LIKE '%ממתינות לבדיקה%' ORDER BY at DESC LIMIT 1",
+    ).first<string>("body")
+    expect(body).not.toContain("ספסל")
   })
 })

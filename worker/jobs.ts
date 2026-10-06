@@ -3,7 +3,7 @@ import { runDrill } from "./db/drill"
 import { alertDeletion, checkDeletion, pruneExports, runExport } from "./db/exports"
 import { resumeOps, type OpEnv } from "./db/ops"
 import { sweepPhotos } from "./db/photos"
-import { alertStalledRetention, runRetention } from "./db/retention"
+import { alertStalledRetention, remindOverdueReview, runRetention } from "./db/retention"
 import { deliverAlerts, precaution, startAlertRound, type Precaution } from "./db/reports"
 import type { SendMail } from "./lib/mail"
 import { REPORT_GUARDS } from "./lib/guards"
@@ -48,6 +48,7 @@ export async function runJobs(env: Env, deps: { sendMail: SendMail; purge: Purge
   let retention: Awaited<ReturnType<typeof runRetention>> | undefined
   await part("retention", async () => (retention = await runRetention(opEnv, now)))
   await part("retention_alert", () => alertStalledRetention(env.DB, env, deps.sendMail, now))
+  await part("review_reminder", () => remindOverdueReview(env.DB, env, deps.sendMail, now))
 
   await part("resume_ops", () => resumeOps(opEnv, now))
 
