@@ -68,11 +68,14 @@ export type Tracked = {
 /** The status the server holds for a submission; null when the link is wrong, undefined when the server can't be reached. */
 /** The statuses the API reports to a sender (worker/db/places.ts), and nothing else. */
 const STATUSES = new Set(["pending", "returned", "published", "rejected", "hidden", "withdrawn", "erased"])
+/** A revision's states, as the database allows them (migrations/0001_places.sql). */
+const REVISION_STATES = new Set(["pending", "returned", "approved", "rejected", "superseded", "withdrawn"])
 const optional = (v: unknown, type: string) => v === undefined || typeof v === type
 const text = (v: unknown) => v === null || v === undefined || typeof v === "string"
 /**
- * Whether an answer has the shape the API sends: a known status, and the fields that decide completion and recovery
- * (files, which is only ever "pending") in their own types. Anything else is read as no answer.
+ * Whether an answer has the shape the API sends: a known status, its revision number, and the fields that decide
+ * completion, recovery and a correction's fate (files, only ever "pending"; a known revision state) in their own
+ * types. Anything else is read as no answer.
  */
 function isTracked(b: unknown): b is Tracked {
   if (!b || typeof b !== "object") return false
@@ -82,8 +85,9 @@ function isTracked(b: unknown): b is Tracked {
     typeof t.status === "string" &&
     STATUSES.has(t.status) &&
     text(t.name_he) &&
-    optional(t.rev, "number") &&
-    optional(t.revision_state, "string") &&
+    Number.isInteger(t.rev) &&
+    (t.rev as number) >= 1 &&
+    (t.revision_state === undefined || (typeof t.revision_state === "string" && REVISION_STATES.has(t.revision_state))) &&
     optional(t.note, "string") &&
     (t.files === undefined || t.files === "pending") &&
     (draft === undefined ||

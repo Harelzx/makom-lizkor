@@ -10,25 +10,28 @@ vi.mock("idb-keyval", () => ({
 }))
 
 const storage = await import("@/lib/storage")
+const { useStore } = await import("@/store")
 
 beforeEach(() => idb.map.clear())
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.restoreAllMocks()
+})
 
-it("a feed asked for before a removal was learned can't undo it; one asked for after it can", async () => {
-  const before = Date.now()
-  await new Promise((r) => setTimeout(r, 5))
+it("a feed asked for before a removal was learned can't undo it, whatever the clock does; one asked for after it can", async () => {
+  const before = await storage.unlistedGeneration()
+  // The device clock jumps back between the request and the removal: ordering doesn't depend on it.
+  vi.spyOn(Date, "now").mockReturnValue(1)
   await storage.markUnlisted("p_x")
-  // The older feed still lists it (it was public when that feed was made): the mark stays.
   await storage.relistPublished(["p_x"], before)
   expect(await storage.loadUnlisted()).toEqual(["p_x"])
-  // A feed asked for later that lists it again is the server's newer word: the place is public after all.
-  await new Promise((r) => setTimeout(r, 5))
-  await storage.relistPublished(["p_x"], Date.now())
+  // A feed asked for after the removal, which lists the place again, is the server's newer word.
+  await storage.relistPublished(["p_x"], await storage.unlistedGeneration())
   expect(await storage.loadUnlisted()).toEqual([])
 })
 
-it("through the feed itself: a response held across the removal, then saved, still leaves the place off offline", async () => {
-  // A page with a visible tab and nothing else the feed needs from the DOM.
+/** A page with a visible tab, and a server whose feed lists `places`; `online: false` refuses every request. */
+function page(server: { online: boolean; places: { id: string }[]; hold?: Promise<void>; started?: () => void }) {
   vi.stubGlobal("document", {
     visibilityState: "visible",
     addEventListener: () => {},
@@ -36,26 +39,57 @@ it("through the feed itself: a response held across the removal, then saved, sti
     getElementById: () => null,
   })
   vi.stubGlobal("window", { addEventListener: () => {}, removeEventListener: () => {} })
-  const place = { id: "p_x", kind: "garden", name_he: "גינת דמו", lat: 31.4, lng: 34.5, precision: "exact", place_he: "", summary_he: "" }
-  let release!: () => void
-  const held = new Promise<void>((r) => (release = r))
   vi.stubGlobal("fetch", async (url: string) => {
-    if (url.startsWith("/api/v1/version")) return new Response(JSON.stringify({ v: "1-1" }))
+    if (!server.online) throw new TypeError("offline")
+    if (url.startsWith("/api/v1/version")) {
+      server.started?.()
+      return new Response(JSON.stringify({ v: `1.${server.places.length}` }))
+    }
     if (url.startsWith("/api/v1/feed")) {
-      await held
-      return new Response(JSON.stringify({ v: "1-1", places: [place] }))
+      await server.hold
+      return new Response(JSON.stringify({ v: `1.${server.places.length}`, places: server.places }))
     }
     return new Response("{}", { status: 404 })
   })
+  useStore.setState({ remote: [], feedVersion: null, feedLive: false })
+}
+const place = { id: "p_x", kind: "garden", name_he: "גינת דמו", lat: 31.4, lng: 34.5, precision: "exact", place_he: "", summary_he: "" }
+const shown = () => useStore.getState().remote.map((p) => p.id)
+
+it("a feed response held across the removal is saved, yet the place stays off after an offline restart; a later feed relists it", async () => {
   const { startFeedSync } = await import("@/lib/feed")
-  const stop = startFeedSync()
-  await new Promise((r) => setTimeout(r, 10))
-  // Meanwhile another tab opens the place's share page, which answers 410.
+  let release!: () => void
+  let started!: () => void
+  const requestStarted = new Promise<void>((r) => (started = r))
+  const server = { online: true, places: [place], hold: new Promise<void>((r) => (release = r)), started }
+  page(server)
+  let stop = startFeedSync()
+  // The feed request is under way; meanwhile another tab opens the place's share page, which answers 410.
+  await requestStarted
+  vi.spyOn(Date, "now").mockReturnValue(0)
   await storage.markUnlisted("p_x")
   release()
-  await vi.waitFor(async () => expect((idb.map.get("feed") as { places: unknown[] } | undefined)?.places).toHaveLength(1))
-  await new Promise((r) => setTimeout(r, 10))
+  await vi.waitFor(() => expect((idb.map.get("feed") as { places: unknown[] } | undefined)?.places).toHaveLength(1))
   stop()
-  // The old response was saved as the offline copy, but the newer removal stands.
   expect(await storage.loadUnlisted()).toEqual(["p_x"])
+
+  // A restart with no connection: the offline copy holds the place, and it stays off.
+  page({ online: false, places: [] })
+  stop = startFeedSync()
+  await vi.waitFor(() => expect(useStore.getState().feedVersion).not.toBeNull())
+  expect(shown()).toEqual([])
+  stop()
+
+  // Online again, the server lists it (approved again): a feed asked for after the removal relists it, offline too.
+  let again!: () => void
+  const asked = new Promise<void>((r) => (again = r))
+  page({ online: true, places: [place, { ...place, id: "p_y" }], started: again })
+  stop = startFeedSync()
+  await asked
+  await vi.waitFor(async () => expect(await storage.loadUnlisted()).toEqual([]))
+  stop()
+  page({ online: false, places: [] })
+  stop = startFeedSync()
+  await vi.waitFor(() => expect(shown()).toContain("p_x"))
+  stop()
 })

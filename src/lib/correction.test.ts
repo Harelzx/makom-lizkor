@@ -32,3 +32,19 @@ it("other text, an unchanged revision, or no status at all, isn't saved", () => 
   expect(savedHere(null, sent, 2)).toBe(false)
   expect(savedHere(undefined, sent, 2)).toBe(false)
 })
+
+it("only a strictly newer revision in a recognised saved state confirms; anything else confirms nothing", async () => {
+  const d = draft("ספסל דמו", "שורה\nשנייה")
+  const at = (rev: unknown, revision_state: unknown) => ({ status: "published", name_he: "x", rev, revision_state, draft: d }) as never
+  expect(savedHere(at(3, "pending"), sent, 2)).toBe(true)
+  for (const [rev, state] of [
+    [3, "bogus"],
+    [3, undefined],
+    [undefined, "pending"],
+    [2, "pending"],
+    [1, "approved"],
+  ] as const) {
+    expect(savedHere(at(rev, state), sent, 2), `${rev} ${state}`).toBe(false)
+    expect(refusedHere(at(rev, state), sent, 2), `${rev} ${state}`).toBe(false)
+  }
+})

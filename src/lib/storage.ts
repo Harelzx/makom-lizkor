@@ -143,18 +143,23 @@ export async function saveSnapshot(feed: unknown): Promise<void> {
 }
 
 /**
- * Contributions this browser learned are not public (their share page answered 404 or 410), each with when it learned
- * it: kept off its offline copy of the feed, across reloads. Changed in one transaction each. A live feed lifts a mark
- * only if it lists the place again and was asked for after the mark was made, so a response already on its way when
- * the removal was learned can't undo it, and two tabs never clear each other's newer marks. Empty without storage.
+ * Contributions this browser learned are not public (their share page answered 404 or 410): kept off its offline copy
+ * of the feed, across reloads. Each mark carries a generation from a counter kept with the marks and raised in the same
+ * transaction, so the order of what this browser learned never depends on its clock. A feed check notes the generation
+ * when it starts; its response lifts only marks it lists that were made at or before then, so a response already on
+ * its way when a removal was learned can't undo it, while a later feed can relist. Empty without storage.
  */
-type Unlisted = Record<string, number>
-const marks = (stored: unknown): Unlisted => (stored && typeof stored === "object" && !Array.isArray(stored) ? (stored as Unlisted) : {})
+type Unlisted = { gen: number; marks: Record<string, number> }
+const unlisted = (stored: unknown): Unlisted => {
+  const u = stored as Partial<Unlisted> | undefined
+  return u && typeof u.gen === "number" && u.marks && typeof u.marks === "object" ? (u as Unlisted) : { gen: 0, marks: {} }
+}
 
-export async function markUnlisted(id: string, at = Date.now()): Promise<void> {
+export async function markUnlisted(id: string): Promise<void> {
   try {
     const s = db()
-    if (s) await update<Unlisted>("unlisted", (old) => ({ ...marks(old), [id]: Math.max(at, marks(old)[id] ?? 0) }), s)
+    if (s)
+      await update<Unlisted>("unlisted", (old) => ((u) => ({ gen: u.gen + 1, marks: { ...u.marks, [id]: u.gen + 1 } }))(unlisted(old)), s)
   } catch {
     /* the page itself still keeps it off while it is open */
   }
@@ -163,21 +168,34 @@ export async function markUnlisted(id: string, at = Date.now()): Promise<void> {
 export async function loadUnlisted(): Promise<string[]> {
   try {
     const s = db()
-    return Object.keys(marks(s ? await get("unlisted", s) : undefined))
+    return Object.keys(unlisted(s ? await get("unlisted", s) : undefined).marks)
   } catch {
     return []
   }
 }
 
-/** A live feed asked for at `askedAt` lists these places: marks made before then are lifted (public after all). */
-export async function relistPublished(ids: string[], askedAt: number): Promise<void> {
+/** Where the marks stand now: noted when a feed check begins. */
+export async function unlistedGeneration(): Promise<number> {
+  try {
+    const s = db()
+    return unlisted(s ? await get("unlisted", s) : undefined).gen
+  } catch {
+    return 0
+  }
+}
+
+/** A live feed asked for at generation `askedGen` lists these places: marks made at or before it are lifted. */
+export async function relistPublished(ids: string[], askedGen: number): Promise<void> {
   try {
     const s = db()
     const listed = new Set(ids)
     if (s)
       await update<Unlisted>(
         "unlisted",
-        (old) => Object.fromEntries(Object.entries(marks(old)).filter(([id, at]) => !(listed.has(id) && at < askedAt))),
+        (old) => {
+          const u = unlisted(old)
+          return { gen: u.gen, marks: Object.fromEntries(Object.entries(u.marks).filter(([id, g]) => !(listed.has(id) && g <= askedGen))) }
+        },
         s,
       )
   } catch {

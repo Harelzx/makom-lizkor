@@ -56,6 +56,20 @@ it("a status outside the contract, or a malformed field that decides completion,
     answer(200, JSON.stringify(body), "application/json")
     expect(await trackSubmission("p_1", "t"), JSON.stringify(body)).toBeUndefined()
   }
-  answer(200, JSON.stringify({ status: "withdrawn", name_he: null, files: "pending" }), "application/json")
+  answer(200, JSON.stringify({ status: "withdrawn", rev: 2, name_he: null, files: "pending" }), "application/json")
   expect(await trackSubmission("p_1", "t")).toMatchObject({ files: "pending" })
+})
+
+it("a correction's metadata outside the contract is a failure to read: unknown revision state, missing or odd rev", async () => {
+  for (const body of [
+    { status: "published", name_he: "x", rev: 3, revision_state: "bogus" },
+    { status: "published", name_he: "x", revision_state: "pending" },
+    { status: "published", name_he: "x", rev: 0, revision_state: "pending" },
+    { status: "published", name_he: "x", rev: 2.5, revision_state: "pending" },
+  ]) {
+    answer(200, JSON.stringify(body), "application/json")
+    expect(await trackSubmission("p_1", "t"), JSON.stringify(body)).toBeUndefined()
+  }
+  answer(200, JSON.stringify({ status: "published", name_he: "x", rev: 3, revision_state: "approved" }), "application/json")
+  expect(await trackSubmission("p_1", "t")).toMatchObject({ rev: 3 })
 })

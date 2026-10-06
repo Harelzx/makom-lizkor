@@ -1,6 +1,6 @@
 import { Feed, isNewer, PublicPlace } from "@/shared/contract"
 import { retryWaiting } from "@/lib/outbox"
-import { loadSnapshot, loadUnlisted, relistPublished, saveSnapshot } from "@/lib/storage"
+import { loadSnapshot, loadUnlisted, relistPublished, saveSnapshot, unlistedGeneration } from "@/lib/storage"
 import { useStore } from "@/store"
 import type { Place } from "@/types"
 
@@ -46,9 +46,10 @@ export function startFeedSync(): () => void {
   const check = async (retry = true): Promise<void> => {
     if (busy || document.visibilityState !== "visible") return
     busy = true
-    // When this look at the server began: a removal learned after it is newer than anything it brings back.
-    const askedAt = Date.now()
     try {
+      // Where this browser's removals stood when this look at the server began: one learned after it is newer than
+      // anything the response brings back.
+      const askedGen = await unlistedGeneration()
       const { v } = (await (await fetch("/api/v1/version", { cache: "no-store" })).json()) as { v: string }
       const mine = useStore.getState().feedVersion
       // Nothing newer: what is shown is current, and now known to be, even if it came from the offline copy.
@@ -70,7 +71,7 @@ export function startFeedSync(): () => void {
         // removal was learned after this feed was asked for.
         void relistPublished(
           feed.places.map((p) => p.id),
-          askedAt,
+          askedGen,
         )
       }
     } catch {
