@@ -32,6 +32,9 @@
     "QUEUE_LIMIT": "200",
     // The site's own address, for absolute links in share pages (og:url, og:image); set with the domain, a launch item.
     "PUBLIC_ORIGIN": "",
+    // The public keys each export is encrypted to (a JSON array of RSA-OAEP JWKs): the owner's, whose private half
+    // stays offline, and the drill's, whose private half is a secret. Empty: no export is written, and the check alerts.
+    "EXPORT_PUBLIC_KEYS": "",
   },
   // Photos: quarantine/ until a moderator approves, public/ after. No public bucket; the Worker serves public/ only.
   // The ledger: every decision, ids and codes only, written before and after it (spec 8.2). Bucket lock is an account
@@ -39,6 +42,9 @@
   "r2_buckets": [
     { "binding": "MEDIA", "bucket_name": "makom-media", "jurisdiction": "eu" },
     { "binding": "LEDGER", "bucket_name": "makom-ledger", "jurisdiction": "eu" },
+    // The nightly export, encrypted, and the photos it lists, stored by their sha256 (spec 8.1). Kept 35 days; the
+    // 34-day bucket lock is an account setting, applied before launch.
+    { "binding": "EXPORTS", "bucket_name": "makom-exports", "jurisdiction": "eu" },
   ],
   // A coarse outer cap per visitor's address, counted by Cloudflare at the edge: nothing about the address is stored.
   "ratelimits": [
