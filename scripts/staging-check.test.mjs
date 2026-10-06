@@ -50,8 +50,12 @@ test("staging runs production's bindings, its own name, and no preview URLs", ()
 })
 
 test("a deploy needs the real database id and every account value", () => {
-  const missing = stagingBlockers(real(), { deploy: true, env: {} })
+  // The committed config has the staging database's id since it was created (2026-10-07); the placeholder is refused.
+  const placeholder = real()
+  placeholder.env.staging.d1_databases[0].database_id = "00000000-0000-0000-0000-000000000000"
+  const missing = stagingBlockers(placeholder, { deploy: true, env: {} })
   assert.ok(missing.some((x) => x.includes("set the staging database's id")))
+  assert.ok(!stagingBlockers(real(), { deploy: true, env: {} }).some((x) => x.includes("set the staging database's id")))
   assert.equal(missing.filter((x) => x.includes("is not set")).length, DEPLOY_VARS.length)
   const r = real()
   r.env.staging.d1_databases[0].database_id = "6b8f0a1e-1111-4222-8333-944455556666"
