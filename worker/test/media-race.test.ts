@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers"
 import { describe, expect, it } from "vitest"
 import { placePhoto, resumeOps, runOp, type OpEnv } from "../db/ops"
+import { withdraw } from "../db/places"
 import { decide, queued, send, upload } from "./submission-helpers"
 
 /** A published place with a photo, as approval leaves it. */
@@ -13,7 +14,7 @@ async function withPhoto() {
     .first<string>("photo_key"))!
   expect(key.startsWith("public/")).toBe(true)
   const bytes = new Uint8Array(await (await env.MEDIA.get(key))!.arrayBuffer())
-  return { id: s.id, key, held: key.replace(/^public\//, "held/"), bytes }
+  return { id: s.id, token: s.trackingToken, key, held: key.replace(/^public\//, "held/"), bytes }
 }
 
 let n = 0
@@ -291,6 +292,8 @@ describe("the photo watch outlasts any one look (F4-O2)", () => {
     const late = gated("put", p.key, true)
     const looking = resumeOps(opEnv(late.media), at(t + 3))
     await late.arrival
+    // While its own write is still on its way, the job has already booked its next look.
+    expect(await due(p.id)).toBe(at(t + 3 + 60).toISOString())
     await hidePhoto(p.id)
     await placePhoto(opEnv(), p.id, at(t + 3))
     late.open()
@@ -313,5 +316,29 @@ describe("the photo watch outlasts any one look (F4-O2)", () => {
     expect(await due(p.id)).toBeNull()
     expect(await stored(p.key)).toBeNull()
     expect(await stored(p.held)).toBeNull()
+  })
+})
+
+describe("a withdrawal's files are erased by the job too, whatever the request managed (F4-O2)", () => {
+  const t0 = Date.now() + 30 * 24 * 60 * 60_000
+  const at = (minutes: number) => new Date(t0 + minutes * 60_000)
+  const due = (placeId: string) =>
+    env.DB.prepare("SELECT due_at FROM media_checks WHERE place_id = ?").bind(placeId).first<string>("due_at")
+
+  it("a withdrawal whose request stopped before erasing, and a copy landing after it: both erased by the job, then the watch ends", async () => {
+    const p = await withPhoto()
+    expect(await withdraw(opEnv(), p.id, p.token, at(0))).toBe("done")
+    // The withdrawal is stored, and the place is already on the watch, in the same step.
+    expect(await due(p.id)).not.toBeNull()
+    // As if the request stopped before its erasure, and an older move's copy landed afterwards.
+    await env.MEDIA.put(p.held, p.bytes)
+    expect(await stored(p.key)).toEqual(p.bytes)
+    await resumeOps(opEnv(), at(3))
+    expect(await stored(p.key)).toBeNull()
+    expect(await stored(p.held)).toBeNull()
+    // It found files, so it looks once more before letting go.
+    expect(await due(p.id)).not.toBeNull()
+    await resumeOps(opEnv(), at(3 + 61))
+    expect(await due(p.id)).toBeNull()
   })
 })

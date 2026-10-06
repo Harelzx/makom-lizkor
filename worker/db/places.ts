@@ -3,7 +3,7 @@ import type { Kind } from "@/types"
 import type { Feed, PublicPlace, RevisionInput, SubmissionInput } from "@/shared/contract"
 import { newToken, placeId, sameHash, sha256Hex, ulid } from "../lib/ids"
 import { stripJpeg } from "../lib/jpeg"
-import { runOp, type OpEnv } from "./ops"
+import { runOp, WATCH_FIRST_LOOK_MS, type OpEnv } from "./ops"
 
 // An approximation of a month; phase 5 replaces it with calendar months read from RETENTION (src/config.ts).
 const MONTH_MS = 30 * 24 * 3600 * 1000
@@ -343,6 +343,13 @@ export async function withdraw(env: OpEnv, id: string, token: string, now: Date)
             )
             .bind(id, tid, at),
           db.prepare(`DELETE FROM contacts WHERE place_id = ?1 AND ${happened}`).bind(id, tid),
+          // On the photo watch in the same step: the job erases whatever files this request or a late write leaves.
+          db
+            .prepare(
+              `INSERT INTO media_checks (place_id, due_at) SELECT ?1, ?3 WHERE ${happened}
+               ON CONFLICT (place_id) DO UPDATE SET due_at = MIN(due_at, excluded.due_at)`,
+            )
+            .bind(id, tid, new Date(now.getTime() + WATCH_FIRST_LOOK_MS).toISOString()),
           db
             .prepare(`UPDATE feed_state SET n = n + 1, changed_at = ?3 WHERE id = 1 AND ?4 = 'published' AND ${happened}`)
             .bind(id, tid, at, row.status),

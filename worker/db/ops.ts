@@ -1,6 +1,6 @@
 import { ulid } from "../lib/ids"
 import { writeLedger, type Actor, type LedgerEntry, type OpKind } from "../lib/ledger"
-import { retirePhotos } from "./places"
+import { erasePhotos, photosRemain, retirePhotos } from "./places"
 
 /** What an operation reaches: the database, the files, the ledger and the edge cache. */
 export type OpEnv = { db: D1Database; media: R2Bucket; ledger: R2Bucket; purge: (tags: string[]) => Promise<boolean> }
@@ -78,9 +78,12 @@ const INTERRUPTED_MS = 2 * 60_000
 const RESUME_BATCH = 100
 /** Passes placePhoto makes before leaving the photo to the next run: each one re-reads the state after its own writes. */
 const PLACE_PASSES = 4
-/** After a move, the job's first look at the photo comes this soon (a cadence, not a promise that writes are over). */
-const MEDIA_SETTLE_MS = INTERRUPTED_MS
-/** Then it keeps looking, this often, for as long as the place has a photo: a write may land after any one look. */
+/** After a move or a withdrawal, the job's first look at the photo comes this soon: a cadence, not a promise that the
+ * move's writes are over by then. */
+export const WATCH_FIRST_LOOK_MS = INTERRUPTED_MS
+/** Then it keeps looking, aiming for this often, for as long as the place has a photo: a write may land after any one
+ * look. A target, not a bound: the job's own schedule, a backlog past MEDIA_BATCH, failures and outages can stretch it,
+ * and bytes that are gone can't be brought back by looking. */
 const MEDIA_WATCH_MS = 60 * 60_000
 /** A photo that wouldn't settle is looked at again this much later, behind the others. */
 const MEDIA_RETRY_MS = 15 * 60_000
@@ -357,9 +360,10 @@ export async function resumeOps(env: OpEnv, now: Date) {
 /**
  * The photo watch: every place whose photo a move has touched is looked at again on a cadence, whatever its operations'
  * steps say, because a write from a Worker that then stopped can land after any finished move or any earlier look,
- * this job's own included. Each look puts the photo where the place's state says and books the next one; a place
- * whose photo is gone for good (withdrawn, erased, never published) leaves the watch. One that won't settle, or whose
- * bytes are gone, is looked at again sooner, behind the others, and stays listed.
+ * this job's own included. Each look puts the photo where the place's state says and books the next one. A withdrawn
+ * or erased place has whatever files remain erased, and leaves the watch once a look finds none; a place with no
+ * published photo leaves it at once. One that won't settle, or whose bytes are gone, is looked at again sooner, behind
+ * the others, and stays listed.
  */
 export async function reconcileMedia(env: OpEnv, now: Date) {
   const at = now.toISOString()
@@ -377,13 +381,22 @@ export async function reconcileMedia(env: OpEnv, now: Date) {
     await book(place_id, due_at, MEDIA_WATCH_MS)
     const booked = new Date(now.getTime() + MEDIA_WATCH_MS).toISOString()
     try {
-      if ((await placePhoto(env, place_id, now, false)) === "none")
+      if ((await placePhoto(env, place_id, now, false)) === "none" && !(await erasedRemains(env, place_id)))
         await env.db.prepare("DELETE FROM media_checks WHERE place_id = ?1 AND due_at = ?2").bind(place_id, booked).run()
     } catch (err) {
       console.error(JSON.stringify({ level: "error", event: "photo_unsettled", place: place_id, error: (err as Error).message }))
       await book(place_id, booked, MEDIA_RETRY_MS).catch(() => undefined)
     }
   }
+}
+
+/** For a withdrawn or erased place: erases any file of it still stored; true if there were some (the watch looks again). */
+async function erasedRemains(env: OpEnv, placeId: string) {
+  const status = await env.db.prepare("SELECT status FROM places WHERE id = ?").bind(placeId).first<string>("status")
+  if (status !== "withdrawn" && status !== "erased") return false
+  if (!(await photosRemain(env.media, placeId))) return false
+  await erasePhotos(env.media, placeId)
+  return true
 }
 
 /**
@@ -454,7 +467,8 @@ export async function placePhoto(env: OpEnv, placeId: string, now = new Date(), 
       .bind(placeId)
       .first<{ status: string; photo_key: string | null; hidden: number }>()
     const key = row?.photo_key
-    // A withdrawn or erased place's files are the erasure's, never brought back here.
+    // A withdrawn or erased place's files are the erasure's: once that state is seen, nothing is copied here. A write a
+    // move issued before it can still land; the watch erases it (erasedRemains).
     if (!row || !key?.startsWith("public/") || row.status === "withdrawn" || row.status === "erased") return "none"
     // On the watch before any write, with a look soon after this move (sooner than one already booked, never later).
     if (register && pass === 0)
@@ -463,7 +477,7 @@ export async function placePhoto(env: OpEnv, placeId: string, now = new Date(), 
           `INSERT INTO media_checks (place_id, due_at) VALUES (?1, ?2)
            ON CONFLICT (place_id) DO UPDATE SET due_at = MIN(due_at, excluded.due_at)`,
         )
-        .bind(placeId, new Date(now.getTime() + MEDIA_SETTLE_MS).toISOString())
+        .bind(placeId, new Date(now.getTime() + WATCH_FIRST_LOOK_MS).toISOString())
         .run()
     const served = row.status === "published" && !row.hidden
     const held = heldKey(key)

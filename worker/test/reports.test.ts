@@ -74,7 +74,16 @@ describe("a complete request on a published place, within the safeguards", () =>
     const commit = await Promise.all(
       objects.filter((o) => o.key.endsWith("commit.json")).map(async (o) => (await env.LEDGER.get(o.key))!.json<LedgerEntry>()),
     )
-    expect(commit.find((c) => c.kind === "suppress")).toMatchObject({ actor: "automatic", fields: ["name_he"], removal: true })
+    // The ledger names the row the hide created, so a replay can tell it from any other hide of the same field.
+    const sup = (await env.DB.prepare("SELECT id FROM field_suppressions WHERE place_id = ? AND lifted_at IS NULL")
+      .bind(id)
+      .first<string>("id"))!
+    expect(commit.find((c) => c.kind === "suppress")).toMatchObject({
+      actor: "automatic",
+      fields: ["name_he"],
+      targets: [sup],
+      removal: true,
+    })
     // Ids and codes only: nothing the requester wrote reaches the ledger.
     for (const o of objects) expect(await (await env.LEDGER.get(o.key))!.text()).not.toContain("אחות")
     expect(await alertCount()).toBe(before + 1)
