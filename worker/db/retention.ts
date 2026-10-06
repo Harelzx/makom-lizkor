@@ -230,6 +230,18 @@ export async function alertStalledRetention(db: D1Database, env: Env, sendMail: 
   if (!last?.first || (last.at ?? last.first) > since) return false
   const sent = await db.prepare("SELECT sent_at FROM job_alerts WHERE job = 'retention'").first<{ sent_at: string }>()
   if (sent && sent.sent_at > since) return false
+  const text = [
+    `עבודת המחיקה של "מקום לזכור" לא הסתיימה בהצלחה מאז ${last.at ?? "שהתחילה לרוץ"}.`,
+    "כל עוד היא לא רצה, מועדי המחיקה שההודעות מבטיחות לא מתקיימים. כדאי לבדוק את היומנים (event: retention_failed).",
+  ].join("\n")
+  return tellModerators(db, env, sendMail, "retention", "מקום לזכור: עבודת המחיקה תקועה", text, now)
+}
+
+/**
+ * A job's alert to every moderator, with no data of anyone in it; recorded as sent (so repeated only after the job's
+ * interval) only when every mail went, so one that couldn't go now is tried at the next run.
+ */
+export async function tellModerators(db: D1Database, env: Env, sendMail: SendMail, job: string, subject: string, text: string, now: Date) {
   const moderators = [
     ...new Set(
       env.MODERATORS.split(",")
@@ -237,16 +249,12 @@ export async function alertStalledRetention(db: D1Database, env: Env, sendMail: 
         .filter(Boolean),
     ),
   ]
-  const text = [
-    `עבודת המחיקה של "מקום לזכור" לא הסתיימה בהצלחה מאז ${last.at ?? "שהתחילה לרוץ"}.`,
-    "כל עוד היא לא רצה, מועדי המחיקה שההודעות מבטיחות לא מתקיימים. כדאי לבדוק את היומנים (event: retention_failed).",
-  ].join("\n")
   let all = moderators.length > 0
-  for (const to of moderators) if (!(await sendMail(env, { to, subject: "מקום לזכור: עבודת המחיקה תקועה", text }))) all = false
+  for (const to of moderators) if (!(await sendMail(env, { to, subject, text }))) all = false
   if (!all) return false
   await db
-    .prepare("INSERT INTO job_alerts (job, sent_at) VALUES ('retention', ?1) ON CONFLICT (job) DO UPDATE SET sent_at = excluded.sent_at")
-    .bind(now.toISOString())
+    .prepare("INSERT INTO job_alerts (job, sent_at) VALUES (?1, ?2) ON CONFLICT (job) DO UPDATE SET sent_at = excluded.sent_at")
+    .bind(job, now.toISOString())
     .run()
   return true
 }

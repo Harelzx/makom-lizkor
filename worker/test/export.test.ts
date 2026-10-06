@@ -1,12 +1,12 @@
 import { env } from "cloudflare:workers"
 import { beforeAll, describe, expect, it } from "vitest"
-import { EXPORT_TABLES } from "../db/exports"
+import { checkDeletion, EXPORT_TABLES } from "../db/exports"
 import { runJobs } from "../jobs"
-import { sha256Hex } from "../lib/ids"
+import { sha256Hex, ulid } from "../lib/ids"
 import { sendMail } from "../lib/mail"
 import { unseal, type Manifest } from "../lib/sealed"
 import { call } from "./app"
-import { decide, queued, send, upload } from "./submission-helpers"
+import { decide, jpeg, queued, send, upload } from "./submission-helpers"
 
 const DAY = 86_400_000
 const deps = { sendMail, purge: async () => true }
@@ -35,9 +35,9 @@ const gunzip = async (bytes: Uint8Array) =>
     tables: Record<string, Record<string, unknown>[]>
   }
 
-async function publishedWithPhoto(name: string) {
+async function publishedWithPhoto(name: string, fill = 0x55) {
   const { id, trackingToken } = await send(name)
-  expect((await upload(id, trackingToken)).status).toBe(200)
+  expect((await upload(id, trackingToken, jpeg(fill))).status).toBe(200)
   expect((await decide(id, await queued(id), "approve")).status).toBe(200)
   return id
 }
@@ -115,5 +115,85 @@ describe("the nightly export (spec 8.1)", () => {
     const at = new Date(Date.now() + 1300 * DAY)
     await runJobs({ ...withKeys, EXPORT_PUBLIC_KEYS: "" }, deps, undefined, at)
     expect(await exportsAfter(at.toISOString())).toHaveLength(0)
+  })
+})
+
+describe("an export's 35 days (spec 7, 8.4)", () => {
+  it("are its last: the export goes, and with it every photo copy no later export lists", async () => {
+    const kept = await publishedWithPhoto("גן דמו שנשאר בגיבוי", 0x31)
+    const gone = await publishedWithPhoto("גן דמו שנמשך מהגיבוי", 0x32)
+    const photoOf = async (id: string) =>
+      (await env.DB.prepare("SELECT r.photo_key AS key FROM places p JOIN revisions r ON r.id = p.published_revision_id WHERE p.id = ?")
+        .bind(id)
+        .first<{ key: string }>())!.key
+    const keptHash = await sha(await (await env.MEDIA.get(await photoOf(kept)))!.arrayBuffer())
+    const goneHash = await sha(await (await env.MEDIA.get(await photoOf(gone)))!.arrayBuffer())
+    const t0 = new Date(Date.now() + 1400 * DAY)
+    await runJobs(withKeys, deps, undefined, t0)
+    const [first] = await exportsAfter(t0.toISOString())
+    // Withdrawn after the first export: the next one no longer lists its photo.
+    await env.DB.prepare("UPDATE places SET status = 'withdrawn' WHERE id = ?").bind(gone).run()
+    await env.MEDIA.delete(await photoOf(gone)).catch(() => undefined)
+    for (const prefix of ["public/", "held/", "quarantine/"])
+      for (const o of (await env.MEDIA.list({ prefix: `${prefix}${gone}/` })).objects) await env.MEDIA.delete(o.key)
+    await runJobs(withKeys, deps, undefined, new Date(t0.getTime() + DAY))
+    expect(await env.EXPORTS.head(`photos/${goneHash}`)).not.toBeNull()
+    expect(keptHash).not.toBe(goneHash)
+
+    await runJobs(withKeys, deps, undefined, new Date(t0.getTime() + 35.5 * DAY))
+    expect((await env.EXPORTS.list({ prefix: `exports/${first.id}/` })).objects).toHaveLength(0)
+    expect(await env.DB.prepare("SELECT deleted_at FROM exports WHERE id = ?").bind(first.id).first<string>("deleted_at")).not.toBeNull()
+    expect(await env.EXPORTS.head(`photos/${goneHash}`)).toBeNull()
+    expect(await env.EXPORTS.head(`photos/${keptHash}`)).not.toBeNull()
+  })
+
+  it("are checked every night from the bucket's own listing and the database, and a breach is told to the moderators", async () => {
+    const at = new Date(Date.now() + 1600 * DAY)
+    await runJobs(withKeys, deps, undefined, at)
+    expect(await checkDeletion({ db: env.DB, exports: env.EXPORTS, keys: withKeys.EXPORT_PUBLIC_KEYS }, at)).toEqual({})
+    // A copy the pruning missed, a contact the deletion missed, a photo copy nothing lists any more.
+    await env.EXPORTS.put(`exports/ex_${ulid(at.getTime() - 37 * DAY)}/data.bin`, "sealed")
+    const { id } = await send("ספסל דמו לבדיקה הלילית")
+    await env.DB.prepare(
+      `INSERT INTO contacts (id, place_id, name, consent_version, created_at, ceiling_at, purge_after) VALUES (?, ?, 'שם דמו', 'v', ?, ?, ?)`,
+    )
+      .bind(
+        `c_${crypto.randomUUID()}`,
+        id,
+        new Date(at.getTime() - 100 * DAY).toISOString(),
+        new Date(at.getTime() - 2 * DAY).toISOString(),
+        new Date(at.getTime() - 2 * DAY).toISOString(),
+      )
+      .run()
+    await env.EXPORTS.put("photos/0000000000000000000000000000000000000000000000000000000000000000", "jpeg")
+    const later = new Date(at.getTime() + 40 * DAY)
+    const found = await checkDeletion({ db: env.DB, exports: env.EXPORTS, keys: withKeys.EXPORT_PUBLIC_KEYS }, later)
+    // The planted copy, and both files of the export 40 days back; with no manifest younger than 35 days, every photo
+    // copy is listed by none.
+    const copies = (await env.EXPORTS.list({ prefix: "photos/" })).objects.length
+    expect(found).toEqual({ contacts: 1, export_files: 3, photo_copies: copies, no_recent_export: 1 })
+    await env.DB.prepare("DELETE FROM dev_outbox WHERE subject LIKE '%בדיקת המחיקה%'").run()
+    // The pass's own deletion and pruning fix what they can; what is left is told once a day, codes and counts only.
+    const failing = new Proxy(env.EXPORTS, {
+      get(target, prop) {
+        if (prop === "delete")
+          return async () => {
+            throw new Error("refused")
+          }
+        const v = Reflect.get(target, prop)
+        return typeof v === "function" ? v.bind(target) : v
+      },
+    })
+    await runJobs({ ...withKeys, EXPORTS: failing }, deps, undefined, later)
+    await runJobs({ ...withKeys, EXPORTS: failing }, deps, undefined, new Date(later.getTime() + 3600_000))
+    const told = (
+      await env.DB.prepare("SELECT to_address, body FROM dev_outbox WHERE subject LIKE '%בדיקת המחיקה%'").all<{
+        to_address: string
+        body: string
+      }>()
+    ).results
+    expect(told.map((m) => m.to_address)).toEqual(["dev@example.test"])
+    expect(told[0].body).toContain("export_files")
+    expect(told[0].body).not.toContain("ספסל")
   })
 })

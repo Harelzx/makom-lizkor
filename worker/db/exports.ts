@@ -1,4 +1,7 @@
-import { ulid } from "../lib/ids"
+import { RETENTION } from "@/config"
+import { ulid, ulidTime } from "../lib/ids"
+import type { SendMail } from "../lib/mail"
+import { tellModerators } from "./retention"
 import { gzip, publicKeys, seal, sha256, type Manifest } from "../lib/sealed"
 
 /**
@@ -110,4 +113,134 @@ async function backUpPhotos(media: R2Bucket, exports: R2Bucket) {
     } while (cursor)
   }
   return files
+}
+
+const DAY_MS = 86_400_000
+/** How long an export and the photo copies only it lists are kept (spec 7): the job deletes them at this age. */
+export const EXPORT_KEEP_DAYS = 35
+
+/** Each export's age from its id, and its manifest's photos, read from the bucket's own listing. */
+async function listExports(exports: R2Bucket) {
+  const objects: { key: string; id: string; at: number }[] = []
+  let cursor: string | undefined
+  do {
+    const page = await exports.list({ prefix: "exports/", cursor })
+    for (const o of page.objects) {
+      const id = o.key.split("/")[1] ?? ""
+      objects.push({ key: o.key, id, at: ulidTime(id.replace(/^ex_/, "")) })
+    }
+    cursor = page.truncated ? page.cursor : undefined
+  } while (cursor)
+  return objects
+}
+async function listPhotos(exports: R2Bucket) {
+  const photos: { key: string; hash: string; uploaded: number }[] = []
+  let cursor: string | undefined
+  do {
+    const page = await exports.list({ prefix: "photos/", cursor })
+    for (const o of page.objects) photos.push({ key: o.key, hash: o.key.slice("photos/".length), uploaded: o.uploaded.getTime() })
+    cursor = page.truncated ? page.cursor : undefined
+  } while (cursor)
+  return photos
+}
+/** The photos still listed by a manifest younger than the cutoff. */
+async function listedPhotos(exports: R2Bucket, objects: { key: string; at: number }[], cutoff: number) {
+  const listed = new Set<string>()
+  for (const o of objects)
+    if (o.key.endsWith("/manifest.json") && o.at > cutoff) {
+      const manifest = (await (await exports.get(o.key))?.json()) as Manifest | undefined
+      for (const f of manifest?.files ?? []) listed.add(f.sha256)
+    }
+  return listed
+}
+
+/**
+ * The 35-day end (spec 7): every export of that age is deleted, whatever its row says (an unfinished one too), and then
+ * every photo copy that no younger manifest lists, once it is a day old (an export under way may not have written its
+ * manifest yet). A deletion that fails is tried again at the next pass, and the nightly check reports it.
+ */
+export async function pruneExports(env: { db: D1Database; exports: R2Bucket }, now: Date) {
+  const cutoff = now.getTime() - EXPORT_KEEP_DAYS * DAY_MS
+  const objects = await listExports(env.exports)
+  const old = objects.filter((o) => !(o.at > cutoff))
+  for (const o of old) await env.exports.delete(o.key)
+  for (const id of new Set(old.map((o) => o.id)))
+    await env.db.prepare("UPDATE exports SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL").bind(now.toISOString(), id).run()
+  const listed = await listedPhotos(env.exports, objects, cutoff)
+  for (const p of await listPhotos(env.exports))
+    if (!listed.has(p.hash) && p.uploaded <= now.getTime() - DAY_MS) await env.exports.delete(p.key)
+}
+
+/**
+ * The nightly deletion check (spec 8.4), from the database and the bucket's own listing: what a deletion date has
+ * passed by more than a day, and still holds. Counts by kind, nothing else.
+ * - contacts, requests' text, hides' notes, moderators' notes past their dates; submissions past their 30 days;
+ * - export files older than 35 days, and photo copies no current manifest lists;
+ * - no export in the last 26 hours, or no key to make one with.
+ */
+export async function checkDeletion(env: { db: D1Database; exports: R2Bucket; keys: string }, now: Date): Promise<Record<string, number>> {
+  const db = env.db
+  const late = new Date(now.getTime() - DAY_MS).toISOString()
+  const before = (days: number) => new Date(now.getTime() - days * DAY_MS - DAY_MS).toISOString()
+  const counts = await db.batch([
+    db.prepare("SELECT COUNT(*) AS n FROM contacts WHERE purge_after <= ?").bind(late),
+    db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM reports WHERE purge_after <= ?1 AND (relationship IS NOT NULL OR explanation IS NOT NULL
+           OR email IS NOT NULL OR explanation_hash IS NOT NULL OR reporter_key IS NOT NULL OR handling_note IS NOT NULL)`,
+      )
+      .bind(late),
+    db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM field_suppressions WHERE notes_purge_after <= ?1
+           AND (reason IS NOT NULL OR basis_detail IS NOT NULL OR basis_note != '')`,
+      )
+      .bind(late),
+    db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM revisions WHERE decision_note IS NOT NULL
+           AND (decided_at <= ?1 OR (state IN ('approved', 'rejected', 'superseded') AND decided_at <= ?2))`,
+      )
+      .bind(before(RETENTION.contactMaxMonths * 30), before(RETENTION.contactAfterCloseDays)),
+    db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM places
+         WHERE (status = 'returned' AND status_changed_at <= ?1) OR (status = 'rejected' AND status_changed_at <= ?2)`,
+      )
+      .bind(before(RETENTION.returnedDays), before(RETENTION.rejectedTextDays)),
+    db
+      .prepare("SELECT COUNT(*) AS n FROM exports WHERE ok = 1 AND created_at > ?")
+      .bind(new Date(now.getTime() - 26 * 3600_000).toISOString()),
+    db.prepare("SELECT MIN(started_at) AS at FROM retention_runs"),
+  ])
+  const n = (i: number) => (counts[i].results[0] as { n: number }).n
+  const found: Record<string, number> = {
+    contacts: n(0),
+    reports: n(1),
+    suppression_notes: n(2),
+    decision_notes: n(3),
+    submissions: n(4),
+  }
+  const cutoff = now.getTime() - EXPORT_KEEP_DAYS * DAY_MS
+  const objects = await listExports(env.exports)
+  found.export_files = objects.filter((o) => !(o.at > cutoff - DAY_MS)).length
+  const listed = await listedPhotos(env.exports, objects, cutoff)
+  found.photo_copies = (await listPhotos(env.exports)).filter((p) => !listed.has(p.hash) && p.uploaded <= now.getTime() - 2 * DAY_MS).length
+  const running = (counts[6].results[0] as { at: string | null }).at
+  if (!publicKeys(env.keys).length) found.no_export_key = 1
+  else if (running && running <= new Date(now.getTime() - 26 * 3600_000).toISOString() && n(5) === 0) found.no_recent_export = 1
+  return Object.fromEntries(Object.entries(found).filter(([, v]) => v > 0))
+}
+
+/** A breach found by the nightly check, told to the moderators once a day while it lasts: kinds and counts only. */
+export async function alertDeletion(db: D1Database, env: Env, sendMail: SendMail, found: Record<string, number>, now: Date) {
+  if (!Object.keys(found).length) return false
+  const sent = await db.prepare("SELECT sent_at FROM job_alerts WHERE job = 'deletion_check'").first<{ sent_at: string }>()
+  if (sent && sent.sent_at > new Date(now.getTime() - DAY_MS).toISOString()) return false
+  const text = [
+    'בדיקת המחיקה הלילית של "מקום לזכור" מצאה מידע שמועד המחיקה שלו עבר, או גיבוי שלא נוצר:',
+    ...Object.entries(found).map(([k, v]) => `${k}: ${v}`),
+    "כדאי לבדוק את היומנים (event: job_failed).",
+  ].join("\n")
+  return tellModerators(db, env, sendMail, "deletion_check", "מקום לזכור: בדיקת המחיקה מצאה חריגה", text, now)
 }

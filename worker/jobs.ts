@@ -1,5 +1,5 @@
 import { RETENTION } from "@/config"
-import { runExport } from "./db/exports"
+import { alertDeletion, checkDeletion, pruneExports, runExport } from "./db/exports"
 import { resumeOps, type OpEnv } from "./db/ops"
 import { sweepPhotos } from "./db/photos"
 import { alertStalledRetention, runRetention } from "./db/retention"
@@ -16,7 +16,8 @@ const BACKSTOP_CLAIM_MS = 10 * 60_000
  * The scheduled pass (every 15 minutes in production; /__dev/cron locally), each part safe to run twice at once:
  * - the retention job (db/retention.ts): abandoned submissions erased, and what reached its purge date emptied;
  * - the photo sweep (db/photos.ts): files nothing live names, once no writer can still be in flight;
- * - the nightly export (db/exports.ts), once a day and only after a deletion run of the same pass finished;
+ * - the nightly export (db/exports.ts), once a day and only after a deletion run of the same pass finished; exports and
+ *   the photo copies only they list deleted at 35 days; the deletion check, told to the moderators once a day;
  * - operations left unfinished are finished, or refused as interrupted (resumeOps);
  * - the 24-hour backstop (spec 6) looks once at each complete request the automatic path held back, with every
  *   safeguard checked again at the moment it runs, and then leaves the request to people; a look that couldn't
@@ -56,6 +57,16 @@ export async function runJobs(env: Env, deps: { sendMail: SendMail; purge: Purge
     if (retention?.ok)
       await runExport({ db: env.DB, media: env.MEDIA, exports: env.EXPORTS, keys: env.EXPORT_PUBLIC_KEYS }, retention.id, now)
   })
+  await part("export_prune", () => pruneExports({ db: env.DB, exports: env.EXPORTS }, now))
+  await part("deletion_check", async () =>
+    alertDeletion(
+      env.DB,
+      env,
+      deps.sendMail,
+      await checkDeletion({ db: env.DB, exports: env.EXPORTS, keys: env.EXPORT_PUBLIC_KEYS }, now),
+      now,
+    ),
+  )
 
   await part("backstop", async () => {
     const stale = new Date(now.getTime() - BACKSTOP_CLAIM_MS).toISOString()
