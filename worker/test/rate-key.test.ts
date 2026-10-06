@@ -56,3 +56,15 @@ it("the anemone limiter is asked about a code derived from the address, never th
   expect(keys[0]).not.toContain(IP)
   expect(keys[0]).toMatch(/^[0-9a-f]{64}$/)
 })
+
+it("counts an IPv6 visitor by their /64, which one connection usually holds whole, and IPv4 by the address", async () => {
+  const { rateKey } = await import("../lib/ids")
+  const s = "secret"
+  // Every address inside one /64 (however it is written) is one visitor to the limiter.
+  const same = ["2001:db8:aa:bb::1", "2001:db8:aa:bb:ffff:1:2:3", "2001:0db8:00aa:00bb:0:0:0:9", "2001:DB8:AA:BB::"]
+  const keys = await Promise.all(same.map((a) => rateKey(s, a)))
+  expect(new Set(keys).size).toBe(1)
+  expect(await rateKey(s, "2001:db8:aa:bc::1")).not.toBe(keys[0])
+  expect(await rateKey(s, "2001:db8::1")).not.toBe(await rateKey(s, "2001:db8:0:1::1"))
+  expect(await rateKey(s, "203.0.113.7")).not.toBe(await rateKey(s, "203.0.113.8"))
+})

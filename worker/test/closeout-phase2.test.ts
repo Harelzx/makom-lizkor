@@ -502,4 +502,15 @@ describe("what a submission's fingerprint keeps", () => {
     expect(again.status).toBe(200)
     expect(again.id).toBe(id)
   })
+
+  it("holds nothing derived from the sender's email or name, so erasing them later leaves nothing of them behind", async () => {
+    const key = crypto.randomUUID().replaceAll("-", "")
+    const first = await send("ספסל דמו טביעה בלי פרטי קשר", { email: `a${Date.now()}@example.test`, submitter_name: "דמו א" }, key)
+    // The same submission with other contact details is still the same submission by its fingerprint.
+    const again = await send("ספסל דמו טביעה בלי פרטי קשר", { email: `b${Date.now()}@example.test`, submitter_name: "דמו ב" }, key)
+    expect(again.status).toBe(200)
+    expect(again.id).toBe(first.id)
+    // Other content under the same key is still refused.
+    expect((await send("ספסל דמו טביעה אחרת", {}, key)).status).toBe(409)
+  })
 })

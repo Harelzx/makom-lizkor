@@ -78,3 +78,33 @@ describe("withdrawing", () => {
     expect(rows).toBe(0)
   })
 })
+
+describe("a withdrawal that keeps losing a race", () => {
+  it("is told to try again, not that the link is wrong, and the next try withdraws", async () => {
+    const { id, trackingToken } = await send("ספסל דמו במרוץ")
+    // Something else changes the place just before each of the first three tries is stored.
+    let losses = 3
+    const db = new Proxy(env.DB, {
+      get(target, key) {
+        if (key === "batch")
+          return async (statements: D1PreparedStatement[]) => {
+            if (losses-- > 0) await target.prepare("UPDATE places SET rev = rev + 1 WHERE id = ?").bind(id).run()
+            return target.batch(statements)
+          }
+        const value = Reflect.get(target, key)
+        return typeof value === "function" ? value.bind(target) : value
+      },
+    })
+    const busy = await call(
+      `http://local/api/v1/submissions/${id}/withdraw`,
+      { method: "POST", headers: as(trackingToken) },
+      { ...env, DB: db },
+    )
+    expect(busy.status).toBe(503)
+    expect((await busy.json<{ code: string }>()).code).toBe("withdrawal_busy")
+    expect(busy.headers.get("Cache-Control")).toContain("no-store")
+    expect((await (await status(id, trackingToken)).json<{ status: string }>()).status).toBe("pending")
+    expect((await withdraw(id, trackingToken)).status).toBe(200)
+    expect((await (await status(id, trackingToken)).json<{ status: string }>()).status).toBe("withdrawn")
+  })
+})

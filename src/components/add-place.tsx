@@ -28,6 +28,8 @@ type Step = 0 | 1 | 2
 
 /** More places are waiting for review than the moderators can read: the form stops politely (spec 12). */
 const QUEUE_FULL = "אנחנו מקבלים עכשיו יותר הצעות ממה שאפשר לבדוק. ההצעה נשמרה במכשיר, ונשלח אותה לבד כשיתפנה מקום."
+/** The bot check didn't pass: not a connection problem, and the next try waits a while (src/lib/api.ts). */
+const CHECK_FAILED = "לא הצלחנו לוודא שהשליחה נעשתה מדפדפן. ההצעה נשמרה במכשיר, וננסה לשלוח אותה שוב בעוד כמה דקות."
 
 /** What the visitor is told after saving: whether the server took the place, and whether this device kept a copy. */
 const SAVE_MESSAGE = {
@@ -298,7 +300,12 @@ export function AddPlace() {
           sendError: r.code,
           nextTryAt: r.retryAfter ? Date.now() + r.retryAfter * 1000 : undefined,
         })
-      message = !r.ok && r.code === "queue_full" ? QUEUE_FULL : SAVE_MESSAGE[r.ok ? "sent" : r.kind][stored ? "stored" : "unstored"]
+      message =
+        !r.ok && r.code === "queue_full"
+          ? QUEUE_FULL
+          : !r.ok && r.code?.startsWith("turnstile_") && stored
+            ? CHECK_FAILED
+            : SAVE_MESSAGE[r.ok ? "sent" : r.kind][stored ? "stored" : "unstored"]
     } catch {
       // Nothing above should throw; if something does, the form stays usable rather than stuck on its button.
       sending.current = false

@@ -17,6 +17,7 @@ export function newSubmitKey(): string {
 }
 
 const REJECTED = new Set([400, 409, 413, 415, 422])
+const CHECK_RETRY_S = 600
 
 /** The server either took the place, refused it (don't send it again), or couldn't be reached (send it again later). */
 export async function submitPlace(input: SubmissionInput, key: string): Promise<SendResult> {
@@ -34,7 +35,10 @@ export async function submitPlace(input: SubmissionInput, key: string): Promise<
       return { ok: false, kind: "rejected", code }
     }
     const code = ((await res.json().catch(() => ({}))) as { code?: string }).code
-    return { ok: false, kind: "temporary", code, retryAfter: Number(res.headers.get("Retry-After")) || undefined }
+    // A failed bot check isn't mended by the next wake: it waits ten minutes, so the visitor isn't shown a challenge
+    // every 30 seconds. The server's own wait, when it gives one, wins.
+    const wait = Number(res.headers.get("Retry-After")) || (res.status === 403 ? CHECK_RETRY_S : undefined)
+    return { ok: false, kind: "temporary", code, retryAfter: wait }
   } catch {
     return { ok: false, kind: "temporary" }
   }

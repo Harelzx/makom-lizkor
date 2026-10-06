@@ -30,11 +30,30 @@ export async function sameHash(a: string, b: string): Promise<boolean> {
 }
 
 /**
- * What the rate limiters count a visitor's address under: HMAC(secret, "rate:" + address), so Cloudflare's limiter
+ * The part of an address that names one visitor: an IPv4 address whole, an IPv6 address by its /64, since one
+ * connection is usually given a whole /64 and could otherwise count as endless visitors. Written forms are normalized
+ * (zeros, case, "::"), and an IPv4 address mapped into IPv6 is read as IPv4.
+ */
+function visitor(address: string): string {
+  if (!address.includes(":")) return address
+  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(address)
+  if (mapped) return mapped[1]
+  const [head, tail] = address.split("::")
+  const parts = (s?: string) => (s ? s.split(":") : [])
+  const known = [...parts(head), ...parts(tail)]
+  const groups = tail === undefined ? known : [...parts(head), ...Array(8 - known.length).fill("0"), ...parts(tail)]
+  return `${groups
+    .slice(0, 4)
+    .map((g) => parseInt(g || "0", 16).toString(16))
+    .join(":")}::/64`
+}
+
+/**
+ * What the rate limiters count a visitor's address under: HMAC(secret, "rate:" + visitor), so Cloudflare's limiter
  * store never holds the address itself (its counters live per Cloudflare location, for an unpublished time).
  */
 export async function rateKey(secret: string, address: string): Promise<string> {
   const k = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"])
-  const mac = new Uint8Array(await crypto.subtle.sign("HMAC", k, new TextEncoder().encode(`rate:${address}`)))
+  const mac = new Uint8Array(await crypto.subtle.sign("HMAC", k, new TextEncoder().encode(`rate:${visitor(address)}`)))
   return [...mac].map((b) => b.toString(16).padStart(2, "0")).join("")
 }

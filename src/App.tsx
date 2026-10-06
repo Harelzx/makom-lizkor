@@ -25,7 +25,8 @@ function useHashRoute() {
       const [, route, id] = location.hash.split("/")
       const s = useStore.getState()
       // A tracking link opens the submission's status. The token is a private capability, so it leaves the address at
-      // once: it stays out of the history, a screen share and a copied address.
+      // once: out of this tab's history entry, a screen share and a copied address. The browser's own history list (and
+      // the mail it came in) still keep the link as it was opened; only the browser can clear those.
       // An email verification link opens a page that asks for a click (a mail scanner following the link confirms
       // nothing); its secret leaves the address the same way.
       if (route === "verify" && id) {

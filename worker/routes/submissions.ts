@@ -104,8 +104,10 @@ submissions.get("/:id", async (c) => {
 
 submissions.post("/:id/withdraw", async (c) => {
   const token = bearer(c.req.header("Authorization"))
-  const done = token ? await withdraw(c.env.DB, c.req.param("id"), token, clock(c.req.raw, c.env)) : false
-  if (!done) return problem(c, 404, "not_found")
+  const done = token ? await withdraw(c.env.DB, c.req.param("id"), token, clock(c.req.raw, c.env)) : "missing"
+  if (done === "missing") return problem(c, 404, "not_found")
+  // The link is good but the place kept changing: nothing was withdrawn yet, and the same request again will do it.
+  if (done === "busy") return problem(c, 503, "withdrawal_busy", {}, { "Retry-After": "1" })
   // The withdrawal stands once stored. Files that can't be erased now are already unreachable (only published photos
   // are served); the answer says so, and the same request again (or the sweep) finishes them.
   const erased = await erasePhotos(c.env.MEDIA, c.req.param("id")).then(

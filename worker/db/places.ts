@@ -47,7 +47,10 @@ export async function insertSubmission(
 ): Promise<Inserted> {
   const keyHash = await sha256Hex(key)
   // The input after Zod, so the same request always gives the same fingerprint; keyed, and erased with a withdrawal.
-  const bodyHash = await hmacHex(secret, `body:${JSON.stringify(input)}`)
+  // The sender's email and name are left out of it, so nothing derived from them outlives their own erasure.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- left out on purpose
+  const { email, submitter_name, ...place } = input
+  const bodyHash = await hmacHex(secret, `body:${JSON.stringify(place)}`)
   const id = placeId(now.getTime())
   const at = now.toISOString()
   // On private property without the owner's permission, only a point rounded to about a kilometre is ever stored
@@ -292,11 +295,15 @@ export async function submissionStatus(db: D1Database, id: string, token: string
  * tombstone with the status stays (spec 3.3). The same compare-and-set as a moderator's decision; a published place
  * also leaves the feed. Sending it again is harmless.
  */
-export async function withdraw(db: D1Database, id: string, token: string, now: Date): Promise<boolean> {
+/**
+ * done: withdrawn now or before · missing: no place for this link · busy: the place kept changing under three tries in a
+ * row, so the holder of a valid link is told to try again rather than that the link is wrong.
+ */
+export async function withdraw(db: D1Database, id: string, token: string, now: Date): Promise<"done" | "missing" | "busy"> {
   for (let attempt = 0; attempt < 3; attempt++) {
     const row = await tracked(db, id, token)
-    if (!row) return false
-    if (row.status === "withdrawn" || row.status === "erased") return true
+    if (!row) return "missing"
+    if (row.status === "withdrawn" || row.status === "erased") return "done"
     const tid = `t_${ulid(now.getTime())}`
     const at = now.toISOString()
     const happened = "EXISTS (SELECT 1 FROM places WHERE id = ?1 AND last_transition_id = ?2)"
@@ -326,10 +333,10 @@ export async function withdraw(db: D1Database, id: string, token: string, now: D
         )
         .bind(id, tid, `a_${ulid(now.getTime())}`, at),
     ])
-    if (placeUpdate.meta.changes === 1) return true
+    if (placeUpdate.meta.changes === 1) return "done"
     // A moderator decided at the same moment: read the place again and withdraw what it is now.
   }
-  return false
+  return "busy"
 }
 
 /** Everything a moderator approves is on screen: every field the feed would publish. */
