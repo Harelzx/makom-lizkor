@@ -50,6 +50,8 @@ blockers.push(
 )
 const { backupBlockers } = await import("./release-backup.mjs")
 blockers.push(...backupBlockers(raw))
+const { platformBlockers } = await import("./release-platform.mjs")
+blockers.push(...platformBlockers(raw))
 
 if (blockers.length) {
   console.error("Not ready to publish the notices:\n" + blockers.map((b) => `  - ${b}`).join("\n"))

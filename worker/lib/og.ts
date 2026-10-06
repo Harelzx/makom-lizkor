@@ -3,6 +3,7 @@ import wasm from "@resvg/resvg-wasm/index_bg.wasm"
 import type { PublicPlace } from "@/shared/contract"
 import { publicPlace } from "../db/places"
 import { OG_FONTS } from "./og-font"
+import { log } from "./log"
 
 /**
  * A contribution's own share image (L4; adviser 20261006T150641Z-d7b8b866). Its address carries the hash of everything
@@ -174,7 +175,7 @@ export async function ogResponse(
       if (state.projection.photo && !photo) throw new Error("photo_unavailable")
       bytes = await render(state.projection, photo ? new Uint8Array(await photo.arrayBuffer()) : null)
     } catch (err) {
-      console.error(JSON.stringify({ level: "error", event: "og_render_failed", error: (err as Error).name }))
+      log("error", "og_render_failed", { error: (err as Error).name })
       return new Response(null, {
         status: 302,
         headers: { Location: "/og.png", "Cache-Control": "no-store", "Cloudflare-CDN-Cache-Control": "no-store" },

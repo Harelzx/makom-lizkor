@@ -1,4 +1,4 @@
-import { expect, test, type APIRequestContext, type Browser } from "@playwright/test"
+import { expect, test, type APIRequestContext, type Browser, type Page } from "@playwright/test"
 import { from, ownAddress } from "./publish"
 
 // The opening isn't what this file tests, and its sunrise took about 8 s on every page that went through it. A visitor
@@ -7,6 +7,31 @@ import { from, ownAddress } from "./publish"
 test.use({ reducedMotion: "reduce" })
 
 const DAY = { timeout: 20_000 }
+
+/** Waits until this browser's offline copy of the feed is stored (src/lib/storage.ts), holding `name` if one is given:
+ * the copy is written after the feed's answer is read, so the answer's arrival alone doesn't mean it is there. */
+const snapshotSaved = (page: Page, name = "") =>
+  expect
+    .poll(
+      () =>
+        page.evaluate(
+          (wanted) =>
+            new Promise<boolean>((done) => {
+              const open = indexedDB.open("makom-lizkor-v2")
+              open.onerror = () => done(false)
+              open.onsuccess = () => {
+                const db = open.result
+                if (!db.objectStoreNames.contains("v1")) return done(false)
+                const get = db.transaction("v1").objectStore("v1").get("feed")
+                get.onerror = () => done(false)
+                get.onsuccess = () => done(get.result != null && JSON.stringify(get.result).includes(wanted))
+              }
+            }),
+          name,
+        ),
+      DAY,
+    )
+    .toBe(true)
 
 /** A published place made through the API: Cloudflare's dummy token passes the development test secret. */
 async function published(browser: Browser, name: string, extra: Record<string, unknown> = {}) {
@@ -50,7 +75,7 @@ test("after one visit, the approved places are there with no connection, from th
   await page.goto("/")
   await page.getByRole("button", { name: "דילוג", exact: true }).click()
   await fed
-  await page.waitForTimeout(500)
+  await snapshotSaved(page, name)
 
   // Now the server can't be reached at all.
   await page.route("**/api/**", (r) => r.abort())
@@ -70,7 +95,7 @@ test("a link to a newly approved place opens it even when this browser holds an 
   await page.goto("/")
   await page.getByRole("button", { name: "דילוג", exact: true }).click()
   await fed
-  await page.waitForTimeout(500)
+  await snapshotSaved(page)
 
   const name = `ספסל דמו חדש מהקישור ${Date.now()}`
   const id = await published(browser, name)
@@ -91,7 +116,7 @@ test("a link to a place that isn't published falls back even when the offline co
   await page.goto("/")
   await page.getByRole("button", { name: "דילוג", exact: true }).click()
   await fed
-  await page.waitForTimeout(500)
+  await snapshotSaved(page)
   // Same version on the server as in the snapshot: the live check finds nothing newer to fetch.
   await page.goto("/#/place/p_01ZZZZZZZZZZZZZZZZZZZZZZZZ")
   await page.reload()

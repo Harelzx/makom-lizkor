@@ -10,6 +10,7 @@
     "access_identity": ["owner", "approver-1", "approver-2"],
     "mailbox": ["owner"],
     "release_approver": ["owner"],
-    "backup_private_key": ["owner"]
+    "backup_private_key": ["owner"],
+    "ops_service_token": ["owner"]
   }
 }

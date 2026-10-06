@@ -17,4 +17,10 @@ export default defineConfig([
       "react-refresh/only-export-components": "off",
     },
   },
+  // The Worker logs only through worker/lib/log.ts, whose lines are kept to a schema (spec 11).
+  {
+    files: ["worker/**/*.ts"],
+    ignores: ["worker/lib/log.ts", "worker/test/**"],
+    rules: { "no-console": "error" },
+  },
 ])

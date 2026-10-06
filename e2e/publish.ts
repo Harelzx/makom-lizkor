@@ -1,4 +1,4 @@
-import type { Browser, BrowserContext } from "@playwright/test"
+import { expect, type Browser, type BrowserContext } from "@playwright/test"
 
 /** A contribution published through the API: Cloudflare's dummy token passes the development test secret. */
 // Each demo place comes from its own sender (a documentation address, synthetic), so the server's per-address limit on
@@ -22,10 +22,21 @@ export async function published(browser: Browser, name: string) {
     items: { id: string; rev: number; revisionId: string }[]
   }
   const item = items.find((i) => i.id === id)!
-  await ctx.request.post(`/api/admin/places/${id}/transitions`, {
+  const approved = await ctx.request.post(`/api/admin/places/${id}/transitions`, {
     headers: { "Sec-Fetch-Site": "same-origin" },
     data: { action: "approve", revisionId: item.revisionId, expectedRev: item.rev },
   })
+  // A refused approval (changed meanwhile, the ledger or the bucket unavailable) would leave a spec waiting for a card
+  // that can't come: say what the server said instead.
+  if (approved.status() !== 200) throw new Error(`demo approval refused: ${approved.status()} ${await approved.text()}`)
+  // Public once the feed lists it: what every visitor's page reads.
+  await expect
+    .poll(async () => {
+      const { v } = (await (await ctx.request.get("/api/v1/version")).json()) as { v: string }
+      const feed = await ctx.request.get(`/api/v1/feed?v=${encodeURIComponent(v)}`)
+      return feed.ok() && ((await feed.json()) as { places: { id: string }[] }).places.some((p) => p.id === id)
+    })
+    .toBe(true)
   await ctx.close()
   return { id, trackingToken }
 }

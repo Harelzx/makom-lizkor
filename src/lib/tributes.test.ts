@@ -31,7 +31,10 @@ beforeEach(() => {
   disk.keys = {}
   net.posts = []
   net.hold = true
-  vi.useRealTimers()
+  // The day the stand-in server answers with is the device's today: midday on 6 October in Jerusalem, whatever the
+  // clock says (it failed once Jerusalem passed midnight into the 7th, the answer then read as yesterday's).
+  vi.useFakeTimers({ toFake: ["Date"] })
+  vi.setSystemTime(new Date("2026-10-06T09:00:00Z"))
 })
 
 it("taps at every moment around an answer send one anemone a day", async () => {

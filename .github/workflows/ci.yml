@@ -1,0 +1,76 @@
+# Each commit on main, and each pull request: the static checks, the Worker's and the browser code's tests, the scripts' tests, the
+# access registry and the workflow policy, then the browser suite on the dev server. No environment and no secrets:
+# CI never reaches production (spec 12.2), and scripts/ci-policy.mjs fails the run if a change makes it.
+name: ci
+
+# One run per commit: pushes to main, and pull requests (a branch's push isn't run again). GitHub Free's minutes are
+# the budget; staging.yml follows a passing run on main instead of building again.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run test:scripts
+      - run: npm run check:access
+      - run: node scripts/ci-policy.mjs
+
+  worker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
+  client:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run test:client
+
+  e2e:
+    needs: [static, worker, client]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run e2e
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: test-results/
+          retention-days: 7

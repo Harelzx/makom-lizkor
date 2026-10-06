@@ -13,9 +13,10 @@ export const PERMISSIONS = {
   mailbox: "reads the project mailbox",
   release_approver: "approves a release",
   backup_private_key: "holds the private key that opens exports",
+  ops_service_token: "holds the Access service token for /api/ops (aggregates only; spec 12.1), a credential for a tool, not a person",
 }
 // Who must hold these: the operator answers for the database, its backups and its releases.
-const OWNER_HOLDS = ["cloudflare_account", "release_approver", "backup_private_key"]
+const OWNER_HOLDS = ["cloudflare_account", "release_approver", "backup_private_key", "ops_service_token"]
 
 export function registryProblems(reg) {
   const problems = []

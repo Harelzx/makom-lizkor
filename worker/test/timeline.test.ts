@@ -1,6 +1,7 @@
 import { applyD1Migrations } from "cloudflare:test"
 import { env } from "cloudflare:workers"
 import { beforeAll, expect, it } from "vitest"
+import { evidence } from "./log-guard"
 import { RETENTION } from "@/config"
 import { CURRENT_REPORT_NOTICE, CURRENT_SUBMISSION_NOTICE } from "@/shared/contract"
 import { checkDeletion } from "../db/exports"
@@ -192,7 +193,7 @@ it("keeps every deletion date the notices give, end to end", { timeout: 600_000 
   }
   const table = Object.entries(expected).map(([name, e]) => ({ name, ...e, found_last: seen[name]?.last, found_gone: seen[name]?.gone }))
   const drills = await env.DB.prepare("SELECT COUNT(*) AS n, SUM(ok) AS ok FROM drill_runs").first<{ n: number; ok: number }>()
-  console.log(`TIMELINE ${JSON.stringify({ T0: new Date(T0).toISOString(), table, findings, reminderDay, oldestExportDays, drills })}`)
+  evidence(`TIMELINE ${JSON.stringify({ T0: new Date(T0).toISOString(), table, findings, reminderDay, oldestExportDays, drills })}`)
 
   for (const row of table)
     expect({ name: row.name, last: row.found_last, gone: row.found_gone }).toEqual({ name: row.name, last: row.last, gone: row.gone })

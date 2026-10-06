@@ -28,5 +28,5 @@ export default defineConfig({
     }),
   ],
   resolve: { alias: [{ find: "@", replacement: resolve(import.meta.dirname, "./src") }] },
-  test: { include: ["worker/test/**/*.test.ts"], setupFiles: ["./worker/test/apply-migrations.ts"] },
+  test: { include: ["worker/test/**/*.test.ts"], setupFiles: ["./worker/test/apply-migrations.ts", "./worker/test/log-guard.ts"] },
 })

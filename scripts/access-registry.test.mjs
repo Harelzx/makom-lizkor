@@ -14,6 +14,7 @@ const base = () => ({
     mailbox: ["owner"],
     release_approver: ["owner"],
     backup_private_key: ["owner"],
+    ops_service_token: ["owner"],
   },
 })
 

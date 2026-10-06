@@ -3,6 +3,7 @@ import { ulid, ulidTime } from "../lib/ids"
 import type { SendMail } from "../lib/mail"
 import { runOp, WATCH_FIRST_LOOK_MS, type OpEnv } from "./ops"
 import { erasePhotos } from "./photos"
+import { log } from "../lib/log"
 
 const DAY_MS = 86_400_000
 /** Places erased in one run; the job runs every 15 minutes, so a backlog clears long before the day's bound. */
@@ -108,7 +109,8 @@ export async function runRetention(env: OpEnv, now: Date): Promise<{ id: string;
       counts[name] = await run()
     } catch (err) {
       ok = false
-      console.error(JSON.stringify({ level: "error", event: "retention_failed", part: name, error: (err as Error).name }))
+      // Logged as a code (decision_notes), which the log keeps; the counts' own key would be dropped.
+      log("error", "retention_failed", { part: name.replace(/[A-Z]/g, (m) => `_${m.toLowerCase()}`), error: (err as Error).name })
     }
   }
   await part("erased", () => eraseAbandoned(env, now))

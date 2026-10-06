@@ -207,6 +207,21 @@ export async function confirmEmail(token: string): Promise<Confirmed> {
 }
 
 /**
+ * The stored photo (a data URL) as a file to send, decoded here: fetching a data: URL is a connection the page's
+ * security policy doesn't allow (connect-src), and an enforced policy would block it.
+ */
+function blobOf(dataUrl: string): Blob {
+  const comma = dataUrl.indexOf(",")
+  const head = dataUrl.slice(0, comma)
+  const body = dataUrl.slice(comma + 1)
+  const type = /^data:([^;,]*)/.exec(head)?.[1] || "application/octet-stream"
+  const bytes = head.endsWith(";base64")
+    ? Uint8Array.from(atob(body), (c) => c.charCodeAt(0))
+    : new TextEncoder().encode(decodeURIComponent(body))
+  return new Blob([bytes], { type })
+}
+
+/**
  * The photo of a place already sent, in a second request (the submission's retry stays exact). "rejected" when the
  * server won't take it (not a picture, too large), so it isn't sent again; "temporary" otherwise.
  */
@@ -219,7 +234,7 @@ export async function uploadPhoto(
 ): Promise<"ok" | "rejected" | "temporary"> {
   try {
     const form = new FormData()
-    form.append("photo", await (await fetch(dataUrl)).blob(), "photo.jpg")
+    form.append("photo", blobOf(dataUrl), "photo.jpg")
     form.append("alt", alt)
     if (credit) form.append("credit", credit)
     const res = await fetch(`/api/v1/submissions/${encodeURIComponent(id)}/photo`, {

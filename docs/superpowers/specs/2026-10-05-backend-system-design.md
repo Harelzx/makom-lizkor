@@ -594,7 +594,12 @@ purge_after  TEXT NOT NULL,   -- starts equal to ceiling_at; only ever lowered
 - **הרשאות ייצור:**
   - קיימות רק כ־secrets של GitHub Environment בשם `production`, ואף פעם לא על המחשב.
   - GitHub מסתיר את ערכי ה־secrets, והם לא נחשפים ישירות לשום סשן. workflow שנכתב לשם כך יכול בכל זאת לחשוף אותם (ראו "מה שאי אפשר להפריד" בהמשך).
-  - ה־environment מוגבל לענף `main`. רק `release.yml` ו־`rollback.yml` משתמשים בו, וזו מוסכמה ש־CI בודק. במאגר פרטי זה דורש GitHub Pro: ב־Free יש רק secret ברמת המאגר, וכל workflow בכל ענף יכול לקרוא אותו.
+  - ה־environment מוגבל לענף `main`. רק `release.yml` ו־`rollback.yml` משתמשים בו, וזו מוסכמה ש־CI בודק.
+  - **תיקון (2026-10-06, לפי התיעוד של GitHub):** במאגר פרטי, GitHub Free לא נותן environment secrets, ‏required reviewers או deployment branches. Pro ו־Team נותנים environment secrets ו־deployment branches, אבל לא required reviewers. Required reviewers במאגר פרטי יש רק ב־Enterprise.
+    - Harel בחר ב־Free, ולא אישר שדרוג.
+    - **לכן הרשאות הייצור לא נשמרות ב־GitHub בכלל,** ו־`release.yml` לא יכול לפרוס לייצור עד שתתקבל החלטה על מסלול השחרור.
+    - **הרשאות ה־staging** (חשבון ה־staging בלבד, נתונים סינתטיים) הן repository secrets בשם `STAGING_*`.
+    - `workflow_dispatch` וכללי ה־deny אינם גבול אישור אנושי שנאכף.
 - **מה בידי הסוכן:** הרשאות staging (נתונים סינתטיים), הקוד, ו־service token לאבחון בלבד. הנתונים שה־`/api/ops` חושף נאכפים בקוד שלנו ובבדיקת סכמה.
 - **לוגים נקיים כבר במקור** (סעיף 11).
 - **כללי deny בשכבת הסוכן:**
@@ -879,11 +884,11 @@ purge_after  TEXT NOT NULL,   -- starts equal to ceiling_at; only ever lowered
 |---|---|---|---|
 | Workers Paid לייצור | 0 | 0 | 5 |
 | Workers Paid ל־staging | 0 | 5 | 5 (אפשר לחזור ל־Free בין עונות) |
-| GitHub Pro (בחשבון הקיים) | 0 | 4 | 4 |
+| GitHub Free, מאגר פרטי (בלי Pro; תיקון ב־12.2) | 0 | 0 | 0 |
 | Exchange Online Plan 1, מושב אחד | 0 | 0 | 4 |
 | דומיין (74–92 ₪ לשנה כולל מע"מ) | 0 | כ־2 | כ־2 |
 | Access, Turnstile, אזור DNS, heartbeat | 0 | 0 | 0 |
-| **סך הכל** | **0** | **כ־11** | **כ־20 (כ־15 מחוץ לעונה)** |
+| **סך הכל** | **0** | **כ־7** | **כ־16 (כ־11 מחוץ לעונה)** |
 
 - **שימוש:** הצפי הוא 0$ בהיקף הנוכחי. לעיון, המחירים מעל המכסות:
   - Workers: 0.30$ למיליון בקשות;
@@ -934,7 +939,7 @@ purge_after  TEXT NOT NULL,   -- starts equal to ceiling_at; only ever lowered
   - D1 ו־R2 בתחום `eu`.
   - עד 3 אנשים.
   - שני חשבונות Cloudflare.
-  - GitHub Pro.
+  - GitHub Free, מאגר פרטי. שום דבר ב־GitHub אינו שער אישור אנושי לשחרור, ומפתחות הייצור לא נשמרים בו (12.2).
 - **סוכני AI:** מודל הגישה שלהם (סעיף 12).
 - **שונות:**
   - כלנית אחת ליום לכל מכשיר ומקום.
@@ -969,7 +974,7 @@ purge_after  TEXT NOT NULL,   -- starts equal to ceiling_at; only ever lowered
 5. **בסיס ההעברה לכל מעבד:** תואם עם סשן הפרטיות (סעיף 12.3). נשאר רק ספק התיבה, שייקבע עם בחירתו.
 6. **רשימת קודי השחזור** וזמני השמירה של `audit_log`: אישור משפטי.
 7. **ה־cache של ה־Worker:** מגבלת ה־purge נסגרה (תמיד Free, סעיף 5). נשארה בדיקה אחת ב־staging: ש־`no-store` לדפדפן לא מבטל את ה־cache בקצה.
-8. **GitHub:** אין עדיין remote. צריך ליצור מאגר פרטי בחשבון הקיים ולשדרג ל־Pro כשמתחיל האימות בענן.
+8. **GitHub:** מאגר פרטי, `Harelzx/makom-lizkor`, ב־GitHub Free. ‏`main` נדחף ב־2026-10-06. אין שדרוג ל־Pro, שגם ככה לא היה נותן required reviewers למאגר פרטי (תיקון ב־12.2). מסלול השחרור לייצור ממתין להחלטה.
 
 ---
 

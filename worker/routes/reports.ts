@@ -9,6 +9,7 @@ import { rateKey } from "../lib/ids"
 import { opEnv } from "../lib/purge"
 import { checkTurnstile } from "../lib/turnstile"
 import type { AppEnv } from "../index"
+import { log } from "../lib/log"
 
 export const reports = new Hono<AppEnv>()
 
@@ -76,7 +77,7 @@ reports.post(
       await startAlertRound(c.env.DB, c.env, stored.ticket, now)
       await deliverAlerts(c.env.DB, c.env, c.get("sendMail"), now, origin, stored.ticket)
     } catch (err) {
-      console.error(JSON.stringify({ level: "error", event: "report_alert", error: (err as Error).name }))
+      log("error", "report_alert", { error: (err as Error).name })
     }
     return c.json<ReportResult>({ ticket: stored.ticket, outcome: hidden ? "hidden_for_review" : "received" }, 202, PRIVATE)
   },
