@@ -384,3 +384,28 @@ describe("follow-up bc46a39c", () => {
     )
   })
 })
+
+describe("follow-up 5131154b", () => {
+  it("F4-A1: a hide that lands late (slow ledger) is timed when it lands, so the next hour's quota still counts it", async () => {
+    const { precaution } = await import("../db/reports")
+    const opEnv = { db: env.DB, media: env.MEDIA, ledger: env.LEDGER, purge: async () => true }
+    const { id } = await published()
+    const { ticket } = await (await report({ placeId: id, requesterType: "other" })).json<{ ticket: string }>()
+    // Made complete and due by hand, so the test controls when its evaluation starts and when it lands.
+    await env.DB.prepare("UPDATE reports SET complete = 1, backstop_at = ? WHERE id = ?").bind(after(24).toISOString(), ticket).run()
+    const landed = after(1 + 1 / 60)
+    expect(await precaution(opEnv, ticket, after(1), { clock: () => landed })).toBe("hidden")
+    const createdAt = await env.DB.prepare("SELECT created_at FROM field_suppressions WHERE report_id = ?")
+      .bind(ticket)
+      .first<string>("created_at")
+    expect(createdAt).toBe(landed.toISOString())
+    // An hour after it started but not after it landed, the hourly quota still sees it.
+    const hourAgo = new Date(after(2).getTime() - HOUR + 30_000).toISOString()
+    const counted = await env.DB.prepare(
+      "SELECT COUNT(DISTINCT report_id) AS n FROM field_suppressions WHERE kind = 'precautionary' AND created_at > ? AND report_id = ?",
+    )
+      .bind(hourAgo, ticket)
+      .first<number>("n")
+    expect(counted).toBe(1)
+  })
+})

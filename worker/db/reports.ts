@@ -159,8 +159,6 @@ export async function precaution(
   // Without its abuse codes (cleared by their ceiling before a late backstop got to it) a request can't be checked
   // for spam, so the automatic path doesn't act on it: a person reviews it, as every request.
   if (!report.explanation_hash) return "refused"
-  const at = now.toISOString()
-  const hourAgo = new Date(now.getTime() - HOUR_MS).toISOString()
   const dayAgo = new Date(now.getTime() - 24 * HOUR_MS).toISOString()
   const [duplicate, reporter] = await Promise.all([
     db
@@ -186,14 +184,16 @@ export async function precaution(
   if (!place) return "refused"
   // The safeguards read first, so a routine refusal writes nothing to the ledger; the same conditions are checked
   // again inside the place's own update.
+  // The windows and the hide's own time come from one clock reading taken when the update is built, after the ledger
+  // has been written: a hide that lands late is counted from when it landed, not from when its evaluation began.
   const binds = (tid: string, t: Date) => [
     report.place_id,
     tid,
-    at,
+    t.toISOString(),
     0,
     place.rev,
-    hourAgo,
-    dayAgo,
+    new Date(t.getTime() - HOUR_MS).toISOString(),
+    new Date(t.getTime() - 24 * HOUR_MS).toISOString(),
     REPORT_GUARDS.perHour,
     REPORT_GUARDS.perDay,
     REPORT_GUARDS.breakerPerHour,
@@ -223,35 +223,39 @@ export async function precaution(
       public: true,
       onIntentFailure: "refuse",
       detail: { fields: elements, report: ticket, toHeld: photo, media: photo },
-      statements: (tid) => [
-        db
-          .prepare(
-            `UPDATE places SET rev = rev + 1, last_transition_id = ?2,
+      statements: (tid) => {
+        const t = clockNow()
+        const landed = t.toISOString()
+        return [
+          db
+            .prepare(
+              `UPDATE places SET rev = rev + 1, last_transition_id = ?2,
                status = CASE WHEN ?4 = 1 THEN 'hidden' ELSE status END,
                status_changed_at = CASE WHEN ?4 = 1 THEN ?3 ELSE status_changed_at END
              WHERE id = ?1 AND rev = ?5 AND status = 'published' AND ${SAFE}`,
-          )
-          .bind(...binds(tid, clockNow()).map((v, i) => (i === 3 ? (whole ? 1 : 0) : v))),
-        ...elements.map((field) =>
-          db
-            .prepare(
-              `INSERT INTO field_suppressions (id, place_id, field, report_id, kind, revision_n, created_at, created_by, notes_ceiling_at,
+            )
+            .bind(...binds(tid, t).map((v, i) => (i === 3 ? (whole ? 1 : 0) : v))),
+          ...elements.map((field) =>
+            db
+              .prepare(
+                `INSERT INTO field_suppressions (id, place_id, field, report_id, kind, revision_n, created_at, created_by, notes_ceiling_at,
                  notes_purge_after)
                SELECT ?3, ?1, ?4, ?5, 'precautionary', ?6, ?7, 'automatic', ?8, MIN(?8, (SELECT purge_after FROM reports WHERE id = ?5))
                WHERE ${happened}`,
+              )
+              .bind(report.place_id, tid, `s_${ulid(t.getTime())}`, field, ticket, place.n, landed, notesCeiling(t)),
+          ),
+          db.prepare(`UPDATE feed_state SET n = n + 1, changed_at = ?3 WHERE id = 1 AND ${happened}`).bind(report.place_id, tid, landed),
+          db
+            .prepare(`UPDATE reports SET outcome = 'hidden_for_review', backstop_at = NULL WHERE id = ?3 AND ${happened}`)
+            .bind(report.place_id, tid, ticket),
+          db
+            .prepare(
+              `INSERT INTO audit_log (id, at, actor, action, entity_id, fields) SELECT ?3, ?4, 'automatic', 'precautionary_hide', ?1, ?5 WHERE ${happened}`,
             )
-            .bind(report.place_id, tid, `s_${ulid(now.getTime())}`, field, ticket, place.n, at, notesCeiling(now)),
-        ),
-        db.prepare(`UPDATE feed_state SET n = n + 1, changed_at = ?3 WHERE id = 1 AND ${happened}`).bind(report.place_id, tid, at),
-        db
-          .prepare(`UPDATE reports SET outcome = 'hidden_for_review', backstop_at = NULL WHERE id = ?3 AND ${happened}`)
-          .bind(report.place_id, tid, ticket),
-        db
-          .prepare(
-            `INSERT INTO audit_log (id, at, actor, action, entity_id, fields) SELECT ?3, ?4, 'automatic', 'precautionary_hide', ?1, ?5 WHERE ${happened}`,
-          )
-          .bind(report.place_id, tid, `a_${ulid(now.getTime())}`, at, elements.join(",")),
-      ],
+            .bind(report.place_id, tid, `a_${ulid(t.getTime())}`, landed, elements.join(",")),
+        ]
+      },
     },
     now,
   )
