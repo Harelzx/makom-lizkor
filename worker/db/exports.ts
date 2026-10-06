@@ -180,7 +180,8 @@ export async function pruneExports(env: { db: D1Database; exports: R2Bucket }, n
 /**
  * The nightly deletion check (spec 8.4), from the database and the bucket's own listing: what a deletion date has
  * passed by more than a day, and still holds. Counts by kind, nothing else.
- * - contacts, requests' text, hides' notes, moderators' notes past their dates; submissions past their 30 days;
+ * - contacts, requests' text, hides' notes, moderators' notes past their dates; addresses never verified past their
+ *   link's expiry; submissions past their 30 days;
  *   anemones' records, audit rows and unapproved photos past theirs;
  * - export files older than 35 days, and photo copies no current manifest lists;
  * - no export in the last 26 hours, or no key to make one with.
@@ -222,6 +223,9 @@ export async function checkDeletion(env: { db: D1Database; exports: R2Bucket; ke
     db.prepare("SELECT COUNT(*) AS n FROM tribute_events WHERE received_at <= ?").bind(before(RETENTION.tributeDays)),
     db.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE at <= ?").bind(before(RETENTION.auditMonths * 30)),
     db.prepare("SELECT photo_key AS k FROM revisions WHERE photo_key LIKE 'quarantine/%' AND state IN ('pending', 'returned')"),
+    db
+      .prepare("SELECT COUNT(*) AS n FROM contacts WHERE email IS NOT NULL AND email_verified_at IS NULL AND email_verify_expires <= ?")
+      .bind(late),
   ])
   const n = (i: number) => (counts[i].results[0] as { n: number }).n
   const found: Record<string, number> = {
@@ -232,6 +236,7 @@ export async function checkDeletion(env: { db: D1Database; exports: R2Bucket; ke
     submissions: n(4),
     tributes: n(7),
     audit: n(8),
+    unverified_emails: n(10),
     unapproved_photos: (counts[9].results as { k: string }[]).filter(
       (r) => uploadedAt(r.k) <= now.getTime() - RETENTION.rejectedPhotoDays * DAY_MS,
     ).length,

@@ -197,9 +197,10 @@ describe("an export's 35 days (spec 7, 8.4)", () => {
     expect(told[0].body).not.toContain("ספסל")
   })
 
-  it("also counts anemones' records, audit rows and waiting photos past their dates", async () => {
+  it("also counts anemones' records, audit rows, waiting photos and unverified addresses past their dates", async () => {
     const at = new Date(Date.now() + 1700 * DAY)
     await runJobs(withKeys, deps, undefined, at)
+    await send("ספסל דמו שהכתובת שלו לא אומתה", { email: "stale-unverified-demo@example.test" })
     const { id, trackingToken } = await send("ספסל דמו שתמונתו ממתינה")
     expect((await upload(id, trackingToken, jpeg(0x51))).status).toBe(200)
     await env.DB.prepare(
@@ -211,6 +212,6 @@ describe("an export's 35 days (spec 7, 8.4)", () => {
       .bind(`a_${id}`, new Date(at.getTime() - 800 * DAY).toISOString(), id)
       .run()
     const found = await checkDeletion({ db: env.DB, exports: env.EXPORTS, keys: withKeys.EXPORT_PUBLIC_KEYS }, at)
-    expect(found).toMatchObject({ tributes: 1, audit: 1, unapproved_photos: 1 })
+    expect(found).toMatchObject({ tributes: 1, audit: 1, unapproved_photos: 1, unverified_emails: 1 })
   })
 })

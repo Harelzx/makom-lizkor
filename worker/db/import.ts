@@ -12,7 +12,8 @@ const due = (value: unknown, cutoff: string) => typeof value === "string" && val
 /**
  * What a restore may write (spec 7, Route B): the export with every deletion rule applied at the moment of the import,
  * the same rules and dates as the retention job (retentionCutoffs, BLANK_COLUMNS). A submission whose days ran out
- * arrives as a tombstone, a closed correction past its days empty, and contact details, a request's text, a hide's
+ * arrives as a tombstone, a closed correction past its days empty, an address never verified before its link expired
+ * without it, and contact details, a request's text, a hide's
  * notes, a moderator's note, a waiting photo's name and audit rows past their dates are never written (anemones'
  * records aren't exported at all). So the new database's own history never holds them.
  */
@@ -48,7 +49,13 @@ export function filterForImport(tables: Record<string, Row[]>, now: Date): Recor
       if (uploadedAt(r.photo_key) <= c.photo) Object.assign(r, { photo_key: null, photo_alt: null, photo_credit: null })
     return r
   })
-  const contacts = (tables.contacts ?? []).filter((x) => !erased.has(x.place_id) && !due(x.purge_after, c.now))
+  const contacts = (tables.contacts ?? [])
+    .filter((x) => !erased.has(x.place_id) && !due(x.purge_after, c.now))
+    .map((x) =>
+      x.email !== null && x.email_verified_at === null && due(x.email_verify_expires, c.now)
+        ? { ...x, email: null, email_verify_hash: null }
+        : x,
+    )
   const reports = (tables.reports ?? []).map((x) =>
     due(x.purge_after, c.now)
       ? { ...x, relationship: null, explanation: null, email: null, explanation_hash: null, reporter_key: null, handling_note: null }

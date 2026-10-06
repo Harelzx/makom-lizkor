@@ -58,6 +58,7 @@ export type RetentionCounts = {
   erased: number
   revisions: number
   decisionNotes: number
+  emails: number
   contacts: number
   reports: number
   notes: number
@@ -75,6 +76,7 @@ export type RetentionCounts = {
  * - a correction to a published place that was returned or refused loses its own text after the same days (the place,
  *   and what it publishes, stay), and a returned one is closed: no photo or text can be added to it any more;
  * - a moderator's note goes RETENTION.contactAfterCloseDays after its decision once its revision is closed, or at its ceiling;
+ * - an address never verified goes when its verification link expires;
  * - contact details, a request's text and address, and moderators' notes on a hide go once their purge date passed;
  * - a photo not approved within RETENTION.rejectedPhotoDays of its upload, anemones' records after
  *   RETENTION.tributeDays, and audit rows after RETENTION.auditMonths.
@@ -90,6 +92,7 @@ export async function runRetention(env: OpEnv, now: Date): Promise<{ id: string;
     erased: 0,
     revisions: 0,
     decisionNotes: 0,
+    emails: 0,
     contacts: 0,
     reports: 0,
     notes: 0,
@@ -124,6 +127,20 @@ export async function runRetention(env: OpEnv, now: Date): Promise<{ id: string;
                AND (decided_at <= ?1 OR (state IN ('approved', 'rejected', 'superseded') AND decided_at <= ?2))`,
           )
           .bind(retentionCutoffs(now).noteCeiling, retentionCutoffs(now).noteClosed)
+          .run()
+      ).meta.changes,
+  )
+  // An address nobody verified before its link expired can never be used: it goes then, not at its contact's date.
+  await part(
+    "emails",
+    async () =>
+      (
+        await db
+          .prepare(
+            `UPDATE contacts SET email = NULL, email_verify_hash = NULL
+             WHERE email IS NOT NULL AND email_verified_at IS NULL AND email_verify_expires <= ?`,
+          )
+          .bind(at)
           .run()
       ).meta.changes,
   )

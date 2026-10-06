@@ -124,10 +124,26 @@ describe("a restore through the filtered import (spec 7, Route B)", () => {
     await env.DB.prepare("UPDATE revisions SET photo_key = ?, photo_alt = 'תיאור תמונה שחיכתה', photo_credit = 'צלם' WHERE place_id = ?")
       .bind(`quarantine/${waiting.id}/r_x-${ulid(R.getTime() - 30 * DAY)}.jpg`, waiting.id)
       .run()
+    // An address never verified, its link expired before the restore; and one verified, which stays.
+    await env.DB.prepare(
+      `INSERT INTO contacts (id, place_id, name, email, email_verify_hash, email_verify_expires, email_verified_at, consent_version,
+         created_at, ceiling_at, purge_after)
+       VALUES (?1, ?2, NULL, 'unverified-demo@example.test', 'vh', ?3, NULL, 'v', ?4, ?5, ?5),
+              (?6, ?2, NULL, 'verified-demo@example.test', NULL, ?3, ?4, 'v', ?4, ?5, ?5)`,
+    )
+      .bind(`c_${crypto.randomUUID()}`, live.id, iso(R, -1), iso(E, -6), iso(R, 300), `c_${crypto.randomUUID()}`)
+      .run()
     const payload = await exported()
     // The export holds every one of them: the filter is what keeps them out.
     const all = JSON.stringify(payload.tables)
-    for (const text of ["שם דמו של הצעה שנמחקה", "תיקון דמו שפג בייבוא", "שם דמו שמועדו עבר", "נימוק שעבר מועדו", "הסבר שעבר מועדו"])
+    for (const text of [
+      "שם דמו של הצעה שנמחקה",
+      "תיקון דמו שפג בייבוא",
+      "שם דמו שמועדו עבר",
+      "נימוק שעבר מועדו",
+      "הסבר שעבר מועדו",
+      "unverified-demo@example.test",
+    ])
       expect(all).toContain(text)
 
     const target = recording(env.IMPORT_TEST)
@@ -147,10 +163,12 @@ describe("a restore through the filtered import (spec 7, Route B)", () => {
       "הערת אישור שעבר מועדה",
       `a_old_${live.id}`,
       "תיאור תמונה שחיכתה",
+      "unverified-demo@example.test",
     ])
       expect(written).not.toContain(text)
     // What was not due arrives whole.
-    for (const text of ["ספסל דמו שהוחזר ונשמר", "הערה שנשמרת", "שם דמו שנשמר", "גן דמו שפורסם ושוחזר"]) expect(written).toContain(text)
+    for (const text of ["ספסל דמו שהוחזר ונשמר", "הערה שנשמרת", "שם דמו שנשמר", "גן דמו שפורסם ושוחזר", "verified-demo@example.test"])
+      expect(written).toContain(text)
 
     const statuses = async (db: D1Database) =>
       Object.fromEntries(

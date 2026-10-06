@@ -188,6 +188,48 @@ describe("deadlines kept with the data", () => {
   })
 })
 
+describe("an address never verified (the phase 2 close-out's finding)", () => {
+  it("goes when its link expires, and only its own: a verified address and the contact's other details keep their dates", async () => {
+    const withEmail = async (name: string, email: string) => {
+      const res = await call("http://local/api/v1/submissions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": crypto.randomUUID().replaceAll("-", ""),
+          "Turnstile-Token": "pass",
+        },
+        body: JSON.stringify({
+          kind: "bench",
+          name_he: name,
+          lat: 31.42,
+          lng: 34.49,
+          consent_version: CURRENT_SUBMISSION_NOTICE,
+          submitter_name: "שולח דמו",
+          email,
+        }),
+      })
+      return (await res.json<{ id: string }>()).id
+    }
+    const unverified = await withEmail("ספסל דמו בלי אימות", "never-verified-demo@example.test")
+    const verified = await withEmail("ספסל דמו עם אימות", "verified-demo@example.test")
+    await env.DB.prepare("UPDATE contacts SET email_verified_at = created_at WHERE place_id = ?").bind(verified).run()
+    const contactOf = (id: string) =>
+      env.DB.prepare("SELECT name, email, email_verify_hash, purge_after FROM contacts WHERE place_id = ?").bind(id).first()
+    const before = await contactOf(unverified)
+    const expires = (await env.DB.prepare("SELECT email_verify_expires AS at FROM contacts WHERE place_id = ?")
+      .bind(unverified)
+      .first<string>("at"))!
+
+    // Not a moment before its link expires.
+    expect((await runRetention(opEnv(), new Date(Date.parse(expires) - 1))).counts.emails).toBe(0)
+    expect((await contactOf(unverified))!.email).toBe("never-verified-demo@example.test")
+    const run = await runRetention(opEnv(), new Date(Date.parse(expires)))
+    expect(run.counts.emails).toBe(1)
+    expect(await contactOf(unverified)).toEqual({ ...before, email: null, email_verify_hash: null })
+    expect((await contactOf(verified))!.email).toBe("verified-demo@example.test")
+  })
+})
+
 describe("the run", () => {
   it("is recorded with its counts, and running it twice changes nothing more", async () => {
     const { id } = await send("ספסל דמו להרצה כפולה")
