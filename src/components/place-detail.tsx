@@ -45,7 +45,10 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
   const titleRef = useFocusOnOpen<HTMLHeadingElement>()
 
   const share = async () => {
-    const url = `${location.origin}${location.pathname}#/place/${place.id}`
+    // The share page's address, whose preview names the place; a place kept only on this device has none to show.
+    const url = local
+      ? `${location.origin}/#/place/${encodeURIComponent(place.id)}`
+      : `${location.origin}/place/${encodeURIComponent(place.id)}`
     try {
       if (navigator.share && matchMedia("(pointer: coarse)").matches) await navigator.share({ title: place.name_he, url })
       else {

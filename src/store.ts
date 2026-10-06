@@ -14,6 +14,14 @@ export const INTRO_SEEN = "makom-lizkor:v2-seen"
 /** A shared link to a place lands on that place: the opening is for those who come in through the front door. */
 // A tracking link (#/track/<id>/<token>) is opened for its status, so it skips the opening too.
 const linkedToPlace = () => typeof location !== "undefined" && /^#\/(place|track|verify)\/[^/]+/.test(location.hash)
+// A share page (/place/<id>, the Worker's copy of this page with the place's preview tags) is the site opened at that
+// place: its address becomes the hash route the rest of the site reads, before anything reads it. A place that isn't
+// public, or no longer is, opens the overview instead, and stays off the map even where this browser's offline copy of
+// the feed still has it.
+const sharedPath = typeof location !== "undefined" ? /^\/place\/([^/]+)\/?$/.exec(location.pathname) : null
+const shareStatus = sharedPath && document.querySelector('meta[name="place-status"]')?.getAttribute("content")
+if (sharedPath) history.replaceState(null, "", shareStatus ? "/#/" : `/#/place/${sharedPath[1]}`)
+const takenBack = shareStatus === "gone" ? decodeURIComponent(sharedPath![1]) : null
 /** The place a shared link names, chosen before the first render so the address is never rewritten under it. */
 const linkedPlaceId = () => {
   if (!linkedToPlace() || !location.hash.startsWith("#/place/")) return null
@@ -122,7 +130,8 @@ async function persist(change: (stored: Place[]) => Place[]): Promise<boolean> {
 }
 
 export const useStore = create<State>((set, get) => ({
-  phase: linkedToPlace() ? "day" : "intro",
+  // A share link to a place that isn't there skips the opening all the same: it came through a link, not the front door.
+  phase: linkedToPlace() || sharedPath ? "day" : "intro",
   light: "morning",
   seed: seed as Place[],
   remote: [],
@@ -173,7 +182,8 @@ export const useStore = create<State>((set, get) => ({
   setSearchOpen: (searchOpen) => set({ searchOpen }),
   setPicking: (picking) => set({ picking }),
   setDraft: (draft) => set({ draft }),
-  setRemote: (feedVersion, remote, live = true) => set({ feedVersion, remote, feedLive: live || get().feedLive }),
+  setRemote: (feedVersion, remote, live = true) =>
+    set({ feedVersion, remote: takenBack ? remote.filter((p) => p.id !== takenBack) : remote, feedLive: live || get().feedLive }),
   addLocal: async (p) => {
     held.add(p.id)
     set({ local: [...get().local, p] })

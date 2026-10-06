@@ -1,26 +1,7 @@
 import { expect, test, type Browser, type Page } from "@playwright/test"
+import { published } from "./publish"
 
 const DAY = { timeout: 20_000 }
-
-/** A contribution published through the API: Cloudflare's dummy token passes the development test secret. */
-async function published(browser: Browser, name: string) {
-  const ctx = await browser.newContext()
-  const res = await ctx.request.post("/api/v1/submissions", {
-    headers: { "Idempotency-Key": crypto.randomUUID().replaceAll("-", ""), "Turnstile-Token": "XXXX.DUMMY.TOKEN.XXXX" },
-    data: { kind: "garden", name_he: name, lat: 31.4234, lng: 34.4987, consent_version: "notice.submission@2026-10-9" },
-  })
-  const { id } = (await res.json()) as { id: string }
-  await ctx.request.post("/__dev/login", { data: { email: "dev@example.test" } })
-  const { items } = (await (await ctx.request.get("/api/admin/queue")).json()) as {
-    items: { id: string; rev: number; revisionId: string }[]
-  }
-  const item = items.find((i) => i.id === id)!
-  await ctx.request.post(`/api/admin/places/${id}/transitions`, {
-    headers: { "Sec-Fetch-Site": "same-origin" },
-    data: { action: "approve", revisionId: item.revisionId, expectedRev: item.rev },
-  })
-  return id
-}
 
 async function open(browser: Browser, id: string, init?: string) {
   const page = await (await browser.newContext()).newPage()
@@ -37,7 +18,7 @@ const total = async (page: Page, id: string) =>
   ((await (await page.request.get("/api/v1/tributes")).json()) as { totals: Record<string, number> }).totals[id] ?? 0
 
 test("ten taps at a published place: ten flowers here, one anemone counted for everyone", async ({ browser }) => {
-  const id = await published(browser, `גינת דמו כלניות ${Date.now()}`)
+  const { id } = await published(browser, `גינת דמו כלניות ${Date.now()}`)
   const { page, posts } = await open(browser, id)
   const counted = page.waitForResponse((r) => r.url().endsWith("/api/v1/tributes") && r.request().method() === "POST")
   for (let i = 0; i < 10; i++) await page.getByRole("button", { name: "השארת כלנית" }).click()
@@ -52,7 +33,7 @@ test("ten taps at a published place: ten flowers here, one anemone counted for e
 })
 
 test("an anemone whose answer was lost is sent again under the same key and counted once", async ({ browser }) => {
-  const id = await published(browser, `גינת דמו כלנית אבדה ${Date.now()}`)
+  const { id } = await published(browser, `גינת דמו כלנית אבדה ${Date.now()}`)
   const { page, posts } = await open(browser, id)
   let lost = false
   await page.route("**/api/v1/tributes", async (route) => {
@@ -71,7 +52,7 @@ test("an anemone whose answer was lost is sent again under the same key and coun
 })
 
 test("a browser that can't store anything keeps its flowers here and sends nothing", async ({ browser }) => {
-  const id = await published(browser, `גינת דמו בלי אחסון ${Date.now()}`)
+  const { id } = await published(browser, `גינת דמו בלי אחסון ${Date.now()}`)
   const { page, posts } = await open(browser, id, "indexedDB.open = () => { throw new DOMException('blocked', 'SecurityError') }")
   await page.getByRole("button", { name: "השארת כלנית" }).click()
   await expect(page.getByText("השארתם כאן כלנית אחת")).toBeVisible()
@@ -90,7 +71,7 @@ test("at one of the site's own places the flowers stay on this device, and say s
 })
 
 test("an anemone that waited more than seven days unsent is dropped, not counted", async ({ browser }) => {
-  const id = await published(browser, `גינת דמו כלנית ישנה ${Date.now()}`)
+  const { id } = await published(browser, `גינת דמו כלנית ישנה ${Date.now()}`)
   const { page, posts } = await open(browser, id)
   await page.evaluate(
     ([placeId]) =>
@@ -112,7 +93,7 @@ test("an anemone that waited more than seven days unsent is dropped, not counted
 })
 
 test("opening a published place's card, without leaving an anemone, keeps no device id", async ({ browser }) => {
-  const id = await published(browser, `גינת דמו בלי מזהה ${Date.now()}`)
+  const { id } = await published(browser, `גינת דמו בלי מזהה ${Date.now()}`)
   const { page } = await open(browser, id)
   await page.waitForTimeout(1500)
   const stored = await page.evaluate(

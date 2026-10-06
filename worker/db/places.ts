@@ -489,18 +489,38 @@ export async function revise(
   return open && (await pendingCount(db)) >= queueLimit ? "queue_full" : "conflict"
 }
 
+const PUBLIC_COLUMNS = `p.id, r.kind, r.name_he, r.lat, r.lng, r.location_precision, r.place_he, r.story_he, r.in_memory_of,
+  r.link_url, r.photo_key, r.photo_alt, r.photo_credit, r.access_note_he`
+
 /** One batch, so the version and the places come from the same moment. Only public fields leave the database. */
 export async function readFeed(db: D1Database, epoch: string): Promise<Feed> {
   const [state, rows] = await db.batch([
     db.prepare("SELECT n FROM feed_state WHERE id = 1"),
-    db.prepare(
-      `SELECT p.id, r.kind, r.name_he, r.lat, r.lng, r.location_precision, r.place_he, r.story_he, r.in_memory_of, r.link_url,
-         r.photo_key, r.photo_alt, r.photo_credit, r.access_note_he
-       FROM places p JOIN revisions r ON r.id = p.published_revision_id WHERE p.status = 'published'`,
-    ),
+    db.prepare(`SELECT ${PUBLIC_COLUMNS} FROM places p JOIN revisions r ON r.id = p.published_revision_id WHERE p.status = 'published'`),
   ])
   const n = (state.results[0] as { n: number }).n
-  const places = (rows.results as Record<string, string | number | null>[]).map((r): PublicPlace => ({
+  return { v: `${epoch}.${n}`, places: (rows.results as Record<string, string | number | null>[]).map(toPublic) }
+}
+
+/**
+ * One contribution as the public sees it, for its share page: published (its public fields, as in the feed), gone
+ * (it was taken back or erased: the page says so, and nothing of it), or none (never public: unknown, pending,
+ * returned or refused, so the page doesn't even say it existed).
+ */
+export async function publicPlace(
+  db: D1Database,
+  id: string,
+): Promise<{ kind: "published"; place: PublicPlace } | { kind: "gone" | "none" }> {
+  const row = await db
+    .prepare(`SELECT p.status, ${PUBLIC_COLUMNS} FROM places p LEFT JOIN revisions r ON r.id = p.published_revision_id WHERE p.id = ?`)
+    .bind(id)
+    .first<Record<string, string | number | null>>()
+  if (row?.status === "published" && row.name_he) return { kind: "published", place: toPublic(row) }
+  return row && (row.status === "withdrawn" || row.status === "erased") ? { kind: "gone" } : { kind: "none" }
+}
+
+function toPublic(r: Record<string, string | number | null>): PublicPlace {
+  return {
     id: r.id as string,
     kind: r.kind as PublicPlace["kind"],
     name_he: r.name_he as string,
@@ -516,8 +536,7 @@ export async function readFeed(db: D1Database, epoch: string): Promise<Feed> {
     ...(typeof r.photo_key === "string" && r.photo_key.startsWith("public/")
       ? { photo: { url: `/media/${r.photo_key}`, alt: r.photo_alt as string, credit: (r.photo_credit as string | null) ?? undefined } }
       : {}),
-  }))
-  return { v: `${epoch}.${n}`, places }
+  }
 }
 
 /** Whether this key already made a submission: its retry is answered from what is stored. */

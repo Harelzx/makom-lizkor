@@ -6,6 +6,7 @@ import { admin } from "./routes/admin"
 import { dev } from "./routes/dev"
 import { email } from "./routes/email"
 import { feed } from "./routes/feed"
+import { share } from "./routes/share"
 import { submissions } from "./routes/submissions"
 import { tributes } from "./routes/tributes"
 
@@ -28,6 +29,7 @@ export function createApp(deps: Deps) {
   app.route("/api/v1", feed)
   app.route("/api/admin", admin)
   app.route("/__dev", dev)
+  app.route("/", share)
 
   // Approved photos only: the Worker is the one door to the bucket, and it opens public/ alone (spec 5).
   app.get("/media/public/*", async (c) => {
@@ -50,7 +52,7 @@ export function createApp(deps: Deps) {
     })
   })
 
-  // Only /api/* and /__dev/* reach the Worker, so anything unmatched here is an API mistake, not a page.
+  // Only /api/*, /__dev/*, /media/* and /place/* reach the Worker, so anything unmatched here is an API mistake, not a page.
   app.notFound((c) => problem(c, 404, "not_found"))
   // One JSON line with the route and the error's name only: never a body, a token, an address or a header.
   app.onError((err, c) => {

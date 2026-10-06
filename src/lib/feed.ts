@@ -1,4 +1,4 @@
-import { Feed, isNewer, type PublicPlace } from "@/shared/contract"
+import { Feed, isNewer, PublicPlace } from "@/shared/contract"
 import { retryWaiting } from "@/lib/outbox"
 import { loadSnapshot, saveSnapshot } from "@/lib/storage"
 import { useStore } from "@/store"
@@ -22,6 +22,18 @@ function toPlace(p: PublicPlace): Place {
     links: p.link_url ? [{ label_he: "אתר הנצחה", url: p.link_url }] : [],
     coord_source: "contribution",
     region: p.lat < 31.7 && p.lng < 34.75 && p.lat > 31.1 ? "envelope" : "country",
+  }
+}
+
+/** The approved place a share page carries (its public fields, written by the Worker), so its card opens at once. */
+function carried(): Place | null {
+  const text = document.getElementById("place-data")?.textContent
+  if (!text) return null
+  try {
+    const p = PublicPlace.safeParse(JSON.parse(text))
+    return p.success ? toPlace(p.data) : null
+  } catch {
+    return null
   }
 }
 
@@ -68,12 +80,18 @@ export function startFeedSync(): () => void {
   document.addEventListener("visibilitychange", onWake)
   window.addEventListener("focus", onWake)
   window.addEventListener("online", onWake)
-  // With no connection yet, the last feed this browser received fills the map; a newer one replaces it whole.
+  // The place a share page carries stands until a feed comes; the server's feed then replaces it with everything else.
+  const shared = carried()
+  if (shared && !useStore.getState().feedVersion) useStore.setState({ remote: [shared] })
+  // With no connection yet, the last feed this browser received fills the map; a newer one replaces it whole. An
+  // offline copy older than the shared place keeps it: only the server's own feed can say it is gone.
   void loadSnapshot().then((saved) => {
     const snapshot = Feed.safeParse(saved)
     const current = useStore.getState().feedVersion
-    if (snapshot.success && (!current || isNewer(snapshot.data.v, current)))
-      useStore.getState().setRemote(snapshot.data.v, snapshot.data.places.map(toPlace), false)
+    if (!snapshot.success || (current && !isNewer(snapshot.data.v, current))) return
+    const places = snapshot.data.places.map(toPlace)
+    if (shared && !places.some((p) => p.id === shared.id)) places.push(shared)
+    useStore.getState().setRemote(snapshot.data.v, places, false)
   })
   onWake()
   return () => {

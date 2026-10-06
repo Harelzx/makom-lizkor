@@ -34,6 +34,8 @@ const { mailBlockers } = await import("./release-mail.mjs")
 const { fileURLToPath } = await import("node:url")
 const raw = experimental_readRawConfig({ config: fileURLToPath(new URL("../wrangler.jsonc", import.meta.url)) }).rawConfig
 blockers.push(...mailBlockers(raw, { binding: MAIL_BINDING, sends: PRODUCTION_MAIL_SENDS }))
+const { originBlockers } = await import("./release-origin.mjs")
+blockers.push(...originBlockers(raw))
 
 if (blockers.length) {
   console.error("Not ready to publish the notices:\n" + blockers.map((b) => `  - ${b}`).join("\n"))
