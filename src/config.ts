@@ -37,8 +37,11 @@ export const RETENTION = {
    * backend spec's timeline (section 7) derives drill copies gone by deletion + 32 days and exports by + 37, provided
    * a drill loads only the newest export, which the code enforces. Unproven until the end-to-end test sets `verified` */
   restoreDrillCopyDays: 30 as number | null,
-  /** the two codes a removal request keeps to catch abuse: one from the network address, one from the explanation */
+  /** the two codes a removal request keeps to catch abuse (one from the network address, one from the explanation): the
+   * job clears them once this much has passed since the request came */
   reportAbuseCodeHours: 24,
+  /** what the notice promises for them: the job's hours plus room for a late run (every 15 minutes in production) */
+  reportAbuseCodeMaxHours: 25,
   /** a photo that wasn't approved */
   rejectedPhotoDays: 30,
   /** anemone count rows: the daily code, the place, the day and the time */
@@ -62,5 +65,5 @@ export const PENDING_PROMISES: string[] = [
   "anemone count rows are deleted after RETENTION.tributeDays (phase 5)",
   "a photo file whose deletion failed on withdrawal or rejection is swept from storage (phase 5)",
   "a withdrawn, erased or hidden place's share page is purged from the edge cache (Cache-Tag place:<id>; phase 4)",
-  "a removal request's abuse codes (address and explanation HMACs) are cleared after RETENTION.reportAbuseCodeHours (phase 4, task 5)",
+  "a removal request's abuse codes (address and explanation HMACs) are cleared after RETENTION.reportAbuseCodeHours, always within reportAbuseCodeMaxHours (phase 4, task 5)",
 ]

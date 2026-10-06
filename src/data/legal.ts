@@ -37,7 +37,7 @@ export const fillLegal = (html: string) =>
     .replaceAll("{{REJECTED_PHOTO}}", days(RETENTION.rejectedPhotoDays))
     .replaceAll("{{TRIBUTE_DAYS}}", days(RETENTION.tributeDays))
     .replaceAll("{{ACCESS_DAYS}}", days(ACCESS_RESPONSE_DAYS))
-    .replaceAll("{{REPORT_ABUSE_HOURS}}", `${RETENTION.reportAbuseCodeHours} שעות`)
+    .replaceAll("{{REPORT_ABUSE_HOURS}}", `${RETENTION.reportAbuseCodeMaxHours} שעות`)
 
 /**
  * The sections in About. They describe the site as it is now: a place a visitor adds is sent for review (its photo
@@ -285,7 +285,7 @@ const REPORT_V2 = amend("report 2026-10-2", REPORT_V1, [
   ],
   [
     "מוסתר רק הפרט שבבקשה, או המקום כולו אם הבקשה עליו.</p>",
-    "מוסתר רק הפרט שבבקשה, או המקום כולו אם הבקשה עליו. בקשה על מקום שהאתר הוסיף בעצמו נבדקת בידי אדם, ושום דבר בו לא מוסתר אוטומטית.</p>\n<p><strong>התראה למאשרים:</strong> על כל בקשה המאשרים מקבלים מייל, ותזכורת עד שמישהו מטפל בה. במייל יש רק קישור לתור ומה נעשה אוטומטית, בלי ההסבר שלכם ובלי פרטי הקשר.</p>\n<p><strong>מניעת שימוש לרעה:</strong> כדי לזהות הצפה של הטופס או שליחה חוזרת של אותה בקשה, נשמרים לזמן קצר שני קודים: אחד שנגזר מכתובת הרשת שלכם, ואחד שנגזר מנוסח ההסבר. אי אפשר לשחזר מהם את הכתובת או את הנוסח, והם נמחקים אחרי {{REPORT_ABUSE_HOURS}}.</p>",
+    "מוסתר רק הפרט שבבקשה, או המקום כולו אם הבקשה עליו. בקשה על מקום שהאתר הוסיף בעצמו נבדקת בידי אדם, ושום דבר בו לא מוסתר אוטומטית.</p>\n<p><strong>התראה למאשרים:</strong> על כל בקשה המאשרים מקבלים מייל, ותזכורת עד שמישהו מטפל בה. במייל יש רק קישור לתור ומה נעשה אוטומטית, בלי ההסבר שלכם ובלי פרטי הקשר.</p>\n<p><strong>מניעת שימוש לרעה:</strong> כדי לזהות הצפה של הטופס או שליחה חוזרת של אותה בקשה, נשמרים לזמן קצר שני קודים: אחד שנגזר מכתובת הרשת שלכם, ואחד שנגזר מנוסח ההסבר. אי אפשר לשחזר מהם את הכתובת או את הנוסח, והם נמחקים תוך {{REPORT_ABUSE_HOURS}} מקבלת הבקשה. מהגיבויים שלנו הם נמחקים תוך {{BACKUP_TAIL}} נוספים.</p>",
   ],
 ])
 
