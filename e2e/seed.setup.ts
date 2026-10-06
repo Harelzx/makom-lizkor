@@ -17,8 +17,8 @@ setup("the site's own places are imported through the moderators' route", async 
     base: baseURL!,
     records: fixtures.places,
     readPhoto: async (file) => ({
-      file: await readFile(`public/photos/${file}`),
-      thumb: await readFile(`public/photos/thumb/${file}`),
+      file: await readFile(`fixtures/photos/${file}`),
+      thumb: await readFile(`fixtures/photos/thumb/${file}`),
       name: file,
     }),
     headers: { Cookie: cookie },

@@ -7,8 +7,8 @@ import { after, test } from "node:test"
 import { bundleProblems } from "./bundle-check.mjs"
 
 const records = [
-  { summary_he: "אתר זיכרון רחב ידיים במתחם שבו התקיים פסטיבל, עם עצים ושלטים" },
-  { summary_he: "Lookout over the fields, with a bench" },
+  { summary_he: "אתר זיכרון רחב ידיים במתחם שבו התקיים פסטיבל, עם עצים ושלטים", photos: [{ file: "nova-trees.webp" }] },
+  { summary_he: "Lookout over the fields, with a bench", photos: [{ file: "zikim-beach.webp" }] },
 ]
 const dirs = []
 after(() => dirs.forEach((d) => rmSync(d, { recursive: true, force: true })))
@@ -35,4 +35,20 @@ test("a missing build fails rather than passing", () => {
   const d = mkdtempSync(join(tmpdir(), "bundle-check-"))
   dirs.push(d)
   assert.deepEqual(bundleProblems(d, records), ["client: not built", "makom_lizkor: not built"])
+})
+
+test("a curated record's photo in the client build fails, unless it is one of About's own landscapes (P7-MEDIA-1)", () => {
+  const d = dist("x", "x")
+  mkdirSync(join(d, "client/photos/thumb"), { recursive: true })
+  writeFileSync(join(d, "client/photos/thumb/nova-trees.webp"), "")
+  mkdirSync(join(d, "client/landscapes"), { recursive: true })
+  writeFileSync(join(d, "client/landscapes/zikim-beach.webp"), "")
+  assert.deepEqual(bundleProblems(d, records, { landscapes: ["zikim-beach.webp"] }), [
+    "client/photos/thumb/nova-trees.webp: a curated record's photo",
+  ])
+  // The same file as a landscape is About's picture, served apart from the place; anywhere else it is the record's.
+  assert.deepEqual(bundleProblems(d, records), [
+    "client/landscapes/zikim-beach.webp: a curated record's photo",
+    "client/photos/thumb/nova-trees.webp: a curated record's photo",
+  ])
 })

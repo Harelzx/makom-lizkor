@@ -33,6 +33,9 @@ jobs:
       - run: npm run test:scripts
       - run: npm run check:access
       - run: node scripts/ci-policy.mjs
+      # No curated record in what would ship (Phase 7 task 6).
+      - run: npm run build
+      - run: node scripts/bundle-check.mjs
 
   worker:
     runs-on: ubuntu-latest

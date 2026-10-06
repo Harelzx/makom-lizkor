@@ -12,11 +12,11 @@ import landscapes from "@/data/landscapes.json"
 import type { Photo } from "@/types"
 import { useStore } from "@/store"
 
-// The landscapes are the site's own pictures, not place records: they stay files beside the page.
+// The landscapes are the site's own pictures, not place records: they stay files beside the page (public/landscapes).
 const landscapePhotos: Photo[] = landscapes.map(({ file, ...rest }) => ({
   ...rest,
-  url: `/photos/${file}`,
-  thumb_url: `/photos/thumb/${file}`,
+  url: `/landscapes/${file}`,
+  thumb_url: `/landscapes/thumb/${file}`,
 }))
 
 export function About() {

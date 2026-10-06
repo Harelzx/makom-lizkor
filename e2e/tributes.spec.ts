@@ -2,6 +2,8 @@ import { expect, test, type Browser, type Page } from "@playwright/test"
 import { published } from "./publish"
 
 const DAY = { timeout: 20_000 }
+let started = 0
+test.beforeEach(() => void (started = Date.now()))
 
 async function open(browser: Browser, id: string, init?: string) {
   const page = await (await browser.newContext()).newPage()
@@ -17,7 +19,9 @@ async function open(browser: Browser, id: string, init?: string) {
     if (/\/api\/v1\/(version|feed)\b/.test(r.url()))
       feed.push(`${new Date().toISOString()} ${r.status()} ${r.url().replace(/^.*\/api/, "/api")}`)
   })
+  const opened = Date.now()
   await page.goto(`/#/place/${id}`)
+  feed.push(`${new Date(opened).toISOString()} goto started (test ${((opened - started) / 1000).toFixed(2)}s in)`)
   try {
     await expect(page.getByRole("button", { name: "השארת כלנית" })).toBeVisible(DAY)
   } catch (e) {

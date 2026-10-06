@@ -112,6 +112,9 @@ jobs:
       - run: npm ci
       - name: Release check
         run: npm run release:check
+      # Built and searched for curated records before anything in production changes (Phase 7 task 6).
+      - run: npm run build
+      - run: node scripts/bundle-check.mjs
       - name: Time Travel bookmark before the migrations
         run: npx wrangler d1 time-travel info DB | tee "$RUNNER_TEMP/bookmark.txt"
       - uses: actions/upload-artifact@v4
@@ -121,7 +124,6 @@ jobs:
           retention-days: 30
       - name: Migrations (expand only; scripts/rollback-check.mjs refuses a rollback across anything else)
         run: npx wrangler d1 migrations apply DB --remote
-      - run: npm run build
       - name: Deploy, the version tagged with the release and its commit
         run: npx wrangler deploy --tag "$RELEASE" --message "release $RELEASE $SHA"
       - name: Production checks

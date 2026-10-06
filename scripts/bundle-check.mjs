@@ -2,9 +2,11 @@
 // and the Worker's are searched for the opening words of each fixture's summary (field names won't do: the client
 // still reads curated fields, from the feed). The fixtures are
 // public information, but D1 is the one source of truth, and a copy in the bundle would outlive a takedown there.
+// Their photos neither (P7-MEDIA-1): served as files, a copied address would still work after the photo is hidden.
+// About's landscapes are the site's own pictures, not records, so a file it lists may stay (in public/landscapes).
 //   node scripts/bundle-check.mjs [dist-dir]
 import { readdirSync, readFileSync, statSync } from "node:fs"
-import { join } from "node:path"
+import { basename, join } from "node:path"
 import { pathToFileURL } from "node:url"
 
 /** What only a curated record carries: each summary's opening words. */
@@ -20,13 +22,16 @@ export function markers(records) {
 }
 
 const files = (dir) =>
-  readdirSync(dir).flatMap((name) => {
-    const path = join(dir, name)
-    return statSync(path).isDirectory() ? files(path) : /\.(js|mjs|json|html|map)$/.test(name) ? [path] : []
-  })
+  readdirSync(dir)
+    .sort()
+    .flatMap((name) => {
+      const path = join(dir, name)
+      return statSync(path).isDirectory() ? files(path) : [path]
+    })
 
-export function bundleProblems(dist, records) {
+export function bundleProblems(dist, records, { landscapes = [] } = {}) {
   const wanted = markers(records)
+  const photos = new Set(records.flatMap((r) => (r.photos ?? []).map((p) => p.file)))
   const problems = []
   for (const dir of ["client", "makom_lizkor"]) {
     let list
@@ -37,9 +42,14 @@ export function bundleProblems(dist, records) {
       continue
     }
     for (const file of list) {
+      const rel = file.slice(dist.length + 1)
+      const name = basename(file)
+      if (photos.has(name) && !(rel.startsWith("client/landscapes/") && landscapes.includes(name)))
+        problems.push(`${rel}: a curated record's photo`)
+      if (!/\.(js|mjs|json|html|map)$/.test(name)) continue
       const text = readFileSync(file, "utf8")
       const found = wanted.filter((m) => text.includes(m)).length
-      if (found) problems.push(`${file.slice(dist.length + 1)}: ${found} marker(s) of curated records`)
+      if (found) problems.push(`${rel}: ${found} marker(s) of curated records`)
     }
   }
   return problems
@@ -47,8 +57,9 @@ export function bundleProblems(dist, records) {
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const dist = process.argv[2] ?? "dist"
-  const records = JSON.parse(readFileSync(new URL("../src/data/places.json", import.meta.url), "utf8"))
-  const problems = bundleProblems(dist, records)
+  const read = (path) => JSON.parse(readFileSync(new URL(path, import.meta.url), "utf8"))
+  const records = read("../src/data/places.json")
+  const problems = bundleProblems(dist, records, { landscapes: read("../src/data/landscapes.json").map((l) => l.file) })
   if (problems.length) {
     console.error("Curated records in the production bundle:\n" + problems.map((p) => `  - ${p}`).join("\n"))
     process.exit(1)
