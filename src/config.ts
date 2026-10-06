@@ -37,6 +37,11 @@ export const RETENTION = {
    * backend spec's timeline (section 7) derives drill copies gone by deletion + 32 days and exports by + 37, provided
    * a drill loads only the newest export, which the code enforces. Unproven until the end-to-end test sets `verified` */
   restoreDrillCopyDays: 30 as number | null,
+  /** the two codes a removal request keeps to catch abuse (one from the network address, one from the explanation): the
+   * job clears them once this much has passed since the request came */
+  reportAbuseCodeHours: 24,
+  /** what the notice promises for them: the job's hours plus room for a late run (every 15 minutes in production) */
+  reportAbuseCodeMaxHours: 25,
   /** a photo that wasn't approved */
   rejectedPhotoDays: 30,
   /** anemone count rows: the daily code, the place, the day and the time */
@@ -62,4 +67,5 @@ export const PENDING_PROMISES: string[] = [
   // The purge call is built (phase 4: one per change, tags feed, tributes and place:<id>); what remains is seeing the
   // edge drop the share page and the photo on staging, and measuring how long it takes.
   "a withdrawn, erased or hidden place's share page and photo are purged from the edge cache (Cache-Tag place:<id>; verified on staging)",
+  "a removal request's abuse codes (address and explanation HMACs) are cleared after RETENTION.reportAbuseCodeHours, always within reportAbuseCodeMaxHours (phase 4, task 5)",
 ]
