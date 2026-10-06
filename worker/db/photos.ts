@@ -1,5 +1,6 @@
 import { ulid } from "../lib/ids"
 import { ogState } from "../lib/og"
+import { log } from "../lib/log"
 
 /**
  * A place's photo files after upload: copied to public/ for an approval, retired when a decision makes them obsolete,
@@ -73,7 +74,7 @@ export async function retirePhotos(db: D1Database, media: R2Bucket, keys: (strin
     await deleteKeys(media, [...obsolete, ...obsolete.filter((k) => k.startsWith("public/")).map((k) => k.replace(/^public\//, "held/"))])
     return true
   } catch (err) {
-    console.error(JSON.stringify({ level: "error", event: "photo_cleanup", error: (err as Error).name }))
+    log("error", "photo_cleanup", { error: (err as Error).name })
     return false
   }
 }

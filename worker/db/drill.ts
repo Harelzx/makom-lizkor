@@ -7,6 +7,7 @@ import { filterForImport, importExport, type ExportPayload } from "./import"
 import { reconcileTables } from "./reconcile"
 import { readLedger, replayLedger } from "./replay"
 import { BLANK_COLUMNS, tellModerators } from "./retention"
+import { log } from "../lib/log"
 
 const DAY_MS = 86_400_000
 /** A drill loads only an export this fresh (spec 7): an older one would keep its rows in the drill database's history. */
@@ -165,7 +166,7 @@ export async function runDrill(d: DrillEnv, now: Date): Promise<string | null> {
   // Then every export still kept, in memory (spec 8.4): what one holds past its date is told by table and count.
   const stale = await auditExports({ exports: d.exports, drillKey: d.drillKey, ledger: d.ledger }, now).catch(() => ({ unreadable: 1 }))
   if (Object.keys(stale).length) {
-    console.error(JSON.stringify({ level: "error", event: "export_audit", found: stale }))
+    log("error", "export_audit", { found: stale })
     await tellModerators(
       db,
       d.env,
@@ -185,7 +186,7 @@ export async function runDrill(d: DrillEnv, now: Date): Promise<string | null> {
     .bind(id, new Date(Math.max(now.getTime(), Date.now())).toISOString(), failure ? 0 : 1, failure, exportId)
     .run()
   if (failure) {
-    console.error(JSON.stringify({ level: "error", event: "drill_failed", failure }))
+    log("error", "drill_failed", { failure: failure ?? undefined })
     const sent = await db.prepare("SELECT sent_at FROM job_alerts WHERE job = 'drill'").first<{ sent_at: string }>()
     if (!sent || sent.sent_at <= new Date(now.getTime() - DAY_MS).toISOString())
       await tellModerators(

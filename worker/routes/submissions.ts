@@ -21,6 +21,7 @@ import { rateKey } from "../lib/ids"
 import { verificationMail } from "../lib/messages"
 import { checkTurnstile } from "../lib/turnstile"
 import type { AppEnv } from "../index"
+import { log } from "../lib/log"
 
 export const submissions = new Hono<AppEnv>()
 
@@ -119,7 +120,7 @@ submissions.post("/:id/withdraw", async (c) => {
   // are served); the answer says so, and the same request again (or the sweep) finishes them.
   const erased = await erasePhotos(c.env.MEDIA, c.req.param("id")).then(
     () => true,
-    (err: Error) => (console.error(JSON.stringify({ level: "error", event: "withdraw_files", error: err.name })), false),
+    (err: Error) => (log("error", "withdraw_files", { error: err.name }), false),
   )
   return c.json(erased ? { status: "withdrawn" } : { status: "withdrawn", files: "pending" }, 200, PRIVATE)
 })

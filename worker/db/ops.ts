@@ -1,6 +1,7 @@
 import { ulid } from "../lib/ids"
 import { writeLedger, type Actor, type LedgerEntry, type OpKind } from "../lib/ledger"
 import { erasePhotos, photosRemain, retirePhotos } from "./photos"
+import { log } from "../lib/log"
 
 /** What an operation reaches: the database, the files, the ledger and the edge cache. */
 export type OpEnv = { db: D1Database; media: R2Bucket; ledger: R2Bucket; purge: (tags: string[]) => Promise<boolean> }
@@ -239,9 +240,7 @@ export async function runOp(env: OpEnv, spec: OpSpec, now: Date): Promise<{ outc
     return { outcome: "conflict", id }
   }
   // The decision has landed: a failure in the steps after it is the scheduled job's to finish, never the request's.
-  await finishOp(env, id, now).catch((err: Error) =>
-    console.error(JSON.stringify({ level: "error", event: "op_finish_failed", op: id, error: err.name })),
-  )
+  await finishOp(env, id, now).catch((err: Error) => log("error", "op_finish_failed", { op: id, error: err.name }))
   return { outcome: "ok", id }
 }
 
@@ -363,7 +362,7 @@ export async function resumeOps(env: OpEnv, now: Date) {
         }
       }
     } catch (err) {
-      console.error(JSON.stringify({ level: "error", event: "op_resume_failed", op: op.id, error: (err as Error).name }))
+      log("error", "op_resume_failed", { op: op.id, error: (err as Error).name })
       await env.db
         .prepare("UPDATE visibility_ops SET updated_at = ?2 WHERE id = ?1")
         .bind(op.id, at)
@@ -401,7 +400,8 @@ export async function reconcileMedia(env: OpEnv, now: Date) {
       if ((await placePhoto(env, place_id, now, false)) === "none" && !(await erasedRemains(env, place_id)))
         await env.db.prepare("DELETE FROM media_checks WHERE place_id = ?1 AND due_at = ?2").bind(place_id, booked).run()
     } catch (err) {
-      console.error(JSON.stringify({ level: "error", event: "photo_unsettled", place: place_id, error: (err as Error).message }))
+      // The class name only: a message may be anyone's text.
+      log("error", "photo_unsettled", { place: place_id, error: (err as Error).name })
       await book(place_id, booked, MEDIA_RETRY_MS).catch(() => undefined)
     }
   }

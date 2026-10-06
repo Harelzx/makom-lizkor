@@ -8,6 +8,7 @@ import { deliverAlerts, precaution, startAlertRound, type Precaution } from "./d
 import type { SendMail } from "./lib/mail"
 import { REPORT_GUARDS } from "./lib/guards"
 import type { Purge } from "./lib/purge"
+import { log } from "./lib/log"
 
 const HOUR_MS = 3600 * 1000
 /** A backstop claimed this long ago by a run that never finished it is taken again. */
@@ -40,7 +41,7 @@ export async function runJobs(env: Env, deps: { sendMail: SendMail; purge: Purge
     try {
       await run()
     } catch (err) {
-      console.error(JSON.stringify({ level: "error", event: "job_failed", job: name, error: (err as Error).name }))
+      log("error", "job_failed", { job: name, error: (err as Error).name })
     }
   }
 

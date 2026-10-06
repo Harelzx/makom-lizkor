@@ -13,6 +13,7 @@ import { share } from "./routes/share"
 import { submissions } from "./routes/submissions"
 import { tributes } from "./routes/tributes"
 import { ogResponse } from "./lib/og"
+import { log } from "./lib/log"
 
 /** What the routes reach outside the Worker; the tests pass stand-ins, the deployed Worker the real ones. */
 export type Deps = { verifyTurnstile: VerifyTurnstile; sendMail: SendMail; purge: Purge }
@@ -74,7 +75,7 @@ export function createApp(deps: Deps) {
   app.notFound((c) => problem(c, 404, "not_found"))
   // One JSON line with the route and the error's name only: never a body, a token, an address or a header.
   app.onError((err, c) => {
-    console.error(JSON.stringify({ level: "error", event: "unhandled", method: c.req.method, path: c.req.routePath, error: err.name }))
+    log("error", "unhandled", { method: c.req.method, path: c.req.routePath, error: err.name })
     return problem(c, 500, "internal")
   })
   return app
