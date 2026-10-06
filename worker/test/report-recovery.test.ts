@@ -317,7 +317,8 @@ describe("follow-up bc46a39c", () => {
     await runJobs(env, deps, undefined, after(24.25))
     expect((await row(ticket))!).toMatchObject({ backstop_at: null, backstop_claim: null })
     // Reopened later; run A wakes and tries to act on its old claim: nothing happens.
-    await env.DB.prepare("UPDATE reports SET status = 'open' WHERE id = ?").bind(ticket).run()
+    // Its abuse codes are put back, so only the claim stands between run A and a hide.
+    await env.DB.prepare("UPDATE reports SET status = 'open', explanation_hash = 'still-here' WHERE id = ?").bind(ticket).run()
     expect(await precaution(opEnv, ticket, after(24.25), { claim: "A" })).toBe("refused")
     await finishBackstop(env.DB, ticket, "A", "retry")
     expect((await row(ticket))!).toMatchObject({ backstop_at: null, backstop_claim: null, outcome: "received" })
