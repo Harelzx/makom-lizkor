@@ -1,4 +1,5 @@
 import { replayDecision, type LedgerEntry } from "../lib/ledger"
+import { sha256, type Manifest } from "../lib/sealed"
 import { notesCeiling } from "./reports"
 import { BLANK_COLUMNS } from "./retention"
 
@@ -159,5 +160,42 @@ export async function replayLedger(db: D1Database, ledger: R2Bucket, now: Date) 
   // The feed's version moves on, so every browser fetches the restored places again.
   if (result.applied || result.quarantined.length || result.erased.length)
     await db.prepare("UPDATE feed_state SET n = n + 1, changed_at = ? WHERE id = 1").bind(now.toISOString()).run()
+  return result
+}
+
+/**
+ * Photos put back from the export's copies when the photo bucket itself was lost (spec 8.3). A file returns only for a
+ * place the restored database (after the ledger's replay) still publishes or holds, under the name it would have now:
+ * public/ when shown, held/ when a hide covers it. Never for a withdrawn or erased place, never quarantine/, and only
+ * if the copy's sha256 is the one the manifest recorded. A file already there is left as it is.
+ */
+export async function restorePhotos(db: D1Database, media: R2Bucket, exports: R2Bucket, manifest: Manifest) {
+  const result = { restored: 0, missing: 0, damaged: 0 }
+  const recorded = new Map(manifest.files.map((f) => [f.key.replace(/^held\//, "public/"), f.sha256]))
+  const { results } = await db
+    .prepare(
+      `SELECT r.photo_key AS key, EXISTS (SELECT 1 FROM field_suppressions s WHERE s.place_id = p.id AND s.lifted_at IS NULL
+         AND s.field IN ('photo', 'whole')) AS hidden
+       FROM places p JOIN revisions r ON r.id = p.published_revision_id
+       WHERE p.status IN ('published', 'hidden') AND r.photo_key LIKE 'public/%'`,
+    )
+    .all<{ key: string; hidden: number }>()
+  for (const { key, hidden } of results) {
+    const target = hidden ? key.replace(/^public\//, "held/") : key
+    if (await media.head(target)) continue
+    const hash = recorded.get(key)
+    const copy = hash ? await exports.get(`photos/${hash}`) : null
+    if (!copy) {
+      result.missing++
+      continue
+    }
+    const bytes = new Uint8Array(await copy.arrayBuffer())
+    if ((await sha256(bytes)) !== hash) {
+      result.damaged++
+      continue
+    }
+    await media.put(target, bytes, { httpMetadata: { contentType: "image/jpeg" } })
+    result.restored++
+  }
   return result
 }

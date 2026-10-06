@@ -4,8 +4,8 @@ import { beforeAll, describe, expect, it } from "vitest"
 import { EXPORT_TABLES, runExport } from "../db/exports"
 import { importExport, type ExportPayload } from "../db/import"
 import { readFeed } from "../db/places"
-import { replayLedger } from "../db/replay"
-import { unseal, type Manifest } from "../lib/sealed"
+import { replayLedger, restorePhotos } from "../db/replay"
+import { sha256, unseal, type Manifest } from "../lib/sealed"
 import { call } from "./app"
 import { admin, approve } from "./helpers"
 import { decide, jpeg, queued, send, upload } from "./submission-helpers"
@@ -21,11 +21,13 @@ beforeAll(async () => {
   )) as CryptoKeyPair
 })
 
+let lastManifest: Manifest
 async function exportNow(): Promise<ExportPayload> {
   await env.DB.prepare("DELETE FROM exports").run()
   const pub = JSON.stringify([await crypto.subtle.exportKey("jwk", keys.publicKey)])
   const id = (await runExport({ db: env.DB, media: env.MEDIA, exports: env.EXPORTS, keys: pub }, "rr_test", new Date()))!
   const manifest = (await (await env.EXPORTS.get(`exports/${id}/manifest.json`))!.json()) as Manifest
+  lastManifest = manifest
   const data = new Uint8Array(await (await env.EXPORTS.get(manifest.data.key))!.arrayBuffer())
   const plain = await unseal(data, manifest.data, (await crypto.subtle.exportKey("jwk", keys.privateKey)) as JsonWebKey)
   return JSON.parse(await new Response(new Blob([plain]).stream().pipeThrough(new DecompressionStream("gzip"))).text()) as ExportPayload
@@ -90,5 +92,49 @@ describe("replaying the ledger onto a restored database (spec 8.2, 8.3)", () => 
     expect(await replayLedger(env.IMPORT_TEST, env.LEDGER, new Date())).toMatchObject({ applied: 0 })
     expect(JSON.stringify(await env.IMPORT_TEST.prepare("SELECT * FROM field_suppressions ORDER BY id").all())).toBe(before)
     expect((await readFeed(env.IMPORT_TEST, "0")).places).toEqual(restored)
+  })
+
+  it("puts photos back from their copies only where the restored place still shows or holds them", async () => {
+    for (const t of [...EXPORT_TABLES].reverse()) await env.IMPORT_TEST.prepare(`DELETE FROM ${t}`).run()
+    const shown = await send("גן דמו שתמונתו חוזרת")
+    expect((await upload(shown.id, shown.trackingToken, jpeg(0x71))).status).toBe(200)
+    await approve(shown.id)
+    const held = await send("גן דמו שתמונתו מוסתרת")
+    expect((await upload(held.id, held.trackingToken, jpeg(0x72))).status).toBe(200)
+    await approve(held.id)
+    expect((await hide(held.id, ["photo"], await rev(held.id))).status).toBe(200)
+    const gone = await send("גן דמו שנמשך ותמונתו לא חוזרת")
+    expect((await upload(gone.id, gone.trackingToken, jpeg(0x73))).status).toBe(200)
+    await approve(gone.id)
+    const payload = await exportNow()
+    expect(
+      (
+        await call(`http://local/api/v1/submissions/${gone.id}/withdraw`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${gone.trackingToken}` },
+        })
+      ).status,
+    ).toBe(200)
+    const keyOf = async (id: string) =>
+      (await env.DB.prepare("SELECT r.photo_key AS k FROM places p JOIN revisions r ON r.id = p.published_revision_id WHERE p.id = ?")
+        .bind(id)
+        .first<{ k: string }>())!.k
+    const shownKey = await keyOf(shown.id)
+    const heldKey = (await keyOf(held.id)).replace(/^public\//, "held/")
+    const shownBytes = new Uint8Array(await (await env.MEDIA.get(shownKey))!.arrayBuffer())
+
+    // The photo bucket is lost.
+    for (const id of [shown.id, held.id, gone.id])
+      for (const prefix of ["public/", "held/", "quarantine/"])
+        for (const o of (await env.MEDIA.list({ prefix: `${prefix}${id}/` })).objects) await env.MEDIA.delete(o.key)
+    expect(await importExport(env.IMPORT_TEST, payload, new Date())).toMatchObject({ ok: true })
+    await replayLedger(env.IMPORT_TEST, env.LEDGER, new Date())
+    const result = await restorePhotos(env.IMPORT_TEST, env.MEDIA, env.EXPORTS, lastManifest)
+    expect(result).toMatchObject({ restored: 2 })
+    expect(await sha256(new Uint8Array(await (await env.MEDIA.get(shownKey))!.arrayBuffer()))).toBe(await sha256(shownBytes))
+    expect(await env.MEDIA.head(heldKey)).not.toBeNull()
+    expect(await env.MEDIA.head(heldKey.replace(/^held\//, "public/"))).toBeNull()
+    expect((await env.MEDIA.list({ prefix: `public/${gone.id}/` })).objects).toHaveLength(0)
+    expect((await env.MEDIA.list({ prefix: `held/${gone.id}/` })).objects).toHaveLength(0)
   })
 })
