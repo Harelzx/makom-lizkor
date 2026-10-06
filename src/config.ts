@@ -74,9 +74,6 @@ export const LAST_UPDATED = "2026-10-05"
  * that implements it, with its test.
  */
 export const PENDING_PROMISES: string[] = [
-  "a returned submission not corrected within 30 days is erased (phase 5)",
-  "anemone count rows are deleted after RETENTION.tributeDays (phase 5)",
-  "a photo file whose deletion failed on withdrawal or rejection is swept from storage (phase 5)",
   // The purge call is built (phase 4: one per change, tags feed, tributes and place:<id>); what remains is seeing the
   // edge drop the share page and the photo on staging, and measuring how long it takes.
   "a withdrawn, erased or hidden place's share page and photo are purged from the edge cache (Cache-Tag place:<id>; verified on staging)",
