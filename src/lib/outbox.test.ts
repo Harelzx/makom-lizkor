@@ -64,4 +64,6 @@ it("a place once answered keeps no key that could ask the server for its trackin
   expect(sentPlace.local?.submitKey).toBeUndefined()
   expect(refused.local?.send).toBe("rejected")
   expect(refused.local?.submitKey).toBeUndefined()
+  // Nothing can send a refused body again, so the email and name in it aren't kept either.
+  expect(refused.local?.submission).toBeUndefined()
 })

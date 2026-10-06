@@ -26,6 +26,8 @@ const send = async (name: string, email?: string) => {
   })
   return { status: res.status, ...(await res.json<{ id: string; trackingToken: string }>()) }
 }
+/** A moment this many minutes from now, for the development clock. */
+const minutes = (m: number) => new Date(Date.now() + m * 60_000).toISOString()
 const linkIn = (text: string, path: string) => new RegExp(`#/${path}/([^\\s]+)`).exec(text)?.[1]
 const verify = (token: string, now?: string) =>
   call("http://local/api/v1/email/verify", {
@@ -116,11 +118,11 @@ describe("a tracking mail that couldn't be sent", () => {
     let down = true
     let tries = 0
     const flaky = createApp({ verifyTurnstile: fakeSiteverify, sendMail: async (e, m) => (tries++, down ? false : sendMail(e, m)) })
-    const verifyVia = (token: string) =>
+    const verifyVia = (token: string, at = 0) =>
       flaky.fetch(
         new Request("http://local/api/v1/email/verify", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", "X-Test-Now": minutes(at) },
           body: JSON.stringify({ token }),
         }),
         env,
@@ -135,7 +137,11 @@ describe("a tracking mail that couldn't be sent", () => {
     expect(await failed.json()).toMatchObject({ first: true, mail: "failed" })
     expect((await mails(to)).length).toBe(1) // the verification mail only: the tracking mail failed
     down = false
-    expect(await (await verifyVia(verifyToken)).json()).toMatchObject({ first: false, mail: "sent" })
+    // A click right after a failed try waits for the gap and uses no try; one after it sends.
+    const triesBefore = tries
+    expect(await (await verifyVia(verifyToken, 1)).json()).toMatchObject({ mail: "failed" })
+    expect(tries).toBe(triesBefore)
+    expect(await (await verifyVia(verifyToken, 3)).json()).toMatchObject({ first: false, mail: "sent" })
     const tracking = (await mails(to)).filter((m) => m.text.includes("#/track/"))
     expect(tracking).toHaveLength(1)
     // The link works.
@@ -144,7 +150,7 @@ describe("a tracking mail that couldn't be sent", () => {
     expect(status.status).toBe(200)
     // Sent once: more clicks send nothing more.
     const before = tries
-    expect(await (await verifyVia(verifyToken)).json()).toMatchObject({ first: false, mail: "earlier" })
+    expect(await (await verifyVia(verifyToken, 4)).json()).toMatchObject({ first: false, mail: "earlier" })
     expect(tries).toBe(before)
   })
 
@@ -157,19 +163,26 @@ describe("a tracking mail that couldn't be sent", () => {
     const to = `dead${Date.now()}@example.test`
     await send("ספסל דמו מייל מת", to)
     const verifyToken = linkIn((await mails(to))[0].text, "verify")!
-    let last: Response | undefined
-    for (let i = 0; i < 8; i++)
-      last = await dead.fetch(
-        new Request("http://local/api/v1/email/verify", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ token: verifyToken }),
-        }),
-        env,
-        createExecutionContext(),
-      )
+    const click = async (at: number) =>
+      (
+        await dead.fetch(
+          new Request("http://local/api/v1/email/verify", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Test-Now": minutes(at) },
+            body: JSON.stringify({ token: verifyToken }),
+          }),
+          env,
+          createExecutionContext(),
+        )
+      ).json<{ mail: string }>()
+    // Clicks in quick succession use one try, not five: the button can't spend them all in a minute.
+    for (const at of [0, 0.2, 0.5, 1]) await click(at)
+    expect(tries).toBe(1)
+    // Spaced out, four more tries; the fifth failure says at once that it won't be tried again.
+    const answers = []
+    for (const at of [3, 6, 9, 12]) answers.push((await click(at)).mail)
+    expect(answers).toEqual(["failed", "failed", "failed", "stopped"])
+    expect((await click(20)).mail).toBe("stopped")
     expect(tries).toBe(5)
-    // Told it won't be tried again, rather than to try again.
-    expect(await last!.json()).toMatchObject({ mail: "stopped" })
   })
 })

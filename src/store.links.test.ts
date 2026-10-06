@@ -45,3 +45,9 @@ it("a link with a broken escape opens the site, not an empty page", async () => 
   const shared = await storeAt("/place/%E0%A4%A", "", "none")
   expect(shared.useStore.getState().selectedId).toBeNull()
 })
+
+it("the server's live feed is shown whole, even a place the share page said wasn't public (it may be approved since)", async () => {
+  const { useStore } = await storeAt("/place/p_x", "", "none")
+  useStore.getState().setRemote("2", [place("p_x"), place("p_y")], true)
+  expect(useStore.getState().remote.map((p) => p.id)).toEqual(["p_x", "p_y"])
+})

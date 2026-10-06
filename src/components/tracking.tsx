@@ -112,7 +112,8 @@ export function Tracking() {
   const tracking = useStore((s) => s.tracking)
   const setTracking = useStore((s) => s.setTracking)
   // undefined: loading or unreachable · null: no such submission for this link
-  const [state, setState] = useState<{ key: string; result: Tracked | null | undefined; failed: boolean } | null>(null)
+  // `ended`: this link stopped opening the submission with the withdrawal (a mailed link, whose address it erased).
+  const [state, setState] = useState<{ key: string; result: Tracked | null | undefined; failed: boolean; ended?: boolean } | null>(null)
   const [confirming, setConfirming] = useState(false)
   const [working, setWorking] = useState(false)
   const [fixing, setFixing] = useState(false)
@@ -193,7 +194,7 @@ export function Tracking() {
     // answer established.
     const shown: Tracked =
       now?.status === "withdrawn" ? now : { status: "withdrawn", name_he: null, ...(done === "withdrawn" ? {} : { files: "pending" }) }
-    setState({ key, result: shown, failed: false })
+    setState({ key, result: shown, failed: false, ended: now === null })
     // The sender's own copy on this device, if it is here, says so too.
     await settleOwnCopy(tracking.id, tracking.token, shown)
   }
@@ -223,7 +224,13 @@ export function Tracking() {
               {current.result.status === "published" && current.result.revision_state === "rejected" && (
                 <p className="text-caption text-ink-2">התיקון האחרון לא אושר. באתר מופיעה הגרסה שאושרה.</p>
               )}
-              {current.result.status === "withdrawn" && current.result.files === "pending" && (
+              {current.result.status === "withdrawn" && current.result.files === "pending" && current.ended && (
+                // This link can't ask again: it ended with the withdrawal.
+                <p className="text-caption text-ink-2">
+                  הקישור הזה כבר לא פותח את ההצעה. את מחיקת התמונה אפשר להשלים מהמכשיר ששלח את ההצעה, ואם לא, היא תימחק מהשרת בהמשך.
+                </p>
+              )}
+              {current.result.status === "withdrawn" && current.result.files === "pending" && !current.ended && (
                 // The same request again finishes what the first couldn't erase.
                 <Button variant="outline" className="pressable self-start" disabled={working} onClick={() => void withdraw()}>
                   להשלים את מחיקת התמונה

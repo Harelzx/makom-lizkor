@@ -510,7 +510,9 @@ describe("what a submission's fingerprint keeps", () => {
     const again = await send("ספסל דמו טביעה בלי פרטי קשר", { email: `b${Date.now()}@example.test`, submitter_name: "דמו ב" }, key)
     expect(again.status).toBe(200)
     expect(again.id).toBe(first.id)
-    // Other content under the same key is still refused.
+    // Other content under the same key is still refused, whichever field differs.
     expect((await send("ספסל דמו טביעה אחרת", {}, key)).status).toBe(409)
+    expect((await send("ספסל דמו טביעה בלי פרטי קשר", { story_he: "סיפור אחר" }, key)).status).toBe(409)
+    expect((await send("ספסל דמו טביעה בלי פרטי קשר", { lat: 31.43 }, key)).status).toBe(409)
   })
 })

@@ -285,3 +285,28 @@ test("a withdrawal whose photo erasure is still pending can be finished after a 
   await page.getByRole("button", { name: "מעקב אחרי ההצעה" }).click()
   await expect(page.getByRole("dialog", { name: "מצב ההצעה" }).getByRole("button", { name: "להשלים את מחיקת התמונה" })).toBeVisible()
 })
+
+test("a link that ended with its withdrawal doesn't offer to finish the photo's erasure, and says who can", async ({ browser }) => {
+  test.setTimeout(120_000)
+  const name = `ספסל דמו קישור שהסתיים ${Date.now()}`
+  const page = await submit(browser, name)
+  let withdrawn = false
+  // Withdrawn with its photo still to erase; from then on this link opens nothing, as a mailed link does once the
+  // withdrawal has erased the address it was made for.
+  await page.route("**/api/v1/submissions/*/withdraw", async (route) => {
+    await route.fetch()
+    withdrawn = true
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ status: "withdrawn", files: "pending" }) })
+  })
+  await page.route(/\/api\/v1\/submissions\/[^/]+$/, async (route) => {
+    if (route.request().method() !== "GET" || !withdrawn) return route.continue()
+    await route.fulfill({ status: 404, contentType: "application/problem+json", body: JSON.stringify({ code: "not_found" }) })
+  })
+  await page.getByRole("button", { name: "מעקב אחרי ההצעה" }).click()
+  const view = page.getByRole("dialog", { name: "מצב ההצעה" })
+  await view.getByRole("button", { name: "משיכת ההצעה" }).click()
+  await page.getByRole("alertdialog").getByRole("button", { name: "למשוך ולמחוק" }).click()
+  await expect(view.getByText("התמונה כבר לא מוצגת", { exact: false })).toBeVisible()
+  await expect(view.getByText("מהמכשיר ששלח את ההצעה", { exact: false })).toBeVisible()
+  await expect(view.getByRole("button", { name: "להשלים את מחיקת התמונה" })).toHaveCount(0)
+})

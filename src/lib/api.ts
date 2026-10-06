@@ -72,7 +72,10 @@ export async function trackSubmission(id: string, token: string): Promise<Tracke
       cache: "no-store",
       signal: AbortSignal.timeout(8000),
     })
-    if (res.status === 404) return null
+    // Only the API's own answer means the link opens nothing (the device then lets its copy of the link go); a 404 from
+    // anywhere else is a failure to read, not proof.
+    if (res.status === 404)
+      return ((await res.json().catch(() => null)) as { code?: string } | null)?.code === "not_found" ? null : undefined
     return res.ok ? ((await res.json()) as Tracked) : undefined
   } catch {
     return undefined

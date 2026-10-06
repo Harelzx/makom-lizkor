@@ -293,7 +293,8 @@ export function AddPlace() {
           const sent = await uploadPhoto(r.id, r.trackingToken, photo, photoAlt.trim() || place.name_he, photoCredit.trim() || undefined)
           if (sent !== "temporary") await updateLocal(place.id, sent === "ok" ? { photoSent: true } : { photoError: "refused" })
         }
-      } else if (r.kind === "rejected") await updateLocal(place.id, { send: "rejected", sendError: r.code, submitKey: undefined })
+      } else if (r.kind === "rejected")
+        await updateLocal(place.id, { send: "rejected", sendError: r.code, submitKey: undefined, submission: undefined })
       else
         await updateLocal(place.id, {
           send: "waiting",
@@ -303,7 +304,7 @@ export function AddPlace() {
       message =
         !r.ok && r.code === "queue_full"
           ? QUEUE_FULL
-          : !r.ok && r.code?.startsWith("turnstile_") && stored
+          : !r.ok && (r.code === "turnstile_failed" || r.code === "turnstile_required") && stored
             ? CHECK_FAILED
             : SAVE_MESSAGE[r.ok ? "sent" : r.kind][stored ? "stored" : "unstored"]
     } catch {

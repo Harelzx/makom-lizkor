@@ -38,13 +38,19 @@ function visitor(address: string): string {
   if (!address.includes(":")) return address
   const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(address)
   if (mapped) return mapped[1]
-  const [head, tail] = address.split("::")
+  // A zone (fe80::1%eth0) names an interface on this side, not the visitor.
+  const bare = address.split("%")[0]
+  const halves = bare.split("::")
   const parts = (s?: string) => (s ? s.split(":") : [])
-  const known = [...parts(head), ...parts(tail)]
-  const groups = tail === undefined ? known : [...parts(head), ...Array(8 - known.length).fill("0"), ...parts(tail)]
+  const known = [...parts(halves[0]), ...parts(halves[1])]
+  // Anything that isn't a well-formed IPv6 address is counted as written: never an error, never merged with others.
+  const wellFormed =
+    halves.length <= 2 && known.every((g) => /^[0-9a-f]{1,4}$/i.test(g)) && (halves.length === 2 ? known.length <= 7 : known.length === 8)
+  if (!wellFormed) return address
+  const groups = halves.length === 2 ? [...parts(halves[0]), ...Array(8 - known.length).fill("0"), ...parts(halves[1])] : known
   return `${groups
     .slice(0, 4)
-    .map((g) => parseInt(g || "0", 16).toString(16))
+    .map((g) => parseInt(g, 16).toString(16))
     .join(":")}::/64`
 }
 

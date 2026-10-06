@@ -49,3 +49,9 @@ it("changes nothing when the status couldn't be read, or the place is still ther
   await settleOwnCopy("p_1", "mailed", null)
   expect(copy()).toMatchObject({ send: "sent", trackingToken: "own" })
 })
+
+it("a copy without its own link isn't changed by another link's 404, which proves nothing about it", async () => {
+  useStore.setState({ local: [{ ...own(), local: { send: "sent", remoteId: "p_1" } } as Place] })
+  await settleOwnCopy("p_1", "mailed", null)
+  expect(copy()).toEqual({ send: "sent", remoteId: "p_1" })
+})

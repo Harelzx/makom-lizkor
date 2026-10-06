@@ -212,23 +212,27 @@ export async function verifyEmail(
   }
 }
 
-const MAIL_TRIES = 5
+export const MAIL_TRIES = 5
+/** The least time between two tries of the tracking mail. */
+const MAIL_GAP_MS = 2 * 60_000
 
 /**
- * Records one try of the tracking mail: sent, or one more failure. Counted in the update itself, so clicks at once can't
- * pass the limit together; false when this try isn't allowed any more.
+ * Records one try of the tracking mail, and says which try it is (1 to five), or null when no try is allowed now: one
+ * went out, all five were used, or the last was less than two minutes ago. Counted and timed in the update itself, so
+ * clicks at once can't pass the limit or send twice.
  */
-export async function claimTrackingMail(db: D1Database, contactId: string): Promise<boolean> {
-  const r = await db
+export async function claimTrackingMail(db: D1Database, contactId: string, now: Date): Promise<number | null> {
+  const row = await db
     .prepare(
-      `UPDATE contacts SET tracking_mail_attempts = tracking_mail_attempts + 1
-       WHERE id = ? AND tracking_mail_sent_at IS NULL AND tracking_mail_attempts < ?`,
+      `UPDATE contacts SET tracking_mail_attempts = tracking_mail_attempts + 1, tracking_mail_tried_at = ?3
+       WHERE id = ?1 AND tracking_mail_sent_at IS NULL AND tracking_mail_attempts < ?2
+         AND (tracking_mail_tried_at IS NULL OR tracking_mail_tried_at <= ?4)
+       RETURNING tracking_mail_attempts AS n`,
     )
-    .bind(contactId, MAIL_TRIES)
-    .run()
-  return r.meta.changes === 1
+    .bind(contactId, MAIL_TRIES, now.toISOString(), new Date(now.getTime() - MAIL_GAP_MS).toISOString())
+    .first<{ n: number }>()
+  return row?.n ?? null
 }
-
 export async function trackingMailSent(db: D1Database, contactId: string, now: Date) {
   await db.prepare("UPDATE contacts SET tracking_mail_sent_at = ? WHERE id = ?").bind(now.toISOString(), contactId).run()
 }
@@ -294,8 +298,7 @@ export async function submissionStatus(db: D1Database, id: string, token: string
  * The sender takes the place back, from any state: its content, its photo and the sender's name go at once, and a
  * tombstone with the status stays (spec 3.3). The same compare-and-set as a moderator's decision; a published place
  * also leaves the feed. Sending it again is harmless.
- */
-/**
+ *
  * done: withdrawn now or before · missing: no place for this link · busy: the place kept changing under three tries in a
  * row, so the holder of a valid link is told to try again rather than that the link is wrong.
  */

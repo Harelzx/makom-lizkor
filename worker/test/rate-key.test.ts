@@ -68,3 +68,12 @@ it("counts an IPv6 visitor by their /64, which one connection usually holds whol
   expect(await rateKey(s, "2001:db8::1")).not.toBe(await rateKey(s, "2001:db8:0:1::1"))
   expect(await rateKey(s, "203.0.113.7")).not.toBe(await rateKey(s, "203.0.113.8"))
 })
+
+it("reads a mapped IPv4 address as IPv4, and never fails on an address it can't parse", async () => {
+  const { rateKey } = await import("../lib/ids")
+  expect(await rateKey("s", "::ffff:203.0.113.7")).toBe(await rateKey("s", "203.0.113.7"))
+  for (const odd of ["1:2:3:4:5:6:7:8::9", "1::2::3", "zz::1", "1:2:3:4:5:6:7:8:9", "fe80::1%eth0", ""])
+    expect(await rateKey("s", odd)).toMatch(/^[0-9a-f]{64}$/)
+  // Distinct unparseable strings stay distinct visitors rather than collapsing into one.
+  expect(await rateKey("s", "1::2::3")).not.toBe(await rateKey("s", "1::2::4"))
+})

@@ -27,13 +27,14 @@ export async function retryWaiting(): Promise<void> {
       // The list was read before the first send; a place removed since (here, or in another tab) isn't sent.
       if (!(await useStore.getState().stillLocal(p.id))) continue
       const r = await submitPlace(l.submission, l.submitKey)
-      // Answered: the key is dropped with the body, so the device can't ask the server for the tracking link again.
+      // Answered: the key is dropped with the body, so the device can't ask the server for the tracking link again (and a
+      // refused body, which nothing can send again, takes its email and name with it).
       if (r.ok)
         await useStore
           .getState()
           .updateLocal(p.id, { send: "sent", remoteId: r.id, trackingToken: r.trackingToken, submission: undefined, submitKey: undefined })
       else if (r.kind === "rejected")
-        await useStore.getState().updateLocal(p.id, { send: "rejected", sendError: r.code, submitKey: undefined })
+        await useStore.getState().updateLocal(p.id, { send: "rejected", sendError: r.code, submitKey: undefined, submission: undefined })
       else {
         // Still unreachable, or asked to wait: the next wake tries again, not before the server's time.
         if (r.retryAfter) await useStore.getState().updateLocal(p.id, { nextTryAt: Date.now() + r.retryAfter * 1000, sendError: r.code })
