@@ -1,10 +1,16 @@
 import { expect, test, type Browser, type BrowserContextOptions, type Page } from "@playwright/test"
+import { from, ownAddress } from "./publish"
+
+// The opening isn't what this file tests, and its sunrise took about 8 s on every page that went through it. A visitor
+// who asked for less motion gets the day at once, with every flow the same; the opening keeps its own full-motion
+// specs (three-years, sound, montage, panel).
+test.use({ reducedMotion: "reduce" })
 
 const DAY = { timeout: 20_000 }
 const GEO: BrowserContextOptions = { geolocation: { latitude: 31.42, longitude: 34.49 }, permissions: ["geolocation"] }
 
 async function submit(b: Browser, name: string): Promise<Page> {
-  const page = await (await b.newContext(GEO)).newPage()
+  const page = await (await ownAddress(await b.newContext(GEO))).newPage()
   await page.goto("/")
   await page.getByRole("button", { name: "דילוג", exact: true }).click()
   await expect(page.getByRole("button", { name: /^חיפוש מקום/ })).toBeVisible(DAY)
@@ -130,7 +136,7 @@ test("a correction whose answer was lost is found saved, not reported as unsent"
 
   // The server saves the correction; its answer never reaches the browser.
   await page.route("**/api/v1/submissions/*/revisions", async (route) => {
-    await route.fetch()
+    await route.fetch({ headers: from(page.context(), route.request().headers()) })
     await route.abort("failed")
   })
   await page.getByRole("button", { name: "מעקב אחרי ההצעה" }).click()
@@ -148,7 +154,7 @@ test("a withdrawal whose answer was lost is found done, not reported as unchange
   const name = `ספסל דמו משיכה שאבדה ${Date.now()}`
   const page = await submit(browser, name)
   await page.route("**/api/v1/submissions/*/withdraw", async (route) => {
-    await route.fetch()
+    await route.fetch({ headers: from(page.context(), route.request().headers()) })
     await route.abort("failed")
   })
   await page.getByRole("button", { name: "מעקב אחרי ההצעה" }).click()
@@ -185,7 +191,7 @@ test("a correction saved before the server failed is found saved", async ({ brow
   test.setTimeout(120_000)
   const { page, view } = await returnedAndFixing(browser, `ספסל דמו תיקון ושגיאה ${Date.now()}`)
   await page.route("**/api/v1/submissions/*/revisions", async (route) => {
-    await route.fetch()
+    await route.fetch({ headers: from(page.context(), route.request().headers()) })
     await route.fulfill({ status: 500, contentType: "application/problem+json", body: JSON.stringify({ status: 500, code: "internal" }) })
   })
   await view.getByRole("button", { name: "שליחה מחדש לבדיקה" }).click()
@@ -200,7 +206,7 @@ test("when another window's different correction got in first, this one stays in
     const sent = route.request().postDataJSON() as Record<string, unknown>
     // Another window sends its own correction first; this one's answer is lost.
     await page.request.post(route.request().url(), {
-      headers: { ...route.request().headers() },
+      headers: from(page.context(), route.request().headers()),
       data: { ...sent, place_he: "כפר עזה" },
     })
     await route.abort("failed")
@@ -215,7 +221,7 @@ test("a correction approved before its lost answer was checked is found saved", 
   const name = `ספסל דמו תיקון שאושר ${Date.now()}`
   const { page, view, modCtx } = await returnedAndFixing(browser, name)
   await page.route("**/api/v1/submissions/*/revisions", async (route) => {
-    await route.fetch()
+    await route.fetch({ headers: from(page.context(), route.request().headers()) })
     // A moderator approves it before the sender's browser looks again.
     const { items } = (await (await modCtx.request.get("/api/admin/queue")).json()) as {
       items: { id: string; rev: number; revisionId: string; name_he: string }[]
@@ -237,7 +243,7 @@ test("a correction with doubled spaces, saved but unanswered, is still recognise
   const { page, view } = await returnedAndFixing(browser, `ספסל דמו רווחים ${Date.now()}`)
   await view.getByLabel("כמה מילים על המקום (לא חובה)").fill("שורה  עם רווח כפול\n\n\n\nושורה אחרי שורות ריקות")
   await page.route("**/api/v1/submissions/*/revisions", async (route) => {
-    await route.fetch()
+    await route.fetch({ headers: from(page.context(), route.request().headers()) })
     await route.abort("failed")
   })
   await view.getByRole("button", { name: "שליחה מחדש לבדיקה" }).click()
@@ -251,9 +257,12 @@ test("when another window's different correction got in first and this one is re
   const { page, view } = await returnedAndFixing(browser, `ספסל דמו סירוב בגלל חלון אחר ${Date.now()}`)
   await page.route("**/api/v1/submissions/*/revisions", async (route) => {
     const sent = route.request().postDataJSON() as Record<string, unknown>
-    await page.request.post(route.request().url(), { headers: { ...route.request().headers() }, data: { ...sent, place_he: "כפר עזה" } })
+    await page.request.post(route.request().url(), {
+      headers: from(page.context(), route.request().headers()),
+      data: { ...sent, place_he: "כפר עזה" },
+    })
     // This window's own request now meets the other's correction: a real 409.
-    await route.continue()
+    await route.continue({ headers: from(page.context(), route.request().headers()) })
   })
   await view.getByRole("button", { name: "שליחה מחדש לבדיקה" }).click()
   await expect(page.getByText("ההצעה השתנתה בינתיים", { exact: false }).first()).toBeVisible()
@@ -266,12 +275,12 @@ test("a withdrawal whose photo erasure is still pending can be finished after a 
   const page = await submit(browser, name)
   // The server withdraws it but can't erase its files yet (as R2 failing would leave it).
   await page.route("**/api/v1/submissions/*/withdraw", async (route) => {
-    await route.fetch()
+    await route.fetch({ headers: from(page.context(), route.request().headers()) })
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ status: "withdrawn", files: "pending" }) })
   })
   await page.route(/\/api\/v1\/submissions\/[^/]+$/, async (route) => {
     if (route.request().method() !== "GET") return route.continue()
-    const res = await route.fetch()
+    const res = await route.fetch({ headers: from(page.context(), route.request().headers()) })
     const body = (await res.json()) as Record<string, unknown>
     await route.fulfill({ response: res, json: body.status === "withdrawn" ? { ...body, files: "pending" } : body })
   })
@@ -332,7 +341,7 @@ test("a link that ended with its withdrawal doesn't offer to finish the photo's 
   // Withdrawn with its photo still to erase; from then on this link opens nothing, as a mailed link does once the
   // withdrawal has erased the address it was made for.
   await page.route("**/api/v1/submissions/*/withdraw", async (route) => {
-    await route.fetch()
+    await route.fetch({ headers: from(page.context(), route.request().headers()) })
     withdrawn = true
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ status: "withdrawn", files: "pending" }) })
   })
@@ -372,4 +381,102 @@ test("a failed withdrawal followed by a malformed status confirms nothing and ke
   await expect(page.getByText("לא הצלחנו לוודא שההצעה נמשכה")).toBeVisible()
   await expect(view.getByText("נמשכה.", { exact: false })).toHaveCount(0)
   expect(await storedToken(page, name)).toBeTruthy()
+})
+
+test("after a correction expires (returned, then refused), the sender corrects again from what is published", async ({ browser }) => {
+  test.setTimeout(120_000)
+  const name = `גן דמו תיקון שפג ${Date.now()}`
+  const api = await browser.newContext()
+  const turnstile = { "Turnstile-Token": "XXXX.DUMMY.TOKEN.XXXX", "CF-Connecting-IP": `203.0.113.${(Date.now() % 50) + 200}` }
+  const res = await api.request.post("/api/v1/submissions", {
+    headers: { "Idempotency-Key": crypto.randomUUID().replaceAll("-", ""), ...turnstile },
+    data: {
+      kind: "garden",
+      name_he: name,
+      lat: 31.4234,
+      lng: 34.4987,
+      place_he: "בארי",
+      story_he: "סיפור דמו שמוסתר",
+      on_private_property: true,
+      location_permission: true,
+      access_note_he: "תיאום ביקור דמו",
+      consent_version: "notice.submission@2026-10-13",
+    },
+  })
+  expect(res.status()).toBe(201)
+  const { id, trackingToken } = (await res.json()) as { id: string; trackingToken: string }
+  const mod = await browser.newContext()
+  await mod.request.post("/__dev/login", { data: { email: "dev@example.test" } })
+  const same = { "Sec-Fetch-Site": "same-origin" }
+  const decide = async (action: string, note?: string) => {
+    const { items } = (await (await mod.request.get("/api/admin/queue")).json()) as {
+      items: { id: string; rev: number; revisionId: string }[]
+    }
+    const item = items.find((i) => i.id === id)!
+    const r = await mod.request.post(`/api/admin/places/${id}/transitions`, {
+      headers: same,
+      data: { action, revisionId: item.revisionId, expectedRev: item.rev, ...(note ? { note } : {}) },
+    })
+    expect(r.status()).toBe(200)
+  }
+  await decide("approve")
+  const view = (await (await mod.request.get(`/api/admin/places/${id}`)).json()) as { rev: number }
+  expect(
+    (
+      await mod.request.post("/api/admin/suppressions", {
+        headers: same,
+        data: { placeId: id, fields: ["story_he"], expectedRev: view.rev, reason: "הסתרת דמו" },
+      })
+    ).status(),
+  ).toBe(200)
+  const feedPlace = async () => {
+    const { v } = (await (await api.request.get("/api/v1/version")).json()) as { v: string }
+    const { places } = (await (await api.request.get(`/api/v1/feed?v=${v}`)).json()) as { places: Record<string, unknown>[] }
+    return places.find((p) => p.id === id)!
+  }
+  const before = await feedPlace()
+  const cron = async (days: number) =>
+    expect(
+      (
+        await api.request.post("/__dev/cron", { headers: { "X-Test-Now": new Date(Date.now() + days * 86_400_000).toISOString() } })
+      ).status(),
+    ).toBe(200)
+
+  // A correction returned, and left past its 30 days.
+  const status = (await (
+    await api.request.get(`/api/v1/submissions/${id}`, { headers: { Authorization: `Bearer ${trackingToken}` } })
+  ).json()) as { rev: number }
+  const sent = await api.request.post(`/api/v1/submissions/${id}/revisions`, {
+    headers: { Authorization: `Bearer ${trackingToken}`, ...turnstile },
+    data: { consent_version: "notice.submission@2026-10-13", expectedRev: status.rev, name_he: "תיקון דמו שהוחזר ופג", place_he: "בארי" },
+  })
+  expect(sent.status()).toBe(200)
+  await decide("return", "הערת דמו לתיקון")
+  await cron(31)
+
+  // The tracking page offers a correction again, from the published text.
+  const page = await (await ownAddress(await browser.newContext())).newPage()
+  const correct = async (newName: string) => {
+    await page.goto(`/#/track/${id}/${trackingToken}`)
+    const dialog = page.getByRole("dialog", { name: "מצב ההצעה" })
+    await expect(dialog.getByText(name)).toBeVisible({ timeout: 20_000 })
+    await dialog.getByRole("button", { name: "תיקון ההצעה" }).click()
+    await expect(dialog.getByLabel("שם המקום")).toHaveValue(name)
+    await dialog.getByLabel("שם המקום").fill(newName)
+    await dialog.getByRole("checkbox").check()
+    await dialog.getByRole("button", { name: "שליחה מחדש לבדיקה" }).click()
+    await expect(dialog.getByText("התיקון ששלחתם ממתין לבדיקה")).toBeVisible()
+  }
+  await correct("תיקון דמו שנדחה ופג")
+  // Refused, and past its 30 days too.
+  await decide("reject")
+  await cron(62)
+  await correct(`${name} מתוקן`)
+  await decide("approve")
+
+  // Published with the new name; the point, its permission and access note, and the hide all as they were.
+  const after = await feedPlace()
+  expect(after).toMatchObject({ name_he: `${name} מתוקן`, lat: before.lat, lng: before.lng, precision: before.precision, summary_he: "" })
+  expect(after.access_note).toBe("תיאום ביקור דמו")
+  expect(before.access_note).toBe("תיאום ביקור דמו")
 })

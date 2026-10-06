@@ -1,4 +1,5 @@
 import { KINDS } from "@/data/taxonomy"
+import { RETENTION } from "@/config"
 import type { Kind } from "@/types"
 import type { Feed, PublicPlace, RevisionInput, SubmissionInput } from "@/shared/contract"
 import { newToken, placeId, sameHash, sha256Hex, ulid } from "../lib/ids"
@@ -264,35 +265,40 @@ export async function submissionStatus(db: D1Database, id: string, token: string
         "SELECT name_he, place_he, in_memory_of, story_he, link_url, state, decision_note FROM revisions WHERE place_id = ? ORDER BY n DESC LIMIT 1",
       )
       .bind(id),
-    db.prepare("SELECT r.name_he FROM places p JOIN revisions r ON r.id = p.published_revision_id WHERE p.id = ?").bind(id),
+    db
+      .prepare(
+        `SELECT r.name_he, r.place_he, r.in_memory_of, r.story_he, r.link_url FROM places p JOIN revisions r ON r.id = p.published_revision_id
+         WHERE p.id = ?`,
+      )
+      .bind(id),
   ])
-  const last = latest.results[0] as
-    | {
-        name_he: string | null
-        place_he: string | null
-        in_memory_of: string | null
-        story_he: string | null
-        link_url: string | null
-        state: string
-        decision_note: string | null
-      }
-    | undefined
-  const live = (published.results[0] as { name_he: string } | undefined)?.name_he
+  type Draft = {
+    name_he: string | null
+    place_he: string | null
+    in_memory_of: string | null
+    story_he: string | null
+    link_url: string | null
+  }
+  const last = latest.results[0] as (Draft & { state: string; decision_note: string | null }) | undefined
+  const shown = published.results[0] as Draft | undefined
+  const live = shown?.name_he
+  // What a correction starts from: the newest text the sender wrote, or, once that closed correction was emptied
+  // after its days, what the place publishes. Never the erased text.
+  const draft = last?.name_he ? last : shown
   return {
     status: row.status,
     rev: row.rev,
-    name_he: (row.status === "published" ? live : last?.name_he) ?? null,
+    name_he: (row.status === "published" ? live : (last?.name_he ?? live)) ?? null,
     revision_state: last?.state,
     ...(last?.state === "returned" && last.decision_note ? { note: last.decision_note } : {}),
-    // What a correction starts from: the newest text the sender wrote.
-    ...(last?.name_he
+    ...(draft?.name_he
       ? {
           draft: {
-            name_he: last.name_he,
-            place_he: last.place_he,
-            in_memory_of: last.in_memory_of,
-            story_he: last.story_he,
-            link_url: last.link_url,
+            name_he: draft.name_he,
+            place_he: draft.place_he,
+            in_memory_of: draft.in_memory_of,
+            story_he: draft.story_he,
+            link_url: draft.link_url,
           },
         }
       : {}),
@@ -439,6 +445,11 @@ export function transitionStatements(
          WHERE id = ?5 AND ${happened}`,
       )
       .bind(t.placeId, tid, state, at, t.revisionId, t.note ?? null, t.action === "approve" ? 1 : 0, t.photoKey ?? null),
+    // An approval or a refusal closes the case: the sender's contact details go RETENTION.contactAfterCloseDays later,
+    // or sooner if their ceiling comes first. A date once set is never pushed back.
+    db
+      .prepare(`UPDATE contacts SET purge_after = MIN(purge_after, ?3) WHERE place_id = ?1 AND ?4 IN ('approve', 'reject') AND ${happened}`)
+      .bind(t.placeId, tid, new Date(now.getTime() + RETENTION.contactAfterCloseDays * 86_400_000).toISOString(), t.action),
     db
       .prepare(`UPDATE feed_state SET n = n + 1, changed_at = ?3 WHERE id = 1 AND ?4 = 'approve' AND ${happened}`)
       .bind(t.placeId, tid, at, t.action),
@@ -450,7 +461,8 @@ export function transitionStatements(
 
 /**
  * The sender's correction: a new revision, from a place returned to them or one already published. Moderators never
- * edit what a contributor wrote, so this is the only way text changes. The kind and the point stay as they were.
+ * edit what a contributor wrote, so this is the only way text changes. The kind and the point stay as they were,
+ * taken from the newest revision that still has them (a closed correction past its days is an empty row).
  * The compare-and-set on `expectedRev` turns a retry or a stale view into a conflict, never a second revision.
  */
 export async function revise(
@@ -494,9 +506,9 @@ export async function revise(
         `INSERT INTO revisions (id, place_id, n, state, kind, name_he, lat, lng, location_precision, on_private_property,
            location_permission_at, access_note_he, place_he, in_memory_of, story_he, link_url, consent_version, created_at,
            photo_key, photo_alt, photo_credit)
-         SELECT ?3, ?1, last.n + 1, 'pending', last.kind, ?4, last.lat, last.lng, last.location_precision, last.on_private_property,
+         SELECT ?3, ?1, (SELECT MAX(n) FROM revisions WHERE place_id = ?1) + 1, 'pending', last.kind, ?4, last.lat, last.lng, last.location_precision, last.on_private_property,
            last.location_permission_at, last.access_note_he, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13
-         FROM (SELECT * FROM revisions WHERE place_id = ?1 ORDER BY n DESC LIMIT 1) AS last
+         FROM (SELECT * FROM revisions WHERE place_id = ?1 AND kind IS NOT NULL ORDER BY n DESC LIMIT 1) AS last
          WHERE ${happened}`,
       )
       .bind(
@@ -616,6 +628,8 @@ export async function pendingCount(db: D1Database) {
 }
 
 const MAX_PHOTO = 4 * 1024 * 1024
+// A withdrawn or erased place is a tombstone: nothing is written into it again, whatever link still reaches it.
+const LIVE_PLACE = "EXISTS (SELECT 1 FROM places WHERE id = ?1 AND status NOT IN ('withdrawn', 'erased'))"
 
 /**
  * The sender's photo for their newest revision that is still open (pending, or returned for a change). It waits in
@@ -635,7 +649,10 @@ export async function attachPhoto(
   const clean = stripJpeg(bytes)
   if (!clean) return "not_jpeg"
   const rev = await db
-    .prepare("SELECT id, photo_key FROM revisions WHERE place_id = ? AND state IN ('pending', 'returned') ORDER BY n DESC LIMIT 1")
+    .prepare(
+      `SELECT id, photo_key FROM revisions WHERE place_id = ?1 AND state IN ('pending', 'returned') AND ${LIVE_PLACE}
+       ORDER BY n DESC LIMIT 1`,
+    )
     .bind(id)
     .first<{ id: string; photo_key: string | null }>()
   if (!rev) return "closed"
@@ -643,11 +660,15 @@ export async function attachPhoto(
   await media.put(key, clean, { httpMetadata: { contentType: "image/jpeg" } })
   // The rev moves with the photo: a moderator's decision made on what they saw before conflicts instead of approving
   // a picture nobody looked at.
-  // Only while the revision is still open: a withdrawal or a decision that came while the file was being written wins.
+  // Only while the revision is still open and its place not ended: a withdrawal, an erasure or a decision that came
+  // while the file was being written wins.
   const [attached] = await db.batch([
     db
-      .prepare("UPDATE revisions SET photo_key = ?, photo_alt = ?, photo_credit = ? WHERE id = ? AND state IN ('pending', 'returned')")
-      .bind(key, alt, credit ?? null, rev.id),
+      .prepare(
+        `UPDATE revisions SET photo_key = ?2, photo_alt = ?3, photo_credit = ?4
+         WHERE id = ?5 AND place_id = ?1 AND state IN ('pending', 'returned') AND ${LIVE_PLACE}`,
+      )
+      .bind(id, key, alt, credit ?? null, rev.id),
     db
       .prepare("UPDATE places SET rev = rev + 1 WHERE id = ? AND EXISTS (SELECT 1 FROM revisions WHERE id = ? AND photo_key = ?)")
       .bind(id, rev.id, key),

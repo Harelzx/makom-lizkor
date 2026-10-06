@@ -1,10 +1,16 @@
 import { expect, test, type Browser, type BrowserContextOptions, type Page } from "@playwright/test"
+import { from, ownAddress } from "./publish"
+
+// The opening isn't what this file tests, and its sunrise took about 8 s on every page that went through it. A visitor
+// who asked for less motion gets the day at once, with every flow the same; the opening keeps its own full-motion
+// specs (three-years, sound, montage, panel).
+test.use({ reducedMotion: "reduce" })
 
 const DAY = { timeout: 20_000 }
 const GEO: BrowserContextOptions = { geolocation: { latitude: 31.42, longitude: 34.49 }, permissions: ["geolocation"] }
 
 async function day(b: Browser, init?: string) {
-  const page = await (await b.newContext(GEO)).newPage()
+  const page = await (await ownAddress(await b.newContext(GEO))).newPage()
   if (init) await page.addInitScript(init)
   await page.goto("/")
   await page.getByRole("button", { name: "דילוג", exact: true }).click()
@@ -43,9 +49,9 @@ test("an answer lost after the server saved is retried as the same place, once",
   let first = true
   await page.route("**/api/v1/submissions", async (route) => {
     keys.push(route.request().headers()["idempotency-key"])
-    if (!first) return route.continue()
+    if (!first) return route.continue({ headers: from(page.context(), route.request().headers()) })
     first = false
-    await route.fetch() // the server saves it…
+    await route.fetch({ headers: from(page.context(), route.request().headers()) }) // the server saves it…
     await route.abort("failed") // …and the answer never arrives
   })
   await fillAndSave(page, name)
@@ -89,7 +95,7 @@ test("when the browser can't store anything, the site opens and the place is sti
 
 test("a place whose sending was cut off by closing the tab is sent on the next visit", async ({ browser }) => {
   const name = `ספסל דמו נסגר ${Date.now()}`
-  const ctx = await browser.newContext(GEO)
+  const ctx = await ownAddress(await browser.newContext(GEO))
   const page = await ctx.newPage()
   await page.route("**/api/v1/submissions", () => new Promise(() => {})) // never answers
   await page.goto("/")
@@ -165,16 +171,16 @@ test("two tabs adding places at once keep each other's places, keys and tracking
   test.setTimeout(90_000)
   const stamp = Date.now()
   const [x, y] = [`ספסל דמו לשונית א ${stamp}`, `ספסל דמו לשונית ב ${stamp}`]
-  const ctx = await browser.newContext(GEO)
+  const ctx = await ownAddress(await browser.newContext(GEO))
   // Both tabs open before either adds anything, so neither has the other's place in memory.
   const tabs = await Promise.all([ctx.newPage(), ctx.newPage()])
   for (const tab of tabs) {
     // The first answer is lost after the server saved it, in both tabs.
     let lost = false
     await tab.route("**/api/v1/submissions", async (route) => {
-      if (lost) return route.continue()
+      if (lost) return route.continue({ headers: from(tab.context(), route.request().headers()) })
       lost = true
-      await route.fetch()
+      await route.fetch({ headers: from(tab.context(), route.request().headers()) })
       await route.abort("failed")
     })
     await tab.goto("/")

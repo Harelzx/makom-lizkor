@@ -11,3 +11,5 @@ TURNSTILE_HOSTNAMES=example.com
 TRACKING_SECRET=development-tracking-secret-not-a-secret
 # Keys the daily hash of an anemone's device id (HMAC); a real secret in production, set with wrangler secret.
 TRIBUTE_SECRET=development-tribute-secret-not-a-secret
+# A synthetic key pair's public half: the dev server's exports are encrypted to it. Its private half is in no file.
+EXPORT_PUBLIC_KEYS=[{"alg":"RSA-OAEP-256","kty":"RSA","n":"wfcEJWzpHraut9eGSD3mXeX5lzTaZrcPU1xFCn_S7v_D0Mj_wnY8Zg0k2c3di4SFFqD4cpeLwB-6PRulG5vrlN1LK10M0whdQkM-VSS1IgNhZorKpOZM3VyiJrnHv5gxmaE5w6mG0RtpgZTGuMdUV37-M-Qaq9CvgwJCazwQggRw2XCwKMkaPAwYBYVqNWIaWrrE6yvUVog1wWLYJUcd51Gw1ApBDjOv2K68KCJLmqScgHGU2GwOrghGL8-wOx29IR8KbigYNjfKL5F-Dzq-s0QrDm0xJ3kEQLM1WaA2UKnlghC27y-H4Uwi4wC37BuMffyzvsCiDrG05_Dcu5uNT1-hmk93O57Yhn-SGUVxkjjrz82c5-SHFdx8gKX5QSLVIsNWX0PzftfN3BFT_-wdgYn592r6Cy0Y8YQUzQ3U4wxGb49MTBD1Xclo46xwhXZgnX5mz2w8FLOiCzxjA0FV5bh5oX0pN-ZMwPV_zMFGJafSrDz3uhfCxjpNaLwXoDFD","e":"AQAB"}]

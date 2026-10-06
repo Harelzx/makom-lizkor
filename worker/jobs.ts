@@ -1,5 +1,9 @@
 import { RETENTION } from "@/config"
+import { runDrill } from "./db/drill"
+import { alertDeletion, checkDeletion, pruneExports, runExport } from "./db/exports"
 import { resumeOps, type OpEnv } from "./db/ops"
+import { sweepPhotos } from "./db/photos"
+import { alertStalledRetention, remindOverdueReview, runRetention } from "./db/retention"
 import { deliverAlerts, precaution, startAlertRound, type Precaution } from "./db/reports"
 import type { SendMail } from "./lib/mail"
 import { REPORT_GUARDS } from "./lib/guards"
@@ -11,6 +15,11 @@ const BACKSTOP_CLAIM_MS = 10 * 60_000
 
 /**
  * The scheduled pass (every 15 minutes in production; /__dev/cron locally), each part safe to run twice at once:
+ * - the retention job (db/retention.ts): abandoned submissions erased, and what reached its purge date emptied;
+ * - the photo sweep (db/photos.ts): files nothing live names, once no writer can still be in flight;
+ * - the nightly export (db/exports.ts), once a day and only after a deletion run of the same pass finished; exports and
+ *   the photo copies only they list deleted at 35 days; the weekly restore drill (db/drill.ts); the deletion check,
+ *   told to the moderators once a day;
  * - operations left unfinished are finished, or refused as interrupted (resumeOps);
  * - the 24-hour backstop (spec 6) looks once at each complete request the automatic path held back, with every
  *   safeguard checked again at the moment it runs, and then leaves the request to people; a look that couldn't
@@ -35,7 +44,48 @@ export async function runJobs(env: Env, deps: { sendMail: SendMail; purge: Purge
     }
   }
 
+  // First, before anything else (spec 7: erasure runs before the export, and nothing later may depend on what it erases).
+  let retention: Awaited<ReturnType<typeof runRetention>> | undefined
+  await part("retention", async () => (retention = await runRetention(opEnv, now)))
+  await part("retention_alert", () => alertStalledRetention(env.DB, env, deps.sendMail, now))
+  await part("review_reminder", () => remindOverdueReview(env.DB, env, deps.sendMail, now))
+
   await part("resume_ops", () => resumeOps(opEnv, now))
+
+  // After the operations are resumed, so a finished one no longer holds its place's files.
+  await part("photo_sweep", () => sweepPhotos(env.DB, env.MEDIA, now))
+
+  // Only after this pass's deletion run finished: what it was due to delete never goes into a 35-day backup.
+  await part("export", async () => {
+    if (retention?.ok)
+      await runExport({ db: env.DB, media: env.MEDIA, exports: env.EXPORTS, keys: env.EXPORT_PUBLIC_KEYS }, retention.id, now)
+  })
+  await part("export_prune", () => pruneExports({ db: env.DB, exports: env.EXPORTS }, now))
+  // Only where a drill database and its key are configured (production; never the development server).
+  const drill = env as Env & { DRILL_DB?: D1Database; DRILL_PRIVATE_KEY?: string }
+  await part("drill", () =>
+    runDrill(
+      {
+        db: env.DB,
+        exports: env.EXPORTS,
+        ledger: env.LEDGER,
+        drillDb: drill.DRILL_DB,
+        drillKey: drill.DRILL_PRIVATE_KEY,
+        env,
+        sendMail: deps.sendMail,
+      },
+      now,
+    ),
+  )
+  await part("deletion_check", async () =>
+    alertDeletion(
+      env.DB,
+      env,
+      deps.sendMail,
+      await checkDeletion({ db: env.DB, exports: env.EXPORTS, keys: env.EXPORT_PUBLIC_KEYS }, now),
+      now,
+    ),
+  )
 
   await part("backstop", async () => {
     const stale = new Date(now.getTime() - BACKSTOP_CLAIM_MS).toISOString()

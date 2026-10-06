@@ -9,6 +9,13 @@ export function ulid(ms = Date.now()): string {
   return t + r
 }
 export const placeId = (ms?: number) => `p_${ulid(ms)}`
+/** When a ULID was made, from its first 10 characters; NaN for anything that isn't one. */
+export function ulidTime(id: string): number {
+  if (!/^[0-9A-HJKMNP-TV-Z]{10}/.test(id)) return NaN
+  let ms = 0
+  for (const c of id.slice(0, 10)) ms = ms * 32 + B32.indexOf(c)
+  return ms
+}
 
 /** 128 random bits, base64url: the submitter's tracking capability. Only its hash is stored. */
 export function newToken(): string {

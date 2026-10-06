@@ -14,6 +14,10 @@ export type OpDetail = {
   media?: string[]
   basis?: string
   report?: string
+  /** On an approval: the photo key the revision named when it was approved, or null (the ledger's `source`). */
+  source?: string | null
+  /** The revision a decision on a submission or a correction decided: a restore replays it onto that revision. */
+  revision?: string
   /** After the database step: public files to take out of view (their held/ copy stays, so nothing is lost). */
   toHeld?: string[]
   /** After the database step: held photos a restoration serves again. */
@@ -115,7 +119,11 @@ function entry(op: OpRow, phase: LedgerEntry["phase"], at: string, late = false)
     ...(detail.targets?.length ? { targets: detail.targets } : {}),
     ...(media.length ? { media } : {}),
     ...(detail.basis ? { basis: detail.basis } : {}),
+    ...(detail.revision ? { revision: detail.revision } : {}),
+    ...(detail.source !== undefined ? { source: detail.source } : {}),
     at,
+    // The database step ran with the moment the operation was stored (runOp uses one clock for both).
+    decided_at: op.created_at,
     ...(late ? { late: true } : {}),
   }
 }

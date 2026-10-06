@@ -39,6 +39,8 @@ export const fillLegal = (html: string) =>
     .replaceAll("{{ACCESS_DAYS}}", days(ACCESS_RESPONSE_DAYS))
     .replaceAll("{{REPORT_ABUSE_HOURS}}", `${RETENTION.reportAbuseCodeMaxHours} שעות`)
     .replaceAll("{{REPORT_OUTBOX_HOURS}}", `${RETENTION.reportOutboxHours} שעות`)
+    .replaceAll("{{RETURNED_DAYS}}", days(RETENTION.returnedDays))
+    .replaceAll("{{REJECTED_TEXT_DAYS}}", days(RETENTION.rejectedTextDays))
 
 /**
  * The sections in About. They describe the site as it is now: a place a visitor adds is sent for review (its photo
@@ -131,7 +133,7 @@ export const LEGAL_SECTIONS: { id: string; title: string; html: string }[] = [
 <li><strong>איורים:</strong> איורי צבעי המים (הכלנית, הניצן, זר הכלניות ושדה הכלניות בזריחה) נוצרו בבינה מלאכותית, במודלי תמונה של OpenAI, לפי הנחיות שנכתבו לאתר. אף איור באתר אינו מתאר אדם אמיתי או אירוע אמיתי. הכלנית שעל המפה, הסמל והאייקונים צוירו בקוד במיוחד לאתר.</li>
 <li><strong>צלילים:</strong> המוזיקה וצלילי הפתיחה (אוויר הלילה, השעון, הנייר והשחר) נוצרו בבינה מלאכותית ב־${link("https://elevenlabs.io", "elevenlabs.io")}, לפי הנחיות שנכתבו לאתר. אין בהם צליל של האירועים עצמם ולא קול של אדם.</li>
 <li><strong>טקסטים:</strong> התיאורים נכתבו במקור עבור "מקום לזכור". לא הועתקו טקסטים או תמונות מאתרי יזכור, לעד או ויקיפדיה.</li>
-<li><strong>ספריות קוד:</strong> MapLibre GL JS (BSD-3-Clause), React (MIT), shadcn/ui (MIT), Radix UI (MIT), Tailwind CSS (MIT), Motion (MIT), Vaul (MIT), cmdk (MIT), Zustand (MIT), idb-keyval (Apache-2.0), Sonner (MIT), Lucide (ISC). בשרת: Hono (MIT), Zod (MIT), jose (MIT).</li>
+<li><strong>ספריות קוד:</strong> MapLibre GL JS (BSD-3-Clause), React (MIT), shadcn/ui (MIT), Radix UI (MIT), Tailwind CSS (MIT), Motion (MIT), Vaul (MIT), cmdk (MIT), Zustand (MIT), idb-keyval (Apache-2.0), Sonner (MIT), Lucide (ISC). בשרת: Hono (MIT), Zod (MIT), jose (MIT), ו־resvg-wasm (MPL-2.0, בלי שינויים; ${link("https://github.com/yisibl/resvg-js", "קוד המקור")}).</li>
 <li><strong>אין שימוש בסמלים רשמיים:</strong> באתר אין סמל מדינה, סמל צה"ל, סמל יזכור או כל סמל רשמי אחר.</li>
 </ul>`,
   },
@@ -267,6 +269,28 @@ const SUBMISSION_PHOTO_LATER = amend("2026-10-11", SUBMISSION_EXACT, [
   ],
 ])
 
+// Version 12 with the retention job built (phase 5): a refused submission goes too, and a published place's refused or
+// returned correction goes alone, the place staying as it was published.
+const SUBMISSION_ABANDONED = amend("2026-10-12", SUBMISSION_PHOTO_LATER, [
+  [
+    "הצעה שהוחזרה ולא תוקנה תוך 30 יום נמחקת.",
+    "הצעה שהוחזרה אליכם ולא תוקנה תוך {{RETURNED_DAYS}} נמחקת, וגם הצעה שנדחתה נמחקת {{REJECTED_TEXT_DAYS}} אחרי ההחלטה: נשארת רק רשומה ריקה, וקישור המעקב יראה שההצעה נמחקה. אם המקום כבר פורסם, והחזרנו או דחינו תיקון שלו, נמחק רק התיקון, והמקום נשאר כפי שפורסם.",
+  ],
+])
+
+// Version 13: the tracking link kept on the sender's device and the one sent by email end differently. The emailed
+// link's capability is deleted with the address, so it stops then, and after an erasure it no longer opens at all.
+const SUBMISSION_EMAIL_LINK = amend("2026-10-13", SUBMISSION_ABANDONED, [
+  [
+    "נשארת רק רשומה ריקה, וקישור המעקב יראה שההצעה נמחקה.",
+    "נשארת רק רשומה ריקה. קישור המעקב שנשמר במכשיר שלכם יראה שההצעה נמחקה, וקישור המעקב שנשלח אליכם במייל כבר לא ייפתח.",
+  ],
+  [
+    "קישור האימות בתוקף 7 ימים.</p>",
+    "קישור האימות בתוקף 7 ימים. קישור המעקב שנשלח במייל פועל כל עוד המייל שלכם שמור אצלנו, ומפסיק לעבוד כשהוא נמחק (ראו «כמה זמן»). הקישור שנשמר במכשיר שלכם ממשיך לעבוד, ובכל מקרה אפשר לכתוב לנו.</p>",
+  ],
+])
+
 // The removal and correction request, as the form first described it.
 const REPORT_V1 = `
 ${WHO}
@@ -344,6 +368,9 @@ ${RIGHTS}
 
   // Version 10 with a photo file that may be deleted later than the rest.
   "notice.submission@2026-10-11": `${SUBMISSION_PHOTO_LATER}${SUBMISSION_TERMS_PHOTO}`,
+
+  "notice.submission@2026-10-12": `${SUBMISSION_ABANDONED}${SUBMISSION_TERMS_PHOTO}`,
+  "notice.submission@2026-10-13": `${SUBMISSION_EMAIL_LINK}${SUBMISSION_TERMS_PHOTO}`,
 
   "notice.report@2026-10-1": `${REPORT_V1}`,
 

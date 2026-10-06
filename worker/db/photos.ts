@@ -1,4 +1,5 @@
 import { ulid } from "../lib/ids"
+import { ogState } from "../lib/og"
 
 /**
  * A place's photo files after upload: copied to public/ for an approval, retired when a decision makes them obsolete,
@@ -20,15 +21,15 @@ export async function preparePhoto(
   media: R2Bucket,
   placeId: string,
   revisionId: string,
-): Promise<{ key: string | null; fresh: boolean }> {
+): Promise<{ key: string | null; fresh: boolean; source: string | null }> {
   const rev = await db.prepare("SELECT photo_key FROM revisions WHERE id = ?").bind(revisionId).first<{ photo_key: string | null }>()
-  const key = rev?.photo_key ?? null
-  if (!key || key.startsWith("public/")) return { key, fresh: false }
-  const object = await media.get(key)
-  if (!object) return { key: null, fresh: false }
+  const source = rev?.photo_key ?? null
+  if (!source || source.startsWith("public/")) return { key: source, fresh: false, source }
+  const object = await media.get(source)
+  if (!object) return { key: null, fresh: false, source }
   const published = `public/${placeId}/${revisionId}-${ulid()}.jpg`
   await media.put(published, await object.arrayBuffer(), { httpMetadata: { contentType: "image/jpeg" } })
-  return { key: published, fresh: true }
+  return { key: published, fresh: true, source }
 }
 
 /**
@@ -103,38 +104,73 @@ export async function photosRemain(media: R2Bucket, placeId: string): Promise<bo
 
 /** Every file of a place, in quarantine, public and held alike: a withdrawal erases them all at once. */
 export async function erasePhotos(media: R2Bucket, placeId: string) {
-  for (const prefix of [`quarantine/${placeId}/`, `public/${placeId}/`, `held/${placeId}/`]) {
+  for (const prefix of [`quarantine/${placeId}/`, `public/${placeId}/`, `held/${placeId}/`, `og/${placeId}/`]) {
     await deleteKeys(media, await keysUnder(media, prefix))
   }
 }
 
 /**
- * The files no live revision names any more: what a lost race or a failed cleanup left behind. Kept: every photo an
- * open revision (pending or returned) or a published one points to. A file younger than an hour is left alone, since an
- * approval copies its photo before it records it.
- *
- * Not scheduled yet, and not safe to schedule as it is (Phase 5, L2): it doesn't cover held/, where it must keep the
- * held twin of every key it keeps; and an age alone doesn't show that a writer has finished (an approval's copy made
- * before its key is recorded, an upload, a late move). Phase 5 sets the rule and schedules it.
+ * The files no live revision names any more: what a lost race, a failed cleanup or a late write left behind (L2,
+ * F4-R10). Scheduled in every pass. A file goes only when all of these hold:
+ * - neither it nor its twin (the same photo in public/ or held/, which a hide or a restoration moves between) is named
+ *   by a revision that is open (pending, returned) or published, of a place not withdrawn or erased;
+ * - it was written more than an hour ago: an upload writes its file and names it in the same request;
+ * - for a place that can still have live photos, no operation on it is unfinished: an approval copies its photo before
+ *   the decision names it, and a decision whose file step failed still owes it (the job finishes it, then the sweep may
+ *   look). A move between public/ and held/ only ever writes the twin of a named photo, which is kept anyway, so a photo
+ *   watch (standing while a place has a photo) holds nothing back. A withdrawn or erased place has nothing live:
+ *   whatever lands for it is exactly what must go.
+ * Returns how many files it removed.
  */
 export async function sweepPhotos(db: D1Database, media: R2Bucket, now: Date) {
-  const { results } = await db
-    .prepare(
-      `SELECT r.photo_key FROM revisions r JOIN places p ON p.id = r.place_id
+  const [named, busy, gone] = await db.batch([
+    db.prepare(
+      `SELECT r.photo_key AS k FROM revisions r JOIN places p ON p.id = r.place_id
        WHERE r.photo_key IS NOT NULL AND r.state IN ('pending', 'returned', 'approved') AND p.status NOT IN ('withdrawn', 'erased')`,
-    )
-    .all<{ photo_key: string }>()
-  const named = new Set(results.map((r) => r.photo_key))
+    ),
+    db.prepare("SELECT place_id AS k FROM visibility_ops WHERE state = 'pending' OR media IN ('pending', 'failed')"),
+    db.prepare("SELECT id AS k FROM places WHERE status IN ('withdrawn', 'erased')"),
+  ])
+  const keys = (r: D1Result) => new Set((r.results as { k: string }[]).map((x) => x.k))
+  const live = keys(named)
+  const inFlight = keys(busy)
+  const ended = keys(gone)
+  const twin = (key: string) =>
+    key.startsWith("public/") ? key.replace(/^public\//, "held/") : key.startsWith("held/") ? key.replace(/^held\//, "public/") : key
   const settled = now.getTime() - 3600 * 1000
-  for (const prefix of ["quarantine/", "public/"]) {
+  let removed = 0
+  for (const prefix of ["quarantine/", "public/", "held/"]) {
     let cursor: string | undefined
     do {
       const page = await media.list({ prefix, cursor })
-      await deleteKeys(
-        media,
-        page.objects.filter((o) => !named.has(o.key) && o.uploaded.getTime() < settled).map((o) => o.key),
-      )
+      const stray = page.objects
+        .filter((o) => {
+          const place = o.key.split("/")[1]
+          if (live.has(o.key) || live.has(twin(o.key)) || o.uploaded.getTime() >= settled) return false
+          return ended.has(place) || !inFlight.has(place)
+        })
+        .map((o) => o.key)
+      await deleteKeys(media, stray)
+      removed += stray.length
       cursor = page.truncated ? page.cursor : undefined
     } while (cursor)
   }
+  // Share images (L4): every one that isn't its place's current image, once an hour old (a render under way writes
+  // its file before its last check), a withdrawn or erased place's all of them.
+  const current = new Map<string, string | null>()
+  let cursor: string | undefined
+  do {
+    const page = await media.list({ prefix: "og/", cursor })
+    const stale: string[] = []
+    for (const o of page.objects) {
+      if (o.uploaded.getTime() >= settled) continue
+      const [, place, file] = o.key.split("/")
+      if (!current.has(place)) current.set(place, (await ogState(db, place))?.hash ?? null)
+      if (file !== `${current.get(place)}.png`) stale.push(o.key)
+    }
+    await deleteKeys(media, stale)
+    removed += stale.length
+    cursor = page.truncated ? page.cursor : undefined
+  } while (cursor)
+  return removed
 }

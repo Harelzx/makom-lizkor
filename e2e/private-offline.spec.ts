@@ -1,13 +1,19 @@
 import { expect, test, type APIRequestContext, type Browser } from "@playwright/test"
+import { from, ownAddress } from "./publish"
+
+// The opening isn't what this file tests, and its sunrise took about 8 s on every page that went through it. A visitor
+// who asked for less motion gets the day at once, with every flow the same; the opening keeps its own full-motion
+// specs (three-years, sound, montage, panel).
+test.use({ reducedMotion: "reduce" })
 
 const DAY = { timeout: 20_000 }
 
 /** A published place made through the API: Cloudflare's dummy token passes the development test secret. */
 async function published(browser: Browser, name: string, extra: Record<string, unknown> = {}) {
-  const ctx = await browser.newContext()
+  const ctx = await ownAddress(await browser.newContext())
   const api: APIRequestContext = ctx.request
   const res = await api.post("/api/v1/submissions", {
-    headers: { "Idempotency-Key": crypto.randomUUID().replaceAll("-", ""), "Turnstile-Token": "XXXX.DUMMY.TOKEN.XXXX" },
+    headers: from(ctx, { "Idempotency-Key": crypto.randomUUID().replaceAll("-", ""), "Turnstile-Token": "XXXX.DUMMY.TOKEN.XXXX" }),
     data: { kind: "garden", name_he: name, lat: 31.423456, lng: 34.498765, consent_version: "notice.submission@2026-10-9", ...extra },
   })
   expect(res.status()).toBe(201)
@@ -38,7 +44,7 @@ test("a family's place on private property is shown approximately, with no way t
 test("after one visit, the approved places are there with no connection, from the last snapshot", async ({ browser }) => {
   const name = `ספסל דמו לאופליין ${Date.now()}`
   await published(browser, name)
-  const ctx = await browser.newContext()
+  const ctx = await ownAddress(await browser.newContext())
   const page = await ctx.newPage()
   const fed = page.waitForResponse((r) => r.url().includes("/api/v1/feed?") && r.status() === 200)
   await page.goto("/")
@@ -57,7 +63,7 @@ test("after one visit, the approved places are there with no connection, from th
 })
 
 test("a link to a newly approved place opens it even when this browser holds an older offline copy", async ({ browser }) => {
-  const ctx = await browser.newContext()
+  const ctx = await ownAddress(await browser.newContext())
   const page = await ctx.newPage()
   // A first visit leaves a snapshot that doesn't have the new place yet.
   const fed = page.waitForResponse((r) => r.url().includes("/api/v1/feed?") && r.status() === 200)
@@ -97,9 +103,9 @@ test("the moderator sees that a place is on private property, the owner's permis
 }) => {
   const name = `גינת דמו באישור הבעלים ${Date.now()}`
   const note = "הכניסה דרך השער הצפוני, בתיאום מראש עם המשפחה"
-  const ctx = await browser.newContext()
+  const ctx = await ownAddress(await browser.newContext())
   const res = await ctx.request.post("/api/v1/submissions", {
-    headers: { "Idempotency-Key": crypto.randomUUID().replaceAll("-", ""), "Turnstile-Token": "XXXX.DUMMY.TOKEN.XXXX" },
+    headers: from(ctx, { "Idempotency-Key": crypto.randomUUID().replaceAll("-", ""), "Turnstile-Token": "XXXX.DUMMY.TOKEN.XXXX" }),
     data: {
       kind: "garden",
       name_he: name,
@@ -124,9 +130,9 @@ test("the moderator sees that a place on private property without the owner's pe
   browser,
 }) => {
   const name = `גינת דמו בלי אישור ${Date.now()}`
-  const ctx = await browser.newContext()
+  const ctx = await ownAddress(await browser.newContext())
   const res = await ctx.request.post("/api/v1/submissions", {
-    headers: { "Idempotency-Key": crypto.randomUUID().replaceAll("-", ""), "Turnstile-Token": "XXXX.DUMMY.TOKEN.XXXX" },
+    headers: from(ctx, { "Idempotency-Key": crypto.randomUUID().replaceAll("-", ""), "Turnstile-Token": "XXXX.DUMMY.TOKEN.XXXX" }),
     data: {
       kind: "garden",
       name_he: name,
