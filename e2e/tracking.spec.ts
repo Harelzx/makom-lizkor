@@ -373,3 +373,101 @@ test("a failed withdrawal followed by a malformed status confirms nothing and ke
   await expect(view.getByText("נמשכה.", { exact: false })).toHaveCount(0)
   expect(await storedToken(page, name)).toBeTruthy()
 })
+
+test("after a correction expires (returned, then refused), the sender corrects again from what is published", async ({ browser }) => {
+  test.setTimeout(120_000)
+  const name = `גן דמו תיקון שפג ${Date.now()}`
+  const api = await browser.newContext()
+  const turnstile = { "Turnstile-Token": "XXXX.DUMMY.TOKEN.XXXX", "CF-Connecting-IP": `203.0.113.${(Date.now() % 50) + 200}` }
+  const res = await api.request.post("/api/v1/submissions", {
+    headers: { "Idempotency-Key": crypto.randomUUID().replaceAll("-", ""), ...turnstile },
+    data: {
+      kind: "garden",
+      name_he: name,
+      lat: 31.4234,
+      lng: 34.4987,
+      place_he: "בארי",
+      story_he: "סיפור דמו שמוסתר",
+      on_private_property: true,
+      location_permission: true,
+      access_note_he: "תיאום ביקור דמו",
+      consent_version: "notice.submission@2026-10-13",
+    },
+  })
+  expect(res.status()).toBe(201)
+  const { id, trackingToken } = (await res.json()) as { id: string; trackingToken: string }
+  const mod = await browser.newContext()
+  await mod.request.post("/__dev/login", { data: { email: "dev@example.test" } })
+  const same = { "Sec-Fetch-Site": "same-origin" }
+  const decide = async (action: string, note?: string) => {
+    const { items } = (await (await mod.request.get("/api/admin/queue")).json()) as {
+      items: { id: string; rev: number; revisionId: string }[]
+    }
+    const item = items.find((i) => i.id === id)!
+    const r = await mod.request.post(`/api/admin/places/${id}/transitions`, {
+      headers: same,
+      data: { action, revisionId: item.revisionId, expectedRev: item.rev, ...(note ? { note } : {}) },
+    })
+    expect(r.status()).toBe(200)
+  }
+  await decide("approve")
+  const view = (await (await mod.request.get(`/api/admin/places/${id}`)).json()) as { rev: number }
+  expect(
+    (
+      await mod.request.post("/api/admin/suppressions", {
+        headers: same,
+        data: { placeId: id, fields: ["story_he"], expectedRev: view.rev, reason: "הסתרת דמו" },
+      })
+    ).status(),
+  ).toBe(200)
+  const feedPlace = async () => {
+    const { v } = (await (await api.request.get("/api/v1/version")).json()) as { v: string }
+    const { places } = (await (await api.request.get(`/api/v1/feed?v=${v}`)).json()) as { places: Record<string, unknown>[] }
+    return places.find((p) => p.id === id)!
+  }
+  const before = await feedPlace()
+  const cron = async (days: number) =>
+    expect(
+      (
+        await api.request.post("/__dev/cron", { headers: { "X-Test-Now": new Date(Date.now() + days * 86_400_000).toISOString() } })
+      ).status(),
+    ).toBe(200)
+
+  // A correction returned, and left past its 30 days.
+  const status = (await (
+    await api.request.get(`/api/v1/submissions/${id}`, { headers: { Authorization: `Bearer ${trackingToken}` } })
+  ).json()) as { rev: number }
+  const sent = await api.request.post(`/api/v1/submissions/${id}/revisions`, {
+    headers: { Authorization: `Bearer ${trackingToken}`, ...turnstile },
+    data: { consent_version: "notice.submission@2026-10-13", expectedRev: status.rev, name_he: "תיקון דמו שהוחזר ופג", place_he: "בארי" },
+  })
+  expect(sent.status()).toBe(200)
+  await decide("return", "הערת דמו לתיקון")
+  await cron(31)
+
+  // The tracking page offers a correction again, from the published text.
+  const page = await (await browser.newContext()).newPage()
+  const correct = async (newName: string) => {
+    await page.goto(`/#/track/${id}/${trackingToken}`)
+    const dialog = page.getByRole("dialog", { name: "מצב ההצעה" })
+    await expect(dialog.getByText(name)).toBeVisible({ timeout: 20_000 })
+    await dialog.getByRole("button", { name: "תיקון ההצעה" }).click()
+    await expect(dialog.getByLabel("שם המקום")).toHaveValue(name)
+    await dialog.getByLabel("שם המקום").fill(newName)
+    await dialog.getByRole("checkbox").check()
+    await dialog.getByRole("button", { name: "שליחה מחדש לבדיקה" }).click()
+    await expect(dialog.getByText("התיקון ששלחתם ממתין לבדיקה")).toBeVisible()
+  }
+  await correct("תיקון דמו שנדחה ופג")
+  // Refused, and past its 30 days too.
+  await decide("reject")
+  await cron(62)
+  await correct(`${name} מתוקן`)
+  await decide("approve")
+
+  // Published with the new name; the point, its permission and access note, and the hide all as they were.
+  const after = await feedPlace()
+  expect(after).toMatchObject({ name_he: `${name} מתוקן`, lat: before.lat, lng: before.lng, precision: before.precision, summary_he: "" })
+  expect(after.access_note).toBe("תיאום ביקור דמו")
+  expect(before.access_note).toBe("תיאום ביקור דמו")
+})
