@@ -97,6 +97,8 @@ it("the report notice says what the browser keeps and for how long, from the con
 it("the submission notice says what the retention job erases: a returned or refused submission, and only a published place's correction", () => {
   const text = noticeHtml(CURRENT_SUBMISSION_NOTICE)
   expect(text).toContain("נשארת רק רשומה ריקה")
+  expect(text).toContain("כבר לא ייפתח")
+  expect(text).toContain("מפסיק לעבוד כשהוא נמחק")
   expect(text).toContain("נמחק רק התיקון")
   expect(text).toContain(`תוך ${RETENTION.returnedDays} יום`)
   expect(text).toContain(`נמחקת ${RETENTION.rejectedTextDays} יום אחרי ההחלטה`)

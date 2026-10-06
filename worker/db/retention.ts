@@ -17,7 +17,7 @@ const hasContent = (t: string) =>
     .map((c) => `${t}.${c} IS NOT NULL`)
     .join(" OR ")})`
 
-export type RetentionCounts = { erased: number; revisions: number; contacts: number; reports: number; notes: number }
+export type RetentionCounts = { erased: number; revisions: number; decisionNotes: number; contacts: number; reports: number; notes: number }
 
 /**
  * The retention job (spec 3.3, 7): the first part of every scheduled run, before anything else, and safe to run twice
@@ -26,7 +26,8 @@ export type RetentionCounts = { erased: number; revisions: number; contacts: num
  *   refused one RETENTION.rejectedTextDays after the refusal, become tombstones: id, state, date and reason stay; all
  *   their content, their contact details and their files go, through the same durable operation as a withdrawal;
  * - a correction to a published place that was returned or refused loses its own text after the same days (the place,
- *   and what it publishes, stay);
+ *   and what it publishes, stay), and a returned one is closed: no photo or text can be added to it any more;
+ * - a moderator's note to the sender goes once its case closed, or at its ceiling;
  * - contact details, a request's text and address, and moderators' notes on a hide go once their purge date passed.
  * A run is recorded, and counted as finished only when every part succeeded: a restore in place may go back no earlier
  * than the last finished run (spec 7, Route A).
@@ -36,7 +37,7 @@ export async function runRetention(env: OpEnv, now: Date): Promise<{ id: string;
   const id = `rr_${ulid(now.getTime())}`
   const at = now.toISOString()
   await db.prepare("INSERT INTO retention_runs (id, started_at) VALUES (?, ?)").bind(id, at).run()
-  const counts: RetentionCounts = { erased: 0, revisions: 0, contacts: 0, reports: 0, notes: 0 }
+  const counts: RetentionCounts = { erased: 0, revisions: 0, decisionNotes: 0, contacts: 0, reports: 0, notes: 0 }
   // Each part on its own: one that keeps failing (a bad row, say) never holds back the others. The run is finished
   // only when every part succeeded.
   let ok = true
@@ -50,6 +51,25 @@ export async function runRetention(env: OpEnv, now: Date): Promise<{ id: string;
   }
   await part("erased", () => eraseAbandoned(env, now))
   await part("revisions", () => blankClosedCorrections(env, now))
+  // A moderator's note to the sender, once its case closed (a newer revision replaced the one it was written on), goes
+  // RETENTION.contactAfterCloseDays after that; any note goes RETENTION.contactMaxMonths after it was written.
+  await part(
+    "decisionNotes",
+    async () =>
+      (
+        await db
+          .prepare(
+            `UPDATE revisions SET decision_note = NULL
+             WHERE decision_note IS NOT NULL AND (decided_at <= ?1 OR (state = 'superseded'
+               AND (SELECT MIN(nx.created_at) FROM revisions nx WHERE nx.place_id = revisions.place_id AND nx.n > revisions.n) <= ?2))`,
+          )
+          .bind(
+            new Date(now.getTime() - RETENTION.contactMaxMonths * 30 * DAY_MS).toISOString(),
+            new Date(now.getTime() - RETENTION.contactAfterCloseDays * DAY_MS).toISOString(),
+          )
+          .run()
+      ).meta.changes,
+  )
   await part("contacts", async () => (await db.prepare("DELETE FROM contacts WHERE purge_after <= ?").bind(at).run()).meta.changes)
   await part(
     "reports",
@@ -175,7 +195,14 @@ async function blankClosedCorrections(env: OpEnv, now: Date) {
     )
     .all<{ id: string; photo_key: string | null }>()
   for (const r of results) {
-    await db.prepare(`UPDATE revisions SET ${BLANK_REVISION} WHERE id = ? AND state IN ('returned', 'rejected')`).bind(r.id).run()
+    // A returned correction left uncorrected is closed with its text: an upload or a correction can't land in an empty row.
+    await db
+      .prepare(
+        `UPDATE revisions SET ${BLANK_REVISION}, state = CASE state WHEN 'returned' THEN 'superseded' ELSE state END
+         WHERE id = ? AND state IN ('returned', 'rejected')`,
+      )
+      .bind(r.id)
+      .run()
     // Its photo waited in quarantine; once no revision names it, the file goes too.
     if (r.photo_key?.startsWith("quarantine/")) {
       const named = await db.prepare("SELECT 1 FROM revisions WHERE photo_key = ?").bind(r.photo_key).first()

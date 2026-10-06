@@ -7,6 +7,7 @@ import { alertStalledRetention, RETENTION_ALERT_HOURS, runRetention } from "../d
 import { sendMail } from "../lib/mail"
 import { call } from "./app"
 import { admin, approve } from "./helpers"
+import { jpeg } from "./submission-helpers"
 
 const DAY = 86_400_000
 const now = new Date(Date.UTC(2027, 8, 1, 3, 0, 0))
@@ -147,7 +148,7 @@ describe("a correction to a published place that was returned or rejected", () =
     const rows = await env.DB.prepare("SELECT state, name_he, decision_note FROM revisions WHERE place_id = ? ORDER BY n").bind(id).all()
     expect(rows.results).toEqual([
       { state: "approved", name_he: "גן דמו שפורסם", decision_note: null },
-      { state: "returned", name_he: null, decision_note: null },
+      { state: "superseded", name_he: null, decision_note: null },
     ])
   })
 })
@@ -287,5 +288,201 @@ describe("a stalled job", () => {
     const down = async () => false
     expect(await alertStalledRetention(env.DB, env, down, at(RETENTION_ALERT_HOURS))).toBe(false)
     expect(await alertStalledRetention(env.DB, env, sendMail, at(RETENTION_ALERT_HOURS + 0.25))).toBe(true)
+  })
+})
+
+// Review a42: the rules exercised through the real flows.
+const upload = async (id: string, token: string, e: Env = env) => {
+  const form = new FormData()
+  form.append("photo", new File([jpeg()], "p.jpg", { type: "image/jpeg" }))
+  form.append("alt", "תיאור דמו")
+  form.append("credit", "צלם דמו")
+  const encoded = new Request("http://local/", { method: "PUT", body: form })
+  const body = await encoded.arrayBuffer()
+  return call(
+    `http://local/api/v1/submissions/${id}/photo`,
+    {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": encoded.headers.get("Content-Type")!,
+        "Content-Length": String(body.byteLength),
+      },
+      body,
+    },
+    e,
+  )
+}
+const later = (days: number) => new Date(Date.now() + days * DAY)
+
+describe("an erased submission is closed to writes (F5-R1)", () => {
+  it("a photo sent with the device's link after the erasure writes nothing into the tombstone, and its file goes", async () => {
+    const { id, trackingToken } = await send("ספסל דמו שנמחק ואז הועלתה תמונה")
+    await decide(id, "return")
+    await age(id, RETENTION.returnedDays)
+    await runRetention(opEnv(), now)
+    expect(await place(id)).toMatchObject({ status: "erased" })
+    expect((await upload(id, trackingToken)).status).not.toBe(200)
+    expect(await contentLeft(id)).toBe(0)
+    expect((await env.MEDIA.list({ prefix: `quarantine/${id}/` })).objects).toHaveLength(0)
+  })
+
+  it("an upload paused before it is recorded, released after the erasure, writes nothing either", async () => {
+    const { id, trackingToken } = await send("ספסל דמו העלאה עצורה")
+    await decide(id, "return")
+    let release!: () => void
+    const gate = new Promise<void>((r) => (release = r))
+    let reached!: () => void
+    const atPut = new Promise<void>((r) => (reached = r))
+    const media = new Proxy(env.MEDIA, {
+      get(target, prop) {
+        if (prop === "put")
+          return async (...args: Parameters<R2Bucket["put"]>) => {
+            const done = await target.put(...args)
+            reached()
+            await gate
+            return done
+          }
+        const v = Reflect.get(target, prop)
+        return typeof v === "function" ? v.bind(target) : v
+      },
+    })
+    const uploading = upload(id, trackingToken, { ...env, MEDIA: media })
+    await atPut
+    await age(id, RETENTION.returnedDays)
+    await runRetention(opEnv(), now)
+    release()
+    expect((await uploading).status).not.toBe(200)
+    expect(await contentLeft(id)).toBe(0)
+    expect((await env.MEDIA.list({ prefix: `quarantine/${id}/` })).objects).toHaveLength(0)
+  })
+})
+
+describe("a published place whose correction expired (F5-R2)", () => {
+  it("is corrected again from what it publishes: the draft comes back, and an approved correction keeps the place whole", async () => {
+    const { id, trackingToken } = await send("גן דמו לתיקון חוזר")
+    await approve(id)
+    const { rev } = await tracked(id, trackingToken)
+    expect((await revise(id, trackingToken, rev, "גן דמו בתיקון שפג")).status).toBe(200)
+    await decide(id, "return", "התיקון לא ברור")
+    await env.DB.prepare("UPDATE revisions SET decided_at = ? WHERE place_id = ? AND state = 'returned'").bind(ago(31), id).run()
+    await runRetention(opEnv(), now)
+    // The expired correction is closed: no photo lands in its empty row.
+    expect((await upload(id, trackingToken)).status).toBe(409)
+    const status = await (
+      await call(`http://local/api/v1/submissions/${id}`, { headers: { Authorization: `Bearer ${trackingToken}` } })
+    ).json<{
+      rev: number
+      draft?: { name_he: string }
+    }>()
+    // The tracking page offers a correction again, starting from what is published, never from the erased text.
+    expect(status.draft?.name_he).toBe("גן דמו לתיקון חוזר")
+    expect((await revise(id, trackingToken, status.rev, "גן דמו מתוקן שוב")).status).toBe(200)
+    await approve(id)
+    const v = (await (await call("http://local/api/v1/version")).json<{ v: string }>()).v
+    const feed = await (await call(`http://local/api/v1/feed?v=${v}`)).json<{ places: Record<string, unknown>[] }>()
+    const shown = feed.places.find((p) => p.id === id)!
+    expect(shown).toMatchObject({ name_he: "גן דמו מתוקן שוב", kind: "bench", lat: 31.42, lng: 34.49 })
+  })
+})
+
+describe("deadlines from the decisions themselves (F5-R3)", () => {
+  it("a submission's contact details go 90 days after its decision, though their ceiling is 12 months", async () => {
+    const res = await call("http://local/api/v1/submissions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Idempotency-Key": crypto.randomUUID().replaceAll("-", ""),
+        "Turnstile-Token": "pass",
+      },
+      body: JSON.stringify({
+        kind: "bench",
+        name_he: "ספסל דמו עם מייל",
+        lat: 31.42,
+        lng: 34.49,
+        consent_version: CURRENT_SUBMISSION_NOTICE,
+        submitter_name: "שם דמו",
+        email: "sender@example.test",
+      }),
+    })
+    const { id, trackingToken } = await res.json<{ id: string; trackingToken: string }>()
+    await approve(id)
+    const contacts = () => env.DB.prepare("SELECT COUNT(*) AS n FROM contacts WHERE place_id = ?").bind(id).first<{ n: number }>()
+    await runRetention(opEnv(), later(RETENTION.contactAfterCloseDays - 1))
+    expect((await contacts())?.n).toBe(1)
+    await runRetention(opEnv(), later(RETENTION.contactAfterCloseDays + 1))
+    expect((await contacts())?.n).toBe(0)
+    // The link kept on the sender's device is the place's own, and outlives the address.
+    expect(await tracked(id, trackingToken)).toMatchObject({ status: "published", name_he: "ספסל דמו עם מייל" })
+  })
+
+  it("a moderator's note to the sender goes 90 days after its revision was replaced, and the published place stays", async () => {
+    const { id, trackingToken } = await send("ספסל דמו עם הערה")
+    await decide(id, "return", "הערת מודרטור דמו")
+    const { rev } = await tracked(id, trackingToken)
+    expect((await revise(id, trackingToken, rev, "ספסל דמו אחרי הערה")).status).toBe(200)
+    await approve(id)
+    const notes = () =>
+      env.DB.prepare("SELECT COUNT(*) AS n FROM revisions WHERE place_id = ? AND decision_note IS NOT NULL").bind(id).first<{ n: number }>()
+    await runRetention(opEnv(), later(RETENTION.contactAfterCloseDays - 1))
+    expect((await notes())?.n).toBe(1)
+    await runRetention(opEnv(), later(RETENTION.contactAfterCloseDays + 1))
+    expect((await notes())?.n).toBe(0)
+    expect(await place(id)).toMatchObject({ status: "published" })
+  })
+})
+
+describe("a hide's notes (E5-1)", () => {
+  it("lose their text once due, active and lifted alike; the decision, its code and its state stay; one not due is kept", async () => {
+    const { id } = await send("גן דמו עם הסתרה")
+    await approve(id)
+    const row = (fields: Record<string, unknown>) => {
+      const sid = `s_${crypto.randomUUID()}`
+      const all = {
+        id: sid,
+        place_id: id,
+        field: "name_he",
+        kind: "manual",
+        revision_n: 1,
+        created_at: ago(200),
+        created_by: "dev@example.test",
+        reason: "נימוק דמו",
+        notes_ceiling_at: ago(-160),
+        notes_purge_after: ago(1),
+        ...fields,
+      }
+      const keys = Object.keys(all)
+      return env.DB.prepare(`INSERT INTO field_suppressions (${keys.join(", ")}) VALUES (${keys.map(() => "?").join(", ")})`)
+        .bind(...Object.values(all))
+        .run()
+        .then(() => sid)
+    }
+    const active = await row({})
+    const lifted = await row({
+      field: "story_he",
+      lifted_at: ago(100),
+      lifted_by: "dev@example.test",
+      basis_code: "rights_cleared",
+      basis_note: "בסיס דמו",
+      basis_detail: "פרט דמו",
+    })
+    const notDue = await row({ field: "in_memory_of", notes_purge_after: ago(0, 60_000) })
+    await runRetention(opEnv(), now)
+    const get = (sid: string) =>
+      env.DB.prepare(
+        "SELECT field, reason, basis_code, basis_note, basis_detail, lifted_at IS NOT NULL AS lifted FROM field_suppressions WHERE id = ?",
+      )
+        .bind(sid)
+        .first()
+    expect(await get(active)).toEqual({ field: "name_he", reason: null, basis_code: null, basis_note: null, basis_detail: null, lifted: 0 })
+    expect(await get(lifted)).toEqual({
+      field: "story_he",
+      reason: null,
+      basis_code: "rights_cleared",
+      basis_note: "",
+      basis_detail: null,
+      lifted: 1,
+    })
+    expect(await get(notDue)).toMatchObject({ reason: "נימוק דמו" })
   })
 })
