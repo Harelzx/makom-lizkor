@@ -1,17 +1,9 @@
 import { env } from "cloudflare:workers"
 import { describe, expect, it } from "vitest"
 import { call } from "./app"
+import { withSite } from "./helpers"
 import { decide, queued, rev, revise, send, upload } from "./submission-helpers"
 
-// The site's page as the static assets serve it: the share route rewrites a copy of it.
-const SITE = `<!doctype html><html lang="he"><head><meta charset="UTF-8" /><title>מקום לזכור</title>
-<meta name="description" content="תיאור האתר" /><meta property="og:title" content="מקום לזכור · שלוש שנים" />
-<meta property="og:description" content="תיאור האתר" /><meta property="og:image" content="/og.png" />
-</head><body><div id="root"></div></body></html>`
-const withSite = {
-  ...env,
-  ASSETS: { fetch: async () => new Response(SITE, { headers: { "Content-Type": "text/html" } }) } as unknown as Fetcher,
-}
 const page = (id: string, e: Env = withSite) => call(`http://local/place/${encodeURIComponent(id)}`, {}, e)
 const meta = (html: string, key: string) => new RegExp(`<meta (?:property|name)="${key}" content="([^"]*)"`).exec(html)?.[1]
 

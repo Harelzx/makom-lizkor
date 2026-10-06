@@ -1,7 +1,8 @@
 import { zValidator } from "@hono/zod-validator"
 import { Hono } from "hono"
 import { z } from "zod"
-import { text } from "@/shared/contract"
+import { ELEMENTS, text } from "@/shared/contract"
+import { attention, BASIS_CODES, lift, listReports, placeView, readContact, setReportStatus, suppress } from "../db/moderation"
 import { runOp } from "../db/ops"
 import { listQueue, photosBefore, preparePhoto, transitionStatements, verifiedContact } from "../db/places"
 import { decisionMail } from "../lib/messages"
@@ -66,8 +67,15 @@ admin.post(
           if (body.action === "reject") return { retire: [before.source].filter((k): k is string => !!k) }
           if (body.action !== "approve") return
           photo = await preparePhoto(c.env.DB, c.env.MEDIA, placeId, body.revisionId)
+          // A correction approved while the photo is hidden keeps it hidden: the hide applies to whatever is published.
+          const photoHidden = await c.env.DB.prepare(
+            "SELECT 1 FROM field_suppressions WHERE place_id = ? AND lifted_at IS NULL AND field IN ('photo', 'whole')",
+          )
+            .bind(placeId)
+            .first()
           return {
             prepared: photo.fresh && photo.key ? [photo.key] : [],
+            toHeld: photoHidden && photo.fresh && photo.key ? [photo.key] : [],
             media: photo.key ? [photo.key] : [],
             retire: [before.source, before.published !== photo.key ? before.published : null].filter((k): k is string => !!k),
           }
@@ -102,3 +110,93 @@ admin.get("/media/*", async (c) => {
     "Content-Security-Policy": "sandbox; default-src 'none'",
   })
 })
+
+const invalid = (r: { success: boolean }, c: Parameters<typeof problem>[0]) => (r.success ? undefined : problem(c, 400, "invalid_input"))
+const outcomeOf = (c: Parameters<typeof problem>[0], outcome: string) =>
+  outcome === "ok"
+    ? c.json({ ok: true })
+    : outcome === "not_found"
+      ? problem(c, 404, "not_found")
+      : outcome === "ledger_unwritten"
+        ? problem(c, 503, "ledger_unavailable", {}, { "Retry-After": "30" })
+        : outcome === "prepare_failed"
+          ? problem(c, 503, "media_unavailable", {}, { "Retry-After": "30" })
+          : outcome === "invalid_report"
+            ? problem(c, 422, "invalid_report")
+            : problem(c, 409, "changed_meanwhile")
+
+admin.get("/places/:id", async (c) => {
+  const view = await placeView(c.env.DB, c.req.param("id"))
+  return view ? c.json(view) : problem(c, 404, "not_found")
+})
+
+// A manual hide: elements of a public place, or the whole place, with a reason; never limited by the safeguards.
+const Suppression = z
+  .object({
+    placeId: z.string().min(1).max(64),
+    fields: z
+      .array(z.enum(ELEMENTS))
+      .min(1)
+      .refine((f) => new Set(f).size === f.length),
+    expectedRev: z.number().int(),
+    reason: text({ max: 500, multiline: true }),
+    reportId: z.string().max(64).optional(),
+  })
+  .strict()
+
+admin.post("/suppressions", zValidator("json", Suppression, invalid), async (c) => {
+  const body = c.req.valid("json")
+  return outcomeOf(c, await suppress(opEnv(c), { ...body, actor: c.get("actor") }, clock(c.req.raw, c.env)))
+})
+
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
+const Lift = z
+  .object({
+    expectedRev: z.number().int(),
+    basisCode: z.enum(BASIS_CODES),
+    basisNote: text({ max: 1000, multiline: true }).refine((s) => s.length >= 10, { message: "too_short" }),
+    confirm: z.object({ affirmativeBasis: z.boolean().optional(), notNonresponseOrDispute: z.boolean().optional() }).strict(),
+    evidenceRef: text({ max: 300 }).optional(),
+    adviserName: text({ max: 120 }).optional(),
+    adviceDate: isoDate.optional(),
+    familyContact: z
+      .object({ note: text({ max: 500, multiline: true }), date: isoDate })
+      .strict()
+      .optional(),
+    verificationNote: text({ max: 500, multiline: true }).optional(),
+    materialAbsent: z.boolean().optional(),
+  })
+  .strict()
+
+admin.post("/suppressions/:id/lift", zValidator("json", Lift, invalid), async (c) => {
+  const result = await lift(opEnv(c), c.req.param("id"), c.req.valid("json"), c.get("actor"), clock(c.req.raw, c.env))
+  if (typeof result === "object") return problem(c, 422, result.refused)
+  return outcomeOf(c, result)
+})
+
+admin.get("/reports", async (c) => {
+  const status = c.req.query("status")
+  return c.json({ items: await listReports(c.env.DB, status === "closed" || status === "all" ? status : "open") })
+})
+
+admin.get("/reports/:id/contact", async (c) => {
+  const email = await readContact(c.env.DB, c.req.param("id"), c.get("actor"), clock(c.req.raw, c.env))
+  return email ? c.json({ email }) : problem(c, 404, "not_found")
+})
+
+const Note = z.object({ note: text({ max: 500, multiline: true }).optional() }).strict()
+for (const [path, to, needsNote] of [
+  ["handle", "in_review", true],
+  ["close", "closed", true],
+  ["reopen", "open", false],
+] as const) {
+  admin.post(`/reports/:id/${path}`, zValidator("json", Note, invalid), async (c) => {
+    const { note } = c.req.valid("json")
+    // Handling is recorded in words: a reminder stops only when someone wrote what they did.
+    if (needsNote && !note) return problem(c, 400, "note_required")
+    const changed = await setReportStatus(c.env.DB, c.req.param("id"), to, c.get("actor"), note ?? null, clock(c.req.raw, c.env))
+    return changed ? c.json({ ok: true }) : problem(c, 409, "changed_meanwhile")
+  })
+}
+
+admin.get("/attention", async (c) => c.json({ ops: await attention(c.env.DB) }))

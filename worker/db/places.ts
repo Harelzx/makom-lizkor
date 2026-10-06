@@ -1,3 +1,5 @@
+import { KINDS } from "@/data/taxonomy"
+import type { Kind } from "@/types"
 import type { Feed, PublicPlace, RevisionInput, SubmissionInput } from "@/shared/contract"
 import { newToken, placeId, sameHash, sha256Hex, ulid } from "../lib/ids"
 import { stripJpeg } from "../lib/jpeg"
@@ -521,8 +523,11 @@ export async function revise(
   return open && (await pendingCount(db)) >= queueLimit ? "queue_full" : "conflict"
 }
 
+// Each place carries the elements hidden now (the union of its active suppressions), applied in toPublic, so the feed,
+// the share page and anything else built from this projection hide exactly the same things.
 const PUBLIC_COLUMNS = `p.id, r.kind, r.name_he, r.lat, r.lng, r.location_precision, r.place_he, r.story_he, r.in_memory_of,
-  r.link_url, r.photo_key, r.photo_alt, r.photo_credit, r.access_note_he`
+  r.link_url, r.photo_key, r.photo_alt, r.photo_credit, r.access_note_he,
+  (SELECT GROUP_CONCAT(s.field) FROM field_suppressions s WHERE s.place_id = p.id AND s.lifted_at IS NULL) AS hidden_fields`
 
 /** One batch, so the version and the places come from the same moment. Only public fields leave the database. */
 export async function readFeed(db: D1Database, epoch: string): Promise<Feed> {
@@ -536,7 +541,7 @@ export async function readFeed(db: D1Database, epoch: string): Promise<Feed> {
 
 /**
  * One contribution as the public sees it, for its share page: published (its public fields, as in the feed), gone
- * (it was taken back or erased: the page says so, and nothing of it), or none (never public: unknown, pending,
+ * (it was taken back, erased or hidden: the page says so, and nothing of it), or none (never public: unknown, pending,
  * returned or refused, so the page doesn't even say it existed).
  */
 export async function publicPlace(
@@ -548,24 +553,32 @@ export async function publicPlace(
     .bind(id)
     .first<Record<string, string | number | null>>()
   if (row?.status === "published" && row.name_he) return { kind: "published", place: toPublic(row) }
-  return row && (row.status === "withdrawn" || row.status === "erased") ? { kind: "gone" } : { kind: "none" }
+  // Hidden reads as gone, like a withdrawal: the page says it was taken down, and nothing of it.
+  return row && (row.status === "withdrawn" || row.status === "erased" || row.status === "hidden") ? { kind: "gone" } : { kind: "none" }
+}
+
+/** A hidden name reads as the place's kind and community, with nothing personal (spec 3.3). */
+export function hiddenName(kind: string, community: string | null): string {
+  const label = KINDS[kind as Kind]?.label ?? KINDS.other.label
+  return community ? `${label} · ${community}` : label
 }
 
 function toPublic(r: Record<string, string | number | null>): PublicPlace {
+  const hidden = new Set(String(r.hidden_fields ?? "").split(","))
   return {
     id: r.id as string,
     kind: r.kind as PublicPlace["kind"],
-    name_he: r.name_he as string,
+    name_he: hidden.has("name_he") ? hiddenName(r.kind as string, r.place_he as string | null) : (r.name_he as string),
     lat: r.lat as number,
     lng: r.lng as number,
     precision: r.location_precision === "approximate" ? "approx" : "exact",
     place_he: (r.place_he as string | null) ?? "",
-    summary_he: (r.story_he as string | null) ?? "",
-    in_memory_of: (r.in_memory_of as string | null) ?? undefined,
+    summary_he: hidden.has("story_he") ? "" : ((r.story_he as string | null) ?? ""),
+    in_memory_of: hidden.has("in_memory_of") ? undefined : ((r.in_memory_of as string | null) ?? undefined),
     link_url: (r.link_url as string | null) ?? undefined,
     ...(r.access_note_he ? { access_note: r.access_note_he as string } : {}),
-    // Only a photo that reached public/ (approved with its place) is ever named in the feed.
-    ...(typeof r.photo_key === "string" && r.photo_key.startsWith("public/")
+    // Only a photo that reached public/ (approved with its place) and isn't hidden is ever named in the feed.
+    ...(!hidden.has("photo") && typeof r.photo_key === "string" && r.photo_key.startsWith("public/")
       ? { photo: { url: `/media/${r.photo_key}`, alt: r.photo_alt as string, credit: (r.photo_credit as string | null) ?? undefined } }
       : {}),
   }

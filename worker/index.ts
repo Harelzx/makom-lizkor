@@ -39,18 +39,24 @@ export function createApp(deps: Deps) {
   app.get("/media/public/*", async (c) => {
     const key = c.req.path.replace(/^\/media\//, "")
     // Only the photo of a revision published now: a file a lost race or a failed cleanup left behind serves nothing.
+    // And only while the photo isn't hidden, by itself or with its whole place (spec 6).
     const live = await c.env.DB.prepare(
-      "SELECT 1 FROM places p JOIN revisions r ON r.id = p.published_revision_id WHERE p.status = 'published' AND r.photo_key = ?",
+      `SELECT p.id FROM places p JOIN revisions r ON r.id = p.published_revision_id
+       WHERE p.status = 'published' AND r.photo_key = ?
+         AND NOT EXISTS (SELECT 1 FROM field_suppressions s WHERE s.place_id = p.id AND s.lifted_at IS NULL AND s.field IN ('photo', 'whole'))`,
     )
       .bind(key)
-      .first()
+      .first<string>("id")
     if (!live) return problem(c, 404, "not_found")
     const object = await c.env.MEDIA.get(key)
     if (!object) return problem(c, 404, "not_found")
-    // Short-lived: a photo taken down later (phase 4) must not live on in caches for long.
+    // A minute in the browser and at the edge (spec 5), tagged with its place: a takedown purges the edge copy, and
+    // the minute bounds it if the purge fails.
     return c.body(object.body, 200, {
       "Content-Type": "image/jpeg",
-      "Cache-Control": "public, max-age=300",
+      "Cache-Control": "public, max-age=60",
+      "Cloudflare-CDN-Cache-Control": "max-age=60",
+      "Cache-Tag": `place:${live}`,
       "X-Content-Type-Options": "nosniff",
       "Content-Security-Policy": "sandbox; default-src 'none'",
     })
