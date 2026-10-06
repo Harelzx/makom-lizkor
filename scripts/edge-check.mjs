@@ -12,8 +12,9 @@
 //   --local: a local preview; what needs the edge is skipped, and labelled so.
 //   --dev:   with --local, sign in through the development stand-in (/__dev/login), as a moderator and as a stranger.
 // Behind Access (staging), CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET in the environment, a service token's, go
-// with every request. EDGE_IDENTITIES (JSON: [{ name, path, headers }], two or more synthetic owners of a private
-// address each) names who may read what. Both are read from the environment only, never from an argument.
+// with every request. EDGE_IDENTITIES (JSON: [{ name, path, headers, marker }], two or more synthetic owners,
+// each with a private address of its own and a marker its answer carries) names who may read what. Both are read
+// from the environment only, never from an argument.
 // Exit: 0 every check passed (or skipped, locally); 1 a check failed; 3 nothing failed but something is incomplete.
 import { writeFileSync } from "node:fs"
 import { pathToFileURL } from "node:url"
