@@ -3,6 +3,8 @@ import { env } from "cloudflare:workers"
 import { describe, expect, it } from "vitest"
 import { CURRENT_SUBMISSION_NOTICE } from "@/shared/contract"
 import { sweepPhotos } from "../db/photos"
+import { runJobs } from "../jobs"
+import { sendMail } from "../lib/mail"
 import { revise as reviseDirect } from "../db/places"
 import { call } from "./app"
 import { decide, feed, jpeg, objects, queued, rev, revise, send, upload } from "./submission-helpers"
@@ -156,7 +158,7 @@ describe("phase 2 close-out", () => {
     expect(await objects(id)).toHaveLength(0)
   })
 
-  it("#10 a decision stored before the file cleanup fails is reported as made, and the sweep finishes the cleanup", async () => {
+  it("#10 a decision stored before the file cleanup fails is reported as made, and the scheduled pass finishes the cleanup", async () => {
     const { id, trackingToken } = await send("ספסל דמו ניקוי נכשל")
     await upload(id, trackingToken)
     await env.MEDIA.put(`quarantine/${id}/leftover.jpg`, jpeg())
@@ -165,7 +167,8 @@ describe("phase 2 close-out", () => {
     const published = (await feed()).find((p) => p.id === id)!
     expect(published.photo).toBeTruthy()
     expect((await objects(id)).some((k) => k.startsWith("quarantine/"))).toBe(true)
-    await sweepPhotos(env.DB, env.MEDIA, later())
+    // The decision still owes its file step: the pass finishes it (resumeOps), then the sweep takes what is left.
+    await runJobs(env, { sendMail, purge: async () => true }, undefined, later())
     expect(await objects(id)).toEqual([(published.photo as { url: string }).url.replace(/^\/media\//, "")])
     expect((await call(`http://local${(published.photo as { url: string }).url}`)).status).toBe(200)
   })

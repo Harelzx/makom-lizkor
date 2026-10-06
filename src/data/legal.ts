@@ -39,6 +39,8 @@ export const fillLegal = (html: string) =>
     .replaceAll("{{ACCESS_DAYS}}", days(ACCESS_RESPONSE_DAYS))
     .replaceAll("{{REPORT_ABUSE_HOURS}}", `${RETENTION.reportAbuseCodeMaxHours} שעות`)
     .replaceAll("{{REPORT_OUTBOX_HOURS}}", `${RETENTION.reportOutboxHours} שעות`)
+    .replaceAll("{{RETURNED_DAYS}}", days(RETENTION.returnedDays))
+    .replaceAll("{{REJECTED_TEXT_DAYS}}", days(RETENTION.rejectedTextDays))
 
 /**
  * The sections in About. They describe the site as it is now: a place a visitor adds is sent for review (its photo
@@ -267,6 +269,15 @@ const SUBMISSION_PHOTO_LATER = amend("2026-10-11", SUBMISSION_EXACT, [
   ],
 ])
 
+// Version 12 with the retention job built (phase 5): a refused submission goes too, and a published place's refused or
+// returned correction goes alone, the place staying as it was published.
+const SUBMISSION_ABANDONED = amend("2026-10-12", SUBMISSION_PHOTO_LATER, [
+  [
+    "הצעה שהוחזרה ולא תוקנה תוך 30 יום נמחקת.",
+    "הצעה שהוחזרה אליכם ולא תוקנה תוך {{RETURNED_DAYS}} נמחקת, וגם הצעה שנדחתה נמחקת {{REJECTED_TEXT_DAYS}} אחרי ההחלטה: נשארת רק רשומה ריקה, וקישור המעקב יראה שההצעה נמחקה. אם המקום כבר פורסם, והחזרנו או דחינו תיקון שלו, נמחק רק התיקון, והמקום נשאר כפי שפורסם.",
+  ],
+])
+
 // The removal and correction request, as the form first described it.
 const REPORT_V1 = `
 ${WHO}
@@ -344,6 +355,8 @@ ${RIGHTS}
 
   // Version 10 with a photo file that may be deleted later than the rest.
   "notice.submission@2026-10-11": `${SUBMISSION_PHOTO_LATER}${SUBMISSION_TERMS_PHOTO}`,
+
+  "notice.submission@2026-10-12": `${SUBMISSION_ABANDONED}${SUBMISSION_TERMS_PHOTO}`,
 
   "notice.report@2026-10-1": `${REPORT_V1}`,
 

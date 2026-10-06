@@ -55,6 +55,7 @@ const SHOWN = [
   "notice.submission@2026-10-9",
   "notice.submission@2026-10-10",
   "notice.submission@2026-10-11",
+  "notice.submission@2026-10-12",
 ]
 
 it("never drops a version a form has shown, and keeps each one's text", () => {
@@ -90,5 +91,14 @@ it("the report notice says what the browser keeps and for how long, from the con
   expect(text).toContain(`«${DISCARD_LABEL}»`)
   expect(text).toContain("לא נשלחת שוב מעצמה")
   expect(text).toContain("נשמרת רק בדף הפתוח")
+  expect(text).not.toContain("{{")
+})
+
+it("the submission notice says what the retention job erases: a returned or refused submission, and only a published place's correction", () => {
+  const text = noticeHtml(CURRENT_SUBMISSION_NOTICE)
+  expect(text).toContain("נשארת רק רשומה ריקה")
+  expect(text).toContain("נמחק רק התיקון")
+  expect(text).toContain(`תוך ${RETENTION.returnedDays} יום`)
+  expect(text).toContain(`נמחקת ${RETENTION.rejectedTextDays} יום אחרי ההחלטה`)
   expect(text).not.toContain("{{")
 })

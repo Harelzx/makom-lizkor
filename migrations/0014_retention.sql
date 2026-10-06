@@ -12,3 +12,7 @@ CREATE TABLE retention_runs (
   counts TEXT
 );
 CREATE INDEX retention_runs_done ON retention_runs(ok, finished_at);
+
+-- When a job's stall was last reported to the moderators (the retention job: no finished run in RETENTION_ALERT_HOURS),
+-- so a stall is reported again every few hours while it lasts, and not every 15 minutes.
+CREATE TABLE job_alerts (job TEXT PRIMARY KEY, sent_at TEXT NOT NULL);

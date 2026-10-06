@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest"
 import { RETENTION } from "@/config"
 import { CURRENT_SUBMISSION_NOTICE } from "@/shared/contract"
 import { runJobs } from "../jobs"
-import { runRetention } from "../db/retention"
+import { alertStalledRetention, RETENTION_ALERT_HOURS, runRetention } from "../db/retention"
 import { sendMail } from "../lib/mail"
 import { call } from "./app"
 import { admin, approve } from "./helpers"
@@ -219,5 +219,73 @@ describe("the run", () => {
     expect(result.ok).toBe(false)
     const run = await env.DB.prepare("SELECT finished_at, ok FROM retention_runs WHERE id = ?").bind(result.id).first()
     expect(run).toMatchObject({ ok: 0 })
+  })
+})
+
+describe("each part on its own", () => {
+  it("an erase that keeps failing never holds back the contact purge; the run is still not finished", async () => {
+    const { id } = await send("ספסל דמו כשהמחיקה נשברת")
+    const due = await contact(id, ago(0, -1))
+    const failing = new Proxy(env.DB, {
+      get(target, key) {
+        if (key === "prepare")
+          return (sql: string) => {
+            if (sql.includes("status = 'rejected' AND status_changed_at")) throw new Error("bad_row")
+            return target.prepare(sql)
+          }
+        const v = Reflect.get(target, key)
+        return typeof v === "function" ? v.bind(target) : v
+      },
+    })
+    const result = await runRetention({ ...opEnv(), db: failing as D1Database }, now)
+    expect(result.ok).toBe(false)
+    expect(await env.DB.prepare("SELECT 1 FROM contacts WHERE id = ?").bind(due).first()).toBeNull()
+  })
+})
+
+describe("a stalled job", () => {
+  const outbox = () =>
+    env.DB.prepare("SELECT to_address, subject, body FROM dev_outbox WHERE subject LIKE '%עבודת המחיקה%' ORDER BY at").all<{
+      to_address: string
+      subject: string
+      body: string
+    }>()
+  const H = 3600_000
+  const at = (hours: number) => new Date(now.getTime() + hours * H)
+  const run = (startedHours: number, ok: boolean) =>
+    env.DB.prepare("INSERT INTO retention_runs (id, started_at, finished_at, ok) VALUES (?, ?, ?, ?)")
+      .bind(`rr_${crypto.randomUUID()}`, at(startedHours).toISOString(), at(startedHours).toISOString(), ok ? 1 : 0)
+      .run()
+
+  it("is reported to the moderators, with no one's data, once nothing has finished for the set hours, and again only after as many more", async () => {
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM retention_runs"),
+      env.DB.prepare("DELETE FROM job_alerts"),
+      env.DB.prepare("DELETE FROM dev_outbox"),
+    ])
+    // Nothing ever ran: a new database isn't a stall.
+    expect(await alertStalledRetention(env.DB, env, sendMail, at(0))).toBe(false)
+    await run(0, true)
+    await run(1, false)
+    expect(await alertStalledRetention(env.DB, env, sendMail, at(RETENTION_ALERT_HOURS - 0.1))).toBe(false)
+    expect(await alertStalledRetention(env.DB, env, sendMail, at(RETENTION_ALERT_HOURS))).toBe(true)
+    const [mail] = (await outbox()).results
+    expect(mail.to_address).toBe(env.MODERATORS.split(",")[0].trim().toLowerCase())
+    expect(mail.body).toContain("retention_failed")
+    expect(mail.body).not.toMatch(/@|p_[0-9A-Z]{20}/)
+    expect(await alertStalledRetention(env.DB, env, sendMail, at(RETENTION_ALERT_HOURS + 1))).toBe(false)
+    expect(await alertStalledRetention(env.DB, env, sendMail, at(2 * RETENTION_ALERT_HOURS + 0.1))).toBe(true)
+    // Once a run finishes again, it's over.
+    await run(2 * RETENTION_ALERT_HOURS + 1, true)
+    expect(await alertStalledRetention(env.DB, env, sendMail, at(3 * RETENTION_ALERT_HOURS + 0.2))).toBe(false)
+    expect((await outbox()).results).toHaveLength(2)
+  })
+
+  it("a report that couldn't be mailed is tried again at the next run", async () => {
+    await env.DB.batch([env.DB.prepare("DELETE FROM retention_runs"), env.DB.prepare("DELETE FROM job_alerts")])
+    await run(0, false)
+    const down = async () => false
+    expect(await alertStalledRetention(env.DB, env, down, at(RETENTION_ALERT_HOURS))).toBe(false)
+    expect(await alertStalledRetention(env.DB, env, sendMail, at(RETENTION_ALERT_HOURS + 0.25))).toBe(true)
   })
 })

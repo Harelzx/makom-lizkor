@@ -1,5 +1,6 @@
 import { RETENTION } from "@/config"
 import { ulid } from "../lib/ids"
+import type { SendMail } from "../lib/mail"
 import { runOp, WATCH_FIRST_LOOK_MS, type OpEnv } from "./ops"
 import { erasePhotos } from "./photos"
 
@@ -36,37 +37,50 @@ export async function runRetention(env: OpEnv, now: Date): Promise<{ id: string;
   const at = now.toISOString()
   await db.prepare("INSERT INTO retention_runs (id, started_at) VALUES (?, ?)").bind(id, at).run()
   const counts: RetentionCounts = { erased: 0, revisions: 0, contacts: 0, reports: 0, notes: 0 }
+  // Each part on its own: one that keeps failing (a bad row, say) never holds back the others. The run is finished
+  // only when every part succeeded.
   let ok = true
-  try {
-    counts.erased = await eraseAbandoned(env, now)
-    counts.revisions = await blankClosedCorrections(env, now)
-    counts.contacts = (await db.prepare("DELETE FROM contacts WHERE purge_after <= ?").bind(at).run()).meta.changes
-    counts.reports = (
-      await db
-        .prepare(
-          `UPDATE reports SET relationship = NULL, explanation = NULL, email = NULL, explanation_hash = NULL, reporter_key = NULL,
-             handling_note = NULL
-           WHERE purge_after <= ?1 AND (relationship IS NOT NULL OR explanation IS NOT NULL OR email IS NOT NULL
-             OR explanation_hash IS NOT NULL OR reporter_key IS NOT NULL OR handling_note IS NOT NULL)`,
-        )
-        .bind(at)
-        .run()
-    ).meta.changes
-    // A lifted hide keeps that it had a documented basis (its code, and an empty note), not what the note said.
-    counts.notes = (
-      await db
-        .prepare(
-          `UPDATE field_suppressions SET reason = NULL, basis_detail = NULL,
-             basis_note = CASE WHEN basis_note IS NULL THEN NULL ELSE '' END
-           WHERE notes_purge_after <= ?1 AND (reason IS NOT NULL OR basis_detail IS NOT NULL OR basis_note != '')`,
-        )
-        .bind(at)
-        .run()
-    ).meta.changes
-  } catch (err) {
-    ok = false
-    console.error(JSON.stringify({ level: "error", event: "retention_failed", error: (err as Error).name }))
+  const part = async (name: keyof RetentionCounts, run: () => Promise<number>) => {
+    try {
+      counts[name] = await run()
+    } catch (err) {
+      ok = false
+      console.error(JSON.stringify({ level: "error", event: "retention_failed", part: name, error: (err as Error).name }))
+    }
   }
+  await part("erased", () => eraseAbandoned(env, now))
+  await part("revisions", () => blankClosedCorrections(env, now))
+  await part("contacts", async () => (await db.prepare("DELETE FROM contacts WHERE purge_after <= ?").bind(at).run()).meta.changes)
+  await part(
+    "reports",
+    async () =>
+      (
+        await db
+          .prepare(
+            `UPDATE reports SET relationship = NULL, explanation = NULL, email = NULL, explanation_hash = NULL, reporter_key = NULL,
+               handling_note = NULL
+             WHERE purge_after <= ?1 AND (relationship IS NOT NULL OR explanation IS NOT NULL OR email IS NOT NULL
+               OR explanation_hash IS NOT NULL OR reporter_key IS NOT NULL OR handling_note IS NOT NULL)`,
+          )
+          .bind(at)
+          .run()
+      ).meta.changes,
+  )
+  // A lifted hide keeps that it had a documented basis (its code, and an empty note), not what the note said.
+  await part(
+    "notes",
+    async () =>
+      (
+        await db
+          .prepare(
+            `UPDATE field_suppressions SET reason = NULL, basis_detail = NULL,
+               basis_note = CASE WHEN basis_note IS NULL THEN NULL ELSE '' END
+             WHERE notes_purge_after <= ?1 AND (reason IS NOT NULL OR basis_detail IS NOT NULL OR basis_note != '')`,
+          )
+          .bind(at)
+          .run()
+      ).meta.changes,
+  )
   await env.db
     .prepare("UPDATE retention_runs SET finished_at = ?, ok = ?, counts = ? WHERE id = ?")
     .bind(new Date(Math.max(now.getTime(), Date.now())).toISOString(), ok ? 1 : 0, JSON.stringify(counts), id)
@@ -169,4 +183,42 @@ async function blankClosedCorrections(env: OpEnv, now: Date) {
     }
   }
   return results.length
+}
+
+/** Hours without a finished run before the moderators hear of it, and between reminders while it lasts. */
+export const RETENTION_ALERT_HOURS = 6
+
+/**
+ * A stalled retention job breaks every deletion date the notices promise, quietly. When no run has finished in
+ * RETENTION_ALERT_HOURS, the moderators are told by mail, with no data of anyone in it, and told again every
+ * RETENTION_ALERT_HOURS while it lasts. A mail that couldn't go now is tried at the next run.
+ */
+export async function alertStalledRetention(db: D1Database, env: Env, sendMail: SendMail, now: Date) {
+  const since = new Date(now.getTime() - RETENTION_ALERT_HOURS * 3600_000).toISOString()
+  const last = await db
+    .prepare("SELECT MAX(finished_at) AS at, (SELECT MIN(started_at) FROM retention_runs) AS first FROM retention_runs WHERE ok = 1")
+    .first<{ at: string | null; first: string | null }>()
+  // A job that has never run yet (a new database) isn't stalled; one that has, with nothing finished since, is.
+  if (!last?.first || (last.at ?? last.first) > since) return false
+  const sent = await db.prepare("SELECT sent_at FROM job_alerts WHERE job = 'retention'").first<{ sent_at: string }>()
+  if (sent && sent.sent_at > since) return false
+  const moderators = [
+    ...new Set(
+      env.MODERATORS.split(",")
+        .map((e) => e.trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  ]
+  const text = [
+    `עבודת המחיקה של "מקום לזכור" לא הסתיימה בהצלחה מאז ${last.at ?? "שהתחילה לרוץ"}.`,
+    "כל עוד היא לא רצה, מועדי המחיקה שההודעות מבטיחות לא מתקיימים. כדאי לבדוק את היומנים (event: retention_failed).",
+  ].join("\n")
+  let all = moderators.length > 0
+  for (const to of moderators) if (!(await sendMail(env, { to, subject: "מקום לזכור: עבודת המחיקה תקועה", text }))) all = false
+  if (!all) return false
+  await db
+    .prepare("INSERT INTO job_alerts (job, sent_at) VALUES ('retention', ?1) ON CONFLICT (job) DO UPDATE SET sent_at = excluded.sent_at")
+    .bind(now.toISOString())
+    .run()
+  return true
 }
