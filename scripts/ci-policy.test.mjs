@@ -144,6 +144,15 @@ test("staging deploys only the commit CI passed on main, with staging's secrets 
     withChange("staging.yml", "    runs-on: ubuntu-latest\n    env:", "    runs-on: ubuntu-latest\n    environment: production\n    env:"),
     "uses the production environment",
   )
+  // Staging's secrets are staging.yml's alone: CI, which runs every pull request, never reads one.
+  fails(
+    withChange(
+      "ci.yml",
+      "      - run: npm test\n",
+      "      - run: npm test\n        env:\n          T: ${{ secrets.STAGING_CLOUDFLARE_API_TOKEN }}\n",
+    ),
+    "reads STAGING_CLOUDFLARE_API_TOKEN outside the production environment",
+  )
   fails(
     withChange("release.yml", "secrets.CLOUDFLARE_ACCOUNT_ID", "secrets.STAGING_CLOUDFLARE_ACCOUNT_ID"),
     "staging secrets in a production workflow",
