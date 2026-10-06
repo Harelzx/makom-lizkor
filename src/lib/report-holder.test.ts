@@ -331,3 +331,40 @@ it("an expiry whose removal from the browser is slow lets the content go at once
   disk.gate = null
   expect(h.entry(r.key)).toMatchObject({ shown: { view: "expired", cleared: true } })
 })
+
+it("a removal held up at one deadline never holds up the next: each request goes at its own deadline", async () => {
+  const a = fresh()
+  await h.start(a)
+  vi.advanceTimersByTime(1000)
+  const b = o.freeze("p_2", { ...payload, placeId: "p_2" }, "second".padStart(22, "b"), Date.now())
+  await h.start(b)
+  const slow = deferred()
+  disk.gate = slow.p
+  await vi.advanceTimersByTimeAsync(a.expiresAt - Date.now())
+  expect(h.entry(a.key)).toMatchObject({ r: null, shown: { view: "expired" } })
+  expect(h.entry(b.key)?.r).toEqual(b)
+  await vi.advanceTimersByTimeAsync(b.expiresAt - Date.now())
+  expect(h.entry(b.key)).toMatchObject({ r: null, shown: { view: "expired" } })
+  slow.open()
+  disk.gate = null
+  await vi.waitFor(() => expect(h.entry(b.key)).toMatchObject({ shown: { view: "expired", cleared: true } }))
+  expect(stored()).toEqual([])
+  expect(net.sent).toHaveLength(2)
+})
+
+it("coming back to a page with several deadlines passed lets them all go at once, before any removal is done", async () => {
+  const a = fresh()
+  const b = o.freeze("p_2", { ...payload, placeId: "p_2" }, "second".padStart(22, "c"), Date.now())
+  await h.start(a)
+  await h.start(b)
+  const slow = deferred()
+  disk.gate = slow.p
+  vi.setSystemTime(b.expiresAt + 3600_000)
+  const checking = h.check()
+  expect(h.entry(a.key)).toMatchObject({ r: null, shown: { view: "expired" } })
+  expect(h.entry(b.key)).toMatchObject({ r: null, shown: { view: "expired" } })
+  slow.open()
+  await checking
+  disk.gate = null
+  expect(stored()).toEqual([])
+})

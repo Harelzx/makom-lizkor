@@ -91,3 +91,27 @@ it("from the moment the site runs, a stored request is dropped at its deadline, 
     vi.useRealTimers()
   }
 })
+
+it("a store that can't be read when the site starts, or at a deadline, is read again by itself until it can be, and the expired request goes", async () => {
+  vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] })
+  try {
+    vi.setSystemTime(t0)
+    const r = o.freeze("p_1", payload, "h".repeat(22), t0)
+    await o.remember(r)
+    disk.mode = "broken"
+    await o.superviseReports()
+    disk.mode = "ok"
+    await vi.advanceTimersByTimeAsync(60_000)
+    // Read again by itself: now it knows the deadline, and at the deadline the store refuses again.
+    disk.keys.reportOutbox = { [r.key]: r }
+    await vi.advanceTimersByTimeAsync(r.expiresAt - Date.now() - 1)
+    disk.mode = "broken"
+    await vi.advanceTimersByTimeAsync(1)
+    expect(Object.keys(disk.keys.reportOutbox as object)).toEqual([r.key])
+    disk.mode = "ok"
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(disk.keys.reportOutbox).toEqual({})
+  } finally {
+    vi.useRealTimers()
+  }
+})

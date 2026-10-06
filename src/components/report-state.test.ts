@@ -25,3 +25,14 @@ it("an answer whose copy couldn't be removed says so, without promising when it 
   expect(status).toMatch(/עוד לא נמחק/)
   expect(status).not.toMatch(/לכל המאוחר/)
 })
+
+it("a first refusal held because its removal failed, in a browser that never kept it, says only the page holds it and a reload loses it", () => {
+  const held = { view: "editable" as const, code: "turnstile_failed", cleared: false }
+  const page = messageOf({ ...base, stored: false, shown: held }, false).alert!
+  const kept = messageOf({ ...base, stored: true, shown: held }, false).alert!
+  expect(page).toMatch(/לא שמר את הבקשה/)
+  expect(page).toMatch(/נשמרת רק בדף הפתוח/)
+  expect(page).not.toMatch(/עדיין שמורה בדפדפן הזה/)
+  expect(kept).toMatch(/עדיין שמורה בדפדפן הזה/)
+  expect(messageOf({ ...base, stored: false, shown: { view: "discarded", cleared: false } }, false).alert).toMatch(/נשמרת רק בדף הפתוח/)
+})

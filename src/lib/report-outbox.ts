@@ -76,14 +76,16 @@ export async function storedReports(now = Date.now()): Promise<{ reports: Pendin
  */
 let next: ReturnType<typeof setTimeout> | undefined
 let listening = false
+const SUPERVISE_RETRY_MS = 60_000
 export async function superviseReports(): Promise<void> {
   if (!listening && typeof document !== "undefined") {
     document.addEventListener("visibilitychange", () => void superviseReports())
     listening = true
   }
   await pruneReports()
-  const { reports } = await storedReports()
+  const { reports, complete } = await storedReports()
   clearTimeout(next)
-  const due = Math.min(...reports.map((r) => r.expiresAt))
+  // A store that couldn't be read may still hold a request past its window: read again in a minute until it can be.
+  const due = complete ? Math.min(...reports.map((r) => r.expiresAt)) : Date.now() + SUPERVISE_RETRY_MS
   if (due < Infinity) next = setTimeout(() => void superviseReports(), Math.max(0, due - Date.now()))
 }

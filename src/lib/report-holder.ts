@@ -201,9 +201,21 @@ export const discard = (key: string) =>
  * What happened to it stays unknown.
  */
 export async function expire(key: string) {
+  if (!revoke(key)) return
+  watch()
+  await removeExpired(key)
+}
+
+/** Lets a due request go from the page, at once: true if it was held and its deadline has come. */
+function revoke(key: string) {
   const e = entries.get(key)
-  if (!e?.r || Date.now() < e.expiresAt) return
+  if (!e?.r || Date.now() < e.expiresAt) return false
   patch(key, { r: null, uncertain: false, shown: { view: "expired" } })
+  return true
+}
+
+/** The browser's copy of an expired request; a removal it refuses is tried again at the next check. */
+async function removeExpired(key: string) {
   const cleared = (await forget(key)) === "cleared"
   if (!cleared) leftover.add(key)
   if (entries.get(key)?.shown?.view === "expired") patch(key, { shown: { view: "expired", cleared } })
@@ -221,9 +233,18 @@ export function dismiss(key: string) {
 
 /** Every deadline that has come, every copy still owed a removal, and the browser's expired copies. */
 export async function check() {
-  for (const e of [...entries.values()]) if (e.r && Date.now() >= e.expiresAt) await expire(e.key)
-  for (const key of [...leftover]) if ((await forget(key)) === "cleared") leftover.delete(key)
-  await pruneReports()
+  // Every due request goes from the page first, and the next deadline is armed, before any wait on the browser's store:
+  // a slow or refused removal never holds up a later deadline.
+  const due = [...entries.keys()].filter(revoke)
+  watch()
+  const owed = [...leftover].filter((k) => !due.includes(k))
+  await Promise.all([
+    ...due.map(removeExpired),
+    ...owed.map(async (k) => {
+      if ((await forget(k)) === "cleared") leftover.delete(k)
+    }),
+    pruneReports(),
+  ])
   watch()
 }
 

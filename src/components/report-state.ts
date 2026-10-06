@@ -27,6 +27,9 @@ const NOT_CLEARED =
 // Refused before anything was stored, but its copy couldn't be removed: it can't be replaced by a new request yet.
 const STUCK =
   " הבקשה עדיין שמורה בדפדפן הזה ולא הצלחנו להסיר אותה, ולכן עוד אי אפשר לכתוב במקומה בקשה חדשה. אפשר לשלוח אותה שוב כמו שהיא, או לנסות שוב להסיר אותה מהמכשיר הזה; אפשר גם למחוק את נתוני האתר בהגדרות הדפדפן."
+// The same, when this browser never kept it: only the page holds it, and a removal couldn't be confirmed.
+const STUCK_PAGE =
+  " הדפדפן הזה לא שמר את הבקשה, אבל לא הצלחנו לוודא שלא נשאר ממנה עותק, ולכן עוד אי אפשר לכתוב במקומה בקשה חדשה. היא נשמרת רק בדף הפתוח: אפשר לשלוח אותה שוב כמו שהיא, או לנסות שוב להסיר אותה מהמכשיר הזה. אם תרעננו או תסגרו את הדף, לא יהיה אפשר לשלוח אותה שוב."
 const EXPIRED = `עברו ${HOURS} שעות מהשליחה הראשונה, ולכן הבקשה לא תישלח שוב מכאן. לא ידוע אם הגיעה אלינו.`
 const EXPIRED_CLEARED = " היא נמחקה מהדפדפן הזה."
 const NEW_REQUEST = " אם תרצו, אפשר למלא בקשה חדשה."
@@ -55,7 +58,7 @@ export function messageOf(s: Entry | undefined, curated: boolean, restored = RES
           (shown.outcome === "hidden_for_review" ? HIDDEN : curated ? RECEIVED_CURATED : RECEIVED) + (shown.cleared ? "" : NOT_CLEARED),
       }
     case "editable":
-      return { alert: refused(shown.code) + (shown.cleared ? "" : STUCK) }
+      return { alert: refused(shown.code) + (shown.cleared ? "" : s.stored ? STUCK : STUCK_PAGE) }
     case "pending":
       if (shown.reason === "conflict") return { alert: CONFLICT + kept }
       if (shown.reason === "refused") return { alert: refused(shown.code) + AFTER_EARLIER + kept }
@@ -67,7 +70,7 @@ export function messageOf(s: Entry | undefined, curated: boolean, restored = RES
         alert: EXPIRED + (shown.cleared === true ? EXPIRED_CLEARED : shown.cleared === false ? NOT_CLEARED : "") + NEW_REQUEST,
       }
     case "discarded":
-      return { alert: shown.cleared ? DISCARDED : DISCARD_FAILED }
+      return { alert: shown.cleared ? DISCARDED : DISCARD_FAILED + kept }
   }
 }
 
