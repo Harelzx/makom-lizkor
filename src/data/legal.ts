@@ -274,7 +274,16 @@ const SUBMISSION_PHOTO_LATER = amend("2026-10-11", SUBMISSION_EXACT, [
 const SUBMISSION_ABANDONED = amend("2026-10-12", SUBMISSION_PHOTO_LATER, [
   [
     "הצעה שהוחזרה ולא תוקנה תוך 30 יום נמחקת.",
-    "הצעה שהוחזרה אליכם ולא תוקנה תוך {{RETURNED_DAYS}} נמחקת, וגם הצעה שנדחתה נמחקת {{REJECTED_TEXT_DAYS}} אחרי ההחלטה: נשארת רק רשומה ריקה. קישור המעקב שנשמר במכשיר שלכם יראה שההצעה נמחקה, וקישור המעקב שנשלח אליכם במייל כבר לא ייפתח. אם המקום כבר פורסם, והחזרנו או דחינו תיקון שלו, נמחק רק התיקון, והמקום נשאר כפי שפורסם.",
+    "הצעה שהוחזרה אליכם ולא תוקנה תוך {{RETURNED_DAYS}} נמחקת, וגם הצעה שנדחתה נמחקת {{REJECTED_TEXT_DAYS}} אחרי ההחלטה: נשארת רק רשומה ריקה, וקישור המעקב יראה שההצעה נמחקה. אם המקום כבר פורסם, והחזרנו או דחינו תיקון שלו, נמחק רק התיקון, והמקום נשאר כפי שפורסם.",
+  ],
+])
+
+// Version 13: the tracking link kept on the sender's device and the one sent by email end differently. The emailed
+// link's capability is deleted with the address, so it stops then, and after an erasure it no longer opens at all.
+const SUBMISSION_EMAIL_LINK = amend("2026-10-13", SUBMISSION_ABANDONED, [
+  [
+    "נשארת רק רשומה ריקה, וקישור המעקב יראה שההצעה נמחקה.",
+    "נשארת רק רשומה ריקה. קישור המעקב שנשמר במכשיר שלכם יראה שההצעה נמחקה, וקישור המעקב שנשלח אליכם במייל כבר לא ייפתח.",
   ],
   [
     "קישור האימות בתוקף 7 ימים.</p>",
@@ -361,6 +370,7 @@ ${RIGHTS}
   "notice.submission@2026-10-11": `${SUBMISSION_PHOTO_LATER}${SUBMISSION_TERMS_PHOTO}`,
 
   "notice.submission@2026-10-12": `${SUBMISSION_ABANDONED}${SUBMISSION_TERMS_PHOTO}`,
+  "notice.submission@2026-10-13": `${SUBMISSION_EMAIL_LINK}${SUBMISSION_TERMS_PHOTO}`,
 
   "notice.report@2026-10-1": `${REPORT_V1}`,
 

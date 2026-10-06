@@ -506,3 +506,120 @@ describe("a hide's notes (E5-1)", () => {
     expect(await get(notDue)).toMatchObject({ reason: "נימוק דמו" })
   })
 })
+
+// Review a43: the emailed link's lifetime, and a ceiling no later decision extends, through the real flows.
+describe("the tracking link sent by email (a43)", () => {
+  const mailed = async (name: string) => {
+    const to = `t${crypto.randomUUID().slice(0, 8)}@example.test`
+    const res = await call("http://local/api/v1/submissions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Idempotency-Key": crypto.randomUUID().replaceAll("-", ""),
+        "Turnstile-Token": "pass",
+      },
+      body: JSON.stringify({ kind: "bench", name_he: name, lat: 31.42, lng: 34.49, consent_version: CURRENT_SUBMISSION_NOTICE, email: to }),
+    })
+    const { id, trackingToken } = await res.json<{ id: string; trackingToken: string }>()
+    const inbox = async () =>
+      (await env.DB.prepare("SELECT body FROM dev_outbox WHERE to_address = ? ORDER BY at, id").bind(to).all<{ body: string }>()).results
+    const verifyToken = /#\/verify\/(\S+)/.exec((await inbox())[0].body)![1]
+    const verified = await call("http://local/api/v1/email/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: verifyToken }),
+    })
+    expect(verified.status).toBe(200)
+    const emailToken = new RegExp(`#/track/${id}/(\\S+)`).exec((await inbox()).map((m) => m.body).join("\n"))![1]
+    return { id, trackingToken, emailToken }
+  }
+  const opens = async (id: string, token: string) =>
+    (await call(`http://local/api/v1/submissions/${id}`, { headers: { Authorization: `Bearer ${token}` } })).status
+
+  it("stops once the address is deleted after the decision; the device's link keeps opening the place", async () => {
+    const { id, trackingToken, emailToken } = await mailed("ספסל דמו קישור במייל")
+    await approve(id)
+    expect(await opens(id, emailToken)).toBe(200)
+    await runRetention(opEnv(), later(RETENTION.contactAfterCloseDays + 1))
+    expect(await opens(id, emailToken)).toBe(404)
+    expect(await tracked(id, trackingToken)).toMatchObject({ status: "published" })
+  })
+
+  it("no longer opens after an erasure, while the device's link says the submission was erased", async () => {
+    const { id, trackingToken, emailToken } = await mailed("ספסל דמו מייל ונמחק")
+    await decide(id, "return")
+    expect(await opens(id, emailToken)).toBe(200)
+    await age(id, RETENTION.returnedDays)
+    await runRetention(opEnv(), now)
+    expect(await opens(id, emailToken)).toBe(404)
+    expect(await tracked(id, trackingToken)).toMatchObject({ status: "erased", name_he: null })
+  })
+})
+
+describe("a contact's deadline (a43)", () => {
+  it("starts at its 12-month ceiling, a return leaves it, and no decision ever pushes it past what is set", async () => {
+    const res = await call("http://local/api/v1/submissions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Idempotency-Key": crypto.randomUUID().replaceAll("-", ""),
+        "Turnstile-Token": "pass",
+      },
+      body: JSON.stringify({
+        kind: "bench",
+        name_he: "ספסל דמו תקרה",
+        lat: 31.42,
+        lng: 34.49,
+        consent_version: CURRENT_SUBMISSION_NOTICE,
+        submitter_name: "שם דמו",
+      }),
+    })
+    const { id, trackingToken } = await res.json<{ id: string; trackingToken: string }>()
+    const dates = () =>
+      env.DB.prepare("SELECT ceiling_at, purge_after FROM contacts WHERE place_id = ?")
+        .bind(id)
+        .first<{ ceiling_at: string; purge_after: string }>()
+    const created = (await dates())!
+    expect(created.purge_after).toBe(created.ceiling_at)
+    await decide(id, "return")
+    expect(await dates()).toEqual(created)
+    // Corrected and approved a few days before the ceiling: the ceiling stays the date.
+    const late = new Date(Date.parse(created.ceiling_at) - 5 * DAY).toISOString()
+    const { rev } = await tracked(id, trackingToken)
+    expect((await revise(id, trackingToken, rev, "ספסל דמו תקרה מתוקן")).status).toBe(200)
+    const { items } = await (await admin("/api/admin/queue")).json<{ items: Item[] }>()
+    const item = items.find((i) => i.id === id)!
+    const approved = await admin(`/api/admin/places/${id}/transitions`, {
+      method: "POST",
+      headers: { "X-Test-Now": late },
+      body: JSON.stringify({ action: "approve", revisionId: item.revisionId, expectedRev: item.rev }),
+    })
+    expect(approved.status).toBe(200)
+    expect(await dates()).toEqual(created)
+    await runRetention(opEnv(), new Date(Date.parse(created.ceiling_at) - 60_000))
+    expect(await dates()).not.toBeNull()
+    await runRetention(opEnv(), new Date(Date.parse(created.ceiling_at) + 60_000))
+    expect(await dates()).toBeNull()
+  })
+
+  it("set at an approval, is not pushed later by a later decision", async () => {
+    const { id, trackingToken } = await send("ספסל דמו שתי החלטות")
+    await contact(id, ago(-335))
+    await env.DB.prepare("UPDATE contacts SET ceiling_at = ?2, purge_after = ?2 WHERE place_id = ?1")
+      .bind(id, later(330).toISOString())
+      .run()
+    await approve(id)
+    const first = (await env.DB.prepare("SELECT purge_after FROM contacts WHERE place_id = ?").bind(id).first<{ purge_after: string }>())!
+    const { rev } = await tracked(id, trackingToken)
+    expect((await revise(id, trackingToken, rev, "ספסל דמו שתי החלטות מתוקן")).status).toBe(200)
+    const { items } = await (await admin("/api/admin/queue")).json<{ items: Item[] }>()
+    const item = items.find((i) => i.id === id)!
+    const res = await admin(`/api/admin/places/${id}/transitions`, {
+      method: "POST",
+      headers: { "X-Test-Now": later(60).toISOString() },
+      body: JSON.stringify({ action: "approve", revisionId: item.revisionId, expectedRev: item.rev }),
+    })
+    expect(res.status).toBe(200)
+    expect(await env.DB.prepare("SELECT purge_after FROM contacts WHERE place_id = ?").bind(id).first()).toEqual(first)
+  })
+})

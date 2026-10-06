@@ -48,7 +48,7 @@ test("a place submitted without email is moderated, published, and seen in anoth
   const body = (await sent).request().postDataJSON() as Record<string, unknown>
   expect(Object.keys(body)).not.toContain("email")
   // The version recorded is the notice the form showed.
-  expect(body.consent_version).toBe("notice.submission@2026-10-12")
+  expect(body.consent_version).toBe("notice.submission@2026-10-13")
   // The browser check ran, and its single-use token went with the place.
   expect((await sent).request().headers()["turnstile-token"]).toBeTruthy()
   // The submitter's own card says where the place went; it doesn't promise it stays only in this browser.
