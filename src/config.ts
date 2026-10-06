@@ -45,6 +45,10 @@ export const RETENTION = {
   /** a removal request kept in the visitor's own browser for a resend, from its first try, until what happened to it
    * is known; never longer. Past it the request is cleared in an open page, or on the next visit if the site was closed */
   reportOutboxHours: 24,
+  /** a submission returned for a correction and not corrected: erased this many days after it was returned */
+  returnedDays: 30,
+  /** a refused submission's text (its photo goes at once): erased this many days after the refusal */
+  rejectedTextDays: 30,
   /** a photo that wasn't approved */
   rejectedPhotoDays: 30,
   /** anemone count rows: the daily code, the place, the day and the time */

@@ -1,0 +1,223 @@
+import { env } from "cloudflare:workers"
+import { beforeEach, describe, expect, it } from "vitest"
+import { RETENTION } from "@/config"
+import { CURRENT_SUBMISSION_NOTICE } from "@/shared/contract"
+import { runJobs } from "../jobs"
+import { runRetention } from "../db/retention"
+import { sendMail } from "../lib/mail"
+import { call } from "./app"
+import { admin, approve } from "./helpers"
+
+const DAY = 86_400_000
+const now = new Date(Date.UTC(2027, 8, 1, 3, 0, 0))
+const ago = (days: number, ms = 0) => new Date(now.getTime() - days * DAY + ms).toISOString()
+const deps = { sendMail, purge: async () => true }
+const opEnv = (e: Env = env) => ({ db: e.DB, media: e.MEDIA, ledger: e.LEDGER, purge: async () => true })
+
+type Item = { id: string; rev: number; revisionId: string }
+const send = async (name: string) => {
+  const res = await call("http://local/api/v1/submissions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID().replaceAll("-", ""), "Turnstile-Token": "pass" },
+    body: JSON.stringify({
+      kind: "bench",
+      name_he: name,
+      lat: 31.42,
+      lng: 34.49,
+      consent_version: CURRENT_SUBMISSION_NOTICE,
+      story_he: "סיפור דמו",
+    }),
+  })
+  return res.json<{ id: string; trackingToken: string }>()
+}
+const decide = async (id: string, action: "return" | "reject", note = "נא להוסיף יישוב") => {
+  const { items } = await (await admin("/api/admin/queue")).json<{ items: Item[] }>()
+  const item = items.find((i) => i.id === id)!
+  const res = await admin(`/api/admin/places/${id}/transitions`, {
+    method: "POST",
+    body: JSON.stringify({ action, revisionId: item.revisionId, expectedRev: item.rev, ...(action === "return" ? { note } : {}) }),
+  })
+  expect(res.status).toBe(200)
+}
+const revise = (id: string, token: string, expectedRev: number, name: string) =>
+  call(`http://local/api/v1/submissions/${id}/revisions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, "Turnstile-Token": "pass-revise" },
+    body: JSON.stringify({ consent_version: CURRENT_SUBMISSION_NOTICE, expectedRev, name_he: name, place_he: "בארי" }),
+  })
+const tracked = async (id: string, token: string) =>
+  (await call(`http://local/api/v1/submissions/${id}`, { headers: { Authorization: `Bearer ${token}` } })).json<{
+    status: string
+    rev: number
+    name_he: string | null
+  }>()
+const place = (id: string) =>
+  env.DB.prepare("SELECT status, erased_reason, submit_body_hash FROM places WHERE id = ?")
+    .bind(id)
+    .first<{ status: string; erased_reason: string | null; submit_body_hash: string | null }>()
+const contentLeft = async (id: string) =>
+  (
+    await env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM revisions WHERE place_id = ? AND (name_he IS NOT NULL OR story_he IS NOT NULL OR place_he IS NOT NULL
+         OR in_memory_of IS NOT NULL OR lat IS NOT NULL OR decision_note IS NOT NULL OR photo_key IS NOT NULL)`,
+    )
+      .bind(id)
+      .first<{ n: number }>()
+  )?.n
+const age = (id: string, days: number, ms = 0) =>
+  env.DB.prepare("UPDATE places SET status_changed_at = ? WHERE id = ?").bind(ago(days, ms), id).run()
+const contact = async (placeId: string, purgeAfter: string) => {
+  const id = `c_${crypto.randomUUID()}`
+  await env.DB.prepare(
+    `INSERT INTO contacts (id, place_id, name, email, consent_version, created_at, ceiling_at, purge_after)
+     VALUES (?, ?, 'שם דמו', 'demo@example.test', ?, ?, ?, ?)`,
+  )
+    .bind(id, placeId, CURRENT_SUBMISSION_NOTICE, ago(30), ago(-335), purgeAfter)
+    .run()
+  return id
+}
+
+beforeEach(async () => {
+  // Each test sees only its own: nothing older is left for the job to find.
+  await env.DB.prepare("UPDATE places SET status_changed_at = ? WHERE status IN ('returned', 'rejected')").bind(now.toISOString()).run()
+})
+
+describe("a returned submission that isn't corrected within 30 days", () => {
+  it("is erased to a tombstone: its content, contact details and files go, its id, state, date and reason stay", async () => {
+    const { id, trackingToken } = await send("ספסל דמו שהוחזר ונשכח")
+    await decide(id, "return")
+    await contact(id, ago(-300))
+    await env.MEDIA.put(`quarantine/${id}/photo.jpg`, "jpeg")
+    await age(id, RETENTION.returnedDays)
+    await runJobs(env, deps, undefined, now)
+    expect(await place(id)).toMatchObject({ status: "erased", erased_reason: "returned_expired", submit_body_hash: null })
+    expect(await contentLeft(id)).toBe(0)
+    expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM contacts WHERE place_id = ?").bind(id).first<{ n: number }>())?.n).toBe(0)
+    await runJobs(env, deps, undefined, now)
+    expect((await env.MEDIA.list({ prefix: `quarantine/${id}/` })).objects).toHaveLength(0)
+    // The sender's link still answers, with nothing of what they wrote.
+    expect(await tracked(id, trackingToken)).toMatchObject({ status: "erased", name_he: null })
+    const audit = await env.DB.prepare("SELECT actor, action FROM audit_log WHERE entity_id = ? ORDER BY at DESC LIMIT 1")
+      .bind(id)
+      .first<{ actor: string; action: string }>()
+    expect(audit).toEqual({ actor: "automatic", action: "erase" })
+  })
+
+  it("is kept until the full 30 days have passed", async () => {
+    const { id } = await send("ספסל דמו שהוחזר אתמול")
+    await decide(id, "return")
+    await age(id, RETENTION.returnedDays, 60_000)
+    await runRetention(opEnv(), now)
+    expect(await place(id)).toMatchObject({ status: "returned" })
+  })
+
+  it("is saved by a correction within the window: it goes back to review, whatever its age before", async () => {
+    const { id, trackingToken } = await send("ספסל דמו שתוקן")
+    await decide(id, "return")
+    const { rev } = await tracked(id, trackingToken)
+    expect((await revise(id, trackingToken, rev, "ספסל דמו מתוקן")).status).toBe(200)
+    await env.DB.prepare("UPDATE revisions SET decided_at = ? WHERE place_id = ? AND state = 'superseded'").bind(ago(60), id).run()
+    await runRetention(opEnv(), now)
+    expect(await place(id)).toMatchObject({ status: "pending" })
+    expect(await tracked(id, trackingToken)).toMatchObject({ name_he: "ספסל דמו מתוקן" })
+  })
+})
+
+describe("a rejected submission", () => {
+  it("keeps only its tombstone after 30 days", async () => {
+    const { id } = await send("ספסל דמו שנדחה")
+    await decide(id, "reject")
+    await age(id, RETENTION.rejectedTextDays)
+    await runRetention(opEnv(), now)
+    expect(await place(id)).toMatchObject({ status: "erased", erased_reason: "rejected_expired" })
+    expect(await contentLeft(id)).toBe(0)
+  })
+})
+
+describe("a correction to a published place that was returned or rejected", () => {
+  it("loses its own text after 30 days; the place and what it publishes stay", async () => {
+    const { id, trackingToken } = await send("גן דמו שפורסם")
+    await approve(id)
+    const { rev } = await tracked(id, trackingToken)
+    expect((await revise(id, trackingToken, rev, "גן דמו בתיקון שהוחזר")).status).toBe(200)
+    await decide(id, "return", "התיקון לא ברור")
+    await env.DB.prepare("UPDATE revisions SET decided_at = ? WHERE place_id = ? AND state = 'returned'").bind(ago(31), id).run()
+    await runRetention(opEnv(), now)
+    expect(await place(id)).toMatchObject({ status: "published" })
+    const rows = await env.DB.prepare("SELECT state, name_he, decision_note FROM revisions WHERE place_id = ? ORDER BY n").bind(id).all()
+    expect(rows.results).toEqual([
+      { state: "approved", name_he: "גן דמו שפורסם", decision_note: null },
+      { state: "returned", name_he: null, decision_note: null },
+    ])
+  })
+})
+
+describe("deadlines kept with the data", () => {
+  it("contact details, a request's text and a hide's notes go once their purge date has passed, and not before", async () => {
+    const { id } = await send("ספסל דמו עם פרטי קשר")
+    const due = await contact(id, ago(0, -1))
+    const later = await contact(id, ago(0, 60_000))
+    const ticket = `r_${crypto.randomUUID()}`
+    await env.DB.prepare(
+      `INSERT INTO reports (id, place_id, origin, elements, requester_type, relationship, explanation, email, notice_version,
+         submit_key_hash, body_hash, explanation_hash, reporter_key, complete, outcome, status, handling_note, received_at, ceiling_at, purge_after)
+       VALUES (?, ?, 'contribution', '["name_he"]', 'family', 'אח', 'הסבר דמו', 'demo@example.test', 'notice.report@2026-10-3',
+         ?, 'hash', 'h1', 'k1', 1, 'received', 'closed', 'טופל', ?, ?, ?)`,
+    )
+      .bind(ticket, id, crypto.randomUUID(), ago(120), ago(-245), ago(1))
+      .run()
+    await runRetention(opEnv(), now)
+    const left = await env.DB.prepare("SELECT id FROM contacts WHERE place_id = ?").bind(id).all<{ id: string }>()
+    expect(left.results.map((r) => r.id)).toEqual([later])
+    expect(due).not.toBe(later)
+    const r = await env.DB.prepare(
+      "SELECT relationship, explanation, email, explanation_hash, reporter_key, handling_note, status FROM reports WHERE id = ?",
+    )
+      .bind(ticket)
+      .first()
+    expect(r).toEqual({
+      relationship: null,
+      explanation: null,
+      email: null,
+      explanation_hash: null,
+      reporter_key: null,
+      handling_note: null,
+      status: "closed",
+    })
+  })
+})
+
+describe("the run", () => {
+  it("is recorded with its counts, and running it twice changes nothing more", async () => {
+    const { id } = await send("ספסל דמו להרצה כפולה")
+    await decide(id, "return")
+    await age(id, 40)
+    const first = await runRetention(opEnv(), now)
+    const second = await runRetention(opEnv(), now)
+    expect(first.ok).toBe(true)
+    expect(first.counts.erased).toBeGreaterThanOrEqual(1)
+    expect(second.counts.erased).toBe(0)
+    const run = await env.DB.prepare(
+      "SELECT started_at, finished_at, ok FROM retention_runs ORDER BY started_at DESC, id DESC LIMIT 1",
+    ).first()
+    expect(run).toMatchObject({ started_at: now.toISOString(), ok: 1 })
+  })
+
+  it("that fails part-way is recorded as not finished, so no restore can rely on it", async () => {
+    const failing = new Proxy(env.DB, {
+      get(target, key) {
+        if (key === "prepare")
+          return (sql: string) => {
+            if (sql.includes("DELETE FROM contacts")) throw new Error("d1_unavailable")
+            return target.prepare(sql)
+          }
+        const v = Reflect.get(target, key)
+        return typeof v === "function" ? v.bind(target) : v
+      },
+    })
+    const result = await runRetention({ ...opEnv(), db: failing as D1Database }, now)
+    expect(result.ok).toBe(false)
+    const run = await env.DB.prepare("SELECT finished_at, ok FROM retention_runs WHERE id = ?").bind(result.id).first()
+    expect(run).toMatchObject({ ok: 0 })
+  })
+})
