@@ -1,7 +1,7 @@
 import { zValidator } from "@hono/zod-validator"
 import { Hono, type Context } from "hono"
 import { ReportInput, type ReportResult } from "@/shared/contract"
-import { alertReport, insertReport, precaution, reportKnown, type Target } from "../db/reports"
+import { deliverAlerts, insertReport, precaution, replayReport, startAlertRound, type Target } from "../db/reports"
 import { clock } from "../lib/clock"
 import { curatedPlace } from "../lib/curated"
 import { PRIVATE, problem } from "../lib/http"
@@ -51,7 +51,12 @@ reports.post(
     // A retry under a known key skips the browser check (its token was single-use) but still counts against the cap.
     const limited = await overLimit(c, visitor)
     if (limited) return limited
-    if (!(await reportKnown(c.env.DB, key))) {
+    // A retry under a known key is answered from what is stored, before the place is looked at: the place may have
+    // been withdrawn or hidden since, and the request was accepted. The same key with another body is refused.
+    const replay = await replayReport(c.env.DB, input, key, c.env.TRACKING_SECRET)
+    if (replay === "mismatch") return problem(c, 409, "idempotency_key_reused")
+    if (replay) return c.json<ReportResult>(replay, 202, PRIVATE)
+    {
       const outcome = await checkTurnstile(c.env, c.get("verifyTurnstile"), c.req.header("Turnstile-Token"), "report", address)
       if (outcome === "required") return problem(c, 403, "turnstile_required")
       if (outcome === "failed") return problem(c, 403, "turnstile_failed")
@@ -65,9 +70,14 @@ reports.post(
     if (stored.kind === "replayed")
       return c.json<ReportResult>({ ticket: stored.ticket, outcome: stored.outcome as ReportResult["outcome"] }, 202, PRIVATE)
     const hidden = stored.complete ? (await precaution(opEnv(c), stored.ticket, now)) === "hidden" : false
-    // The alert never holds up the answer's truth: if no mail can go now, the scheduled job sends it.
+    // The alert never holds up the answer: a delivery that can't go now is retried by the scheduled job.
     const origin = c.env.ENVIRONMENT === "development" ? new URL(c.req.url).origin : c.env.PUBLIC_ORIGIN || ""
-    await alertReport(c.env.DB, c.env, c.get("sendMail"), stored.ticket, now, origin).catch(() => false)
+    try {
+      await startAlertRound(c.env.DB, c.env, stored.ticket, now)
+      await deliverAlerts(c.env.DB, c.env, c.get("sendMail"), now, origin, stored.ticket)
+    } catch (err) {
+      console.error(JSON.stringify({ level: "error", event: "report_alert", error: (err as Error).name }))
+    }
     return c.json<ReportResult>({ ticket: stored.ticket, outcome: hidden ? "hidden_for_review" : "received" }, 202, PRIVATE)
   },
 )

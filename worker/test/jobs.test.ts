@@ -134,7 +134,8 @@ describe("urgent review reminders", () => {
   it("an alert no mail could carry at intake is sent by the next run", async () => {
     const id = await published()
     const { ticket } = await report({ placeId: id, requesterType: "other" })
-    await env.DB.prepare("UPDATE reports SET alerted_at = NULL, alerts = 0 WHERE id = ?").bind(ticket).run()
+    // The intake's delivery failed (the provider refused it): left for the next run.
+    await env.DB.prepare("UPDATE report_alerts SET state = 'failed', claimed_at = NULL WHERE report_id = ?").bind(ticket).run()
     const before = await mails()
     await jobs(after(0.25))
     expect(await mails()).toBe(before + 1)

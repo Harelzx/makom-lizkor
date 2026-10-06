@@ -1,8 +1,10 @@
 import type { Element } from "@/shared/contract"
 import { ulid } from "../lib/ids"
 import { runOp, type OpEnv, type OpOutcome } from "./ops"
+import { notesCeiling } from "./reports"
 
 const DAY_MS = 24 * 3600 * 1000
+const plus90 = (now: Date) => new Date(now.getTime() + 90 * DAY_MS).toISOString()
 const heldKey = (key: string) => key.replace(/^public\//, "held/")
 
 /** The restoration codes of spec 6. There is no code for "no answer" or for a family disagreement: neither is a basis. */
@@ -80,10 +82,23 @@ export async function suppress(
         ...i.fields.map((field) =>
           db
             .prepare(
-              `INSERT INTO field_suppressions (id, place_id, field, report_id, kind, revision_n, created_at, created_by, reason)
-               SELECT ?3, ?1, ?4, ?5, 'manual', ?6, ?7, ?8, ?9 WHERE ${happened}`,
+              `INSERT INTO field_suppressions (id, place_id, field, report_id, kind, revision_n, created_at, created_by, reason,
+                 notes_ceiling_at, notes_purge_after)
+               SELECT ?3, ?1, ?4, ?5, 'manual', ?6, ?7, ?8, ?9, ?10, MIN(?10, COALESCE((SELECT purge_after FROM reports WHERE id = ?5), ?10))
+               WHERE ${happened}`,
             )
-            .bind(i.placeId, tid, `s_${ulid(now.getTime())}`, field, i.reportId ?? null, place.revision_n, at, i.actor, i.reason),
+            .bind(
+              i.placeId,
+              tid,
+              `s_${ulid(now.getTime())}`,
+              field,
+              i.reportId ?? null,
+              place.revision_n,
+              at,
+              i.actor,
+              i.reason,
+              notesCeiling(now),
+            ),
         ),
         db.prepare(`UPDATE feed_state SET n = n + 1, changed_at = ?3 WHERE id = 1 AND ${happened}`).bind(i.placeId, tid, at),
         db
@@ -200,10 +215,12 @@ export async function lift(
           .bind(sup.place_id, tid, at, restorePlace ? 1 : 0, expectedRev, suppressionId),
         db
           .prepare(
-            `UPDATE field_suppressions SET lifted_at = ?4, lifted_by = ?5, basis_code = ?6, basis_note = ?7, basis_detail = ?8
+            `UPDATE field_suppressions SET lifted_at = ?4, lifted_by = ?5, basis_code = ?6, basis_note = ?7, basis_detail = ?8,
+               notes_purge_after = MIN(notes_purge_after, ?9)
              WHERE id = ?3 AND ${happened}`,
           )
-          .bind(sup.place_id, tid, suppressionId, at, actor, basisCode, basisNote, JSON.stringify(detail)),
+          // Lifting ends the hide's case: what was written about it goes 90 days later at most.
+          .bind(sup.place_id, tid, suppressionId, at, actor, basisCode, basisNote, JSON.stringify(detail), plus90(now)),
         db.prepare(`UPDATE feed_state SET n = n + 1, changed_at = ?3 WHERE id = 1 AND ${happened}`).bind(sup.place_id, tid, at),
         db
           .prepare(`INSERT INTO audit_log (id, at, actor, action, entity_id, fields) SELECT ?3, ?4, ?5, 'lift', ?1, ?6 WHERE ${happened}`)
@@ -266,13 +283,24 @@ export async function setReportStatus(
               `UPDATE reports SET status = 'closed', closed_at = ?4, handled_by = ?2, handling_note = COALESCE(?3, handling_note), backstop_at = NULL,
                  purge_after = MIN(purge_after, ?5) WHERE id = ?1 AND status != 'closed'`,
             )
-            .bind(ticket, actor, note, at, new Date(now.getTime() + 90 * DAY_MS).toISOString())
+            .bind(ticket, actor, note, at, plus90(now))
         : db.prepare("UPDATE reports SET status = 'open', closed_at = NULL WHERE id = ?1 AND status = 'closed'").bind(ticket)
   const [changed] = await db.batch([
     stmt,
     db
       .prepare("INSERT INTO audit_log (id, at, actor, action, entity_id, fields) SELECT ?, ?, ?, ?, ?, 'status' WHERE changes() = 1")
       .bind(`a_${ulid(now.getTime())}`, at, actor, `report_${to}`, ticket),
+    // A closed request's hides keep what moderators wrote about them 90 days at most, like the request itself. After
+    // the audit row, which reads changes() of the status update just before it.
+    ...(to === "closed"
+      ? [
+          db
+            .prepare(
+              "UPDATE field_suppressions SET notes_purge_after = MIN(notes_purge_after, ?2) WHERE report_id = ?1 AND EXISTS (SELECT 1 FROM reports WHERE id = ?1 AND status = 'closed')",
+            )
+            .bind(ticket, plus90(now)),
+        ]
+      : []),
   ])
   return changed.meta.changes === 1
 }

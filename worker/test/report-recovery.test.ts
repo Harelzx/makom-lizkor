@@ -1,0 +1,276 @@
+import { env } from "cloudflare:workers"
+import { beforeEach, describe, expect, it } from "vitest"
+import type { ReportInput } from "@/shared/contract"
+import { runJobs } from "../jobs"
+import { REPORT_GUARDS } from "../lib/guards"
+import { sendMail, type Mail } from "../lib/mail"
+import { call } from "./app"
+import { admin, approve, submit } from "./helpers"
+
+const HOUR = 3600_000
+let day = 0
+const start = () => new Date(Date.UTC(2028, 0, 1 + day, 9, 0, 0))
+const after = (hours: number) => new Date(start().getTime() + hours * HOUR)
+const TWO = "dev@example.test,mod2@example.test"
+beforeEach(async () => {
+  day += 3
+  // Each test watches its own requests and alerts.
+  await env.DB.prepare("UPDATE reports SET status = 'closed', backstop_at = NULL").run()
+  await env.DB.prepare("DELETE FROM report_alerts").run()
+})
+
+async function published() {
+  const { id, trackingToken } = await submit("גינת דמו")
+  await approve(id)
+  return { id, trackingToken }
+}
+type Opts = { key?: string; at?: Date; e?: Env }
+async function report(body: Partial<ReportInput> & { placeId: string }, o: Opts = {}) {
+  return call(
+    "http://local/api/v1/reports",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Idempotency-Key": o.key ?? crypto.randomUUID().replaceAll("-", ""),
+        "Turnstile-Token": "pass-report",
+        "X-Test-Now": (o.at ?? start()).toISOString(),
+      },
+      body: JSON.stringify({
+        elements: ["name_he"],
+        requesterType: "family",
+        relationship: "אחות",
+        explanation: `השם של אחי מופיע כאן בלי רשות, נבקש להסיר. ${crypto.randomUUID()}`,
+        noticeVersion: "notice.report@2026-10-2",
+        ...body,
+      }),
+    },
+    o.e,
+  )
+}
+const row = (ticket: string) =>
+  env.DB.prepare("SELECT * FROM reports WHERE id = ?").bind(ticket).first<Record<string, string | number | null>>()
+const hidden = async (placeId: string) =>
+  ((await env.DB.prepare("SELECT COUNT(*) AS n FROM field_suppressions WHERE place_id = ? AND lifted_at IS NULL")
+    .bind(placeId)
+    .first<number>("n")) ?? 0) > 0
+
+/** A bucket that runs `meanwhile` when an intent is written, so a test can change the world between check and act. */
+function interleaving(meanwhile: () => Promise<unknown>): Env {
+  return {
+    ...env,
+    LEDGER: new Proxy(env.LEDGER, {
+      get(target, prop) {
+        if (prop === "put")
+          return async (key: string, ...rest: unknown[]) => {
+            if (key.endsWith("intent.json")) await meanwhile()
+            return target.put(key, ...(rest as [string]))
+          }
+        const value = Reflect.get(target, prop)
+        return typeof value === "function" ? value.bind(target) : value
+      },
+    }),
+  }
+}
+
+describe("F4-A1: the spam signals hold at the moment of the hide, not only when they were read", () => {
+  it("a copy of the explanation arriving between the check and the hide stops the hide", async () => {
+    const { id } = await published()
+    const explanation = "השם של אחי מופיע כאן בלי רשות, נבקש להסיר אותו מיד בבקשה."
+    const e = interleaving(async () => {
+      // Another request with the same explanation lands while this one's intent is being written.
+      const copy = await (await published()).id
+      await report({ placeId: copy, explanation, requesterType: "other" })
+    })
+    const res = await report({ placeId: id, explanation }, { e })
+    expect((await res.json<{ outcome: string }>()).outcome).toBe("received")
+    expect(await hidden(id)).toBe(false)
+  })
+
+  it("abuse codes cleared between the check and the hide stop the hide", async () => {
+    const { id } = await published()
+    const e = interleaving(() =>
+      env.DB.prepare("UPDATE reports SET explanation_hash = NULL, reporter_key = NULL WHERE place_id = ?").bind(id).run(),
+    )
+    const res = await report({ placeId: id }, { e })
+    expect((await res.json<{ outcome: string }>()).outcome).toBe("received")
+    expect(await hidden(id)).toBe(false)
+  })
+})
+
+describe("F4-A2: a backstop that stopped midway is taken again; one that finished is not", () => {
+  /** A complete request held back at intake (the place had an automatic hide an hour before). */
+  async function heldBack() {
+    const { id } = await published()
+    await report({ placeId: id, elements: ["story_he"] }, { at: after(-1) })
+    const { ticket } = await (await report({ placeId: id })).json<{ ticket: string }>()
+    return { id, ticket }
+  }
+  const deps = { sendMail, purge: async () => true }
+
+  it("a claim left by a run that stopped is taken again once it is stale, and the request is evaluated", async () => {
+    const { id, ticket } = await heldBack()
+    // As if a run claimed it at 24 h and stopped before evaluating.
+    await env.DB.prepare("UPDATE reports SET backstop_claimed_at = ? WHERE id = ?").bind(after(24).toISOString(), ticket).run()
+    await runJobs(env, deps, undefined, after(24 + 5 / 60))
+    expect((await row(ticket))!.outcome).toBe("received")
+    await runJobs(env, deps, undefined, after(24 + 20 / 60))
+    expect((await row(ticket))!).toMatchObject({ outcome: "hidden_for_review", backstop_at: null })
+    expect(await hidden(id)).toBe(true)
+  })
+
+  it("an evaluation that couldn't finish (the ledger refused the intent) is tried again at the next run", async () => {
+    const { ticket } = await heldBack()
+    const down = { ...env, LEDGER: { put: async () => Promise.reject(new Error("down")) } as unknown as R2Bucket }
+    await runJobs(down, deps, undefined, after(24))
+    expect((await row(ticket))!).toMatchObject({ outcome: "received" })
+    expect((await row(ticket))!.backstop_at).not.toBeNull()
+    await runJobs(env, deps, undefined, after(24.25))
+    expect((await row(ticket))!).toMatchObject({ outcome: "hidden_for_review", backstop_at: null })
+  })
+})
+
+describe("F4-A3: a retry under a known key is answered from what is stored, whatever happened to the place since", () => {
+  it("after the place was withdrawn, the same request again gets its ticket; another body under the key is refused", async () => {
+    const { id, trackingToken } = await published()
+    const key = crypto.randomUUID().replaceAll("-", "")
+    const body = { placeId: id, requesterType: "other" as const, explanation: "טעות בשם המקום, נא לתקן" }
+    const first = await (await report(body, { key })).json<{ ticket: string; outcome: string }>()
+    await call(`http://local/api/v1/submissions/${id}/withdraw`, { method: "POST", headers: { Authorization: `Bearer ${trackingToken}` } })
+    const again = await report(body, { key })
+    expect(again.status).toBe(202)
+    expect(await again.json()).toEqual(first)
+    expect((await report({ ...body, explanation: "משהו אחר לגמרי" }, { key })).status).toBe(409)
+    expect((await report(body)).status).toBe(404)
+  })
+})
+
+describe("F4-A4: urgent alerts are delivered per moderator, retried, and not resent once delivered", () => {
+  const two = { ...env, MODERATORS: TWO }
+  const delivered = (to: string) =>
+    env.DB.prepare("SELECT COUNT(*) AS n FROM dev_outbox WHERE to_address = ? AND subject LIKE '%בדיקה דחופה%'").bind(to).first<number>("n")
+  /** A mailer that fails for `failing` while `down.on` is set. */
+  function flaky(failing: string, down: { on: boolean }) {
+    return async (e: Env, m: Mail) => (down.on && m.to === failing ? false : sendMail(e, m))
+  }
+
+  it("one moderator's failed delivery is retried at the next run; the other's isn't sent again", async () => {
+    const { id } = await published()
+    const down = { on: true }
+    const before = { dev: (await delivered("dev@example.test"))!, mod2: (await delivered("mod2@example.test"))! }
+    // The intake's own alert: the second moderator's mail fails.
+    const app = (await import("../index")).createApp({
+      verifyTurnstile: (await import("./app")).fakeSiteverify,
+      sendMail: flaky("mod2@example.test", down),
+      purge: async () => true,
+    })
+    const res = await app.fetch(
+      new Request("http://local/api/v1/reports", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": crypto.randomUUID().replaceAll("-", ""),
+          "Turnstile-Token": "pass-report",
+          "X-Test-Now": start().toISOString(),
+        },
+        body: JSON.stringify({
+          placeId: id,
+          elements: ["name_he"],
+          requesterType: "other",
+          explanation: "טעות",
+          noticeVersion: "notice.report@2026-10-2",
+        }),
+      }),
+      two,
+      (await import("cloudflare:test")).createExecutionContext(),
+    )
+    expect(res.status).toBe(202)
+    expect(await delivered("dev@example.test")).toBe(before.dev + 1)
+    expect(await delivered("mod2@example.test")).toBe(before.mod2)
+    down.on = false
+    await runJobs(two, { sendMail: flaky("mod2@example.test", down), purge: async () => true }, undefined, after(0.25))
+    expect(await delivered("mod2@example.test")).toBe(before.mod2 + 1)
+    expect(await delivered("dev@example.test")).toBe(before.dev + 1)
+  })
+
+  it("a delivery claimed by a run that stopped before sending is sent once its claim is stale", async () => {
+    const { id } = await published()
+    const { ticket } = await (await report({ placeId: id, requesterType: "other" }, { e: two })).json<{ ticket: string }>()
+    const before = (await delivered("mod2@example.test"))!
+    // As if a run claimed mod2's delivery and stopped.
+    await env.DB.prepare(
+      "UPDATE report_alerts SET state = 'pending', claimed_at = ?, sent_at = NULL WHERE report_id = ? AND recipient = 'mod2@example.test'",
+    )
+      .bind(after(0).toISOString(), ticket)
+      .run()
+    await runJobs(two, { sendMail, purge: async () => true }, undefined, after(1 / 60))
+    expect(await delivered("mod2@example.test")).toBe(before)
+    await runJobs(two, { sendMail, purge: async () => true }, undefined, after(0.25))
+    expect(await delivered("mod2@example.test")).toBe(before + 1)
+  })
+
+  it("every 6 hours a new round goes to each moderator, and recorded handling stops what is still waiting", async () => {
+    const { id } = await published()
+    const { ticket } = await (await report({ placeId: id, requesterType: "other" }, { e: two })).json<{ ticket: string }>()
+    const before = (await delivered("mod2@example.test"))!
+    await runJobs(two, { sendMail: async () => false, purge: async () => true }, undefined, after(REPORT_GUARDS.reminderHours))
+    // The reminder round exists but couldn't be delivered; a moderator then records handling.
+    await admin(`/api/admin/reports/${ticket}/handle`, { method: "POST", body: JSON.stringify({ note: "טיפלתי" }) })
+    await runJobs(two, { sendMail, purge: async () => true }, undefined, after(REPORT_GUARDS.reminderHours + 0.25))
+    expect(await delivered("mod2@example.test")).toBe(before)
+    expect((await row(ticket))!.alerts).toBe(2)
+  })
+})
+
+describe("F4-A5: what moderators wrote about a hide has a deadline that only moves earlier", () => {
+  const sup = (placeId: string) =>
+    env.DB.prepare("SELECT id, created_at, notes_ceiling_at, notes_purge_after FROM field_suppressions WHERE place_id = ?")
+      .bind(placeId)
+      .first<{ id: string; created_at: string; notes_ceiling_at: string; notes_purge_after: string }>()
+  const DAY = 24 * HOUR
+
+  it("a hide's notes are kept 12 months at most, lowered to 90 days when its request closes, and never raised", async () => {
+    const { id } = await published()
+    const { ticket } = await (await report({ placeId: id })).json<{ ticket: string }>()
+    const s = (await sup(id))!
+    expect(new Date(s.notes_ceiling_at).getTime()).toBe(new Date(s.created_at).getTime() + 360 * DAY)
+    expect(s.notes_purge_after <= s.notes_ceiling_at).toBe(true)
+    await admin(`/api/admin/reports/${ticket}/close`, {
+      method: "POST",
+      headers: { "X-Test-Now": after(1).toISOString() },
+      body: JSON.stringify({ note: "נסגר" }),
+    })
+    const closed = (await sup(id))!
+    expect(closed.notes_purge_after).toBe(new Date(after(1).getTime() + 90 * DAY).toISOString())
+    await admin(`/api/admin/reports/${ticket}/reopen`, { method: "POST", body: "{}" })
+    expect((await sup(id))!.notes_purge_after).toBe(closed.notes_purge_after)
+    await expect(
+      env.DB.prepare("UPDATE field_suppressions SET notes_purge_after = ? WHERE id = ?").bind(closed.notes_ceiling_at, closed.id).run(),
+    ).rejects.toThrow(/suppression_notes_deadline/)
+  })
+
+  it("a manual hide's notes are kept 12 months at most, and lowered to 90 days when the hide is lifted", async () => {
+    const { id } = await published()
+    const view = await (await admin(`/api/admin/places/${id}`)).json<{ rev: number }>()
+    await admin("/api/admin/suppressions", {
+      method: "POST",
+      headers: { "X-Test-Now": start().toISOString() },
+      body: JSON.stringify({ placeId: id, fields: ["story_he"], expectedRev: view.rev, reason: "שיחה" }),
+    })
+    const s = (await sup(id))!
+    expect(s.notes_purge_after).toBe(s.notes_ceiling_at)
+    const rev = (await (await admin(`/api/admin/places/${id}`)).json<{ rev: number }>()).rev
+    const lifted = await admin(`/api/admin/suppressions/${s.id}/lift`, {
+      method: "POST",
+      headers: { "X-Test-Now": after(2).toISOString() },
+      body: JSON.stringify({
+        expectedRev: rev,
+        basisCode: "hidden_in_error",
+        basisNote: "הוסתר בטעות, הסיפור תקין",
+        confirm: { affirmativeBasis: true, notNonresponseOrDispute: true },
+      }),
+    })
+    expect(lifted.status).toBe(200)
+    expect((await sup(id))!.notes_purge_after).toBe(new Date(after(2).getTime() + 90 * DAY).toISOString())
+  })
+})
