@@ -15,6 +15,8 @@ import { tributes } from "./routes/tributes"
 import { ogResponse } from "./lib/og"
 import { log } from "./lib/log"
 import { ops } from "./routes/ops"
+import { csp } from "./routes/csp"
+import { secure } from "./lib/security-headers"
 import type { ErrorRates } from "./lib/ops-summary"
 
 /** What the routes reach outside the Worker; the tests pass stand-ins, the deployed Worker the real ones. */
@@ -35,6 +37,14 @@ export function createApp(deps: Deps) {
     c.set("purge", deps.purge)
     c.set("errorRates", deps.errorRates)
     await next()
+    // The site's security headers on everything the Worker answers, errors included (spec 11); the static files get
+    // the same ones from public/_headers. A response made by fetch has fixed headers, so it is copied first.
+    try {
+      secure(c.res.headers)
+    } catch {
+      c.res = new Response(c.res.body, c.res)
+      secure(c.res.headers)
+    }
   })
 
   app.get("/api/v1/health", (c) => c.json({ ok: true }))
@@ -45,6 +55,7 @@ export function createApp(deps: Deps) {
   app.route("/api/v1", feed)
   app.route("/api/admin", admin)
   app.route("/api/ops", ops)
+  app.route("/api/csp-report", csp)
   app.route("/__dev", dev)
   app.route("/", share)
 

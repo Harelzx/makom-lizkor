@@ -1,6 +1,10 @@
 import { z } from "zod"
 import { cleanText } from "./text"
 
+// No generated code: zod's probe for it (new Function) is an eval the site's policy refuses (spec 11), and the Worker's
+// runtime refuses it too. The schemas here are small, so interpreting them costs nothing a visitor would notice.
+z.config({ jitless: true })
+
 /** Must match ADDABLE_KINDS in src/data/taxonomy.ts; a test keeps them equal. Communities are out of scope. */
 export const SUBMITTABLE_KINDS = ["bench", "lookout", "grove", "garden", "plaque", "monument", "other"] as const
 

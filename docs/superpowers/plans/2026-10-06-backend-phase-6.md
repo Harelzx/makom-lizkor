@@ -15,13 +15,13 @@
 
 **ה־spec:**
 
-| סעיף | נושא |
-| --- | --- |
-| 10 | `/api/ops` |
-| 11 | כותרות, CSP, לוגים |
-| 12.1–12.3 | הסוכנים, deny, ה־manifest, מרשם הגישה |
-| 13 | שכבת המדיניות, האינוריאנטים, staging, עומס |
-| 14.2 | השחרור וה־rollback |
+| סעיף      | נושא                                       |
+| --------- | ------------------------------------------ |
+| 10        | `/api/ops`                                 |
+| 11        | כותרות, CSP, לוגים                         |
+| 12.1–12.3 | הסוכנים, deny, ה־manifest, מרשם הגישה      |
+| 13        | שכבת המדיניות, האינוריאנטים, staging, עומס |
+| 14.2      | השחרור וה־rollback                         |
 
 **מחוץ לשלב הזה** (החלטות חשבון של הראל, ונשארים ברשימת ההשקה):
 
@@ -39,8 +39,9 @@
   - חלון ויחידות מוגדרים;
   - מכנה של בקשות, אם מדווחים אחוז;
   - כשאין טלמטריה, הערך הוא «לא זמין», לא אפס.
-  
+
   מקומית: מקור סינתטי. החיבור לספק ובדיקת ההרשאות שלו הם עבודת שחרור.
+
 - **P6-LOG-1:**
   - הלוגר בודק ערכים, לא רק שמות שדות. ערך פסול נשמט, ונרשם רק שם השדה (`dropped`). הקלט שנדחה אף פעם לא נכתב.
   - בדיווח CSP אין host: יש קטגוריית מקור מרשימה סגורה, ו־directive מרשימה ידועה.
@@ -65,8 +66,9 @@
 - **`worker/lib/log.ts`:** ‏`log(level, event, fields)` עם רשימת שדות מותרת:
   - `event`, `level`, `code`, `part`, `job`, `op`, `place`, `failure`, `count`/`counts`, `error` (שם המחלקה בלבד), `status`, `found`;
   - כל ערך הוא מזהה, קוד או מספר.
-  
+
   כל `console.*` בקוד ה־Worker עובר אליו.
+
 - **בדיקה סטטית:** אין `console.` מחוץ ל־`log.ts`.
 - **בדיקת זמן ריצה לכל ה־suite:** ‏setup של Vitest עוטף את `console`. כל שורה שנכתבה בזמן הבדיקות נבדקת מול הסכמה: JSON, שדות מהרשימה, ובלי מייל, IP, טוקן או גוף בקשה (לפי תבניות). ה־suite נכשל על שורה חריגה. כך הכלל נבדק על כל מסלול שהבדיקות מפעילות, לא רק על דוגמאות.
 
@@ -106,11 +108,21 @@
     - `report-uri /api/csp-report`.
   - בנוסף: HSTS, ‏`nosniff`, ‏`Referrer-Policy: strict-origin-when-cross-origin`, ‏`Permissions-Policy` (מיקום: `self` בלבד; השאר כבוי) ו־COOP.
 - **אותן כותרות על כל תגובה שה־Worker עצמו מייצר:** middleware אחד. דפי השיתוף מקבלים את אותה מדיניות. המדיה שומרת את ה־`sandbox` שלה.
-- **`POST /api/csp-report`:** רושם רק את ה־directive שהופר ואת ה־host החסום, בלי נתיב ובלי שאילתה. עם rate limit. מחזיר 204.
+- **`POST /api/csp-report`:** רושם רק את ה־directive שהופר (מהרשימה הידועה) ואת **סוג** המקור החסום (מהרשימה הסגורה `CSP_SOURCES`), לא את ה־host, לפי a49 וסשן הפרטיות. כתובת הדף, ה־referrer, הקובץ וה־sample נקראים ולא נשמרים. עם rate limit (`CSP_LIMIT`, ‏20 בדקה לכתובת, במפתח מגובב; מעבר לו 429 בלי שורה). מחזיר 204, גם לדיווח פגום.
 - **בדיקות:**
   - Worker: כל מסלול מחזיר את הכותרות.
   - e2e על build הייצור (preview): הכותרות על `/`, על נכס ועל `/place/<id>`.
+  - **ביקורת חיובית** (`e2e/security-headers.spec.ts`): הפרה מכוונת (תמונה מ־`csp-control.invalid`) מגיעה לאוסף ונענית ב־204, ושורת `csp_report` אחת נרשמת. הבדיקה גם דורשת שזו תהיה ההפרה היחידה בדף. בהרצה הראשונה היא תפסה שני דיווחי `script-src eval` אמיתיים: הבדיקה של zod אם `new Function` זמין. תוקן ב־`z.config({ jitless: true })` ב־`src/shared/contract.ts`.
   - **ריצת e2e מלאה על preview בלי אף הפרת Report-Only.** אוסף את הודעות ה־console ואת הדיווחים שהגיעו ל־`/api/csp-report`. זו הראיה שאפשר יהיה לעבור לאכיפה; המעבר עצמו אחרי staging.
+
+- **הכרעות (בביצוע):**
+  - **Turnstile:** רק `challenges.cloudflare.com`, ב־`script-src`, ב־`connect-src` וב־`frame-src`. זה ה־host היחיד שבתיעוד של Cloudflare (דף ה־CSP ו־llms-full, ‏2026-10-06). את "שני ה־hostnames החדשים" שב־spec לא מצאנו שם: טענה לא מאומתת, ולא מנחשים. ה־e2e לא טוען את Turnstile (אין sitekey), ולכן Turnstile תחת המדיניות נבדק רק ב־staging.
+  - **`worker-src 'self'`:** בלי `blob:`. ה־worker של MapLibre הוא קובץ module של האתר (`?worker&url`). ריצת ה־preview לא דיווחה דבר.
+  - **`X-Frame-Options: DENY`** בנוסף ל־`frame-ancestors 'none'`: `frame-ancestors` לא חוסם במצב Report-Only.
+  - **HSTS** בלי `includeSubDomains` ובלי `preload`, עד שהדומיין ידוע.
+  - **תגובה עם `Content-Security-Policy` משלה** (ה־sandbox של תמונה) שומרת אותו, ולא מקבלת את מדיניות הדף לצדו. את שאר הכותרות היא מקבלת.
+  - **מקור אחד לשני הנושאים:** `worker/lib/security-headers.ts`. `public/_headers` נכתב ממנו (`node scripts/security-headers.mjs`), ובדיקה ב־`test:scripts` נכשלת כשהם שונים.
+  - **הראיה לאפס הפרות בריצה מלאה:** שורות `csp_report` בפלט ה־WebServer של ריצת ה־prod. מותרת רק אחת: של הביקורת החיובית (`img-src`, ‏`unknown`). ב־dev ייתכנו דיווחים מ־HMR של Vite. הם לא ממצא, ואין להרחיב בגללם את `connect-src`.
 
 ## משימה 5: CI, שחרור, rollback ו־manifest (spec 12.2, 14.2)
 
@@ -166,12 +178,13 @@
   - שתי הרשאות שונות לא מקבלות לעולם `HIT`;
   - מדידת purge עד תוכן טרי;
   - `workers.dev` סגור.
-  
+
   מקומית רץ על preview, בחלקים שחלים שם. ב־staging רץ במלואו.
+
 - **`tests/load/oct7.js` (k6):**
   - הפרופיל: 50 rps ו־spike של פי 10;
   - ספים: p95 מתחת ל־300ms, cache hit מעל 95% ואפס 5xx.
-  
+
   מקומית: הרצת עשן קצרה אם k6 מותקן. המספרים עצמם רק ב־staging.
 
 ## בדיקות השלב
