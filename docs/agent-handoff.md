@@ -14,10 +14,10 @@ The backend session's working notes while Harel is away. Kept current after each
 ## State
 
 - Phases 1 and 2: merged into `main` locally (Phase 1 `c73870c`, Phase 2 `2f609bc`, follow-ups `07eef68`).
-- Phase 2 close-out on the branch (not merged): through `948dd19`. Two consolidated fresh reviews done; findings fixed. Next: report batch 5 to the adviser (`reports/closeout-d.json`).
+- Phase 2 close-out on the branch (not merged): batches 1–6 through `429c0a9`. Adviser items 1–3 of `20261006T001348Z-079ed1ed` done in `429c0a9`; items 4 (evidence slices) and 5 (fresh follow-up review + report) in progress. Not yet accepted by the adviser.
 - `main` merged into the branch at `7e570fc` (privacy session's `PENDING_PROMISES` gate).
-- Phase 3: plan `de6f693`; Task 1 server anemones `003c608`; Task 2 client anemones `b7735c5` (+ fixes `e97598a`, `0b8ead2`, `948dd19`). Task 3 (share pages) and Task 4 remain.
-- Privacy session: approved the anemone and withdrawal wording; asked to switch About to «…בקשות לפי קוד שנגזר מהכתובת» and to cover what the browser keeps.
+- Phase 3: plan `de6f693`; Task 1 server anemones `003c608`; Task 2 client anemones `b7735c5` (+ fixes `e97598a`, `0b8ead2`, `948dd19`); Task 3 share pages `5c3de2d` (Worker share 6/6, scripts 9/9, share+routing e2e dev 11/11 and prod 5/5, Worker 125/125, client 13/13 on that commit). Task 4: full suites running; two fresh reviews running (whole Phase 3; Phase 2 follow-up `948dd19..429c0a9`).
+- Privacy session: approved the anemone and withdrawal wording, notice 10-11 and hashed limiter keys; my proposed wording «עד שהמשיכה שלו מהמכשיר הזה תושלם» is unanswered.
 
 ## Adviser consultations
 
@@ -33,17 +33,10 @@ The backend session's working notes while Harel is away. Kept current after each
 
 ## Outstanding
 
-Phase 2 close-out from 20261005T200200Z-1838ed8c (each with a test):
-
-1. #12 photo race: serve /media/public only for the currently published photo; losing approval/upload cleans up; recoverable cleanup; test an approval copy paused across a withdrawal. Plus a #10 failure-injection test (R2 fails after a committed decision).
-2. Two tabs must not overwrite each other's local records (submit keys, tracking tokens): merge writes; two-tab regression with lost responses and reload.
-3. #1: prove the moderator UI renders permission context and the access note (e2e).
-4. Revisions respect the queue cap (concurrency; valid replay still recovers); test a second correction while one is pending (#22).
-5. release:check: validate the effective production send_email binding (not a text match); negative cases.
-6. Report in smaller pinned batches: photo/moderation/withdrawal first, then storage/outbox and revision guards.
-
-- Phase 5 must ship the 30-day erase of returned, uncorrected places (promised since `notice.submission@2026-10-5`; launch blocker).
-- Deferred minors from the Phase 2 review: #12, #16–#22 (see the Phase 2 plan's backlog).
+- The six items of `20261005T200200Z-1838ed8c` were done in batches 1–6 (`11fa1a9` … `429c0a9`).
+- Deferred minors from the consolidated reviews: `tracked()` timing; an email link to a withdrawn place says 404 rather than gone; `withdraw` losing compare-and-set three times answers 404; public photos cached 300 s; unverified email kept 12 months (Phase 5 checklist).
+- Phase 5 must ship the `PENDING_PROMISES` entries in `src/config.ts` (30-day erase of returned places, tribute rows after 8 days, the photo sweep), unverified-email erasure and the `sweepPhotos` schedule. Launch blockers.
+- Share pages: the edge cache (60 s, `Cache-Tag: place:<id>`) needs a purge on withdrawal once deployed; the curated lookup (`worker/lib/curated.ts`) is scaffolding until Phase 7.
 
 ## Pending for Harel
 
@@ -51,5 +44,6 @@ Phase 2 close-out from 20261005T200200Z-1838ed8c (each with a test):
 
 ## Next action
 
-1. Submit the retrospective Phase 2 implementation report (asked in 20261005T195531Z-a1310bb9).
-2. Write the Phase 3 detailed plan (`docs/superpowers/plans/2026-10-05-backend-phase-3.md`) following that reply, then implement.
+1. Fix the two reviews' Critical/Important findings (each RED→GREEN), rerun suites.
+2. Report to the adviser with `--review-report`: Phase 2 follow-up (evidence slices + review) and Phase 3 completion; merge into `main` locally (`--no-ff`) only after `proceed`, then `scripts/milestone`.
+3. Then Phase 4 onward, locally where possible. Phase 5 must build every `PENDING_PROMISES` entry (30-day erase of returns, tribute rows after 8 days, photo sweep) and remove each entry in the commit that builds it.
