@@ -2,6 +2,7 @@ import { Hono, type Context } from "hono"
 import type { AppEnv } from "../index"
 import { publicPlace } from "../db/places"
 import { curatedPlace } from "../lib/curated"
+import { ogState } from "../lib/og"
 
 export const share = new Hono<AppEnv>()
 
@@ -53,6 +54,10 @@ async function sharePage(c: Context<AppEnv>, id: string | null) {
   }
 
   const place = found.place
+  // A contribution's own image, named by the hash of what it shows now; the site's own places keep the general one
+  // until they move into the database (phase 7).
+  const og = id!.startsWith("p_") ? await ogState(c.env.DB, id!) : null
+  const image = og ? `${origin}/media/og/${encodeURIComponent(id!)}/${og.hash}.png` : `${origin}/og.png`
   // Cut by characters, not UTF-16 units, so an emoji at the edge isn't split into a broken glyph.
   const words = Array.from(place.summary_he || place.place_he || "מקום לזכור")
     .slice(0, DESCRIPTION_MAX)
@@ -70,7 +75,7 @@ async function sharePage(c: Context<AppEnv>, id: string | null) {
     .on('meta[name="description"]', content(words))
     .on('meta[property="og:title"]', content(place.name_he))
     .on('meta[property="og:description"]', content(words))
-    .on('meta[property="og:image"]', origin ? content(`${origin}/og.png`) : {})
+    .on('meta[property="og:image"]', origin ? content(image) : {})
     .on("head", {
       element: (head) => {
         if (url) {

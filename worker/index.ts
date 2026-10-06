@@ -12,6 +12,7 @@ import { reports } from "./routes/reports"
 import { share } from "./routes/share"
 import { submissions } from "./routes/submissions"
 import { tributes } from "./routes/tributes"
+import { ogResponse } from "./lib/og"
 
 /** What the routes reach outside the Worker; the tests pass stand-ins, the deployed Worker the real ones. */
 export type Deps = { verifyTurnstile: VerifyTurnstile; sendMail: SendMail; purge: Purge }
@@ -35,6 +36,12 @@ export function createApp(deps: Deps) {
   app.route("/api/admin", admin)
   app.route("/__dev", dev)
   app.route("/", share)
+
+  // A contribution's share image, only while it is the place's current one (worker/lib/og.ts).
+  app.get("/media/og/:id/:file", (c) => {
+    const file = c.req.param("file")
+    return ogResponse({ db: c.env.DB, media: c.env.MEDIA }, c.req.param("id"), file.endsWith(".png") ? file.slice(0, -4) : "")
+  })
 
   // Approved photos only: the Worker is the one door to the bucket, and it opens public/ alone (spec 5).
   app.get("/media/public/*", async (c) => {

@@ -5,6 +5,7 @@ import { EXPORT_TABLES, runExport } from "../db/exports"
 import { importExport, type ExportPayload } from "../db/import"
 import { readFeed } from "../db/places"
 import { replayLedger, restorePhotos } from "../db/replay"
+import { ogState } from "../lib/og"
 import { sha256, unseal, type Manifest } from "../lib/sealed"
 import { call } from "./app"
 import { admin, approve } from "./helpers"
@@ -86,6 +87,12 @@ describe("replaying the ledger onto a restored database (spec 8.2, 8.3)", () => 
       .bind(withdrawn.id)
       .first<number>("n")
     expect(left).toBe(0)
+
+    // Share images (L4) follow the reconciled state: the hide after the export is in the restored image's address,
+    // and the place with a gap has none until a moderator looks.
+    expect((await ogState(env.IMPORT_TEST, hidden.id))!.hash).toBe((await ogState(env.DB, hidden.id))!.hash)
+    expect(await ogState(env.IMPORT_TEST, gap.id)).toBeNull()
+    expect(await ogState(env.IMPORT_TEST, withdrawn.id)).toBeNull()
 
     // Twice is once.
     const before = JSON.stringify(await env.IMPORT_TEST.prepare("SELECT * FROM field_suppressions ORDER BY id").all())

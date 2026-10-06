@@ -17,7 +17,8 @@ describe("a place's share page", () => {
     expect(html).toContain("<title>ספסל דמו לשיתוף · מקום לזכור</title>")
     expect(meta(html, "og:title")).toBe("ספסל דמו לשיתוף")
     expect(meta(html, "og:description")).toBe("סיפור קצר על הספסל")
-    expect(meta(html, "og:image")).toBe("http://local/og.png")
+    // Its own image (L4), named by the hash of what it shows now.
+    expect(meta(html, "og:image")).toMatch(new RegExp(`^http://local/media/og/${id}/[0-9a-f]{64}\\.png$`))
     expect(meta(html, "og:url")).toBe(`http://local/place/${id}`)
     expect(html).toContain(`<link rel="canonical" href="http://local/place/${id}"`)
     const data = JSON.parse(/<script type="application\/json" id="place-data">([^<]*)<\/script>/.exec(html)![1])
@@ -44,6 +45,8 @@ describe("a place's share page", () => {
     expect(meta(html, "og:title")).toBeTruthy()
     expect(meta(html, "og:title")).not.toBe("מקום לזכור · שלוש שנים")
     expect(html).not.toContain('id="place-data"')
+    // The general image until the site's own places move into the database (phase 7).
+    expect(meta(html, "og:image")).toBe("http://local/og.png")
   })
 
   it("keeps a hostile name from breaking the page or running anything", async () => {

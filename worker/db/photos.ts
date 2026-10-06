@@ -1,4 +1,5 @@
 import { ulid } from "../lib/ids"
+import { ogState } from "../lib/og"
 
 /**
  * A place's photo files after upload: copied to public/ for an approval, retired when a decision makes them obsolete,
@@ -103,7 +104,7 @@ export async function photosRemain(media: R2Bucket, placeId: string): Promise<bo
 
 /** Every file of a place, in quarantine, public and held alike: a withdrawal erases them all at once. */
 export async function erasePhotos(media: R2Bucket, placeId: string) {
-  for (const prefix of [`quarantine/${placeId}/`, `public/${placeId}/`, `held/${placeId}/`]) {
+  for (const prefix of [`quarantine/${placeId}/`, `public/${placeId}/`, `held/${placeId}/`, `og/${placeId}/`]) {
     await deleteKeys(media, await keysUnder(media, prefix))
   }
 }
@@ -154,5 +155,22 @@ export async function sweepPhotos(db: D1Database, media: R2Bucket, now: Date) {
       cursor = page.truncated ? page.cursor : undefined
     } while (cursor)
   }
+  // Share images (L4): every one that isn't its place's current image, once an hour old (a render under way writes
+  // its file before its last check), a withdrawn or erased place's all of them.
+  const current = new Map<string, string | null>()
+  let cursor: string | undefined
+  do {
+    const page = await media.list({ prefix: "og/", cursor })
+    const stale: string[] = []
+    for (const o of page.objects) {
+      if (o.uploaded.getTime() >= settled) continue
+      const [, place, file] = o.key.split("/")
+      if (!current.has(place)) current.set(place, (await ogState(db, place))?.hash ?? null)
+      if (file !== `${current.get(place)}.png`) stale.push(o.key)
+    }
+    await deleteKeys(media, stale)
+    removed += stale.length
+    cursor = page.truncated ? page.cursor : undefined
+  } while (cursor)
   return removed
 }
