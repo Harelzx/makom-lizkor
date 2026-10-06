@@ -84,3 +84,34 @@ it("the summary's schema is the committed one: a change to what the agent sees i
   const { default: committed } = await import("../lib/ops-summary.schema.json")
   expect(z.toJSONSchema(OpsSummary)).toEqual(committed)
 })
+
+// Staging admits only the CI's service token through Access, and its MODERATORS holds a placeholder no one can sign in
+// as (adviser a55): the token carries no email, so it is never a moderator, listed for the ops summary or not.
+it("a service token is never a moderator: the queue and an approval refuse it, whatever MODERATORS holds", async () => {
+  const token = await serviceToken(allowed())
+  const call = (path: string, e: Env, init: RequestInit = {}) =>
+    app().fetch(
+      new Request(`http://local${path}`, {
+        ...init,
+        headers: { "Cf-Access-Jwt-Assertion": token, "Sec-Fetch-Site": "same-origin", "Content-Type": "application/json" },
+      }),
+      e,
+      createExecutionContext(),
+    )
+  const s = await send("גן דמו שאסימון שירות לא יאשר")
+  for (const e of [env, { ...env, MODERATORS: "staging-moderator@example.test" }]) {
+    expect((await call("/api/admin/queue", e)).status).toBe(403)
+    const approval = await call(`/api/admin/places/${s.id}/transitions`, e, {
+      method: "POST",
+      body: JSON.stringify({ action: "approve", revisionId: "r", expectedRev: 0 }),
+    })
+    expect(approval.status).toBe(403)
+  }
+  // Still waiting for a person: the moderator's own queue has it.
+  const queue = await app().fetch(
+    new Request("http://local/api/admin/queue", { headers: { "Cf-Access-Jwt-Assertion": await devToken("dev@example.test") } }),
+    env,
+    createExecutionContext(),
+  )
+  expect(((await queue.json()) as { items: { id: string }[] }).items.some((i) => i.id === s.id)).toBe(true)
+})
