@@ -1,6 +1,11 @@
 // node --test scripts/ci-policy.test.mjs
 import assert from "node:assert/strict"
+import { spawnSync } from "node:child_process"
+import { mkdtempSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { test } from "node:test"
+import { parse } from "yaml"
 import { policyProblems, readWorkflows } from "./ci-policy.mjs"
 
 const real = readWorkflows()
@@ -161,4 +166,15 @@ test("staging deploys only the commit CI passed on main, with staging's secrets 
     withChange("staging.yml", 'npx wrangler deploy --tag "staging-', 'npx wrangler deploy --env production --tag "staging-'),
     "changes production",
   )
+})
+
+test("a failed command inside a pipe fails its step, so no migration runs without the bookmark (P6-BOOKMARK-1)", () => {
+  // GitHub runs an unspecified shell as `bash -e {0}`, without pipefail (workflow syntax, jobs.<id>.steps[*].shell).
+  fails(withChange("ci.yml", "      - run: npm test\n", "      - run: npm test | tee test.log\n"), "a pipe that hides a failure")
+  // The release's own bookmark step, run as GitHub runs it, with a Wrangler that fails and a tee that succeeds.
+  const step = parse(real["release.yml"]).jobs.release.steps.find((s) => /time-travel/.test(s.run ?? ""))
+  const dir = mkdtempSync(join(tmpdir(), "bookmark-"))
+  writeFileSync(join(dir, "npx"), "#!/bin/sh\necho 'no bookmark' >&2\nexit 1\n", { mode: 0o755 })
+  const res = spawnSync("bash", ["-e", "-c", step.run], { env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, RUNNER_TEMP: dir } })
+  assert.notEqual(res.status, 0, "the step passed although Wrangler failed")
 })

@@ -112,8 +112,12 @@ jobs:
       - run: npm ci
       - name: Release check
         run: npm run release:check
+      # Without pipefail (GitHub's default `bash -e`), a failed command before tee would pass and the migrations would
+      # run with no recovery point (a51, P6-BOOKMARK-1).
       - name: Time Travel bookmark before the migrations
-        run: npx wrangler d1 time-travel info DB | tee "$RUNNER_TEMP/bookmark.txt"
+        run: |
+          set -euo pipefail
+          npx wrangler d1 time-travel info DB | tee "$RUNNER_TEMP/bookmark.txt"
       - uses: actions/upload-artifact@v4
         with:
           name: bookmark-${{ inputs.release }}

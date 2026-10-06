@@ -14,6 +14,11 @@ const SHA_REF = "${{ needs.verify.outputs.sha }}"
 const runs = (job) => (job.steps ?? []).map((s) => (typeof s.run === "string" ? s.run : ""))
 const text = (o) => JSON.stringify(o ?? null)
 
+/** A pipe (not ||) outside single quotes, where jq filters keep theirs. */
+const hidesFailure = (run) => /(^|[^|])\|(?!\|)/.test(run.replace(/'[^']*'/g, "''"))
+const pipefail = (step, job, w) =>
+  /^\s*set -[a-z]*o pipefail\b/.test(step.run) || [step.shell, job.defaults?.run?.shell, w.defaults?.run?.shell].includes("bash")
+
 export function policyProblems(workflows) {
   const problems = []
   for (const [name, source] of Object.entries(workflows)) {
@@ -42,6 +47,10 @@ export function policyProblems(workflows) {
       if (secrets.length && env !== "production" && !staging)
         say(`job ${id} reads ${secrets.join(", ")} outside the production environment`)
       if (production && secrets.some((s) => s.startsWith("STAGING_"))) say(`job ${id} reads staging secrets in a production workflow`)
+      // GitHub runs a step with no shell named as `bash -e {0}`, without pipefail: a failure before a pipe would pass.
+      for (const step of job.steps ?? [])
+        if (typeof step.run === "string" && hidesFailure(step.run) && !pipefail(step, job, w))
+          say(`job ${id} has a pipe that hides a failure; start the step with set -o pipefail`)
       // An input or event field written into a script is a script injection; it goes through env instead.
       for (const run of runs(job))
         if (/\$\{\{\s*(inputs\.|github\.event\.)/.test(run)) say(`job ${id} writes an input into a script; pass it through env`)
