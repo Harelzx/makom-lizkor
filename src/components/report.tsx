@@ -5,12 +5,13 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Field, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { messageOf, useHolder } from "@/components/report-state"
+import { messageOf, UNREAD, useReports } from "@/components/report-state"
 import { noticeHtml } from "@/data/legal"
 import { DISCARD_LABEL, ELEMENT_LABEL, REQUESTER_LABEL } from "@/data/reports"
 import { newSubmitKey } from "@/lib/api"
 import { ease } from "@/lib/motion"
-import { freeze, pendingReport } from "@/lib/report-outbox"
+import { discard, dismiss, entry, heldFor, hydrate, readFailed, resend, start } from "@/lib/report-holder"
+import { freeze } from "@/lib/report-outbox"
 import { CURRENT_REPORT_NOTICE, REQUESTER_TYPES, type Element, type ReportInput } from "@/shared/contract"
 import type { Place } from "@/types"
 
@@ -51,35 +52,44 @@ export function ReportRequest({ place }: { place: Place }) {
   const uid = useId()
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState<Fields>(EMPTY)
-  const [h, s] = useHolder()
+  useReports()
+  // The request this card shows, by key: the page holds it (src/lib/report-holder.ts), so it outlives the card closing.
+  const [key, setKey] = useState<string | null>(null)
+  const s = entry(key)
   // A request sent from here earlier comes back first; nothing can be sent until that is known.
   const [restoring, setRestoring] = useState(true)
   const curated = place.coord_source !== "contribution"
   // While a request is kept, the form shows it as it was sent, and only it.
-  const f = s.kept ? fieldsOf(s.kept.payload) : draft
+  const kept = s?.r ?? null
+  const busy = !!s?.busy
+  const f = kept ? fieldsOf(kept.payload) : draft
   const change = (patch: Partial<Fields>) => setDraft((d) => ({ ...d, ...patch }))
 
   useEffect(() => {
     let live = true
-    void pendingReport(place.id).then(({ report, complete }) => {
+    void hydrate().then(() => {
       if (!live) return
-      if (report) {
-        h.restore(report)
+      const held = heldFor(place.id)
+      if (held) {
+        setKey(held.key)
         setOpen(true)
-      } else if (!complete) h.unread()
+      }
       setRestoring(false)
     })
     return () => {
       live = false
     }
-  }, [place.id, h])
+  }, [place.id])
 
   const ready = f.elements.length > 0 && !!f.requester && f.explanation.trim().length > 0
-  const { status, alert } = messageOf(s, curated)
+  const message = messageOf(s, curated)
+  const status = message.status
+  // Unread: the browser's copy couldn't be read, so an earlier request may exist unseen; never shown as none.
+  const alert = message.alert ?? (!restoring && !s && readFailed() ? UNREAD : undefined)
 
   const send = async () => {
-    if (restoring || s.busy) return
-    if (s.kept) return void h.resend()
+    if (restoring || busy) return
+    if (kept) return void resend(kept.key)
     if (!ready || !draft.requester) return
     const r = freeze(
       place.id,
@@ -96,9 +106,11 @@ export function ReportRequest({ place }: { place: Place }) {
     )
     // The fields show the kept request from here on. The draft goes, and comes back only when this first try is refused
     // before anything was stored; an expired or removed request leaves an empty form.
+    if (key) dismiss(key)
+    setKey(r.key)
     setDraft(EMPTY)
-    await h.start(r)
-    if (h.get().shown?.view === "editable") setDraft(fieldsOf(r.payload))
+    await start(r)
+    if (entry(r.key)?.shown?.view === "editable") setDraft(fieldsOf(r.payload))
   }
 
   if (!open)
@@ -120,7 +132,7 @@ export function ReportRequest({ place }: { place: Place }) {
       ) : (
         <>
           <p className="text-caption text-ink-2">כל בקשה נבדקת בידי אדם בדחיפות. אין צורך בשם, בתעודה מזהה או במסמכים.</p>
-          <fieldset disabled={!!s.kept || s.busy || restoring} className="contents">
+          <fieldset disabled={!!kept || busy || restoring} className="contents">
             <FieldGroup>
               <FieldSet>
                 <FieldLegend variant="label">מה לבקש להסיר או לתקן</FieldLegend>
@@ -214,9 +226,9 @@ export function ReportRequest({ place }: { place: Place }) {
             )}
           </AnimatePresence>
           <div className="flex items-center justify-between gap-2">
-            {s.kept ? (
+            {kept ? (
               // Letting go here doesn't take back a request that arrived: a person reviews it as usual.
-              <Button variant="ghost" disabled={s.busy} onClick={() => void h.discard()}>
+              <Button variant="ghost" disabled={busy} onClick={() => void discard(kept.key)}>
                 {DISCARD_LABEL}
               </Button>
             ) : (
@@ -226,11 +238,11 @@ export function ReportRequest({ place }: { place: Place }) {
             )}
             <Button
               className="pressable rounded-full px-5"
-              disabled={restoring || s.busy || (!s.kept && !ready)}
-              aria-busy={s.busy}
+              disabled={restoring || busy || (!kept && !ready)}
+              aria-busy={busy}
               onClick={() => void send()}
             >
-              {s.kept ? "שליחה שוב" : "שליחת הבקשה"}
+              {kept ? "שליחה שוב" : "שליחת הבקשה"}
             </Button>
           </div>
         </>

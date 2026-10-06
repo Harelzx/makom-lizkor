@@ -49,3 +49,12 @@ it("an error body of any shape never throws: unrecognised is unknown, and only a
   answer(409, JSON.stringify({ code: "idempotency_key_reused" }))
   expect(await sendReport(input, "k".repeat(22))).toEqual({ ok: false, kind: "conflict" })
 })
+
+it("a try whose window ends while the browser check runs is not sent at all", async () => {
+  let posts = 0
+  vi.stubGlobal("fetch", async () => (posts++, new Response(JSON.stringify({ ticket: "r_1", outcome: "received" }), { status: 202 })))
+  expect(await sendReport(input, "k".repeat(22), Date.now() - 1)).toEqual({ ok: false, kind: "expired" })
+  expect(posts).toBe(0)
+  expect(await sendReport(input, "k".repeat(22), Date.now() + 60_000)).toMatchObject({ ok: true })
+  expect(posts).toBe(1)
+})

@@ -12,12 +12,7 @@ vi.mock("@/lib/storage", () => ({
   },
 }))
 
-// A fresh module is a reload: the page's memory goes, the browser's copy stays.
-let o: typeof import("@/lib/report-outbox")
-const reload = async () => {
-  vi.resetModules()
-  o = await import("@/lib/report-outbox")
-}
+const o = await import("@/lib/report-outbox")
 
 const payload: ReportInput = {
   placeId: "p_1",
@@ -28,10 +23,9 @@ const payload: ReportInput = {
 }
 const t0 = Date.UTC(2026, 9, 6, 9)
 
-beforeEach(async () => {
+beforeEach(() => {
   disk.keys = {}
   disk.mode = "ok"
-  await reload()
 })
 
 it("the window is the configured hours from the first try", () => {
@@ -39,65 +33,45 @@ it("the window is the configured hours from the first try", () => {
   expect(o.freeze("p_1", payload, "k".repeat(22), t0).expiresAt).toBe(t0 + o.REPORT_WINDOW_MS)
 })
 
-it("a kept request comes back after a reload exactly as it was frozen", async () => {
+it("a kept request is read back exactly as it was frozen", async () => {
   const r = o.freeze("p_1", payload, "k".repeat(22), t0)
   expect(await o.remember(r)).toBe("stored")
-  await reload()
-  expect(await o.pendingReport("p_1", t0 + 60_000)).toEqual({ report: r, complete: true })
+  expect(await o.storedReports(t0 + 60_000)).toEqual({ reports: [r], complete: true })
 })
 
-it("a browser whose store refuses: the request is held in the page across a closed card, and after a reload the unread store is never read as empty", async () => {
+it("a store that refuses: nothing kept, and a read says it couldn't read rather than that there is nothing", async () => {
   disk.mode = "broken"
   const r = o.freeze("p_1", payload, "a".repeat(22), t0)
   expect(await o.remember(r)).toBe("memory")
-  // The card closed and opened again (no reload): still there, from the page's own copy.
-  expect(await o.pendingReport("p_1", t0)).toEqual({ report: r, complete: false })
-  await reload()
-  expect(await o.pendingReport("p_1", t0)).toEqual({ report: null, complete: false })
+  expect(await o.storedReports(t0)).toEqual({ reports: [], complete: false })
+  expect(await o.forget(r.key)).toBe("failed")
 })
 
-it("a browser with no storage at all: held in the page, nothing is unread, and letting go leaves nothing behind", async () => {
+it("no storage at all: nothing kept, nothing unread, and nothing left behind", async () => {
   disk.mode = "none"
   const r = o.freeze("p_1", payload, "b".repeat(22), t0)
   expect(await o.remember(r)).toBe("memory")
-  expect(await o.pendingReport("p_1", t0)).toEqual({ report: r, complete: true })
+  expect(await o.storedReports(t0)).toEqual({ reports: [], complete: true })
   expect(await o.forget(r.key)).toBe("cleared")
-  expect(await o.pendingReport("p_1", t0)).toEqual({ report: null, complete: true })
 })
 
-it("letting go is key-scoped, and a removal the store refused is reported as failed, not as done", async () => {
+it("letting go is key-scoped", async () => {
   const one = o.freeze("p_1", payload, "c".repeat(22), t0)
-  const two = o.freeze("p_2", { ...payload, placeId: "p_2" }, "d".repeat(22), t0)
+  const two = o.freeze("p_2", { ...payload, placeId: "p_2" }, "d".repeat(22), t0 + 1)
   await o.remember(one)
   await o.remember(two)
   expect(await o.forget(one.key)).toBe("cleared")
-  expect((await o.pendingReport("p_1", t0)).report).toBeNull()
-  expect((await o.pendingReport("p_2", t0)).report).toEqual(two)
-  disk.mode = "broken"
-  expect(await o.forget(two.key)).toBe("failed")
-  disk.mode = "ok"
-  await reload()
-  // The copy it couldn't remove is still there, within its window.
-  expect((await o.pendingReport("p_2", t0)).report).toEqual(two)
+  expect((await o.storedReports(t0)).reports).toEqual([two])
 })
 
-it("past the window nothing is returned, from the page or the browser, and a start prunes the browser's copy", async () => {
+it("past the window nothing is read, and a prune drops the browser's copy; a prune that fails never throws", async () => {
   const r = o.freeze("p_1", payload, "e".repeat(22), t0)
   await o.remember(r)
-  expect((await o.pendingReport("p_1", t0 + o.REPORT_WINDOW_MS - 1)).report).toEqual(r)
-  expect((await o.pendingReport("p_1", t0 + o.REPORT_WINDOW_MS)).report).toBeNull()
+  expect((await o.storedReports(t0 + o.REPORT_WINDOW_MS - 1)).reports).toEqual([r])
+  expect((await o.storedReports(t0 + o.REPORT_WINDOW_MS)).reports).toEqual([])
   await o.remember(r)
-  await reload()
   await o.pruneReports(t0 + o.REPORT_WINDOW_MS)
   expect(disk.keys.reportOutbox).toEqual({})
-})
-
-it("a view listing held requests hears every change", async () => {
-  const seen: number[] = []
-  const stop = o.subscribeReports(() => seen.push(o.reportsVersion()))
-  const r = o.freeze("p_1", payload, "f".repeat(22), t0)
-  await o.remember(r)
-  await o.forget(r.key)
-  stop()
-  expect(seen).toEqual([1, 2])
+  disk.mode = "broken"
+  await expect(o.pruneReports(t0)).resolves.toBeUndefined()
 })

@@ -12,31 +12,8 @@ export const REPORT_WINDOW_MS = RETENTION.reportOutboxHours * 3600_000
 export type PendingReport = { key: string; placeId: string; payload: ReportInput; firstAttemptAt: number; expiresAt: number }
 type Outbox = Record<string, PendingReport>
 
-/**
- * The page's own copy of every request it holds, written before the browser's. A browser that keeps nothing still
- * finds a request again within this page (a card closed and opened, another place visited), never after a reload.
- */
-const memory = new Map<string, PendingReport>()
-// The ones this browser refused to keep: found again in this page, they still say a reload loses them.
-const pageOnly = new Set<string>()
-export const isStored = (key: string) => !pageOnly.has(key)
-let version = 0
-const listeners = new Set<() => void>()
-const changed = () => {
-  version++
-  for (const l of listeners) l()
-}
-/** For a view that lists what is held: it changes whenever a request is kept or let go in this page. */
-export const subscribeReports = (l: () => void) => {
-  listeners.add(l)
-  return () => void listeners.delete(l)
-}
-export const reportsVersion = () => version
-
+// The browser's copy only. The page's own copy, and everything a page does with a request, is src/lib/report-holder.ts.
 const unexpired = (all: Outbox, now: number) => Object.fromEntries(Object.entries(all).filter(([, r]) => r.expiresAt > now))
-const dropExpired = (now: number) => {
-  for (const [k, r] of memory) if (r.expiresAt <= now) memory.delete(k)
-}
 // A browser with no storage at all kept nothing, so nothing of it is unread or left behind; any other failure might have.
 const noStorage = (e: unknown) => e instanceof Error && e.message === "storage_unavailable"
 
@@ -49,24 +26,18 @@ export const freeze = (placeId: string, payload: ReportInput, key: string, now =
   expiresAt: now + REPORT_WINDOW_MS,
 })
 
-/** Keeps it before its first try: "stored" in this browser, or only "memory" (this page) when the browser keeps nothing. */
+/** Keeps it in this browser before its first try: "stored", or "memory" when the browser keeps nothing (this page only). */
 export async function remember(r: PendingReport): Promise<"stored" | "memory"> {
-  memory.set(r.key, r)
-  changed()
   try {
     await changeReportOutbox<PendingReport>((all) => ({ ...all, [r.key]: r }))
-    pageOnly.delete(r.key)
     return "stored"
   } catch {
-    pageOnly.add(r.key)
     return "memory"
   }
 }
 
-/** Lets go of exactly this request (a late answer for one never clears another), saying whether the browser's copy went. */
+/** Removes exactly this request's copy (a late answer for one never clears another), saying whether it went. */
 export async function forget(key: string): Promise<"cleared" | "failed"> {
-  memory.delete(key)
-  changed()
   try {
     await changeReportOutbox<PendingReport>((all) => Object.fromEntries(Object.entries(all).filter(([k]) => k !== key)))
     return "cleared"
@@ -75,37 +46,25 @@ export async function forget(key: string): Promise<"cleared" | "failed"> {
   }
 }
 
-/** Drops the requests past their window. Runs when the site starts and on every read: nothing runs while it is closed. */
+/** Drops the requests past their window. Runs when the site starts and whenever the page checks its deadlines. */
 export async function pruneReports(now = Date.now()): Promise<void> {
-  dropExpired(now)
-  // Never in the way of the site starting: a browser that can't do it now leaves it for the next read or visit.
+  // Never in the way of the site starting: a browser that can't do it now leaves it for the next check or visit.
   try {
     await changeReportOutbox<PendingReport>((all) => unexpired(all, now))
   } catch {
-    /* kept for the next read, which drops expired requests too */
+    /* tried again at the next check */
   }
 }
 
 /**
- * Every unexpired request this page or browser holds, newest first. `complete` is false when the browser's copy
- * couldn't be read: then a request may exist that isn't listed, and nothing may say there is none.
+ * The unexpired requests this browser holds, newest first. `complete` is false when its copy couldn't be read: then
+ * a request may exist that isn't listed, and nothing may say there is none.
  */
-export async function pendingReports(now = Date.now()): Promise<{ reports: PendingReport[]; complete: boolean }> {
-  dropExpired(now)
-  let stored: Outbox = {}
-  let complete = true
+export async function storedReports(now = Date.now()): Promise<{ reports: PendingReport[]; complete: boolean }> {
   try {
-    stored = await changeReportOutbox<PendingReport>((all) => unexpired(all, now))
+    const all = await changeReportOutbox<PendingReport>((stored) => unexpired(stored, now))
+    return { reports: Object.values(all).sort((a, b) => b.firstAttemptAt - a.firstAttemptAt), complete: true }
   } catch (e) {
-    complete = noStorage(e)
+    return { reports: [], complete: noStorage(e) }
   }
-  const all = new Map(Object.entries(stored))
-  for (const [k, r] of memory) all.set(k, r)
-  return { reports: [...all.values()].sort((a, b) => b.firstAttemptAt - a.firstAttemptAt), complete }
-}
-
-/** The newest unconfirmed request about a place, if one is still in its window; never an expired one. */
-export async function pendingReport(placeId: string, now = Date.now()): Promise<{ report: PendingReport | null; complete: boolean }> {
-  const { reports, complete } = await pendingReports(now)
-  return { report: reports.find((r) => r.placeId === placeId) ?? null, complete }
 }

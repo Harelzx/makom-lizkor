@@ -273,6 +273,8 @@ export type ReportSend =
   | { ok: false; kind: "conflict" }
   /** No answer that says: the server may have stored it (a lost answer, an error after the write). */
   | { ok: false; kind: "unknown" }
+  /** Not sent: its window ended while this try was being prepared (the bot check can take a while). */
+  | { ok: false; kind: "expired" }
 
 /**
  * The refusals the request route gives before it stores anything (worker/routes/reports.ts): the limiter, the body and
@@ -286,9 +288,13 @@ const BEFORE_WRITE: Record<number, string[]> = {
   503: ["not_configured", "turnstile_unavailable"],
 }
 
-/** A removal or correction request (spec 6), under the key its first try was given; a fresh bot check every try. */
-export async function sendReport(input: ReportInput, key: string): Promise<ReportSend> {
+/**
+ * A removal or correction request (spec 6), under the key its first try was given; a fresh bot check every try. Never
+ * sent at or after `deadline`, checked at the last moment before it goes.
+ */
+export async function sendReport(input: ReportInput, key: string, deadline = Infinity): Promise<ReportSend> {
   const token = await turnstileToken("report").catch(() => null)
+  if (Date.now() >= deadline) return { ok: false, kind: "expired" }
   let res: Response
   try {
     res = await fetch("/api/v1/reports", {

@@ -82,9 +82,10 @@ it("keeps every report notice a request may have recorded, in the order they wer
 it("the report notice says what the browser keeps and for how long, from the configured hours, and names the button that lets it go", () => {
   const text = noticeHtml(CURRENT_REPORT_NOTICE)
   expect(text).toContain("בדפדפן שלכם")
-  expect(text).toContain(`לכל היותר ${RETENTION.reportOutboxHours} שעות מהשליחה הראשונה`)
+  expect(text).toContain(`רק עד ${RETENTION.reportOutboxHours} שעות מהשליחה הראשונה`)
+  expect(text).toContain("ננסה למחוק אותה שוב כל עוד האתר פתוח")
   expect(text).toContain(`«${DISCARD_LABEL}»`)
-  expect(text).toContain("ולא נשלחת שוב מעצמה")
+  expect(text).toContain("לא נשלחת שוב מעצמה")
   expect(text).toContain("נשמרת רק בדף הפתוח")
   expect(text).not.toContain("{{")
 })
