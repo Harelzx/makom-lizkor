@@ -181,9 +181,12 @@ test("two tabs adding places at once keep each other's places, keys and tracking
   await fillAndSave(tabs[1], y)
   const afterBoth = await stored(tabs[0])
   expect(afterBoth.map((p) => p.name)).toEqual(expect.arrayContaining([x, y]))
-  const keys = Object.fromEntries(afterBoth.map((p) => [p.name, p.key]))
-  expect(keys[x]).toBeTruthy()
-  expect(keys[y]).toBeTruthy()
+  // Each place is still there with what it needs: its key while waiting, or its tracking link if an early wake of
+  // the outbox has already sent it (the key is dropped once a place is answered).
+  for (const name of [x, y]) {
+    const p = afterBoth.find((q) => q.name === name)!
+    expect(p.key || p.token, name).toBeTruthy()
+  }
 
   // Each tab retries; the retries land, and each tab records what it learned without dropping the other's.
   for (const tab of tabs) await tab.evaluate(() => document.dispatchEvent(new Event("visibilitychange")))

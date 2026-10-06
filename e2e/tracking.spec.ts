@@ -294,6 +294,8 @@ test("a withdrawal whose photo erasure is still pending can be finished after a 
 })
 
 test("a withdrawal the server was too busy to make keeps the link, says so, and works on the next try", async ({ browser }) => {
+  // A submission and two withdrawals, like its neighbours here.
+  test.setTimeout(120_000)
   const name = `ספסל דמו משיכה עמוסה ${Date.now()}`
   const page = await submit(browser, name)
   let busy = true

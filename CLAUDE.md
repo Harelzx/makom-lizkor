@@ -67,6 +67,7 @@ Harel delegated routine project decisions for the backend work (branch `claude/s
 - Read `decision`, not the exit code: `proceed` · `revise` (not approval) · `needs_harel` (exit 2: defer, continue independent work). Exit 1 = no decision; 75 = busy. Never eval or pipe a reply into a shell.
 - An adviser decision never authorizes deployment, push, PR, purchases, cloud changes, production data, real email, destructive operations or final legal promises, and never overrides tool permissions.
 - After compaction or session recovery: reread this section, `CLAUDE-HANDOFF.md` and `docs/agent-handoff.md`, and recover the latest decisions (`runtime/decisions.jsonl` in the bundle) before going on.
+- 2026-10-06, adviser v4 (Harel's workflow update): reread the dated sections of `CLAUDE-HANDOFF.md` and `policy.md`. Review in coherent packets (`--review-report` with `--review-file`/`--source-file`, a `--dry-run` per new packet shape, code ≤ 48,000 bytes), keep a coverage table and one findings list with stable IDs in `docs/agent-handoff.md`, run each heavy test stage as its own `scripts/heavy` call with per-run evidence directories (the runner is named in the handoff's Pointers), diagnose functional failures before another full run, and treat the frame-rate check as a separate performance check that needs a quiet machine.
 
 ## Architecture
 

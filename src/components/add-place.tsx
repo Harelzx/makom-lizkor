@@ -28,7 +28,7 @@ type Step = 0 | 1 | 2
 
 /** More places are waiting for review than the moderators can read: the form stops politely (spec 12). */
 const QUEUE_FULL = "אנחנו מקבלים עכשיו יותר הצעות ממה שאפשר לבדוק. ההצעה נשמרה במכשיר, ונשלח אותה לבד כשיתפנה מקום."
-/** The bot check didn't pass: not a connection problem, and the next try waits a while (src/lib/api.ts). */
+/** The bot check judged and refused the token: not a connection problem, and the next try waits a while (src/lib/api.ts). */
 const CHECK_FAILED = "לא הצלחנו לוודא שהשליחה נעשתה מדפדפן. ההצעה נשמרה במכשיר, וננסה לשלוח אותה שוב בעוד כמה דקות."
 
 /** What the visitor is told after saving: whether the server took the place, and whether this device kept a copy. */
@@ -304,7 +304,7 @@ export function AddPlace() {
       message =
         !r.ok && r.code === "queue_full"
           ? QUEUE_FULL
-          : !r.ok && (r.code === "turnstile_failed" || r.code === "turnstile_required") && stored
+          : !r.ok && r.code === "turnstile_failed" && stored
             ? CHECK_FAILED
             : SAVE_MESSAGE[r.ok ? "sent" : r.kind][stored ? "stored" : "unstored"]
     } catch {

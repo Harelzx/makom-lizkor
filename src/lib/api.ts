@@ -35,9 +35,10 @@ export async function submitPlace(input: SubmissionInput, key: string): Promise<
       return { ok: false, kind: "rejected", code }
     }
     const code = ((await res.json().catch(() => ({}))) as { code?: string }).code
-    // A failed bot check isn't mended by the next wake: it waits ten minutes, so the visitor isn't shown a challenge
-    // every 30 seconds. The server's own wait, when it gives one, wins.
-    const wait = Number(res.headers.get("Retry-After")) || (res.status === 403 ? CHECK_RETRY_S : undefined)
+    // A token the server judged and refused isn't mended by the next wake: it waits ten minutes, so the visitor isn't
+    // shown a challenge every 30 seconds. No token at all (the check couldn't run in this browser just now) is retried
+    // at the next wake like any temporary failure. The server's own wait, when it gives one, wins.
+    const wait = Number(res.headers.get("Retry-After")) || (code === "turnstile_failed" ? CHECK_RETRY_S : undefined)
     return { ok: false, kind: "temporary", code, retryAfter: wait }
   } catch {
     return { ok: false, kind: "temporary" }
