@@ -1,12 +1,14 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { AnimatePresence, motion } from "motion/react"
 import { Anemone } from "@/components/anemone"
 import { useStore } from "@/store"
 import { spring } from "@/lib/motion"
+import { canShare, queueTribute, shared } from "@/lib/tributes"
 
 /**
  * Leaving an anemone: the quiet gesture a visitor can make at a place.
- * Each one blooms into a small row of flowers kept on this device.
+ * Each one blooms into a small row of flowers kept on this device. At a place published on the server, one a day from
+ * this device also joins the shared count (spec 4); elsewhere, or when the browser keeps nothing, they stay here.
  */
 // where each petal drifts: [x, y, rotation]
 const PETALS: [number, number, number][] = [
@@ -21,7 +23,18 @@ const PETALS: [number, number, number][] = [
 export function Tribute({ placeId }: { placeId: string }) {
   const count = useStore((s) => s.tributes[placeId] ?? 0)
   const leave = useStore((s) => s.leaveAnemone)
+  const total = useStore((s) => s.tributeTotals[placeId] ?? 0)
   const [burst, setBurst] = useState(0)
+  // Whether this browser keeps the device id the shared count needs; until known, the flowers count as local.
+  const [sharing, setSharing] = useState(false)
+  useEffect(() => {
+    let live = true
+    if (shared(placeId)) void canShare().then((v) => live && setSharing(v))
+    return () => {
+      live = false
+    }
+  }, [placeId])
+  const counts = shared(placeId) && sharing
   const shown = Math.min(count, 9)
 
   return (
@@ -30,6 +43,7 @@ export function Tribute({ placeId }: { placeId: string }) {
         type="button"
         onClick={() => {
           leave(placeId)
+          void queueTribute(placeId)
           setBurst((b) => b + 1)
           navigator.vibrate?.(12)
         }}
@@ -77,8 +91,20 @@ export function Tribute({ placeId }: { placeId: string }) {
           </AnimatePresence>
         </div>
         <p className="text-caption text-ink-2" aria-live="polite">
-          {count === 0 ? "נשמר רק במכשיר הזה" : count === 1 ? "השארתם כאן כלנית אחת" : `השארתם כאן ${count} כלניות`}
+          {count === 0
+            ? counts
+              ? "כלנית אחת ביום מהמכשיר הזה נספרת לכולם"
+              : "נשמר רק במכשיר הזה"
+            : count === 1
+              ? "השארתם כאן כלנית אחת"
+              : `השארתם כאן ${count} כלניות`}
         </p>
+        {count > 0 && !counts && <p className="text-caption text-ink-2">נשמר רק במכשיר הזה</p>}
+        {shared(placeId) && total > 0 && (
+          <p className="text-caption text-ink-2">
+            {total === 1 ? "השאירו כאן כלנית אחת" : `השאירו כאן ${total.toLocaleString("he-IL")} כלניות`}
+          </p>
+        )}
       </div>
     </div>
   )

@@ -2,7 +2,7 @@ import { zValidator } from "@hono/zod-validator"
 import { Hono } from "hono"
 import { z } from "zod"
 import type { AppEnv } from "../index"
-import { verifyEmail } from "../db/places"
+import { claimTrackingMail, MAIL_TRIES, trackingMailSent, verifyEmail } from "../db/places"
 import { clock } from "../lib/clock"
 import { PRIVATE, problem } from "../lib/http"
 import { trackingMail } from "../lib/messages"
@@ -19,15 +19,28 @@ email.post(
     r.success ? undefined : problem(c, 400, "invalid_input"),
   ),
   async (c) => {
-    const r = await verifyEmail(c.env.DB, c.req.valid("json").token, clock(c.req.raw, c.env))
+    if (!c.env.TRACKING_SECRET) return problem(c, 503, "not_configured")
+    const now = clock(c.req.raw, c.env)
+    const r = await verifyEmail(c.env.DB, c.req.valid("json").token, now, c.env.TRACKING_SECRET)
     if (!r) return problem(c, 404, "not_found")
-    if (r.first) {
-      const link = `${new URL(c.req.url).origin}/#/track/${r.placeId}/${r.emailToken}`
-      await c
-        .get("sendMail")(c.env, trackingMail(r.to, link))
+    // The tracking mail, if it hasn't gone out yet: this click, or a later one, tries again (five tries at most, two
+    // minutes apart). `mail` tells the page what happened to it, so a visitor whose mail didn't go knows to try again:
+    // "failed" also when the last try was too recent, or a click at the same moment holds it; "stopped" once the
+    // fifth has failed.
+    let mail: "sent" | "earlier" | "failed" | "stopped" = r.mailState === "due" ? "failed" : r.mailState
+    const attempt = r.mail ? await claimTrackingMail(c.env.DB, r.mail.contactId, now) : null
+    if (r.mail && attempt) {
+      const link = `${new URL(c.req.url).origin}/#/track/${r.mail.placeId}/${r.mail.emailToken}`
+      const sendMail = c.get("sendMail")
+      const sent = await Promise.resolve()
+        .then(() => sendMail(c.env, trackingMail(r.mail!.to, link)))
         .catch(() => false)
+      if (sent) {
+        await trackingMailSent(c.env.DB, r.mail.contactId, now)
+        mail = "sent"
+      } else if (attempt >= MAIL_TRIES) mail = "stopped"
     }
-    // `first`: whether this click verified the address (and sent the tracking link), or it was verified before.
-    return c.json({ ok: true, first: r.first }, 200, PRIVATE)
+    // `first`: whether this click verified the address, or it was verified before.
+    return c.json({ ok: true, first: r.first, mail }, 200, PRIVATE)
   },
 )

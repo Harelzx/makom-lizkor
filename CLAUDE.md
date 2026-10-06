@@ -34,13 +34,15 @@ npx playwright test e2e/routing.spec.ts          # one file
 npx playwright test -g "shared link to a place"  # one test by name
 node scripts/build-data.mjs                      # regenerate src/data/*.json from data-src/
 npm test                   # the Worker's tests (Vitest inside workerd, fresh local D1 per run); heavy: scripts/heavy npm test
-npm run db:migrate:local   # apply migrations/ to the local D1 the dev server uses (Playwright's webServer runs it first)
+npm run test:client        # the browser code's own logic (the store) in Node, storage stood in for; heavy: scripts/heavy npm run test:client
+npm run test:scripts       # node:test for scripts/ (the release check's mail rules)
+npm run db:migrate:local   # apply migrations/ to the local D1 the dev server uses (e2e runs migrate their own fresh copy)
 npm run cf-typegen         # regenerate worker-configuration.d.ts after changing wrangler.jsonc or .dev.vars
 ```
 
 - Two kinds of tests: Playwright e2e specs in `e2e/`, and the Worker's tests in `worker/test/` (`npm test`). The e2e specs find elements by their **Hebrew accessible names** (`getByRole("button", { name: "כל המקומות" })`), so renaming a Hebrew label can break a test.
 - `panel.spec.ts` samples real animation frames through `e2e/frames.ts` to check motion quality: no squared corners mid-spring, no single-frame jumps. Specs run serially (`workers: 1`).
-- Ports are deliberately different: 5174 for `npm run dev`, 5190 for Playwright and the `makom-lizkor-v2` preview entry (with `reuseExistingServer`, the preview server and e2e share one process), and 4174 for prod e2e. Don't "unify" them. Those are the main checkout's; each parallel worktree gets its own trio from `scripts/parallel/ports.mjs` (54xx/55xx/56xx), so e2e never reuses another worktree's server.
+- Ports are deliberately different: 5174 for `npm run dev`, 5190 for Playwright and the `makom-lizkor-v2` preview entry, and 4174 for prod e2e. Each e2e run starts its own server on a fresh local D1 and R2 (`.wrangler/e2e-state-{dev,prod}`, wiped and migrated first; `reuseExistingServer` is off), so stop a preview server on the e2e port before running e2e. Don't "unify" them. Those are the main checkout's; each parallel worktree gets its own trio from `scripts/parallel/ports.mjs` (54xx/55xx/56xx), so e2e never reuses another worktree's server.
 - **Prettier is enforced**: no semicolons, double quotes, trailing commas, `printWidth` 140, with Tailwind classes sorted by `prettier-plugin-tailwindcss` (including inside `cn()` and `cva()`). An override keeps `src/components/ui/**` at shadcn's own format (80 columns, `es5` commas), so output from `shadcn add` drops in without churn. After editing, run `npm run format` and make sure `format:check` passes.
 - `vite build` warns that some chunks exceed 500 kB. Those chunks are MapLibre's own library (the lazy `controller` chunk) and its worker, which already load after the opening. The warning is expected and can't be fixed by splitting.
 
@@ -55,6 +57,18 @@ Several Claude Code sessions may work on this repo at once, each in its own work
 - New milestones from other sessions arrive in your context. Act on one only if it affects your current work; otherwise ignore it silently.
 - For an urgent breaking change, message the affected session directly instead of waiting for the log.
 
+## Delegated adviser while Harel is away (backend session only)
+
+Harel delegated routine project decisions for the backend work (branch `claude/system-architecture-design-9a660f`) to a Codex adviser while he is away. Other sessions: this section is not yours. Bundle: `/Users/harel/Documents/Codex/2026-10-05/b/outputs/codex-supervisor/`; read its `CLAUDE-HANDOFF.md` (and `policy.md`, `context.md`, `README.md` once). The continuation record is `docs/agent-handoff.md`.
+
+- Bring to the adviser what would otherwise go to Harel: a substantive question, a choice between materially different approaches, a deviation from the agreed design, a finished batch, a phase ready for review or merge, the final handoff. Not every routine edit.
+- Ask from this worktree with a quoted heredoc: `python3 /Users/harel/Documents/Codex/2026-10-05/b/outputs/codex-supervisor/supervisor.py --project "$PWD" --json <<'CODEX_REQUEST'` … `CODEX_REQUEST` (or `--question-file`). Synthetic data only; no secrets or real submitter data.
+- Implementation reports (from `implementation-report.example.json`, filled truthfully): `… supervisor.py --project "$PWD" --review-report /absolute/path/report.json --json`. Required after a meaningful batch, before a phase's local merge, and at the end.
+- Read `decision`, not the exit code: `proceed` · `revise` (not approval) · `needs_harel` (exit 2: defer, continue independent work). Exit 1 = no decision; 75 = busy. Never eval or pipe a reply into a shell.
+- An adviser decision never authorizes deployment, push, PR, purchases, cloud changes, production data, real email, destructive operations or final legal promises, and never overrides tool permissions.
+- After compaction or session recovery: reread this section, `CLAUDE-HANDOFF.md` and `docs/agent-handoff.md`, and recover the latest decisions (`runtime/decisions.jsonl` in the bundle) before going on.
+- 2026-10-06, adviser v4 (Harel's workflow update): reread the dated sections of `CLAUDE-HANDOFF.md` and `policy.md`. Review in coherent packets (`--review-report` with `--review-file`/`--source-file`, a `--dry-run` per new packet shape, code ≤ 48,000 bytes), keep a coverage table and one findings list with stable IDs in `docs/agent-handoff.md`, run each heavy test stage as its own `scripts/heavy` call with per-run evidence directories (the runner is named in the handoff's Pointers), diagnose functional failures before another full run, and treat the frame-rate check as a separate performance check that needs a quiet machine.
+
 ## Architecture
 
 ### State and phases (`src/store.ts`)
@@ -67,11 +81,11 @@ A single Zustand store holds everything: the seed places, the visitor's local pl
 
 ### Routing (`useHashRoute` in `App.tsx`)
 
-The only route is `#/place/<id>`, kept in sync with `selectedId`. Opening a card from the list pushes a history entry, so the browser Back button (or a swipe back on a phone) closes the card. Moving from one place to another replaces the entry instead. An unknown id falls back to `#/` and flies to the envelope view. Ids that start with `local-` are visitor-added places. They load asynchronously, so the router trusts them. When the day starts, the router reads the hash as an entrance (`apply(true)`), so a place opened during the sunrise stays open instead of being read as Back.
+The only route is `#/place/<id>`, kept in sync with `selectedId`. The share button gives `/place/<id>` instead: the Worker (`worker/routes/share.ts`) serves the site's page with that place's preview tags (and an approved contribution's public fields in `#place-data`, so the card opens before the feed), 404 for a place never public and 410 for one taken back; `store.ts` turns the path into `#/place/<id>` before anything reads it, or into `#/` for a 404 or 410. Absolute addresses there come from `PUBLIC_ORIGIN` (the request's origin only in development), and `release:check` refuses it unset. Opening a card from the list pushes a history entry, so the browser Back button (or a swipe back on a phone) closes the card. Moving from one place to another replaces the entry instead. An unknown id falls back to `#/` and flies to the envelope view. Ids that start with `local-` are visitor-added places. They load asynchronously, so the router trusts them. When the day starts, the router reads the hash as an entrance (`apply(true)`), so a place opened during the sunrise stays open instead of being read as Back.
 
 ### Backend, phase 1 (`worker/`, `migrations/`, `src/shared/`)
 
-- One Hono Worker runs inside `npm run dev` through `@cloudflare/vite-plugin`. Only `/api/*` and `/__dev/*` reach it (`run_worker_first` in `wrangler.jsonc`); everything else is the static site. The local D1 lives in `.wrangler/` (git-ignored) and is shared by dev and e2e runs, so demo places from e2e accumulate there.
+- One Hono Worker runs inside `npm run dev` through `@cloudflare/vite-plugin`. Only `/api/*`, `/__dev/*`, `/media/*` and `/place/*` reach it (`run_worker_first` in `wrangler.jsonc`); everything else is the static site. The dev server's local D1 and R2 live in `.wrangler/state` (git-ignored); each e2e run uses its own fresh copy (`.wrangler/e2e-state-*`), so demo places never accumulate in the dev server's.
 - **The vars in `wrangler.jsonc` are what a deploy ships, and they are production.** Development (the stand-in Access sign-in at `/__dev/login`, the `X-Test-Now` clock) is switched on only by `.dev.vars`: untracked, created from the committed template `.dev.vars.example` (synthetic values only) by `npm run dev` and the e2e servers when missing, and never deployed. The Worker tests read the template itself, not a local `.dev.vars`. A test fails if the deploy vars stop being production.
 - `src/shared/contract.ts` holds the Zod schemas both sides use; `src/shared/text.ts` strips bidi controls from anything stored. The client reads approved places through `src/lib/feed.ts` (loaded once the day begins, never in the opening's bundle) into `remote` in the store. `allPlaces()` takes `seed`, `remote` and `local`, and hides a local copy once its `remoteId` is published. Ids that start with `p_` are contributions; the router trusts them until the feed has come.
 - The moderators' queue is `/admin/` (`admin/index.html`, outside `src/`, with its code in `src/admin/`). Locally, sign in with `POST /__dev/login {"email":"dev@example.test"}`.

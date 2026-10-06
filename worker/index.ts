@@ -6,7 +6,9 @@ import { admin } from "./routes/admin"
 import { dev } from "./routes/dev"
 import { email } from "./routes/email"
 import { feed } from "./routes/feed"
+import { share } from "./routes/share"
 import { submissions } from "./routes/submissions"
+import { tributes } from "./routes/tributes"
 
 /** What the routes reach outside the Worker; the tests pass stand-ins, the deployed Worker the real ones. */
 export type Deps = { verifyTurnstile: VerifyTurnstile; sendMail: SendMail }
@@ -23,13 +25,22 @@ export function createApp(deps: Deps) {
   app.get("/api/v1/health", (c) => c.json({ ok: true }))
   app.route("/api/v1/submissions", submissions)
   app.route("/api/v1/email", email)
+  app.route("/api/v1/tributes", tributes)
   app.route("/api/v1", feed)
   app.route("/api/admin", admin)
   app.route("/__dev", dev)
+  app.route("/", share)
 
   // Approved photos only: the Worker is the one door to the bucket, and it opens public/ alone (spec 5).
   app.get("/media/public/*", async (c) => {
     const key = c.req.path.replace(/^\/media\//, "")
+    // Only the photo of a revision published now: a file a lost race or a failed cleanup left behind serves nothing.
+    const live = await c.env.DB.prepare(
+      "SELECT 1 FROM places p JOIN revisions r ON r.id = p.published_revision_id WHERE p.status = 'published' AND r.photo_key = ?",
+    )
+      .bind(key)
+      .first()
+    if (!live) return problem(c, 404, "not_found")
     const object = await c.env.MEDIA.get(key)
     if (!object) return problem(c, 404, "not_found")
     // Short-lived: a photo taken down later (phase 4) must not live on in caches for long.
@@ -41,7 +52,7 @@ export function createApp(deps: Deps) {
     })
   })
 
-  // Only /api/* and /__dev/* reach the Worker, so anything unmatched here is an API mistake, not a page.
+  // Only /api/*, /__dev/*, /media/* and /place/* reach the Worker, so anything unmatched here is an API mistake, not a page.
   app.notFound((c) => problem(c, 404, "not_found"))
   // One JSON line with the route and the error's name only: never a body, a token, an address or a header.
   app.onError((err, c) => {

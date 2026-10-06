@@ -23,6 +23,7 @@ export const SUBMISSION_NOTICES = [
   "notice.submission@2026-10-8",
   "notice.submission@2026-10-9",
   "notice.submission@2026-10-10",
+  "notice.submission@2026-10-11",
 ] as const
 export const CURRENT_SUBMISSION_NOTICE = SUBMISSION_NOTICES[SUBMISSION_NOTICES.length - 1]
 
@@ -96,6 +97,17 @@ export const PublicPlace = z.object({
   photo: z.object({ url: z.string(), alt: z.string(), credit: z.string().optional() }).optional(),
 })
 export type PublicPlace = z.infer<typeof PublicPlace>
+
+/** One anemone on its way to the shared count (spec 4): the place, and this device's random id, kept on the device. */
+export const TributeInput = z.object({ placeId: z.string().min(1).max(64), deviceId: z.string().regex(/^[0-9a-f]{32}$/) }).strict()
+export type TributeInput = z.infer<typeof TributeInput>
+/** What the server did with it: counted now or before, or why not. The visitor's own flowers stay either way. */
+export type TributeResult =
+  | { counted: true; reason?: "replayed"; day: string }
+  | { counted: false; reason: "already_today"; day: string }
+  | { counted: false; reason: "not_published" }
+/** The shared counts of published places, by id. */
+export type TributeTotals = { totals: Record<string, number> }
 
 export const Feed = z.object({ v: z.string(), places: z.array(PublicPlace) })
 export type Feed = z.infer<typeof Feed>

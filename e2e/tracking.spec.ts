@@ -11,15 +11,37 @@ async function submit(b: Browser, name: string): Promise<Page> {
   await page.getByRole("button", { name: "הוספת מקום" }).first().click()
   const dialog = page.getByRole("dialog")
   await dialog.getByRole("button", { name: "המיקום הנוכחי שלי" }).click()
+  // The location arrives asynchronously and grows the form; pressing on before it would land where the button was.
+  await expect(dialog.getByText("סומן מיקום", { exact: false })).toBeVisible({ timeout: 15_000 })
   await dialog.getByRole("button", { name: "המשך" }).click()
   await dialog.getByLabel("שם המקום").fill(name)
   await dialog.getByRole("button", { name: "המשך" }).click()
+  // The last step has two boxes (family, consent); wait for the step before it to finish leaving, or a box of
+  // the leaving step is collected and never comes back.
+  await expect(dialog.getByRole("checkbox")).toHaveCount(2)
   for (const box of await dialog.getByRole("checkbox").all()) await box.check()
   await dialog.getByRole("button", { name: "שמירה והנחת כלנית" }).click()
   await expect(dialog).toBeHidden({ timeout: 15_000 })
   await expect(page.getByText("נשלח לבדיקה, ויופיע לכולם אחרי אישור.")).toBeVisible()
   return page
 }
+
+/** The tracking link this browser keeps for its copy of a place, read from storage itself. */
+const storedToken = (page: Page, name: string) =>
+  page.evaluate(
+    (n) =>
+      new Promise<string | undefined>((resolve) => {
+        const req = indexedDB.open("makom-lizkor-v2")
+        req.onsuccess = () => {
+          const get = req.result.transaction("v1").objectStore("v1").get("local")
+          get.onsuccess = () =>
+            resolve(
+              (get.result as { name_he: string; local?: { trackingToken?: string } }[]).find((p) => p.name_he === n)?.local?.trackingToken,
+            )
+        }
+      }),
+    name,
+  )
 
 async function queued(b: Browser, name: string) {
   const ctx = await b.newContext()
@@ -90,4 +112,264 @@ test("a moderator returns a place with a note, the sender corrects it, and it co
   const corrected = mod.getByRole("article", { name: `${name} מתוקן` })
   await expect(corrected).toBeVisible()
   await expect(corrected.getByText("בארי", { exact: false })).toBeVisible()
+})
+
+test("a correction whose answer was lost is found saved, not reported as unsent", async ({ browser }) => {
+  test.setTimeout(120_000)
+  const name = `ספסל דמו תיקון שאבד ${Date.now()}`
+  const page = await submit(browser, name)
+  const modCtx = await browser.newContext()
+  await modCtx.request.post("/__dev/login", { data: { email: "dev@example.test" } })
+  const mod = await modCtx.newPage()
+  await mod.goto("/admin/")
+  const item = mod.getByRole("article", { name })
+  await item.getByRole("button", { name: "החזרה לתיקון" }).click()
+  await item.getByLabel("הערה למגיש").fill("נא לציין את שם היישוב")
+  await item.getByRole("button", { name: "שליחת ההחזרה" }).click()
+  await expect(item).toHaveCount(0)
+
+  // The server saves the correction; its answer never reaches the browser.
+  await page.route("**/api/v1/submissions/*/revisions", async (route) => {
+    await route.fetch()
+    await route.abort("failed")
+  })
+  await page.getByRole("button", { name: "מעקב אחרי ההצעה" }).click()
+  const view = page.getByRole("dialog", { name: "מצב ההצעה" })
+  await view.getByRole("button", { name: "תיקון ההצעה" }).click()
+  await view.getByLabel("יישוב או אזור").fill("בארי")
+  await view.getByRole("checkbox").check()
+  await view.getByRole("button", { name: "שליחה מחדש לבדיקה" }).click()
+  await expect(view.getByText("ממתינה לבדיקה")).toBeVisible()
+  await expect(page.getByText("לא קיבלנו תשובה מהשרת")).toHaveCount(0)
+  await expect(page.getByText("לא הצלחנו לשלוח את התיקון")).toHaveCount(0)
+})
+
+test("a withdrawal whose answer was lost is found done, not reported as unchanged", async ({ browser }) => {
+  const name = `ספסל דמו משיכה שאבדה ${Date.now()}`
+  const page = await submit(browser, name)
+  await page.route("**/api/v1/submissions/*/withdraw", async (route) => {
+    await route.fetch()
+    await route.abort("failed")
+  })
+  await page.getByRole("button", { name: "מעקב אחרי ההצעה" }).click()
+  const view = page.getByRole("dialog", { name: "מצב ההצעה" })
+  await view.getByRole("button", { name: "משיכת ההצעה" }).click()
+  await page.getByRole("alertdialog").getByRole("button", { name: "למשוך ולמחוק" }).click()
+  await expect(view.getByText("נמשכה", { exact: false })).toBeVisible()
+  await expect(page.getByText("לא הצלחנו", { exact: false })).toHaveCount(0)
+  // The device no longer keeps the tracking link of a withdrawn place.
+  await expect.poll(() => storedToken(page, name)).toBeUndefined()
+})
+
+/** A submission returned by the moderator, with its tracking view open on the correction form. */
+async function returnedAndFixing(browser: Browser, name: string) {
+  const page = await submit(browser, name)
+  const modCtx = await browser.newContext()
+  await modCtx.request.post("/__dev/login", { data: { email: "dev@example.test" } })
+  const mod = await modCtx.newPage()
+  await mod.goto("/admin/")
+  const item = mod.getByRole("article", { name })
+  await item.getByRole("button", { name: "החזרה לתיקון" }).click()
+  await item.getByLabel("הערה למגיש").fill("נא לציין את שם היישוב")
+  await item.getByRole("button", { name: "שליחת ההחזרה" }).click()
+  await expect(item).toHaveCount(0)
+  await page.getByRole("button", { name: "מעקב אחרי ההצעה" }).click()
+  const view = page.getByRole("dialog", { name: "מצב ההצעה" })
+  await view.getByRole("button", { name: "תיקון ההצעה" }).click()
+  await view.getByLabel("יישוב או אזור").fill("בארי")
+  await view.getByRole("checkbox").check()
+  return { page, view, modCtx }
+}
+
+test("a correction saved before the server failed is found saved", async ({ browser }) => {
+  test.setTimeout(120_000)
+  const { page, view } = await returnedAndFixing(browser, `ספסל דמו תיקון ושגיאה ${Date.now()}`)
+  await page.route("**/api/v1/submissions/*/revisions", async (route) => {
+    await route.fetch()
+    await route.fulfill({ status: 500, contentType: "application/problem+json", body: JSON.stringify({ status: 500, code: "internal" }) })
+  })
+  await view.getByRole("button", { name: "שליחה מחדש לבדיקה" }).click()
+  await expect(view.getByText("ממתינה לבדיקה")).toBeVisible()
+  await expect(page.getByText("התיקון לא נשמר", { exact: false })).toHaveCount(0)
+})
+
+test("when another window's different correction got in first, this one stays in the form", async ({ browser }) => {
+  test.setTimeout(120_000)
+  const { page, view } = await returnedAndFixing(browser, `ספסל דמו שני חלונות ${Date.now()}`)
+  await page.route("**/api/v1/submissions/*/revisions", async (route) => {
+    const sent = route.request().postDataJSON() as Record<string, unknown>
+    // Another window sends its own correction first; this one's answer is lost.
+    await page.request.post(route.request().url(), {
+      headers: { ...route.request().headers() },
+      data: { ...sent, place_he: "כפר עזה" },
+    })
+    await route.abort("failed")
+  })
+  await view.getByRole("button", { name: "שליחה מחדש לבדיקה" }).click()
+  await expect(page.getByText("ההצעה השתנתה בינתיים", { exact: false }).first()).toBeVisible()
+  await expect(view.getByLabel("יישוב או אזור")).toHaveValue("בארי")
+})
+
+test("a correction approved before its lost answer was checked is found saved", async ({ browser }) => {
+  test.setTimeout(120_000)
+  const name = `ספסל דמו תיקון שאושר ${Date.now()}`
+  const { page, view, modCtx } = await returnedAndFixing(browser, name)
+  await page.route("**/api/v1/submissions/*/revisions", async (route) => {
+    await route.fetch()
+    // A moderator approves it before the sender's browser looks again.
+    const { items } = (await (await modCtx.request.get("/api/admin/queue")).json()) as {
+      items: { id: string; rev: number; revisionId: string; name_he: string }[]
+    }
+    const item = items.find((i) => i.name_he === name)!
+    await modCtx.request.post(`/api/admin/places/${item.id}/transitions`, {
+      headers: { "Sec-Fetch-Site": "same-origin" },
+      data: { action: "approve", revisionId: item.revisionId, expectedRev: item.rev },
+    })
+    await route.abort("failed")
+  })
+  await view.getByRole("button", { name: "שליחה מחדש לבדיקה" }).click()
+  await expect(view.getByText("אושרה ומופיעה באתר")).toBeVisible()
+  await expect(page.getByText("לא מופיע בשרת", { exact: false })).toHaveCount(0)
+})
+
+test("a correction with doubled spaces, saved but unanswered, is still recognised as this one", async ({ browser }) => {
+  test.setTimeout(120_000)
+  const { page, view } = await returnedAndFixing(browser, `ספסל דמו רווחים ${Date.now()}`)
+  await view.getByLabel("כמה מילים על המקום (לא חובה)").fill("שורה  עם רווח כפול\n\n\n\nושורה אחרי שורות ריקות")
+  await page.route("**/api/v1/submissions/*/revisions", async (route) => {
+    await route.fetch()
+    await route.abort("failed")
+  })
+  await view.getByRole("button", { name: "שליחה מחדש לבדיקה" }).click()
+  // Recognised as this correction, the form closes; unrecognised, it stays open with the text.
+  await expect(view.getByRole("button", { name: "שליחה מחדש לבדיקה" })).toHaveCount(0)
+  await expect(view.getByText("ממתינה לבדיקה")).toBeVisible()
+})
+
+test("when another window's different correction got in first and this one is refused, this one stays in the form", async ({ browser }) => {
+  test.setTimeout(120_000)
+  const { page, view } = await returnedAndFixing(browser, `ספסל דמו סירוב בגלל חלון אחר ${Date.now()}`)
+  await page.route("**/api/v1/submissions/*/revisions", async (route) => {
+    const sent = route.request().postDataJSON() as Record<string, unknown>
+    await page.request.post(route.request().url(), { headers: { ...route.request().headers() }, data: { ...sent, place_he: "כפר עזה" } })
+    // This window's own request now meets the other's correction: a real 409.
+    await route.continue()
+  })
+  await view.getByRole("button", { name: "שליחה מחדש לבדיקה" }).click()
+  await expect(page.getByText("ההצעה השתנתה בינתיים", { exact: false }).first()).toBeVisible()
+  await expect(view.getByLabel("יישוב או אזור")).toHaveValue("בארי")
+})
+
+test("a withdrawal whose photo erasure is still pending can be finished after a reload", async ({ browser }) => {
+  test.setTimeout(120_000)
+  const name = `ספסל דמו מחיקה תלויה ${Date.now()}`
+  const page = await submit(browser, name)
+  // The server withdraws it but can't erase its files yet (as R2 failing would leave it).
+  await page.route("**/api/v1/submissions/*/withdraw", async (route) => {
+    await route.fetch()
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ status: "withdrawn", files: "pending" }) })
+  })
+  await page.route(/\/api\/v1\/submissions\/[^/]+$/, async (route) => {
+    if (route.request().method() !== "GET") return route.continue()
+    const res = await route.fetch()
+    const body = (await res.json()) as Record<string, unknown>
+    await route.fulfill({ response: res, json: body.status === "withdrawn" ? { ...body, files: "pending" } : body })
+  })
+  await page.getByRole("button", { name: "מעקב אחרי ההצעה" }).click()
+  const view = page.getByRole("dialog", { name: "מצב ההצעה" })
+  await view.getByRole("button", { name: "משיכת ההצעה" }).click()
+  await page.getByRole("alertdialog").getByRole("button", { name: "למשוך ולמחוק" }).click()
+  await expect(view.getByText("התמונה כבר לא מוצגת", { exact: false })).toBeVisible()
+  // After a reload the way back is still there: the address reopens the place's card, which still opens the tracking
+  // view, and the view offers to finish.
+  await page.reload()
+  await page.getByRole("button", { name: "מעקב אחרי ההצעה" }).click()
+  const again = page.getByRole("dialog", { name: "מצב ההצעה" })
+  await expect(again.getByRole("button", { name: "להשלים את מחיקת התמונה" })).toBeVisible()
+  expect(await storedToken(page, name)).toBeTruthy()
+  // The storage works again: finishing erases the rest, and only then does the device let the link go.
+  await page.unrouteAll({ behavior: "wait" })
+  await again.getByRole("button", { name: "להשלים את מחיקת התמונה" }).click()
+  await expect(again.getByText("נמשכה. ההצעה, השם והמייל שלכם והתמונה נמחקו מהשרת")).toBeVisible()
+  await expect(again.getByRole("button", { name: "להשלים את מחיקת התמונה" })).toHaveCount(0)
+  await expect.poll(() => storedToken(page, name)).toBeUndefined()
+})
+
+test("a withdrawal the server was too busy to make keeps the link, says so, and works on the next try", async ({ browser }) => {
+  // A submission and two withdrawals, like its neighbours here.
+  test.setTimeout(120_000)
+  const name = `ספסל דמו משיכה עמוסה ${Date.now()}`
+  const page = await submit(browser, name)
+  let busy = true
+  await page.route("**/api/v1/submissions/*/withdraw", async (route) => {
+    if (!busy) return route.continue()
+    await route.fulfill({
+      status: 503,
+      contentType: "application/problem+json",
+      headers: { "Retry-After": "1" },
+      body: JSON.stringify({ code: "withdrawal_busy" }),
+    })
+  })
+  await page.getByRole("button", { name: "מעקב אחרי ההצעה" }).click()
+  const view = page.getByRole("dialog", { name: "מצב ההצעה" })
+  await view.getByRole("button", { name: "משיכת ההצעה" }).click()
+  await page.getByRole("alertdialog").getByRole("button", { name: "למשוך ולמחוק" }).click()
+  await expect(page.getByText("לא הצלחנו לוודא שההצעה נמשכה")).toBeVisible()
+  await expect(view.getByText("ממתינה לבדיקה")).toBeVisible()
+  expect(await storedToken(page, name)).toBeTruthy()
+  busy = false
+  await view.getByRole("button", { name: "משיכת ההצעה" }).click()
+  await page.getByRole("alertdialog").getByRole("button", { name: "למשוך ולמחוק" }).click()
+  await expect(view.getByText("נמשכה", { exact: false })).toBeVisible()
+  await expect.poll(() => storedToken(page, name)).toBeUndefined()
+})
+
+test("a link that ended with its withdrawal doesn't offer to finish the photo's erasure, and says who can", async ({ browser }) => {
+  test.setTimeout(120_000)
+  const name = `ספסל דמו קישור שהסתיים ${Date.now()}`
+  const page = await submit(browser, name)
+  let withdrawn = false
+  // Withdrawn with its photo still to erase; from then on this link opens nothing, as a mailed link does once the
+  // withdrawal has erased the address it was made for.
+  await page.route("**/api/v1/submissions/*/withdraw", async (route) => {
+    await route.fetch()
+    withdrawn = true
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ status: "withdrawn", files: "pending" }) })
+  })
+  await page.route(/\/api\/v1\/submissions\/[^/]+$/, async (route) => {
+    if (route.request().method() !== "GET" || !withdrawn) return route.continue()
+    await route.fulfill({ status: 404, contentType: "application/problem+json", body: JSON.stringify({ code: "not_found" }) })
+  })
+  await page.getByRole("button", { name: "מעקב אחרי ההצעה" }).click()
+  const view = page.getByRole("dialog", { name: "מצב ההצעה" })
+  await view.getByRole("button", { name: "משיכת ההצעה" }).click()
+  await page.getByRole("alertdialog").getByRole("button", { name: "למשוך ולמחוק" }).click()
+  await expect(view.getByText("התמונה כבר לא מוצגת", { exact: false })).toBeVisible()
+  await expect(view.getByText("מהמכשיר ששלח את ההצעה", { exact: false })).toBeVisible()
+  await expect(view.getByRole("button", { name: "להשלים את מחיקת התמונה" })).toHaveCount(0)
+})
+
+test("a failed withdrawal followed by a malformed status confirms nothing and keeps the link", async ({ browser }) => {
+  test.setTimeout(120_000)
+  const name = `ספסל דמו מצב פגום ${Date.now()}`
+  const page = await submit(browser, name)
+  await page.getByRole("button", { name: "מעקב אחרי ההצעה" }).click()
+  const view = page.getByRole("dialog", { name: "מצב ההצעה" })
+  await expect(view.getByText("ממתינה לבדיקה")).toBeVisible(DAY)
+  // The withdrawal fails, and the status that follows says "withdrawn" in a shape the API never sends.
+  await page.route("**/api/v1/submissions/*/withdraw", (route) => route.fulfill({ status: 503, body: "" }))
+  await page.route(/\/api\/v1\/submissions\/[^/]+$/, (route) =>
+    route.request().method() === "GET"
+      ? route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ status: "withdrawn", name_he: null, files: "maybe" }),
+        })
+      : route.continue(),
+  )
+  await view.getByRole("button", { name: "משיכת ההצעה" }).click()
+  await page.getByRole("alertdialog").getByRole("button", { name: "למשוך ולמחוק" }).click()
+  await expect(page.getByText("לא הצלחנו לוודא שההצעה נמשכה")).toBeVisible()
+  await expect(view.getByText("נמשכה.", { exact: false })).toHaveCount(0)
+  expect(await storedToken(page, name)).toBeTruthy()
 })

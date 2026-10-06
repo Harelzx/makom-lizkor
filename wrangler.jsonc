@@ -4,7 +4,12 @@
   "main": "./worker/index.ts",
   "compatibility_date": "2026-10-01",
   // The SPA is served as static assets; only these paths run the Worker.
-  "assets": { "not_found_handling": "single-page-application", "run_worker_first": ["/api/*", "/__dev/*", "/media/*"] },
+  "assets": {
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    // A place's share page (/place/<id>) is the site's page with the place's preview tags, written by the Worker.
+    "run_worker_first": ["/api/*", "/__dev/*", "/media/*", "/place/*"],
+  },
   "d1_databases": [
     { "binding": "DB", "database_name": "makom-dev", "database_id": "00000000-0000-0000-0000-000000000000", "migrations_dir": "migrations" },
   ],
@@ -20,11 +25,17 @@
     "TURNSTILE_HOSTNAMES": "",
     // Past this many submissions waiting for review, the form stops politely (spec 12, load shedding).
     "QUEUE_LIMIT": "200",
+    // The site's own address, for absolute links in share pages (og:url, og:image); set with the domain, a launch item.
+    "PUBLIC_ORIGIN": "",
   },
   // Photos: quarantine/ until a moderator approves, public/ after. No public bucket; the Worker serves public/ only.
   "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "makom-media", "jurisdiction": "eu" }],
   // A coarse outer cap per visitor's address, counted by Cloudflare at the edge: nothing about the address is stored.
-  "ratelimits": [{ "name": "SUBMIT_LIMIT", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } }],
+  "ratelimits": [
+    { "name": "SUBMIT_LIMIT", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } },
+    // Anemones: generous, since a visitor may leave one at many places; the database already counts one a day each.
+    { "name": "TRIBUTE_LIMIT", "namespace_id": "1002", "simple": { "limit": 60, "period": 60 } },
+  ],
   // Our own JSON log lines only; no automatic per-request records (they carry URLs and headers).
   "observability": { "logs": { "enabled": true, "invocation_logs": false } },
 }

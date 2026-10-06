@@ -15,6 +15,8 @@ const devOutbox: SendMail = async (env, m) => {
 /**
  * Elsewhere, mail goes through Cloudflare Email Service, which needs the site's own domain on Cloudflare DNS (a launch
  * item, checked in staging). Until that binding exists, nothing is sent; the tracking link works without any mail.
+ * When it does, it sends through MAIL_BINDING and PRODUCTION_MAIL_SENDS turns true (mail-binding.ts): the release
+ * check refuses a public build until both are so.
  */
 const notYet: SendMail = async () => false
 

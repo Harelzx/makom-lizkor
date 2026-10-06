@@ -26,12 +26,16 @@ if (!sitekey || /^[123]x0+/.test(sitekey))
   )
 
 // Mail: the form offers an email and the notice promises a verification mail, so a public build needs mail that is
-// actually sent (Cloudflare Email Service bound to the Worker), not the development outbox.
-const wrangler = (await import("node:fs")).readFileSync(new URL("../wrangler.jsonc", import.meta.url), "utf8")
-if (!/"send_email"\s*:/.test(wrangler))
-  blockers.push(
-    "No send_email binding in wrangler.jsonc: verification and tracking mails wouldn't be sent, though the form offers an email",
-  )
+// actually sent (Cloudflare Email Service bound to the Worker), not the development outbox. The config is parsed as
+// wrangler reads it, so a commented-out binding or one in a staging environment doesn't count.
+const { experimental_readRawConfig } = await import("wrangler")
+const { MAIL_BINDING, PRODUCTION_MAIL_SENDS } = await import("../worker/lib/mail-binding.ts")
+const { mailBlockers } = await import("./release-mail.mjs")
+const { fileURLToPath } = await import("node:url")
+const raw = experimental_readRawConfig({ config: fileURLToPath(new URL("../wrangler.jsonc", import.meta.url)) }).rawConfig
+blockers.push(...mailBlockers(raw, { binding: MAIL_BINDING, sends: PRODUCTION_MAIL_SENDS }))
+const { originBlockers } = await import("./release-origin.mjs")
+blockers.push(...originBlockers(raw))
 
 if (blockers.length) {
   console.error("Not ready to publish the notices:\n" + blockers.map((b) => `  - ${b}`).join("\n"))

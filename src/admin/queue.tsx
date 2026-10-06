@@ -23,6 +23,11 @@ interface Item {
   place_he: string | null
   in_memory_of: string | null
   story_he: string | null
+  /** 1 when the sender said the place is on private property. */
+  on_private_property: number
+  /** 1 when the owner allowed the exact location to be shown; only then is there an access note. */
+  location_permission: number
+  access_note_he: string | null
 }
 
 /** The pending items, or the Hebrew reason they can't be shown. */
@@ -163,6 +168,20 @@ export function Queue() {
                 </a>
                 {item.location_precision === "approximate" && " (משוער)"}
               </p>
+              {/* Private property: what the visitor will be told, read before it is approved (the access note is published). */}
+              {!!item.on_private_property && (
+                <div className="mt-2 rounded-xl border border-line p-3">
+                  <p className="text-caption font-bold text-ink-1">
+                    {item.location_permission ? "במקום פרטי, במיקום מדויק באישור הבעלים" : "במקום פרטי, בלי אישור הבעלים: יוצג מיקום משוער"}
+                  </p>
+                  {item.access_note_he && (
+                    <p className="mt-1 text-caption whitespace-pre-line text-ink-1">
+                      <span className="text-ink-2">איך מגיעים (יפורסם): </span>
+                      {item.access_note_he}
+                    </p>
+                  )}
+                </div>
+              )}
               {/* Shown as text, never as a link: the moderator reads where it goes before anyone can follow it. */}
               {item.link_url && (
                 <p className="text-caption break-all text-ink-2" dir="ltr">

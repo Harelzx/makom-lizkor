@@ -15,6 +15,7 @@ import { Anemone } from "@/components/anemone"
 import { ADDABLE_KINDS, KINDS } from "@/data/taxonomy"
 import { CONSENT_TEXT, FAMILY_CONSENT_TEXT, noticeHtml, PHOTO_RIGHTS_TEXT } from "@/data/legal"
 import { newSubmitKey, submitPlace, uploadPhoto } from "@/lib/api"
+import { exportable } from "@/lib/export"
 import { downloadJSON, resizeImage } from "@/lib/storage"
 import { getMap, reducedMotion } from "@/map/controller"
 import { useStore } from "@/store"
@@ -27,6 +28,8 @@ type Step = 0 | 1 | 2
 
 /** More places are waiting for review than the moderators can read: the form stops politely (spec 12). */
 const QUEUE_FULL = "אנחנו מקבלים עכשיו יותר הצעות ממה שאפשר לבדוק. ההצעה נשמרה במכשיר, ונשלח אותה לבד כשיתפנה מקום."
+/** The bot check judged and refused the token: not a connection problem, and the next try waits a while (src/lib/api.ts). */
+const CHECK_FAILED = "לא הצלחנו לוודא שהשליחה נעשתה מדפדפן. ההצעה נשמרה במכשיר, וננסה לשלוח אותה שוב בעוד כמה דקות."
 
 /** What the visitor is told after saving: whether the server took the place, and whether this device kept a copy. */
 const SAVE_MESSAGE = {
@@ -276,20 +279,34 @@ export function AddPlace() {
       const stored = await addLocal(place)
       const r = await submitPlace(submission, place.local!.submitKey!)
       if (r.ok) {
-        await updateLocal(place.id, { send: "sent", remoteId: r.id, trackingToken: r.trackingToken })
+        // Sent: the body (with any email and name) isn't needed for a retry any more, so the device stops keeping it,
+        // nor the key, which could ask the server for the tracking link again after a withdrawal.
+        await updateLocal(place.id, {
+          send: "sent",
+          remoteId: r.id,
+          trackingToken: r.trackingToken,
+          submission: undefined,
+          submitKey: undefined,
+        })
         // The photo follows the place; if it can't go now, the outbox sends it later.
         if (photo) {
           const sent = await uploadPhoto(r.id, r.trackingToken, photo, photoAlt.trim() || place.name_he, photoCredit.trim() || undefined)
           if (sent !== "temporary") await updateLocal(place.id, sent === "ok" ? { photoSent: true } : { photoError: "refused" })
         }
-      } else if (r.kind === "rejected") await updateLocal(place.id, { send: "rejected", sendError: r.code })
+      } else if (r.kind === "rejected")
+        await updateLocal(place.id, { send: "rejected", sendError: r.code, submitKey: undefined, submission: undefined })
       else
         await updateLocal(place.id, {
           send: "waiting",
           sendError: r.code,
           nextTryAt: r.retryAfter ? Date.now() + r.retryAfter * 1000 : undefined,
         })
-      message = !r.ok && r.code === "queue_full" ? QUEUE_FULL : SAVE_MESSAGE[r.ok ? "sent" : r.kind][stored ? "stored" : "unstored"]
+      message =
+        !r.ok && r.code === "queue_full"
+          ? QUEUE_FULL
+          : !r.ok && r.code === "turnstile_failed" && stored
+            ? CHECK_FAILED
+            : SAVE_MESSAGE[r.ok ? "sent" : r.kind][stored ? "stored" : "unstored"]
     } catch {
       // Nothing above should throw; if something does, the form stays usable rather than stuck on its button.
       sending.current = false
@@ -544,7 +561,7 @@ export function AddPlace() {
                               variant="outline"
                               size="sm"
                               disabled={!local.length}
-                              onClick={() => downloadJSON("makom-lizkor-places.json", local)}
+                              onClick={() => downloadJSON("makom-lizkor-places.json", exportable(local))}
                             >
                               <DownloadIcon data-icon="inline-start" />
                               ייצוא
@@ -562,8 +579,11 @@ export function AddPlace() {
                                     if (!f) return
                                     try {
                                       const data = JSON.parse(await f.text())
-                                      const n = await importLocal(Array.isArray(data) ? data : [])
-                                      toast(n ? `נוספו ${n} מקומות` : "לא נמצאו בקובץ מקומות חדשים")
+                                      const { added: n, saved } = await importLocal(Array.isArray(data) ? data : [])
+                                      if (!n) toast("לא נמצאו בקובץ מקומות חדשים")
+                                      else if (!saved)
+                                        toast(`נוספו ${n} מקומות`, { description: "הם לא נשמרו במכשיר הזה, ויימחקו כשתסגרו את הדף." })
+                                      else toast(`נוספו ${n} מקומות`)
                                     } catch {
                                       toast("הקובץ לא נקרא. צריך קובץ JSON שיוצא מכאן.")
                                     }

@@ -20,6 +20,8 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { CONSENT_TEXT, noticeHtml } from "@/data/legal"
 import { reviseSubmission, trackSubmission, withdrawSubmission, type Draft, type Tracked } from "@/lib/api"
+import { refusedHere, savedHere } from "@/lib/correction"
+import { FINAL, settleOwnCopy } from "@/lib/own-copy"
 import { CURRENT_SUBMISSION_NOTICE } from "@/shared/contract"
 import { useStore } from "@/store"
 
@@ -33,9 +35,6 @@ const STATUS: Record<string, string> = {
   withdrawn: "נמשכה. ההצעה, השם והמייל שלכם והתמונה נמחקו מהשרת",
   erased: "נמחקה",
 }
-
-/** Once withdrawn or erased, there is nothing left to take back. */
-const FINAL = new Set(["withdrawn", "erased"])
 
 /**
  * A submission's status, opened from its private tracking link or from the sender's own card. The link is the only
@@ -113,7 +112,8 @@ export function Tracking() {
   const tracking = useStore((s) => s.tracking)
   const setTracking = useStore((s) => s.setTracking)
   // undefined: loading or unreachable · null: no such submission for this link
-  const [state, setState] = useState<{ key: string; result: Tracked | null | undefined; failed: boolean } | null>(null)
+  // `ended`: this link stopped opening the submission with the withdrawal (a mailed link, whose address it erased).
+  const [state, setState] = useState<{ key: string; result: Tracked | null | undefined; failed: boolean; ended?: boolean } | null>(null)
   const [confirming, setConfirming] = useState(false)
   const [working, setWorking] = useState(false)
   const [fixing, setFixing] = useState(false)
@@ -124,6 +124,8 @@ export function Tracking() {
     let live = true
     void trackSubmission(tracking.id, tracking.token).then((result) => {
       if (live) setState({ key: `${tracking.id}/${tracking.token}`, result, failed: result === undefined })
+      // Withdrawn from elsewhere, or its files erased since: the copy on this device catches up.
+      void settleOwnCopy(tracking.id, tracking.token, result)
     })
     return () => {
       live = false
@@ -135,21 +137,47 @@ export function Tracking() {
     if (!tracking) return
     const result = await trackSubmission(tracking.id, tracking.token)
     setState({ key: `${tracking.id}/${tracking.token}`, result, failed: result === undefined })
+    void settleOwnCopy(tracking.id, tracking.token, result)
   }
 
   const sendCorrection = async (d: Draft) => {
     if (!tracking || current?.result?.rev === undefined) return
-    const r = await reviseSubmission(tracking.id, tracking.token, {
-      expectedRev: current.result.rev,
+    const sent = {
       name_he: d.name_he.trim(),
       place_he: d.place_he?.trim() || undefined,
       in_memory_of: d.in_memory_of?.trim() || undefined,
       story_he: d.story_he?.trim() || undefined,
       link_url: d.link_url || undefined,
+    }
+    const r = await reviseSubmission(tracking.id, tracking.token, {
+      expectedRev: current.result.rev,
+      ...sent,
       consent_version: CURRENT_SUBMISSION_NOTICE,
     })
-    if (r === "failed") return void toast("לא הצלחנו לשלוח את התיקון", { description: "התיקון לא נשמר. נסו שוב בעוד רגע." })
-    if (r === "conflict") toast("ההצעה השתנתה בינתיים", { description: "הנה המצב העדכני." })
+    if (r === "refused") return void toast("התיקון לא התקבל", { description: "התיקון נשאר כאן. בדקו אותו ונסו לשלוח שוב." })
+    if (r === "gone") return void toast("הקישור כבר לא פותח את ההצעה", { description: "ייתכן שהיא נמשכה או נמחקה. התיקון לא נשמר." })
+    if (r === "failed") return void toast("לא הצלחנו לשלוח את התיקון", { description: "התיקון לא נשמר ונשאר כאן. נסו שוב בעוד רגע." })
+    if (r === "queue_full")
+      return void toast("יש עכשיו יותר הצעות ממה שאפשר לבדוק", { description: "התיקון לא נשמר. נסו שוב בעוד כמה שעות." })
+    if (r === "uncertain" || r === "conflict") {
+      // No clear answer, or the place changed meanwhile: the correction may still be the one saved (its answer lost
+      // and a retry refused). It counts as saved only if the newest text on the server is the very text sent from
+      // here; otherwise it stays in the form, with the current state shown.
+      const now = await trackSubmission(tracking.id, tracking.token)
+      if (refusedHere(now, sent, current.result.rev)) {
+        setState({ key, result: now!, failed: false })
+        return void toast("התיקון הגיע, אבל לא אושר", { description: "הוא נשאר כאן. אפשר לראות למטה את מצב ההצעה ולשלוח שוב." })
+      }
+      if (!savedHere(now, sent, current.result.rev)) {
+        if (now) setState({ key, result: now, failed: false })
+        return void toast(now ? (r === "conflict" ? "ההצעה השתנתה בינתיים" : "התיקון שלכם לא מופיע בשרת") : "לא ברור אם התיקון נשמר", {
+          description:
+            now && (r === "conflict" || now.rev !== current.result.rev)
+              ? "ההצעה השתנתה בינתיים, אולי מחלון אחר. התיקון שלכם נשאר כאן; בדקו את המצב לפני ששולחים שוב."
+              : "התיקון נשאר כאן. נסו שוב בעוד רגע.",
+        })
+      }
+    }
     setFixing(false)
     await reload()
   }
@@ -159,13 +187,20 @@ export function Tracking() {
     if (!tracking) return
     setWorking(true)
     const done = await withdrawSubmission(tracking.id, tracking.token)
+    // The status says what is established, whatever the answer was (or if none came): withdrawn, and whether its files
+    // are still to be erased.
+    const now = await trackSubmission(tracking.id, tracking.token)
     setWorking(false)
     setConfirming(false)
-    if (!done) return void toast("לא הצלחנו למשוך כרגע", { description: "ההצעה לא השתנתה. נסו שוב בעוד רגע." })
-    setState({ key, result: { status: "withdrawn", name_he: null }, failed: false })
+    if (now?.status !== "withdrawn" && (done === "failed" || now))
+      return void toast("לא הצלחנו לוודא שההצעה נמשכה", { description: "נסו שוב בעוד רגע." })
+    // Withdrawn; if the status couldn't be read just now (or this link ended with the withdrawal), say only what the
+    // answer established.
+    const shown: Tracked =
+      now?.status === "withdrawn" ? now : { status: "withdrawn", name_he: null, ...(done === "withdrawn" ? {} : { files: "pending" }) }
+    setState({ key, result: shown, failed: false, ended: now === null })
     // The sender's own copy on this device, if it is here, says so too.
-    const own = useStore.getState().local.find((p) => p.local?.remoteId === tracking.id)
-    if (own) void useStore.getState().updateLocal(own.id, { send: "withdrawn" })
+    await settleOwnCopy(tracking.id, tracking.token, shown)
   }
 
   return (
@@ -182,12 +217,28 @@ export function Tracking() {
           {current?.result && (
             <>
               {current.result.name_he && <p className="text-title-3 text-ink-1">{current.result.name_he}</p>}
-              <p className="text-label text-ink-1">{STATUS[current.result.status] ?? current.result.status}</p>
+              <p className="text-label text-ink-1">
+                {current.result.status === "withdrawn" && current.result.files === "pending"
+                  ? "נמשכה. ההצעה, השם והמייל שלכם נמחקו מהשרת. התמונה כבר לא מוצגת, ותימחק מהשרת בהמשך"
+                  : (STATUS[current.result.status] ?? current.result.status)}
+              </p>
               {current.result.status === "published" && current.result.revision_state === "pending" && (
                 <p className="text-caption text-ink-2">התיקון ששלחתם ממתין לבדיקה. עד אז מופיעה הגרסה הקודמת.</p>
               )}
               {current.result.status === "published" && current.result.revision_state === "rejected" && (
                 <p className="text-caption text-ink-2">התיקון האחרון לא אושר. באתר מופיעה הגרסה שאושרה.</p>
+              )}
+              {current.result.status === "withdrawn" && current.result.files === "pending" && current.ended && (
+                // This link can't ask again: it ended with the withdrawal.
+                <p className="text-caption text-ink-2">
+                  הקישור הזה כבר לא פותח את ההצעה. את מחיקת התמונה אפשר להשלים מהמכשיר ששלח את ההצעה, ואם לא, היא תימחק מהשרת בהמשך.
+                </p>
+              )}
+              {current.result.status === "withdrawn" && current.result.files === "pending" && !current.ended && (
+                // The same request again finishes what the first couldn't erase.
+                <Button variant="outline" className="pressable self-start" disabled={working} onClick={() => void withdraw()}>
+                  להשלים את מחיקת התמונה
+                </Button>
               )}
               {current.result.note && (
                 <div className="rounded-2xl border border-line p-3">
