@@ -191,3 +191,59 @@ describe("the development trigger", () => {
     expect((await call("http://local/__dev/cron", { method: "POST" }, { ...env, ENVIRONMENT: "production" })).status).toBe(404)
   })
 })
+
+describe("the abuse codes' ceiling holds even when the backstop can't keep up", () => {
+  /** Requests stored directly, so a flood of them costs the test nothing: complete, due for the backstop, codes set. */
+  async function flood(n: number) {
+    const received = start().toISOString()
+    const ceiling = after(12 * 30 * 24).toISOString()
+    for (let i = 0; i < n; i++)
+      await env.DB.prepare(
+        `INSERT INTO reports (id, place_id, origin, elements, requester_type, explanation, notice_version, submit_key_hash, body_hash,
+           explanation_hash, reporter_key, complete, outcome, status, backstop_at, received_at, ceiling_at, purge_after)
+         VALUES (?1, 'p_flood', 'contribution', '["name_he"]', 'family', 'הסבר', 'notice.report@2026-10-2', ?1, 'b', 'e', 'r', 1,
+           'received', 'open', ?2, ?3, ?4, ?4)`,
+      )
+        .bind(`r_flood_${day}_${i}`, after(REPORT_GUARDS.backstopHours).toISOString(), received, ceiling)
+        .run()
+  }
+  const codesLeft = () =>
+    env.DB.prepare("SELECT COUNT(*) AS n FROM reports WHERE id LIKE ? AND (reporter_key IS NOT NULL OR explanation_hash IS NOT NULL)")
+      .bind(`r_flood_${day}_%`)
+      .first<number>("n")
+
+  it("sixty requests due in one run: every code is gone within reportAbuseCodeMaxHours", async () => {
+    await flood(60)
+    await jobs(after(RETENTION.reportAbuseCodeHours))
+    // The ceiling leaves half an hour for a late run: by then nothing may be left, whatever the backstop got through.
+    await jobs(after(RETENTION.reportAbuseCodeMaxHours - 0.5))
+    expect(await codesLeft()).toBe(0)
+  })
+
+  it("with the backstop failing on every run, the codes still go by the ceiling", async () => {
+    await flood(3)
+    // The backstop part throws (its query fails); the other parts carry on.
+    const db = new Proxy(env.DB, {
+      get(target, prop) {
+        if (prop === "prepare")
+          return (sql: string) => {
+            if (sql.includes("WHERE backstop_at IS NOT NULL AND backstop_at <=")) throw new Error("d1 down")
+            return target.prepare(sql)
+          }
+        const value = Reflect.get(target, prop)
+        return typeof value === "function" ? value.bind(target) : value
+      },
+    })
+    await jobs(after(RETENTION.reportAbuseCodeMaxHours - 0.5), { ...env, DB: db })
+    expect(await codesLeft()).toBe(0)
+  })
+
+  it("a backstop that finds the codes already gone leaves the request to people", async () => {
+    const id = await published()
+    await report({ placeId: id, elements: ["story_he"] }, after(-1))
+    const { ticket } = await report({ placeId: id })
+    await env.DB.prepare("UPDATE reports SET reporter_key = NULL, explanation_hash = NULL WHERE id = ?").bind(ticket).run()
+    await jobs(after(REPORT_GUARDS.backstopHours))
+    expect((await row(ticket))!.outcome).toBe("received")
+  })
+})

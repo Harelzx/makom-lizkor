@@ -107,6 +107,9 @@ export async function precaution(env: OpEnv, ticket: string, now: Date): Promise
   const report = await db.prepare("SELECT * FROM reports WHERE id = ?").bind(ticket).first<ReportRow>()
   if (!report || !report.complete || report.origin !== "contribution" || report.outcome !== "received" || report.status === "closed")
     return "held_back"
+  // Without its abuse codes (cleared by their ceiling before a late backstop got to it) a request can't be checked
+  // for spam, so the automatic path doesn't act on it: a person reviews it, as every request.
+  if (!report.explanation_hash) return "held_back"
   const at = now.toISOString()
   const hourAgo = new Date(now.getTime() - HOUR_MS).toISOString()
   const dayAgo = new Date(now.getTime() - 24 * HOUR_MS).toISOString()

@@ -15,7 +15,8 @@ const HOUR_MS = 3600 * 1000
  * - moderators are reminded every 6 hours of each open request until one records handling it;
  * - the two abuse codes (keyed hashes of the reporter's address and of the explanation) are cleared
  *   RETENTION.reportAbuseCodeHours after the request, once the backstop has had its look: they exist only for the
- *   day's counts. The notice promises them gone within reportAbuseCodeMaxHours, which leaves room for late runs.
+ *   day's counts. The notice promises them gone within reportAbuseCodeMaxHours, so half an hour before that they are
+ *   cleared whatever the backstop got through (a flood larger than one run takes, or a backstop that keeps failing).
  *   Nothing else is cleared here: the request, and its replay detection, stay to the request's own deletion date.
  * A part that fails is logged by name and never stops the others.
  */
@@ -56,12 +57,18 @@ export async function runJobs(env: Env, deps: { sendMail: SendMail; purge: Purge
     for (const { id } of results) await alertReport(env.DB, env, deps.sendMail, id, now, origin)
   })
 
+  // Last, and on its own: it runs even if every part before it failed.
   await part("abuse_codes", () =>
     env.DB.prepare(
       `UPDATE reports SET reporter_key = NULL, explanation_hash = NULL
-       WHERE received_at <= ? AND backstop_at IS NULL AND (reporter_key IS NOT NULL OR explanation_hash IS NOT NULL)`,
+       WHERE (reporter_key IS NOT NULL OR explanation_hash IS NOT NULL)
+         AND ((received_at <= ?1 AND backstop_at IS NULL) OR received_at <= ?2)`,
     )
-      .bind(new Date(now.getTime() - RETENTION.reportAbuseCodeHours * HOUR_MS).toISOString())
+      .bind(
+        new Date(now.getTime() - RETENTION.reportAbuseCodeHours * HOUR_MS).toISOString(),
+        // The ceiling, whatever the backstop got through: the notice's hours, less half an hour for a late run.
+        new Date(now.getTime() - (RETENTION.reportAbuseCodeMaxHours - 0.5) * HOUR_MS).toISOString(),
+      )
       .run(),
   )
 }
