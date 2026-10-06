@@ -203,7 +203,8 @@ export function Tracking() {
       })
     // The sender's own copy on this device, if it is here, says so too.
     const own = useStore.getState().local.find((p) => p.local?.remoteId === tracking.id)
-    if (own) void useStore.getState().updateLocal(own.id, { send: "withdrawn" })
+    // …and the device stops keeping the tracking link: there is nothing left to follow or withdraw.
+    if (own) void useStore.getState().updateLocal(own.id, { send: "withdrawn", trackingToken: undefined })
   }
 
   return (

@@ -138,6 +138,26 @@ test("a withdrawal whose answer was lost is found done, not reported as unchange
   await page.getByRole("alertdialog").getByRole("button", { name: "למשוך ולמחוק" }).click()
   await expect(view.getByText("נמשכה", { exact: false })).toBeVisible()
   await expect(page.getByText("לא הצלחנו", { exact: false })).toHaveCount(0)
+  // The device no longer keeps the tracking link of a withdrawn place.
+  await expect
+    .poll(() =>
+      page.evaluate(
+        (n) =>
+          new Promise<unknown>((resolve) => {
+            const req = indexedDB.open("makom-lizkor-v2")
+            req.onsuccess = () => {
+              const get = req.result.transaction("v1").objectStore("v1").get("local")
+              get.onsuccess = () =>
+                resolve(
+                  (get.result as { name_he: string; local?: { trackingToken?: string } }[]).find((p) => p.name_he === n)?.local
+                    ?.trackingToken,
+                )
+            }
+          }),
+        name,
+      ),
+    )
+    .toBeUndefined()
 })
 
 /** A submission returned by the moderator, with its tracking view open on the correction form. */
