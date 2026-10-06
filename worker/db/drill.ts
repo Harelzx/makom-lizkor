@@ -2,7 +2,7 @@ import { ulid } from "../lib/ids"
 import type { SendMail } from "../lib/mail"
 import { sha256, unseal, type Manifest } from "../lib/sealed"
 import { EXPORT_TABLES } from "./exports"
-import { importExport, type ExportPayload } from "./import"
+import { filterForImport, importExport, type ExportPayload } from "./import"
 import { readLedger, replayLedger } from "./replay"
 import { tellModerators } from "./retention"
 
@@ -29,6 +29,47 @@ const fail = (code: string): never => {
 }
 async function empty(db: D1Database) {
   await db.batch([...EXPORT_TABLES].reverse().map((t) => db.prepare(`DELETE FROM ${t}`)))
+}
+
+/** An export's data opened in memory with a recipient's private key: never written anywhere. */
+async function openExport(data: Uint8Array, manifest: Manifest, key: string) {
+  const plain = await unseal(data, manifest.data, JSON.parse(key) as JsonWebKey)
+  return JSON.parse(await new Response(new Blob([plain]).stream().pipeThrough(new DecompressionStream("gzip"))).text()) as ExportPayload
+}
+
+/**
+ * Every retained export checked for personal data it should never have held (spec 8.4): each one opened in memory
+ * with the drill key, and the deletion rules (filterForImport, the job's own) applied at the moment it was made, less a
+ * day's grace for a deletion run's backlog. What they would change was due before the export and still in it: counted
+ * by table, nothing else. Content kept on purpose (a hidden memorial, say) is no deletion rule's to change, so it is
+ * never counted. Nothing is written to any database: an older export never reaches the drill's.
+ */
+export async function auditExports(d: { exports: R2Bucket; drillKey: string }): Promise<Record<string, number>> {
+  const found: Record<string, number> = {}
+  const count = (k: string, n = 1) => (found[k] = (found[k] ?? 0) + n)
+  const manifests: string[] = []
+  let cursor: string | undefined
+  do {
+    const page = await d.exports.list({ prefix: "exports/", cursor })
+    manifests.push(...page.objects.map((o) => o.key).filter((k) => k.endsWith("/manifest.json")))
+    cursor = page.truncated ? page.cursor : undefined
+  } while (cursor)
+  for (const key of manifests) {
+    try {
+      const manifest = (await (await d.exports.get(key))!.json()) as Manifest
+      const data = new Uint8Array(await (await d.exports.get(manifest.data.key))!.arrayBuffer())
+      const payload = await openExport(data, manifest, d.drillKey)
+      const kept = filterForImport(payload.tables, new Date(Date.parse(payload.created_at) - DAY_MS))
+      for (const t of EXPORT_TABLES) {
+        const same = new Set(kept[t].map((r) => JSON.stringify(r)))
+        const changed = (payload.tables[t] ?? []).filter((r) => !same.has(JSON.stringify(r))).length
+        if (changed) count(t, changed)
+      }
+    } catch {
+      count("unreadable")
+    }
+  }
+  return found
 }
 
 /**
@@ -65,12 +106,9 @@ export async function runDrill(d: DrillEnv, now: Date): Promise<string | null> {
     if (!sealed) fail("data_missing")
     const data = new Uint8Array(await sealed!.arrayBuffer())
     if ((await sha256(data)) !== manifest!.data.sha256) fail("data_checksum")
-    const plain = await unseal(data, manifest!.data, JSON.parse(d.drillKey) as JsonWebKey).catch((err: Error) =>
+    const payload = await openExport(data, manifest!, d.drillKey).catch((err: Error) =>
       fail(err.message === "not_a_recipient" ? "not_a_recipient" : "unseal"),
     )
-    const payload = JSON.parse(
-      await new Response(new Blob([plain]).stream().pipeThrough(new DecompressionStream("gzip"))).text(),
-    ) as ExportPayload
     for (const [t, m] of Object.entries(manifest!.tables)) {
       const rows = payload.tables[t]
       if (!rows || rows.length !== m.rows || (await sha256(new TextEncoder().encode(JSON.stringify(rows)))) !== m.sha256)
@@ -95,6 +133,24 @@ export async function runDrill(d: DrillEnv, now: Date): Promise<string | null> {
     failure = err instanceof Failed ? err.message : "error"
   } finally {
     await empty(d.drillDb).catch(() => (failure ??= "cleanup"))
+  }
+  // Then every export still kept, in memory (spec 8.4): what one holds past its date is told by table and count.
+  const stale = await auditExports({ exports: d.exports, drillKey: d.drillKey }).catch(() => ({ unreadable: 1 }))
+  if (Object.keys(stale).length) {
+    console.error(JSON.stringify({ level: "error", event: "export_audit", found: stale }))
+    await tellModerators(
+      db,
+      d.env,
+      d.sendMail,
+      "export_audit",
+      "מקום לזכור: נמצא בגיבויים מידע שמועד המחיקה שלו עבר",
+      [
+        'הבדיקה השבועית של הגיבויים של "מקום לזכור" מצאה מידע שהיה צריך להימחק לפני שהגיבוי נוצר:',
+        ...Object.entries(stale).map(([k, v]) => `${k}: ${v}`),
+        "כדאי לבדוק את היומנים (event: export_audit).",
+      ].join("\n"),
+      now,
+    )
   }
   await db
     .prepare("UPDATE drill_runs SET finished_at = ?2, ok = ?3, failure = ?4, export_id = ?5 WHERE id = ?1")
