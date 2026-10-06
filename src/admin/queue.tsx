@@ -138,10 +138,11 @@ export function Queue() {
   }
 
   return (
-    // The site's body never scrolls (the map fills it), so the queue scrolls on its own.
-    <main className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-2xl p-6">
-        <h1 className="text-title-2 text-ink-1">הצעות שממתינות לבדיקה</h1>
+    <section aria-labelledby="queue-title">
+      <div>
+        <h2 id="queue-title" className="text-title-2 text-ink-1">
+          הצעות שממתינות לבדיקה
+        </h2>
         {error && (
           <p role="alert" className="mt-3 text-label text-destructive">
             {error}
@@ -202,6 +203,6 @@ export function Queue() {
           ))}
         </div>
       </div>
-    </main>
+    </section>
   )
 }
