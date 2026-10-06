@@ -432,6 +432,26 @@ describe("deadlines from the decisions themselves (F5-R3)", () => {
   })
 })
 
+describe("a note on the approval itself", () => {
+  it("goes 90 days after the approval closed the case; the place stays published", async () => {
+    const { id } = await send("ספסל דמו עם הערת אישור")
+    const { items } = await (await admin("/api/admin/queue")).json<{ items: Item[] }>()
+    const item = items.find((i) => i.id === id)!
+    const res = await admin(`/api/admin/places/${id}/transitions`, {
+      method: "POST",
+      body: JSON.stringify({ action: "approve", revisionId: item.revisionId, expectedRev: item.rev, note: "הערת אישור דמו" }),
+    })
+    expect(res.status).toBe(200)
+    const notes = () =>
+      env.DB.prepare("SELECT COUNT(*) AS n FROM revisions WHERE place_id = ? AND decision_note IS NOT NULL").bind(id).first<{ n: number }>()
+    await runRetention(opEnv(), later(RETENTION.contactAfterCloseDays - 1))
+    expect((await notes())?.n).toBe(1)
+    await runRetention(opEnv(), later(RETENTION.contactAfterCloseDays + 1))
+    expect((await notes())?.n).toBe(0)
+    expect(await place(id)).toMatchObject({ status: "published" })
+  })
+})
+
 describe("a hide's notes (E5-1)", () => {
   it("lose their text once due, active and lifted alike; the decision, its code and its state stay; one not due is kept", async () => {
     const { id } = await send("גן דמו עם הסתרה")

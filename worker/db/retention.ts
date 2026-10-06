@@ -27,7 +27,7 @@ export type RetentionCounts = { erased: number; revisions: number; decisionNotes
  *   their content, their contact details and their files go, through the same durable operation as a withdrawal;
  * - a correction to a published place that was returned or refused loses its own text after the same days (the place,
  *   and what it publishes, stay), and a returned one is closed: no photo or text can be added to it any more;
- * - a moderator's note to the sender goes once its case closed, or at its ceiling;
+ * - a moderator's note goes RETENTION.contactAfterCloseDays after its decision once its revision is closed, or at its ceiling;
  * - contact details, a request's text and address, and moderators' notes on a hide go once their purge date passed.
  * A run is recorded, and counted as finished only when every part succeeded: a restore in place may go back no earlier
  * than the last finished run (spec 7, Route A).
@@ -51,8 +51,9 @@ export async function runRetention(env: OpEnv, now: Date): Promise<{ id: string;
   }
   await part("erased", () => eraseAbandoned(env, now))
   await part("revisions", () => blankClosedCorrections(env, now))
-  // A moderator's note to the sender, once its case closed (a newer revision replaced the one it was written on), goes
-  // RETENTION.contactAfterCloseDays after that; any note goes RETENTION.contactMaxMonths after it was written.
+  // A moderator's note goes RETENTION.contactAfterCloseDays after its decision once that revision is no longer open
+  // (approved, refused, or replaced by the sender's correction): never later than that after its case closed. A note on
+  // a revision still returned to the sender goes with the 30-day erasure, and any note at RETENTION.contactMaxMonths.
   await part(
     "decisionNotes",
     async () =>
@@ -60,8 +61,8 @@ export async function runRetention(env: OpEnv, now: Date): Promise<{ id: string;
         await db
           .prepare(
             `UPDATE revisions SET decision_note = NULL
-             WHERE decision_note IS NOT NULL AND (decided_at <= ?1 OR (state = 'superseded'
-               AND (SELECT MIN(nx.created_at) FROM revisions nx WHERE nx.place_id = revisions.place_id AND nx.n > revisions.n) <= ?2))`,
+             WHERE decision_note IS NOT NULL
+               AND (decided_at <= ?1 OR (state IN ('approved', 'rejected', 'superseded') AND decided_at <= ?2))`,
           )
           .bind(
             new Date(now.getTime() - RETENTION.contactMaxMonths * 30 * DAY_MS).toISOString(),
