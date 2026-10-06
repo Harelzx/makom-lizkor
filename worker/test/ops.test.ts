@@ -484,3 +484,41 @@ describe("purge retries are reserved before they are tried (F4-O3)", () => {
     expect(await op(id)).toMatchObject({ purge: "abandoned", purge_tries: 3 })
   })
 })
+
+describe("refused cleanups that keep failing don't hold back the rest (F4-O3)", () => {
+  it("more than a hundred of them, abort already written: a later operation is still finished", async () => {
+    const p = await published()
+    const old = "2026-10-06T06:00:00.000Z"
+    const refusedRow = (id: string) =>
+      env.DB.prepare(
+        `INSERT INTO visibility_ops (id, place_id, kind, actor, removal, expected_rev, seq_from, detail, state, refused_reason,
+           intent, media, ledger_commit, purge, abort, created_at, updated_at)
+         VALUES (?1, ?2, 'approve', 'moderator', 0, 1, 0, ?3, 'refused', 'conflict', 'written', 'failed', 'pending', 'none',
+           'written', ?4, ?4)`,
+      ).bind(id, p.id, JSON.stringify({ prepared: [`public/${p.id}/${id}.jpg`] }), old)
+    const stuck = Array.from({ length: 101 }, (_, i) => `t_clean_${String(i).padStart(3, "0")}`)
+    await env.DB.batch([
+      ...stuck.map(refusedRow),
+      env.DB.prepare(
+        `INSERT INTO visibility_ops (id, place_id, kind, actor, removal, expected_rev, seq_from, detail, state, intent, media,
+           ledger_commit, purge, created_at, updated_at)
+         VALUES ('t_clean_later', ?1, 'suppress', 'moderator', 1, 1, 0, '{"fields":["whole"]}', 'applied', 'written', 'none',
+           'failed', 'none', ?2, ?2)`,
+      ).bind(p.id, "2026-10-06T06:30:00.000Z"),
+    ])
+    // The bucket keeps refusing to delete their prepared copies.
+    const media = new Proxy(env.MEDIA, {
+      get(target, prop) {
+        if (prop === "delete")
+          return async (keys: string | string[]) =>
+            [keys].flat().some((k) => k.includes("t_clean_")) ? Promise.reject(new Error("down")) : target.delete(keys)
+        const value = Reflect.get(target, prop)
+        return typeof value === "function" ? value.bind(target) : value
+      },
+    })
+    await resumeOps({ ...opEnv, media }, later(1))
+    await resumeOps({ ...opEnv, media }, later(2))
+    expect(await op("t_clean_later")).toMatchObject({ ledger_commit: "written" })
+    expect(await op("t_clean_000")).toMatchObject({ media: "failed" })
+  })
+})

@@ -78,8 +78,10 @@ const INTERRUPTED_MS = 2 * 60_000
 const RESUME_BATCH = 100
 /** Passes placePhoto makes before leaving the photo to the next run: each one re-reads the state after its own writes. */
 const PLACE_PASSES = 4
-/** A photo move's writes have all landed or stopped by then; the job looks at the photo again after it. */
+/** After a move, the job's first look at the photo comes this soon (a cadence, not a promise that writes are over). */
 const MEDIA_SETTLE_MS = INTERRUPTED_MS
+/** Then it keeps looking, this often, for as long as the place has a photo: a write may land after any one look. */
+const MEDIA_WATCH_MS = 60 * 60_000
 /** A photo that wouldn't settle is looked at again this much later, behind the others. */
 const MEDIA_RETRY_MS = 15 * 60_000
 /** Photos one scheduled run looks at. */
@@ -318,6 +320,8 @@ export async function resumeOps(env: OpEnv, now: Date) {
     .bind(new Date(now.getTime() - INTERRUPTED_MS).toISOString(), RESUME_BATCH)
     .all<OpRow>()
   for (const op of results) {
+    // Tried now, whichever path it takes: the least recently tried go first next time, so none holds back the rest.
+    await env.db.prepare("UPDATE visibility_ops SET updated_at = ?2 WHERE id = ?1").bind(op.id, at).run()
     // One operation's failure is its own: it is tried again on a later run, and the rest go on now.
     try {
       if (op.state === "applied") await finishOp(env, op.id, now)
@@ -351,9 +355,11 @@ export async function resumeOps(env: OpEnv, now: Date) {
 }
 
 /**
- * The photos due for another look, whatever their operations' steps say: a move that finished can still have been
- * undone by another's write landing late, from a Worker that then stopped. Each is put where its place's state says;
- * one that won't settle (or whose bytes are gone) is looked at again later, behind the others, and stays listed.
+ * The photo watch: every place whose photo a move has touched is looked at again on a cadence, whatever its operations'
+ * steps say, because a write from a Worker that then stopped can land after any finished move or any earlier look,
+ * this job's own included. Each look puts the photo where the place's state says and books the next one; a place
+ * whose photo is gone for good (withdrawn, erased, never published) leaves the watch. One that won't settle, or whose
+ * bytes are gone, is looked at again sooner, behind the others, and stays listed.
  */
 export async function reconcileMedia(env: OpEnv, now: Date) {
   const at = now.toISOString()
@@ -361,18 +367,21 @@ export async function reconcileMedia(env: OpEnv, now: Date) {
     .prepare("SELECT place_id, due_at FROM media_checks WHERE due_at <= ?1 ORDER BY due_at, place_id LIMIT ?2")
     .bind(at, MEDIA_BATCH)
     .all<{ place_id: string; due_at: string }>()
+  const book = (placeId: string, read: string, ms: number) =>
+    env.db
+      .prepare("UPDATE media_checks SET due_at = ?3 WHERE place_id = ?1 AND due_at = ?2")
+      .bind(placeId, read, new Date(now.getTime() + ms).toISOString())
+      .run()
   for (const { place_id, due_at } of results) {
+    // Booked before the look's own writes: if this Worker stops midway, the next look is already set.
+    await book(place_id, due_at, MEDIA_WATCH_MS)
+    const booked = new Date(now.getTime() + MEDIA_WATCH_MS).toISOString()
     try {
-      await placePhoto(env, place_id, now, false)
-      // Unless a move registered meanwhile: then it is looked at again after that one.
-      await env.db.prepare("DELETE FROM media_checks WHERE place_id = ?1 AND due_at = ?2").bind(place_id, due_at).run()
+      if ((await placePhoto(env, place_id, now, false)) === "none")
+        await env.db.prepare("DELETE FROM media_checks WHERE place_id = ?1 AND due_at = ?2").bind(place_id, booked).run()
     } catch (err) {
       console.error(JSON.stringify({ level: "error", event: "photo_unsettled", place: place_id, error: (err as Error).message }))
-      await env.db
-        .prepare("UPDATE media_checks SET due_at = ?3 WHERE place_id = ?1 AND due_at = ?2")
-        .bind(place_id, due_at, new Date(now.getTime() + MEDIA_RETRY_MS).toISOString())
-        .run()
-        .catch(() => undefined)
+      await book(place_id, booked, MEDIA_RETRY_MS).catch(() => undefined)
     }
   }
 }
@@ -430,10 +439,11 @@ async function preparedCleaned(env: OpEnv, id: string, now: Date) {
  * Several of these can run at once for one place (a slow request and the job, two decisions in a row), and a delete
  * already on its way can't be called back. So each pass re-reads the state after its own writes, and the call ends
  * only when a pass finds the files already where the state says: a finisher whose delete lands late sees the result on
- * its next pass and puts the copy back. A photo that still hasn't settled after a few passes throws, so its
- * operation's file step stays unfinished and the job runs it again.
+ * its next pass and puts the copy back. A finisher that stops right after such a write can't, so every move puts the
+ * place on the photo watch (reconcileMedia), which keeps looking. A photo that still hasn't settled after a few passes
+ * throws, so its operation's file step stays unfinished and the job runs it again.
  */
-export async function placePhoto(env: OpEnv, placeId: string, now = new Date(), register = true) {
+export async function placePhoto(env: OpEnv, placeId: string, now = new Date(), register = true): Promise<"none" | "placed"> {
   for (let pass = 0; pass < PLACE_PASSES; pass++) {
     const row = await env.db
       .prepare(
@@ -444,13 +454,14 @@ export async function placePhoto(env: OpEnv, placeId: string, now = new Date(), 
       .bind(placeId)
       .first<{ status: string; photo_key: string | null; hidden: number }>()
     const key = row?.photo_key
-    if (!row || !key?.startsWith("public/")) return
-    // Registered before any write, so the job looks again once every write of this move has landed or stopped.
+    // A withdrawn or erased place's files are the erasure's, never brought back here.
+    if (!row || !key?.startsWith("public/") || row.status === "withdrawn" || row.status === "erased") return "none"
+    // On the watch before any write, with a look soon after this move (sooner than one already booked, never later).
     if (register && pass === 0)
       await env.db
         .prepare(
           `INSERT INTO media_checks (place_id, due_at) VALUES (?1, ?2)
-           ON CONFLICT (place_id) DO UPDATE SET due_at = MAX(due_at, excluded.due_at)`,
+           ON CONFLICT (place_id) DO UPDATE SET due_at = MIN(due_at, excluded.due_at)`,
         )
         .bind(placeId, new Date(now.getTime() + MEDIA_SETTLE_MS).toISOString())
         .run()
@@ -468,7 +479,7 @@ export async function placePhoto(env: OpEnv, placeId: string, now = new Date(), 
       await env.media.delete(key)
       changed = true
     }
-    if (!changed) return
+    if (!changed) return "placed"
   }
   throw new Error("photo_unsettled")
 }

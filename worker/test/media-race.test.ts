@@ -162,7 +162,8 @@ describe("a late write whose Worker then stopped is put right by the scheduled j
     await resumeOps(opEnv(), afterSettling())
     expect(await stored(p.key)).toEqual(p.bytes)
     expect(await stored(p.held)).toEqual(p.bytes)
-    expect(await due(p.id)).toBeNull()
+    // The watch stays, looking again later: a write still on its way may land after this look.
+    expect(await due(p.id)).not.toBeNull()
   })
 
   it("the reverse: a restoration's copy lands after a newer hide finished, and its Worker stops: the job takes it down", async () => {
@@ -226,5 +227,91 @@ describe("a late write whose Worker then stopped is put right by the scheduled j
     await resumeOps(opEnv(), afterSettling())
     // Still due: the job keeps looking, later, rather than forgetting it.
     expect(await due(p.id)).not.toBeNull()
+  })
+})
+
+describe("the photo watch outlasts any one look (F4-O2)", () => {
+  const t0 = Date.now()
+  const at = (minutes: number) => new Date(t0 + minutes * 60_000)
+  const due = (placeId: string) =>
+    env.DB.prepare("SELECT due_at FROM media_checks WHERE place_id = ?").bind(placeId).first<string>("due_at")
+  // Each test runs its jobs on its own stretch of time, after the previous test's.
+  let base = 0
+  const next = () => (base += 24 * 60)
+
+  it("a hide's delete held across a completed look, then landing as its Worker stops: a later scheduled look serves the photo again", async () => {
+    const t = next()
+    const p = await withPhoto()
+    await hidePhoto(p.id)
+    const late = gated("delete", p.key, true)
+    const hiding = placePhoto(opEnv(late.media), p.id, at(t)).catch((err: Error) => err)
+    await late.arrival
+    await liftAll(p.id)
+    await placePhoto(opEnv(), p.id, at(t))
+    // The job looks while the delete is still on its way, and finds everything in place.
+    await resumeOps(opEnv(), at(t + 3))
+    expect(await stored(p.key)).toEqual(p.bytes)
+    late.open()
+    expect(String(await hiding)).toContain("worker stopped")
+    expect(await stored(p.key)).toBeNull()
+    await resumeOps(opEnv(), at(t + 30))
+    expect(await stored(p.key)).toBeNull()
+    await resumeOps(opEnv(), at(t + 3 + 61))
+    expect(await stored(p.key)).toEqual(p.bytes)
+    expect(await stored(p.held)).toEqual(p.bytes)
+  })
+
+  it("the reverse: a restoration's copy held across a completed look, then landing as its Worker stops: a later look takes it down", async () => {
+    const t = next()
+    const p = await withPhoto()
+    await hidePhoto(p.id)
+    await placePhoto(opEnv(), p.id, at(t))
+    await liftAll(p.id)
+    const late = gated("put", p.key, true)
+    const restoring = placePhoto(opEnv(late.media), p.id, at(t)).catch((err: Error) => err)
+    await late.arrival
+    await hidePhoto(p.id)
+    await placePhoto(opEnv(), p.id, at(t))
+    await resumeOps(opEnv(), at(t + 3))
+    late.open()
+    expect(String(await restoring)).toContain("worker stopped")
+    expect(await stored(p.key)).toEqual(p.bytes)
+    await resumeOps(opEnv(), at(t + 3 + 61))
+    expect(await stored(p.key)).toBeNull()
+    expect(await stored(p.held)).toEqual(p.bytes)
+  })
+
+  it("a look's own copy landing late, after a newer hide, as the job's Worker stops: the next look takes it down", async () => {
+    const t = next()
+    const p = await withPhoto()
+    await hidePhoto(p.id)
+    await placePhoto(opEnv(), p.id, at(t))
+    // Restored in the database, with the copy back in view left to the job.
+    await liftAll(p.id)
+    const late = gated("put", p.key, true)
+    const looking = resumeOps(opEnv(late.media), at(t + 3))
+    await late.arrival
+    await hidePhoto(p.id)
+    await placePhoto(opEnv(), p.id, at(t + 3))
+    late.open()
+    await looking
+    expect(late.reached()).toBe(1)
+    expect(await stored(p.key)).toEqual(p.bytes)
+    await resumeOps(opEnv(), at(t + 3 + 61))
+    expect(await stored(p.key)).toBeNull()
+    expect(await stored(p.held)).toEqual(p.bytes)
+  })
+
+  it("a place whose photo is gone for good (withdrawn) leaves the watch, and nothing is copied back", async () => {
+    const t = next()
+    const p = await withPhoto()
+    await placePhoto(opEnv(), p.id, at(t))
+    expect(await due(p.id)).not.toBeNull()
+    await env.DB.prepare("UPDATE places SET status = 'withdrawn' WHERE id = ?").bind(p.id).run()
+    await env.MEDIA.delete([p.key, p.held])
+    await resumeOps(opEnv(), at(t + 3))
+    expect(await due(p.id)).toBeNull()
+    expect(await stored(p.key)).toBeNull()
+    expect(await stored(p.held)).toBeNull()
   })
 })
