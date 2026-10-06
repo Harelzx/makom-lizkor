@@ -51,6 +51,13 @@ Intake/policy and moderation (F4-A, incl. pinned moderation/reports/recovery tes
 
 Red checks where a test's sensitivity was in doubt (logs in `runs/*-c1*-mutations`).
 
+## Testing procedure (Harel, 2026-10-06)
+
+- While implementing: the smallest regression for the behavior changed (watched red first). At a task boundary: the affected Worker/client tests, static checks, and affected browser flows. Full dev/prod browser suites only at stable integration checkpoints (phase end, before a merge), not after each small fix or doc edit; broaden when shared behavior changes or a failure warrants it.
+- Long runs: run them against a fixed commit in the detached test checkout (`agent-evidence/backend-phase4/test-checkout.sh COMMIT`, then `bash …/stages.sh --checkout <path> STAGE…`), and keep coding in this worktree. Name the independent task first. One heavy browser suite at a time (`scripts/heavy`). The runner records checkout, full commit, dirty files, each stage's command and real exit status (`meta.txt`, `summary.tsv`), and a JSON timing report per browser stage (`<stage>-timing.json`).
+- Measure before optimizing: the next required full run gives the timings; then small, justified changes (skip the opening in unrelated backend specs, observable conditions instead of sleeps, controlled time for timer logic). Keep real-browser coverage of reloads, storage, multiple tabs and the critical journeys; keep the frame-rate checks separate. Never drop assertions, mock the behavior under test, or retry until green. Report measured savings only.
+- A pass applies to the commit tested; later changes are integrated and their impact checked before a merge.
+
 ## Independent choices since the restart
 
 - held/ keeps a copy while a photo is published (no move deletes it); a standing photo watch (`media_checks`) re-checks moved photos hourly (target cadence) and erases withdrawn places' files.
