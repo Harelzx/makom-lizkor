@@ -45,8 +45,8 @@ admin.post(
     const body = c.req.valid("json")
     const placeId = c.req.param("id")
     // Whether this decides a correction of a place already published: the mail says so.
-    const correction =
-      (await c.env.DB.prepare("SELECT status FROM places WHERE id = ?").bind(placeId).first<string>("status")) === "published"
+    const status = await c.env.DB.prepare("SELECT status FROM places WHERE id = ?").bind(placeId).first<string>("status")
+    const correction = status === "published" || status === "hidden"
     // The files this decision may make obsolete, as they are before it.
     const before = await photosBefore(c.env.DB, placeId, body.revisionId)
     const now = clock(c.req.raw, c.env)
@@ -91,7 +91,7 @@ admin.post(
     const contact = await verifiedContact(c.env.DB, c.req.param("id"))
     if (contact)
       await c
-        .get("sendMail")(c.env, decisionMail(contact.email, body.action, contact.name_he ?? "", body.note, correction))
+        .get("sendMail")(c.env, decisionMail(contact.email, body.action, contact.name_he ?? "", body.note, correction, status === "hidden"))
         .catch(() => false)
     return c.json({ ok: true })
   },

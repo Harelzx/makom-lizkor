@@ -173,6 +173,10 @@ describe("when the ledger refuses the intent", () => {
 describe("after the database has changed", () => {
   it("clears the cache even when moving the files and writing the commit both fail", async () => {
     const p = await published()
+    // The place has a published photo; the bucket refuses to read it.
+    await env.DB.prepare("UPDATE revisions SET photo_key = ? WHERE id = (SELECT published_revision_id FROM places WHERE id = ?)")
+      .bind(`public/${p.id}/x.jpg`, p.id)
+      .run()
     const media = { get: async () => Promise.reject(new Error("down")) } as unknown as R2Bucket
     const spec = hide(p.id, p.rev, { detail: { fields: ["whole"], toHeld: [`public/${p.id}/x.jpg`] } })
     const { id } = await runOp({ ...opEnv, media, ledger: refusing((k) => k.endsWith("commit.json")) }, spec, now)
@@ -248,7 +252,9 @@ describe("review findings on the engine", () => {
     const p = await published()
     // The intent reached the ledger, then the Worker stopped before storing that it had.
     const { id } = await runOp(opEnv, hide(p.id, p.rev, { prepare: async () => Promise.reject(new Error("crash")) }), now)
-    await env.DB.prepare("UPDATE visibility_ops SET state = 'pending', intent = 'pending', refused_reason = NULL WHERE id = ?").bind(id).run()
+    await env.DB.prepare("UPDATE visibility_ops SET state = 'pending', intent = 'pending', refused_reason = NULL WHERE id = ?")
+      .bind(id)
+      .run()
     await env.LEDGER.delete(ledgerKey({ place: p.id, seq_from: p.ledger_seq, op: id!, phase: "abort" }))
     await resumeOps(opEnv, later(3))
     expect(await entryOf(ledgerKey({ place: p.id, seq_from: p.ledger_seq, op: id!, phase: "abort" }))).toBeTruthy()

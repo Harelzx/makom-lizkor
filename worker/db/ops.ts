@@ -143,7 +143,7 @@ export async function runOp(env: OpEnv, spec: OpSpec, now: Date): Promise<{ outc
       .bind(id, reason, at)
       .run()
     await abortRecorded(env, id, at)
-    await cleanPrepared(env, spec.kind, detail)
+    await cleanPrepared(env, spec.placeId, detail)
   }
 
   const stored = (await readOp(env.db, id))!
@@ -172,22 +172,33 @@ export async function runOp(env: OpEnv, spec: OpSpec, now: Date): Promise<{ outc
   }
 
   const happened = "EXISTS (SELECT 1 FROM places WHERE id = ?1 AND last_transition_id = ?2)"
-  const [cas] = await env.db.batch([
-    ...spec.statements(id),
-    env.db.prepare(`UPDATE places SET ledger_seq = ledger_seq + 1 WHERE id = ?1 AND last_transition_id = ?2`).bind(spec.placeId, id),
-    env.db
-      .prepare(
-        `UPDATE visibility_ops SET state = 'applied', rev_to = (SELECT rev FROM places WHERE id = ?1),
+  let cas: D1Result
+  try {
+    ;[cas] = await env.db.batch([
+      ...spec.statements(id),
+      env.db.prepare(`UPDATE places SET ledger_seq = ledger_seq + 1 WHERE id = ?1 AND last_transition_id = ?2`).bind(spec.placeId, id),
+      env.db
+        .prepare(
+          `UPDATE visibility_ops SET state = 'applied', rev_to = (SELECT rev FROM places WHERE id = ?1),
            result_status = (SELECT status FROM places WHERE id = ?1), updated_at = ?3
          WHERE id = ?2 AND ${happened}`,
-      )
-      .bind(spec.placeId, id, at),
-  ])
+        )
+        .bind(spec.placeId, id, at),
+    ])
+  } catch (err) {
+    // Refused as interrupted while this request was still on its way (migrations/0010): nothing landed.
+    if (!String((err as Error).message).includes("operation_not_pending")) throw err
+    await refuse("conflict")
+    return { outcome: "conflict", id }
+  }
   if (cas.meta.changes !== 1) {
     await refuse("conflict")
     return { outcome: "conflict", id }
   }
-  await finishOp(env, id, now)
+  // The decision has landed: a failure in the steps after it is the scheduled job's to finish, never the request's.
+  await finishOp(env, id, now).catch((err: Error) =>
+    console.error(JSON.stringify({ level: "error", event: "op_finish_failed", op: id, error: err.name })),
+  )
   return { outcome: "ok", id }
 }
 
@@ -203,8 +214,9 @@ export async function finishOp(env: OpEnv, id: string, now: Date) {
   if (intent === "failed" && (await writeLedger(env.ledger, entry(op, "intent", at, true)))) intent = "late"
   if (media === "pending" || media === "failed") {
     try {
-      for (const key of detail.toHeld ?? []) await move(env.media, key, heldKey(key))
-      if (detail.dropHeld?.length) await env.media.delete(detail.dropHeld)
+      // Where the published photo belongs is read from the place as it is now, not replayed from this decision: a
+      // later hide or restoration may already own the file, and must not be undone by finishing an older one.
+      if (detail.toHeld?.length || detail.dropHeld?.length) await placePhoto(env, op.place_id)
       if (detail.retire?.length) await retirePhotos(env.db, env.media, detail.retire)
       media = "done"
     } catch {
@@ -255,29 +267,54 @@ export async function resumeOps(env: OpEnv, now: Date) {
       .run()
     if (refused.meta.changes === 1) {
       await abortRecorded(env, op.id, now.toISOString())
-      await cleanPrepared(env, op.kind, JSON.parse(op.detail) as OpDetail)
+      await cleanPrepared(env, op.place_id, JSON.parse(op.detail) as OpDetail)
     }
   }
 }
 
-/** A refused operation whose intent reached the ledger gets an abort beside it, so a replay knows it never happened. */
+/**
+ * A refused operation gets an abort in the ledger, so a replay knows it never happened. Written whatever the stored
+ * intent state says: the intent may have reached the ledger just before a crash recorded it, and an abort with no
+ * intent beside it is harmless.
+ */
 async function abortRecorded(env: OpEnv, id: string, at: string) {
   const op = await readOp(env.db, id)
-  if (op && (op.intent === "written" || op.intent === "late")) await writeLedger(env.ledger, entry(op, "abort", at))
+  if (op) await writeLedger(env.ledger, entry(op, "abort", at))
 }
 
 /**
- * Copies made for a decision that never landed. An approval's copy is a key of its own, removed if nothing names it;
- * a restoration's copy shares its key with the published revision, whose file stays safe in held/, so it goes.
+ * Copies made for a decision that never landed. A copy nothing names (an approval's own key) is removed; one the
+ * published revision names (a restoration's) is put where the place's state says it belongs: an identical restoration
+ * may have won meanwhile, and its photo must stay.
  */
-async function cleanPrepared(env: OpEnv, kind: OpKind, detail: OpDetail) {
+async function cleanPrepared(env: OpEnv, placeId: string, detail: OpDetail) {
   if (!detail.prepared?.length) return
   try {
-    if (kind === "approve") await retirePhotos(env.db, env.media, detail.prepared)
-    else await env.media.delete(detail.prepared)
+    await retirePhotos(env.db, env.media, detail.prepared)
+    await placePhoto(env, placeId)
   } catch {
     // Left for the sweep: nothing serves a file the database doesn't make public.
   }
+}
+
+/**
+ * Puts the published photo of a place where its state says it belongs: held/ while a photo or whole-place hide is
+ * active (or the place isn't published), public/ otherwise. Idempotent, and decided from the state now, so any number
+ * of late or repeated calls agree.
+ */
+export async function placePhoto(env: OpEnv, placeId: string) {
+  const row = await env.db
+    .prepare(
+      `SELECT p.status, r.photo_key,
+         EXISTS (SELECT 1 FROM field_suppressions s WHERE s.place_id = p.id AND s.lifted_at IS NULL AND s.field IN ('photo', 'whole')) AS hidden
+       FROM places p LEFT JOIN revisions r ON r.id = p.published_revision_id WHERE p.id = ?`,
+    )
+    .bind(placeId)
+    .first<{ status: string; photo_key: string | null; hidden: number }>()
+  const key = row?.photo_key
+  if (!row || !key?.startsWith("public/")) return
+  if (row.status !== "published" || row.hidden) await move(env.media, key, heldKey(key))
+  else await move(env.media, heldKey(key), key)
 }
 
 /** Moves a file, idempotently: done if it is already where it should be. */

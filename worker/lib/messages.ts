@@ -37,10 +37,19 @@ const CORRECTION: Record<string, (name: string, note?: string) => string> = {
     `החזרנו אליכם את התיקון ל"${name}" לתיקון נוסף. המקום נשאר באתר כפי שאושר קודם.\n\nהערת המאשרים:\n${note ?? ""}\n\nאת התיקון שולחים מקישור המעקב.`,
 }
 
-export const decisionMail = (to: string, action: string, name: string, note?: string, correction = false): Mail => ({
+// A correction of a place not shown now: approving it doesn't show the place again, so the mail can't say it does.
+const HIDDEN_CORRECTION: Record<string, (name: string, note?: string) => string> = {
+  ...CORRECTION,
+  approve: (name) => `התיקון ל"${name}" אושר. המקום אינו מוצג כרגע באתר.`,
+  reject: (name) => `התיקון ל"${name}" לא אושר. המקום אינו מוצג כרגע באתר.`,
+  return: (name, note) =>
+    `החזרנו אליכם את התיקון ל"${name}" לתיקון נוסף. המקום אינו מוצג כרגע באתר.\n\nהערת המאשרים:\n${note ?? ""}\n\nאת התיקון שולחים מקישור המעקב.`,
+}
+
+export const decisionMail = (to: string, action: string, name: string, note?: string, correction = false, hidden = false): Mail => ({
   to,
   subject: "עדכון על ההצעה שלכם · מקום לזכור",
-  text: ((correction ? CORRECTION : DECISION)[action]?.(name, note) ?? "") + SIGN,
+  text: ((hidden ? HIDDEN_CORRECTION : correction ? CORRECTION : DECISION)[action]?.(name, note) ?? "") + SIGN,
 })
 
 /**

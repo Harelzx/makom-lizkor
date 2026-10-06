@@ -1,6 +1,6 @@
 import { call } from "./app"
 import { expect, it } from "vitest"
-import { CURRENT_SUBMISSION_NOTICE, SUBMISSION_NOTICES } from "@/shared/contract"
+import { CURRENT_REPORT_NOTICE, CURRENT_SUBMISSION_NOTICE, REPORT_NOTICES, SUBMISSION_NOTICES } from "@/shared/contract"
 import { NOTICES } from "@/data/legal"
 
 const submit = (consent_version: string) =>
@@ -62,4 +62,17 @@ it("never drops a version a form has shown, and keeps each one's text", () => {
   }
   // New versions go at the end: the order is the order they were shown.
   expect(SUBMISSION_NOTICES.slice(0, SHOWN.length)).toEqual(SHOWN)
+})
+
+// The report notices a request may have recorded. As for submissions, never removed and new ones at the end.
+const REPORTS_SHOWN = ["notice.report@2026-10-1", "notice.report@2026-10-2"]
+
+it("keeps every report notice a request may have recorded, in the order they were shown, and the form shows the newest", () => {
+  for (const v of REPORTS_SHOWN) {
+    expect(REPORT_NOTICES).toContain(v)
+    expect(Object.keys(NOTICES)).toContain(v)
+  }
+  expect(REPORT_NOTICES.slice(0, REPORTS_SHOWN.length)).toEqual(REPORTS_SHOWN)
+  expect(REPORT_NOTICES.at(-1)).toBe(CURRENT_REPORT_NOTICE)
+  expect(CURRENT_REPORT_NOTICE).toBe("notice.report@2026-10-2")
 })

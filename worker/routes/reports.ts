@@ -21,10 +21,13 @@ async function overLimit(c: Context<AppEnv>, key: string | null): Promise<Respon
   return null
 }
 
-/** The place a request names: a published contribution, or one of the site's own places (curated, until phase 7). */
+/** The place a request names: a published or hidden contribution, or one of the site's own places (curated, until phase 7). */
 async function targetOf(db: D1Database, placeId: string): Promise<Target | null> {
   if (placeId.startsWith("p_")) {
     const status = await db.prepare("SELECT status FROM places WHERE id = ?").bind(placeId).first<string>("status")
+    // A place hidden whole can still be asked about (another element, or by someone else): a person reviews it, and the
+    // automatic path never acts on it.
+    if (status === "hidden") return { origin: "contribution", published: false }
     return status === "published" ? { origin: "contribution", published: true } : null
   }
   return curatedPlace(placeId).kind === "published" ? { origin: "curated", published: true } : null

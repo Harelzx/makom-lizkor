@@ -366,11 +366,11 @@ export async function listQueue(db: D1Database) {
   const { results } = await db
     .prepare(
       `SELECT p.id, p.rev, r.id AS revisionId, r.kind, r.name_he, r.lat, r.lng, r.location_precision, r.place_he, r.in_memory_of, r.story_he,
-         r.link_url, p.created_at, p.status = 'published' AS correction,
+         r.link_url, p.created_at, p.status IN ('published', 'hidden') AS correction, p.status = 'hidden' AS hidden,
          CASE WHEN r.photo_key IS NOT NULL THEN '/api/admin/media/' || r.photo_key END AS photo_url, r.photo_alt, r.photo_credit,
          r.access_note_he, r.on_private_property, r.location_permission_at IS NOT NULL AS location_permission
        FROM places p JOIN revisions r ON r.place_id = p.id AND r.state = 'pending'
-       WHERE p.status IN ('pending', 'published') ORDER BY r.created_at`,
+       WHERE p.status IN ('pending', 'published', 'hidden') ORDER BY r.created_at`,
     )
     .all()
   return results
@@ -381,8 +381,9 @@ export async function listQueue(db: D1Database) {
  * checks the transition id this request wrote, so the revisions, the feed version and the audit row move only
  * if this transition actually happened.
  *
- * The revision decided is a first submission (the place is pending) or a correction of a published place. A correction
- * never takes a published place down: rejecting or returning it leaves the published revision live, and approving it
+ * The revision decided is a first submission (the place is pending) or a correction of a published or hidden place.
+ * A hidden place stays hidden whatever is decided: its correction may be the basis for restoring it (content_corrected),
+ * but only a moderator's documented lift shows it again. A correction never takes a published place down: rejecting or returning it leaves the published revision live, and approving it
  * swaps the published revision and retires the old one.
  */
 export function transitionStatements(
@@ -407,11 +408,12 @@ export function transitionStatements(
     db
       .prepare(
         `UPDATE places SET rev = rev + 1, last_transition_id = ?2, status_changed_at = ?4,
-           status = CASE WHEN ?3 = 'approve' THEN 'published'
+           status = CASE WHEN status = 'hidden' THEN 'hidden'
+                         WHEN ?3 = 'approve' THEN 'published'
                          WHEN status = 'pending' THEN (CASE ?3 WHEN 'reject' THEN 'rejected' ELSE 'returned' END)
                          ELSE status END,
            published_revision_id = CASE WHEN ?3 = 'approve' THEN ?5 ELSE published_revision_id END
-         WHERE id = ?1 AND rev = ?6 AND status IN ('pending', 'published')
+         WHERE id = ?1 AND rev = ?6 AND status IN ('pending', 'published', 'hidden')
            AND EXISTS (SELECT 1 FROM revisions WHERE id = ?5 AND place_id = ?1 AND state = 'pending')`,
       )
       .bind(t.placeId, tid, t.action, at, t.revisionId, t.expectedRev),
@@ -460,7 +462,7 @@ export async function revise(
   // gone), otherwise the newest revision's.
   const photo = await db
     .prepare(
-      place.status === "published"
+      place.status === "published" || place.status === "hidden"
         ? "SELECT r.photo_key, r.photo_alt, r.photo_credit FROM places p JOIN revisions r ON r.id = p.published_revision_id WHERE p.id = ?"
         : "SELECT photo_key, photo_alt, photo_credit FROM revisions WHERE place_id = ? ORDER BY n DESC LIMIT 1",
     )
@@ -474,7 +476,7 @@ export async function revise(
       .prepare(
         `UPDATE places SET rev = rev + 1, last_transition_id = ?2, status_changed_at = ?3,
            status = CASE WHEN status = 'returned' THEN 'pending' ELSE status END
-         WHERE id = ?1 AND rev = ?4 AND status IN ('returned', 'published')
+         WHERE id = ?1 AND rev = ?4 AND status IN ('returned', 'published', 'hidden')
            AND NOT EXISTS (SELECT 1 FROM revisions WHERE place_id = ?1 AND state = 'pending')
            AND (SELECT COUNT(*) FROM revisions WHERE state = 'pending') < ?5`,
       )
@@ -515,7 +517,7 @@ export async function revise(
   // Full only if nothing else stood in the way: a stale view or a correction already waiting is a conflict either way.
   const open = await db
     .prepare(
-      `SELECT 1 FROM places WHERE id = ?1 AND rev = ?2 AND status IN ('returned', 'published')
+      `SELECT 1 FROM places WHERE id = ?1 AND rev = ?2 AND status IN ('returned', 'published', 'hidden')
          AND NOT EXISTS (SELECT 1 FROM revisions WHERE place_id = ?1 AND state = 'pending')`,
     )
     .bind(id, expectedRev)
@@ -565,6 +567,7 @@ export function hiddenName(kind: string, community: string | null): string {
 
 function toPublic(r: Record<string, string | number | null>): PublicPlace {
   const hidden = new Set(String(r.hidden_fields ?? "").split(","))
+  const personal = hidden.has("name_he") || hidden.has("in_memory_of")
   return {
     id: r.id as string,
     kind: r.kind as PublicPlace["kind"],
@@ -575,11 +578,19 @@ function toPublic(r: Record<string, string | number | null>): PublicPlace {
     place_he: (r.place_he as string | null) ?? "",
     summary_he: hidden.has("story_he") ? "" : ((r.story_he as string | null) ?? ""),
     in_memory_of: hidden.has("in_memory_of") ? undefined : ((r.in_memory_of as string | null) ?? undefined),
-    link_url: (r.link_url as string | null) ?? undefined,
+    // A link and a photo's description can repeat a hidden name or dedication: with either hidden, the link is left out
+    // and the photo is described by the same neutral words as the place.
+    link_url: personal ? undefined : ((r.link_url as string | null) ?? undefined),
     ...(r.access_note_he ? { access_note: r.access_note_he as string } : {}),
     // Only a photo that reached public/ (approved with its place) and isn't hidden is ever named in the feed.
     ...(!hidden.has("photo") && typeof r.photo_key === "string" && r.photo_key.startsWith("public/")
-      ? { photo: { url: `/media/${r.photo_key}`, alt: r.photo_alt as string, credit: (r.photo_credit as string | null) ?? undefined } }
+      ? {
+          photo: {
+            url: `/media/${r.photo_key}`,
+            alt: personal ? hiddenName(r.kind as string, r.place_he as string | null) : (r.photo_alt as string),
+            credit: (r.photo_credit as string | null) ?? undefined,
+          },
+        }
       : {}),
   }
 }
