@@ -260,3 +260,81 @@ describe("handling a request", () => {
     expect((await reportRow(ticket))!).toMatchObject({ status: "open", purge_after: closed.purge_after, ceiling_at: closed.ceiling_at })
   })
 })
+
+describe("review findings: where a hidden photo's file is", () => {
+  async function withPhoto() {
+    const s = await send("ספסל דמו עם תמונה לבדיקה", { place_he: "נחל עוז" })
+    await upload(s.id, s.trackingToken)
+    await decide(s.id, await queued(s.id), "approve")
+    return { ...s, photo: (await view(s.id)).photo_key! }
+  }
+  const served = async (key: string) => (await call(`http://local/media/${key}`)).status
+  const stored = async (key: string) => !!(await env.MEDIA.head(key))
+  /** The bindings with a bucket that refuses one kind of call on keys under `prefix`. */
+  const refusing = (method: "get" | "delete", prefix: string): Env => ({
+    ...env,
+    MEDIA: new Proxy(env.MEDIA, {
+      get(target, prop) {
+        if (prop === method)
+          return (key: string | string[], ...rest: unknown[]) =>
+            [key].flat().some((k) => k.startsWith(prefix))
+              ? Promise.reject(new Error("down"))
+              : (target[method] as (...a: unknown[]) => unknown).call(target, key, ...rest)
+        const value = Reflect.get(target, prop)
+        return typeof value === "function" ? value.bind(target) : value
+      },
+    }),
+  })
+
+  it("the same restoration sent twice at once leaves the photo served (F4-R1)", async () => {
+    const s = await withPhoto()
+    await hide(s.id, ["photo"])
+    const [sup] = (await view(s.id)).suppressions
+    const { rev } = await view(s.id)
+    const send2 = () =>
+      admin(`/api/admin/suppressions/${sup.id}/lift`, { method: "POST", body: JSON.stringify({ expectedRev: rev, ...restoreBody() }) })
+    const statuses = (await Promise.all([send2(), send2()])).map((r) => r.status).sort()
+    expect(statuses).toEqual([200, 409])
+    expect(await served(s.photo)).toBe(200)
+  })
+
+  it("a restoration finished late doesn't delete the only copy of a photo hidden again since (F4-R2)", async () => {
+    const s = await withPhoto()
+    await hide(s.id, ["photo"])
+    const [sup] = (await view(s.id)).suppressions
+    // The restoration lands, but removing the held copy fails.
+    expect((await lift(s.id, sup.id, restoreBody(), refusing("delete", "held/"))).status).toBe(200)
+    // The photo is hidden again, and only then does the scheduled job finish the restoration.
+    await hide(s.id, ["photo"])
+    const { resumeOps } = await import("../db/ops")
+    await resumeOps({ db: env.DB, media: env.MEDIA, ledger: env.LEDGER, purge: async () => true }, new Date(Date.now() + 3600_000))
+    expect(await stored(s.photo.replace(/^public\//, "held/")) || (await stored(s.photo))).toBe(true)
+    expect(await served(s.photo)).toBe(404)
+  })
+
+  it("a hide finished late doesn't take down a photo restored since (F4-R2)", async () => {
+    const s = await withPhoto()
+    // The hide lands, but moving the file fails.
+    expect((await hide(s.id, ["photo"], refusing("get", "public/"))).status).toBe(200)
+    const [sup] = (await view(s.id)).suppressions
+    expect((await lift(s.id, sup.id, restoreBody())).status).toBe(200)
+    expect(await served(s.photo)).toBe(200)
+    const { resumeOps } = await import("../db/ops")
+    await resumeOps({ db: env.DB, media: env.MEDIA, ledger: env.LEDGER, purge: async () => true }, new Date(Date.now() + 3600_000))
+    expect(await served(s.photo)).toBe(200)
+  })
+})
+
+describe("review findings: a whole place hidden can still be corrected (F4-R3)", () => {
+  it("the sender's correction reaches the queue, its approval keeps the place hidden, and content_corrected can then restore it", async () => {
+    const s = await published()
+    await hide(s.id, ["whole"])
+    expect((await revise(s.id, s.trackingToken, await rev(s.id, s.trackingToken), "ספסל דמו מתוקן")).status).toBe(200)
+    expect((await decide(s.id, await queued(s.id), "approve")).status).toBe(200)
+    expect((await view(s.id)).status).toBe("hidden")
+    expect(await name(s.id)).toBeUndefined()
+    const [sup] = (await view(s.id)).suppressions
+    expect((await lift(s.id, sup.id, restoreBody({ basisCode: "content_corrected", materialAbsent: true }))).status).toBe(200)
+    expect(await name(s.id)).toBe("ספסל דמו מתוקן")
+  })
+})

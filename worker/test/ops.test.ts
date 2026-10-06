@@ -242,3 +242,42 @@ describe("an operation that stopped before the database step", () => {
     expect(await env.MEDIA.head(key)).toBeNull()
   })
 })
+
+describe("review findings on the engine", () => {
+  it("an operation refused as interrupted gets an abort even when its intent's state was never recorded (F4-R5)", async () => {
+    const p = await published()
+    // The intent reached the ledger, then the Worker stopped before storing that it had.
+    const { id } = await runOp(opEnv, hide(p.id, p.rev, { prepare: async () => Promise.reject(new Error("crash")) }), now)
+    await env.DB.prepare("UPDATE visibility_ops SET state = 'pending', intent = 'pending', refused_reason = NULL WHERE id = ?").bind(id).run()
+    await env.LEDGER.delete(ledgerKey({ place: p.id, seq_from: p.ledger_seq, op: id!, phase: "abort" }))
+    await resumeOps(opEnv, later(3))
+    expect(await entryOf(ledgerKey({ place: p.id, seq_from: p.ledger_seq, op: id!, phase: "abort" }))).toBeTruthy()
+  })
+
+  it("an operation refused as interrupted while its request was still running can't land afterwards (F4-R6)", async () => {
+    const p = await published()
+    // The request is so slow that the scheduled job gives up on it before its database step.
+    const slow = hide(p.id, p.rev, { prepare: async () => void (await resumeOps(opEnv, later(3))) })
+    const { outcome, id } = await runOp(opEnv, slow, now)
+    expect(outcome).toBe("conflict")
+    expect(await op(id!)).toMatchObject({ state: "refused", refused_reason: "interrupted" })
+    expect(await place(p.id)).toMatchObject({ status: "published", rev: p.rev })
+  })
+
+  it("a decision that landed is reported as landed even if recording its last steps fails (F4-R7)", async () => {
+    const p = await published()
+    const db = new Proxy(env.DB, {
+      get(target, prop) {
+        if (prop === "prepare")
+          return (sql: string) => {
+            if (sql.startsWith("UPDATE visibility_ops SET intent = ?2, media = ?3")) throw new Error("d1 down")
+            return target.prepare(sql)
+          }
+        const value = Reflect.get(target, prop)
+        return typeof value === "function" ? value.bind(target) : value
+      },
+    })
+    expect((await runOp({ ...opEnv, db }, hide(p.id, p.rev), now)).outcome).toBe("ok")
+    expect(await place(p.id)).toMatchObject({ status: "hidden" })
+  })
+})

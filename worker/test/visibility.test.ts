@@ -94,3 +94,15 @@ describe("a published photo's caching (spec 5)", () => {
     expect(res.headers.get("Cache-Tag")).toBe(`place:${id}`)
   })
 })
+
+describe("review findings", () => {
+  it("with the name or the dedication hidden, the photo's description and the link can't repeat them (F4-R9)", async () => {
+    const s = await send("ספסל דמו לזכר רונית", { place_he: "בארי", link_url: "https://example.test/ronit" })
+    await upload(s.id, s.trackingToken)
+    await decide(s.id, await queued(s.id), "approve")
+    await hide(s.id, ["name_he"])
+    const p = (await inFeed(s.id))! as { photo?: { alt: string }; link_url?: string }
+    expect(p.photo!.alt).toBe("ספסל · בארי")
+    expect(p).not.toHaveProperty("link_url")
+  })
+})

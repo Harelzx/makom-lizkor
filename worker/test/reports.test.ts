@@ -245,3 +245,15 @@ describe("what is kept, and for how long", () => {
     expect(r.reporter_key).toMatch(/^[0-9a-f]{64}$/)
   })
 })
+
+describe("review findings", () => {
+  it("a request about a place hidden whole is accepted for a person to review, never acted on automatically (F4-R4)", async () => {
+    const id = await published()
+    expect((await (await report({ placeId: id, elements: ["whole"] })).json<{ outcome: string }>()).outcome).toBe("hidden_for_review")
+    const res = await report({ placeId: id, elements: ["photo"], explanation: "גם התמונה צריכה לרדת, היא צולמה בלי רשות המשפחה." })
+    expect(res.status).toBe(202)
+    const { ticket, outcome } = await res.json<{ ticket: string; outcome: string }>()
+    expect(outcome).toBe("received")
+    expect(await row(ticket)).toMatchObject({ complete: 0, origin: "contribution" })
+  })
+})
