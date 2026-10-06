@@ -1,4 +1,3 @@
-import { env } from "cloudflare:workers"
 import { describe, expect, it } from "vitest"
 import { call } from "./app"
 import { withSite } from "./helpers"
