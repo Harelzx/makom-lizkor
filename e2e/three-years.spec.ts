@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test"
+import { expect, test, type Page } from "./fixtures"
 
 // The time since that morning is computed from today's date in Israel, never written by hand.
 // The browser runs on New York time on purpose: a visitor abroad must see the same count.

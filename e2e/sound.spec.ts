@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test"
+import { expect, test, type Page } from "./fixtures"
 
 // The film waits for one click: with sound or without. Sound files are fetched only for those who ask for sound.
 

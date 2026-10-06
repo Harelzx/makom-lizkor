@@ -1,4 +1,4 @@
-import { expect, test, type Browser, type BrowserContextOptions, type Page } from "@playwright/test"
+import { expect, test, type Browser, type BrowserContextOptions, type Page } from "./fixtures"
 import { ownAddress } from "./publish"
 
 // The opening isn't what this file tests, and its sunrise took about 8 s on every page that went through it. A visitor
@@ -47,7 +47,9 @@ test("a place submitted without email is moderated, published, and seen in anoth
   await expect(dialog.getByRole("checkbox")).toHaveCount(2)
   await dialog.getByText("הודעת הפרטיות", { exact: true }).click()
   // The notice's own photo paragraph: the photo field's description above it says the same, in its own words.
-  await expect(dialog.getByText("תמונה: אם צירפתם תמונה", { exact: false })).toContainText("מתפרסמת רק אם המקום אושר")
+  const notice = dialog.getByText("תמונה: אם צירפתם תמונה", { exact: false })
+  await expect(notice).toBeVisible()
+  await expect(notice).toContainText("מתפרסמת רק אם המקום אושר")
   for (const box of await dialog.getByRole("checkbox").all()) await box.check()
   const sent = visitor.waitForResponse((r) => r.url().endsWith("/api/v1/submissions") && r.status() === 201)
   await dialog.getByRole("button", { name: "שמירה והנחת כלנית" }).click()

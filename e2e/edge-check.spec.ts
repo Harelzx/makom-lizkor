@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process"
 import { promisify } from "node:util"
-import { expect, test } from "@playwright/test"
+import { expect, test } from "./fixtures"
 
 // scripts/edge-check.mjs, the check release.yml runs on production after a deploy, run here against the preview of
 // the production build in its explicit local mode: what the preview has must pass (each address answering as it should,

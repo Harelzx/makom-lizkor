@@ -1,4 +1,4 @@
-import { expect, test, type APIRequestContext, type Browser, type BrowserContext, type Page, type Route } from "@playwright/test"
+import { expect, test, type APIRequestContext, type Browser, type BrowserContext, type Page, type Route } from "./fixtures"
 import { published } from "./publish"
 
 /** The place as the public feed has it now. */
