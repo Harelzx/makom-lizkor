@@ -1,7 +1,7 @@
 // Regression tests for the phase 2 review's findings, one per finding.
 import { env } from "cloudflare:workers"
 import { describe, expect, it } from "vitest"
-import { sweepPhotos } from "../db/places"
+import { sweepPhotos } from "../db/photos"
 import { call } from "./app"
 import { admin } from "./helpers"
 import { decide, feed, jpeg, objects, queued, rev, revise, send, upload } from "./submission-helpers"

@@ -2,7 +2,8 @@
 import { env } from "cloudflare:workers"
 import { describe, expect, it } from "vitest"
 import { CURRENT_SUBMISSION_NOTICE } from "@/shared/contract"
-import { revise as reviseDirect, sweepPhotos } from "../db/places"
+import { sweepPhotos } from "../db/photos"
+import { revise as reviseDirect } from "../db/places"
 import { call } from "./app"
 import { decide, feed, jpeg, objects, queued, rev, revise, send, upload } from "./submission-helpers"
 

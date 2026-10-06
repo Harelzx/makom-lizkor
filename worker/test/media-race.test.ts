@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers"
 import { describe, expect, it } from "vitest"
 import { placePhoto, resumeOps, runOp, type OpEnv } from "../db/ops"
 import { withdraw } from "../db/places"
+import { call } from "./app"
 import { decide, queued, send, upload } from "./submission-helpers"
 
 /** A published place with a photo, as approval leaves it. */
@@ -340,5 +341,17 @@ describe("a withdrawal's files are erased by the job too, whatever the request m
     expect(await due(p.id)).not.toBeNull()
     await resumeOps(opEnv(), at(3 + 61))
     expect(await due(p.id)).toBeNull()
+  })
+
+  it("a copy that lands after the watch has ended is never served, and is left to the sweep (Phase 5)", async () => {
+    const p = await withPhoto()
+    expect(await withdraw(opEnv(), p.id, p.token, at(200))).toBe("done")
+    await env.MEDIA.delete([p.key, p.held])
+    await resumeOps(opEnv(), at(203))
+    expect(await due(p.id)).toBeNull()
+    // An older move's write, issued before the withdrawal, lands only now.
+    await env.MEDIA.put(p.key, p.bytes)
+    expect((await call(`http://local/media/${p.key}`)).status).toBe(404)
+    expect(await stored(p.key)).toEqual(p.bytes)
   })
 })

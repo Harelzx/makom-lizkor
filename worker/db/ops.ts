@@ -1,6 +1,6 @@
 import { ulid } from "../lib/ids"
 import { writeLedger, type Actor, type LedgerEntry, type OpKind } from "../lib/ledger"
-import { erasePhotos, photosRemain, retirePhotos } from "./places"
+import { erasePhotos, photosRemain, retirePhotos } from "./photos"
 
 /** What an operation reaches: the database, the files, the ledger and the edge cache. */
 export type OpEnv = { db: D1Database; media: R2Bucket; ledger: R2Bucket; purge: (tags: string[]) => Promise<boolean> }

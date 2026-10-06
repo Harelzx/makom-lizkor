@@ -2,11 +2,10 @@ import { zValidator } from "@hono/zod-validator"
 import { Hono, type Context } from "hono"
 import { z } from "zod"
 import { RevisionInput, SubmissionInput, text } from "@/shared/contract"
+import { erasePhotos, photosRemain } from "../db/photos"
 import {
   attachPhoto,
   canTrack,
-  erasePhotos,
-  photosRemain,
   insertSubmission,
   trackingTokenFor,
   pendingCount,
