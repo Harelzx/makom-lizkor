@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react"
+import { toast } from "sonner"
 import { Toaster } from "@/components/ui/sonner"
 import { useStore } from "@/store"
 import { Intro } from "@/components/intro"
@@ -63,14 +64,21 @@ function useHashRoute() {
   // a place approved since it was saved would fall back wrongly.
   const feedVersion = useStore((s) => s.feedVersion)
   const feedLive = useStore((s) => s.feedLive)
+  // The contribution whose card was last shown with its place, so its disappearing can be told from a bad link.
+  const shown = useRef<string | null>(null)
   useEffect(() => {
     const s = useStore.getState()
     const id = s.selectedId
+    if (id?.startsWith("p_") && s.remote.some((p) => p.id === id)) shown.current = id
     if (!feedVersion || !feedLive || !id?.startsWith("p_") || s.remote.some((p) => p.id === id)) return
     history.replaceState(null, "", "#/")
     s.select(null)
+    // A place taken out of view while its card was open (hidden, or withdrawn by its sender) closes quietly, saying
+    // only that it isn't shown now: never why, and never as if the visitor had done something wrong.
+    if (shown.current === id) toast("המקום הזה אינו מוצג כרגע")
+    shown.current = null
     void import("@/map/controller").then((m) => m.flyToEnvelope(2400))
-  }, [feedVersion, feedLive])
+  }, [feedVersion, feedLive, selectedId])
   useEffect(() => {
     if (phase !== "day") return
     const next = selectedId ? `#/place/${encodeURIComponent(selectedId)}` : "#/"

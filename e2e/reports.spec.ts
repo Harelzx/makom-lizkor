@@ -1,4 +1,4 @@
-import { expect, test, type APIRequestContext } from "@playwright/test"
+import { expect, test, type APIRequestContext, type Browser } from "@playwright/test"
 import { published } from "./publish"
 
 /** The place as the public feed has it now. */
@@ -135,4 +135,108 @@ test("operations needing attention that fail to load say so, and come with a ret
   await expect(mod.getByRole("alert")).toHaveCount(0)
   await expect(mod.getByRole("button", { name: "לנסות שוב לטעון את הפעולות" })).toHaveCount(0)
   await ctx.close()
+})
+
+// The privacy session's result texts, word for word.
+const HIDDEN = "מה שציינתם הוסתר באופן זמני, כאמצעי זהירות, עד שאדם יבדוק את הבקשה. ההסתרה אינה הכרעה בבקשה."
+const RECEIVED = "הבקשה התקבלה. אדם יבדוק אותה בדחיפות."
+const RECEIVED_CURATED = "הבקשה התקבלה. אדם יבדוק אותה בדחיפות. במקומות שהאתר הוסיף בעצמו, שום דבר לא מוסתר לפני הבדיקה."
+const DAY = { timeout: 20_000 }
+
+/** The place's card, opened from a link, with the request form open. */
+async function requestForm(browser: Browser, id: string, heading: string | RegExp) {
+  const page = await (await browser.newContext()).newPage()
+  await page.goto(`/#/place/${id}`)
+  await expect(page.getByRole("heading", { name: heading })).toBeVisible(DAY)
+  await page.getByRole("button", { name: "בקשת הסרה או תיקון" }).click()
+  return { page, form: page.getByRole("region", { name: "בקשת הסרה או תיקון" }) }
+}
+
+test("a family member asks from the place card: the name is hidden for now, and the answer says it is no decision", async ({
+  browser,
+  request,
+}) => {
+  const name = `גן דמו לבקשה מהכרטיס ${Date.now()}`
+  const { id } = await published(browser, name)
+  const { form } = await requestForm(browser, id, name)
+  // Only what the place shows can be named, and the place as a whole.
+  await expect(form.getByRole("checkbox", { name: "התמונה" })).toHaveCount(0)
+  await expect(form.getByRole("checkbox", { name: "המקום כולו" })).toBeVisible()
+  await form.getByRole("checkbox", { name: "השם" }).check()
+  await form.getByRole("radio", { name: "בן או בת משפחה" }).check()
+  await form.getByLabel(/^הקשר שלכם/).fill("אחות")
+  // Worded apart from the other tests': the same explanation twice in a day is a spam signal, and nothing is hidden.
+  await form.getByLabel("מה לבדוק, ולמה").fill("השם של אבא שלנו מופיע כאן, והמשפחה לא נשאלה. נבקש להסתיר אותו עד שנדבר.")
+  await form.getByText("הודעת הפרטיות", { exact: true }).click()
+  await expect(form.getByText("אין בטופס שדה לשם", { exact: false })).toBeVisible()
+  await form.getByRole("button", { name: "שליחת הבקשה" }).click()
+  await expect(form.getByRole("status")).toHaveText(HIDDEN)
+  await expect.poll(async () => (await inFeed(request, id))?.name_he).toBe("גן זיכרון")
+})
+
+test("a request about one of the site's own places: received, and the answer says nothing is hidden before the review", async ({
+  browser,
+}) => {
+  const { form } = await requestForm(browser, "nova-memorial-reim", /נובה/)
+  await form.getByRole("checkbox", { name: "הסיפור" }).check()
+  await form.getByRole("radio", { name: /^אחר/ }).check()
+  await form.getByLabel("מה לבדוק, ולמה").fill("יש טעות בתאריך שמופיע בתיאור של המקום הזה.")
+  await form.getByRole("button", { name: "שליחת הבקשה" }).click()
+  await expect(form.getByRole("status")).toHaveText(RECEIVED_CURATED)
+})
+
+test("a request whose answer was lost says so without claiming it arrived, and sending it again opens no second request", async ({
+  browser,
+}) => {
+  const name = `גן דמו לבקשה שאבדה ${Date.now()}`
+  const { id } = await published(browser, name)
+  const { page, form } = await requestForm(browser, id, name)
+  let posts = 0
+  await page.route("**/api/v1/reports", async (route) => {
+    posts++
+    // The first reaches the server, and its answer never comes back.
+    if (posts === 1) {
+      await route.fetch()
+      return route.abort("failed")
+    }
+    return route.continue()
+  })
+  await form.getByRole("checkbox", { name: "השם" }).check()
+  await form.getByRole("radio", { name: /^אחר/ }).check()
+  await form.getByLabel("מה לבדוק, ולמה").fill("השם כאן כתוב בשגיאה, כדאי לבדוק מול אתר המועצה.")
+  await form.getByRole("button", { name: "שליחת הבקשה" }).click()
+  await expect(form.getByRole("alert")).toHaveText(/לא ברור אם הבקשה הגיעה אלינו/)
+  // Sent again as it was: the form can't be changed in between.
+  await expect(form.getByLabel("מה לבדוק, ולמה")).toBeDisabled()
+  await form.getByRole("button", { name: "שליחה שוב" }).click()
+  await expect(form.getByRole("status")).toHaveText(RECEIVED)
+  expect(posts).toBe(2)
+  const mod = await browser.newContext()
+  await mod.request.post("/__dev/login", { data: { email: "dev@example.test" } })
+  const { items } = (await (await mod.request.get("/api/admin/reports")).json()) as { items: { place_id: string }[] }
+  expect(items.filter((r) => r.place_id === id)).toHaveLength(1)
+  await mod.close()
+})
+
+test("a card open while its place is hidden whole closes quietly when the feed catches up", async ({ browser }) => {
+  const name = `גן דמו שהוסתר ${Date.now()}`
+  const { id } = await published(browser, name)
+  const page = await (await browser.newContext()).newPage()
+  await page.goto(`/#/place/${id}`)
+  await expect(page.getByRole("heading", { name })).toBeVisible(DAY)
+  const mod = await browser.newContext()
+  await mod.request.post("/__dev/login", { data: { email: "dev@example.test" } })
+  const { rev } = (await (await mod.request.get(`/api/admin/places/${id}`)).json()) as { rev: number }
+  const hid = await mod.request.post("/api/admin/suppressions", {
+    headers: { "Sec-Fetch-Site": "same-origin" },
+    data: { placeId: id, fields: ["whole"], expectedRev: rev, reason: "בקשת משפחה בטלפון" },
+  })
+  expect(hid.status()).toBe(200)
+  await mod.close()
+  const fed = page.waitForResponse((r) => r.url().includes("/api/v1/feed?") && r.status() === 200)
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")))
+  await fed
+  await expect(page.getByText("המקום הזה אינו מוצג כרגע")).toBeVisible()
+  await expect(page.getByRole("heading", { name })).toHaveCount(0)
+  await expect(page).toHaveURL(/#\/$/)
 })

@@ -1,5 +1,5 @@
 import { turnstileToken } from "@/lib/turnstile"
-import type { RevisionInput, SubmissionInput, TributeResult, TributeTotals } from "@/shared/contract"
+import type { ReportInput, ReportResult, RevisionInput, SubmissionInput, TributeResult, TributeTotals } from "@/shared/contract"
 
 export type SendResult =
   | { ok: true; id: string; trackingToken: string }
@@ -262,4 +262,37 @@ export async function getTributeTotals(): Promise<Record<string, number> | null>
   } catch {
     return null
   }
+}
+
+export type ReportSend =
+  | ({ ok: true } & ReportResult)
+  | { ok: false; kind: "rejected"; code: string }
+  /** It didn't go: the check couldn't run, or the server said to come back. Sending again is safe. */
+  | { ok: false; kind: "temporary"; code?: string }
+  /** It went, and no answer came back: the server may have it. Sent again under the same key, it is never a second request. */
+  | { ok: false; kind: "unknown" }
+
+const REPORT_REFUSED = new Set([400, 404, 409, 410, 422])
+
+/** A removal or correction request (spec 6), under a key the form keeps for every try. */
+export async function sendReport(input: ReportInput, key: string): Promise<ReportSend> {
+  const token = await turnstileToken("report").catch(() => null)
+  let res: Response
+  try {
+    res = await fetch("/api/v1/reports", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Idempotency-Key": key, ...(token ? { "Turnstile-Token": token } : {}) },
+      body: JSON.stringify(input),
+      signal: AbortSignal.timeout(10_000),
+    })
+  } catch {
+    return { ok: false, kind: "unknown" }
+  }
+  if (res.status === 202) {
+    const result = (await res.json().catch(() => null)) as ReportResult | null
+    return result?.ticket ? { ok: true, ...result } : { ok: false, kind: "unknown" }
+  }
+  const code = ((await res.json().catch(() => ({}))) as { code?: string }).code
+  if (REPORT_REFUSED.has(res.status)) return { ok: false, kind: "rejected", code: code ?? `http_${res.status}` }
+  return { ok: false, kind: "temporary", code }
 }
