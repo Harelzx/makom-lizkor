@@ -289,7 +289,7 @@ describe("follow-up bc46a39c", () => {
   }
 
   it("F4-A1: a backstop that runs after the abuse codes expired doesn't hide, even with the codes still stored", async () => {
-    const { id, ticket } = await heldBack()
+    const { ticket } = await heldBack()
     await runJobs(env, deps, undefined, after(25))
     expect((await row(ticket))!.outcome).toBe("received")
     expect(await hiddenBy(ticket)).toBe(false)
@@ -307,7 +307,7 @@ describe("follow-up bc46a39c", () => {
   it("F4-A2: a run whose claim went stale can neither undo nor repeat the evaluation another run finished", async () => {
     const { precaution } = await import("../db/reports")
     const { finishBackstop } = await import("../jobs")
-    const { id, ticket } = await heldBack()
+    const { ticket } = await heldBack()
     // Run A claimed at 24 h and stalled. The request is closed meanwhile, so run B's evaluation finishes as refused.
     await env.DB.prepare("UPDATE reports SET backstop_claimed_at = ?, backstop_claim = 'A', status = 'closed' WHERE id = ?")
       .bind(after(24).toISOString(), ticket)
