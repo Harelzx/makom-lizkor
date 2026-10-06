@@ -1,4 +1,5 @@
 import type { Element, ReportInput } from "@/shared/contract"
+import { RETENTION } from "@/config"
 import { REPORT_GUARDS, complete, isSpam, linkCount, normalizeExplanation } from "../lib/guards"
 import { sha256Hex, ulid } from "../lib/ids"
 import type { Mail } from "../lib/mail"
@@ -116,8 +117,12 @@ export async function insertReport(
  * safe(r, t) from spec 6, as SQL over the database at this moment: the site-wide quotas, the per-place limit, the
  * circuit breaker, the request still open, its abuse codes still there, no copy of its explanation in the past day and
  * its reporter under the day's count. Numbered parameters: ?1 place, ?6 an hour ago, ?7 a day ago, ?8 per hour, ?9 per
- * day, ?10 breaker, ?11 the request, ?12 reporter's day. Read once before anything is written, and again as conditions
- * of the place's own update, so nothing that changes in between can let a hide through.
+ * day, ?10 breaker, ?11 the request, ?12 reporter's day, ?13 the oldest request whose abuse codes still count (they
+ * expire with RETENTION.reportAbuseCodeMaxHours, less the half hour the job keeps in hand), ?14 the backstop run's
+ * claim (null at intake). The request must still be awaiting its evaluation (backstop_at set, and claimed by this run
+ * when a run is evaluating it), so a run whose claim went stale can't hide after another finished. Read once before
+ * anything is written, and again as conditions of the place's own update, so nothing that changes in between (the
+ * clock included, while the ledger is written) can let a hide through.
  */
 const SAFE = `(SELECT COUNT(DISTINCT report_id) FROM field_suppressions WHERE kind = 'precautionary' AND created_at > ?6) < ?8
   AND (SELECT COUNT(DISTINCT report_id) FROM field_suppressions WHERE kind = 'precautionary' AND created_at > ?7) < ?9
@@ -127,7 +132,9 @@ const SAFE = `(SELECT COUNT(DISTINCT report_id) FROM field_suppressions WHERE ki
   AND NOT EXISTS (SELECT 1 FROM reports o JOIN reports me ON me.id = ?11
                   WHERE o.explanation_hash = me.explanation_hash AND o.id != me.id AND o.received_at > ?7)
   AND (SELECT COUNT(*) FROM reports o JOIN reports me ON me.id = ?11
-       WHERE me.reporter_key IS NOT NULL AND o.reporter_key = me.reporter_key AND o.received_at > ?7) <= ?12`
+       WHERE me.reporter_key IS NOT NULL AND o.reporter_key = me.reporter_key AND o.received_at > ?7) <= ?12
+  AND (SELECT received_at FROM reports WHERE id = ?11) > ?13
+  AND EXISTS (SELECT 1 FROM reports WHERE id = ?11 AND backstop_at IS NOT NULL AND (?14 IS NULL OR backstop_claim = ?14))`
 
 /**
  * hidden: done. refused: a finished evaluation said no (a safeguard, spam, the request closed or its codes gone).
@@ -136,7 +143,15 @@ const SAFE = `(SELECT COUNT(DISTINCT report_id) FROM field_suppressions WHERE ki
  */
 export type Precaution = "hidden" | "refused" | "retry"
 
-export async function precaution(env: OpEnv, ticket: string, now: Date): Promise<Precaution> {
+export async function precaution(
+  env: OpEnv,
+  ticket: string,
+  now: Date,
+  /** The backstop run's claim, and the clock read again at the update (the ledger may take a while). */
+  opts: { claim?: string; clock?: () => Date } = {},
+): Promise<Precaution> {
+  const clockNow = opts.clock ?? (() => new Date(Math.max(now.getTime(), Date.now())))
+  const evidenceSince = (t: Date) => new Date(t.getTime() - (RETENTION.reportAbuseCodeMaxHours - 0.5) * HOUR_MS).toISOString()
   const db = env.db
   const report = await db.prepare("SELECT * FROM reports WHERE id = ?").bind(ticket).first<ReportRow>()
   if (!report || !report.complete || report.origin !== "contribution" || report.outcome !== "received" || report.status === "closed")
@@ -171,25 +186,26 @@ export async function precaution(env: OpEnv, ticket: string, now: Date): Promise
   if (!place) return "refused"
   // The safeguards read first, so a routine refusal writes nothing to the ledger; the same conditions are checked
   // again inside the place's own update.
-  const binds = (tid: string) =>
-    [
-      report.place_id,
-      tid,
-      at,
-      0,
-      place.rev,
-      hourAgo,
-      dayAgo,
-      REPORT_GUARDS.perHour,
-      REPORT_GUARDS.perDay,
-      REPORT_GUARDS.breakerPerHour,
-      ticket,
-      REPORT_GUARDS.reporterPerDay,
-    ] as const
+  const binds = (tid: string, t: Date) => [
+    report.place_id,
+    tid,
+    at,
+    0,
+    place.rev,
+    hourAgo,
+    dayAgo,
+    REPORT_GUARDS.perHour,
+    REPORT_GUARDS.perDay,
+    REPORT_GUARDS.breakerPerHour,
+    ticket,
+    REPORT_GUARDS.reporterPerDay,
+    evidenceSince(t),
+    opts.claim ?? null,
+  ]
   const safeNow = async () =>
     !!(await db
       .prepare(`SELECT ${SAFE} AS safe`)
-      .bind(...binds(""))
+      .bind(...binds("", clockNow()))
       .first<number>("safe"))
   if (!(await safeNow())) return "refused"
   const elements = JSON.parse(report.elements) as Element[]
@@ -215,7 +231,7 @@ export async function precaution(env: OpEnv, ticket: string, now: Date): Promise
                status_changed_at = CASE WHEN ?4 = 1 THEN ?3 ELSE status_changed_at END
              WHERE id = ?1 AND rev = ?5 AND status = 'published' AND ${SAFE}`,
           )
-          .bind(...binds(tid).map((v, i) => (i === 3 ? (whole ? 1 : 0) : v))),
+          .bind(...binds(tid, clockNow()).map((v, i) => (i === 3 ? (whole ? 1 : 0) : v))),
         ...elements.map((field) =>
           db
             .prepare(
@@ -255,16 +271,9 @@ const DELIVERY_TRIES = 5
  * records handling it (viewing is not handling). The round is claimed on the request itself, so two runs at the same
  * moment open it once; it then holds one delivery per moderator.
  */
-export async function startAlertRound(db: D1Database, env: Env, ticket: string, now: Date): Promise<number | null> {
+export async function startAlertRound(db: D1Database, env: Env, ticket: string, now: Date): Promise<boolean> {
+  const at = now.toISOString()
   const due = new Date(now.getTime() - REPORT_GUARDS.reminderHours * HOUR_MS).toISOString()
-  const round = await db
-    .prepare(
-      `UPDATE reports SET alerts = alerts + 1, alerted_at = ?2
-       WHERE id = ?1 AND status = 'open' AND (alerted_at IS NULL OR alerted_at <= ?3) RETURNING alerts`,
-    )
-    .bind(ticket, now.toISOString(), due)
-    .first<number>("alerts")
-  if (!round) return null
   const moderators = [
     ...new Set(
       env.MODERATORS.split(",")
@@ -272,15 +281,24 @@ export async function startAlertRound(db: D1Database, env: Env, ticket: string, 
         .filter(Boolean),
     ),
   ]
-  if (moderators.length)
-    await db.batch(
-      moderators.map((to) =>
-        db
-          .prepare("INSERT OR IGNORE INTO report_alerts (report_id, round, recipient, state) VALUES (?, ?, ?, 'pending')")
-          .bind(ticket, round, to),
-      ),
-    )
-  return round
+  // One batch: the round and its deliveries exist together or not at all, so a crash can't open a round that sends
+  // nothing for six hours. A second run at the same moment finds the round already open and adds nothing new.
+  const [opened] = await db.batch([
+    db
+      .prepare(
+        "UPDATE reports SET alerts = alerts + 1, alerted_at = ?2 WHERE id = ?1 AND status = 'open' AND (alerted_at IS NULL OR alerted_at <= ?3)",
+      )
+      .bind(ticket, at, due),
+    ...moderators.map((to) =>
+      db
+        .prepare(
+          `INSERT OR IGNORE INTO report_alerts (report_id, round, recipient, state)
+           SELECT id, alerts, ?3, 'pending' FROM reports WHERE id = ?1 AND alerted_at = ?2 AND status = 'open'`,
+        )
+        .bind(ticket, at, to),
+    ),
+  ])
+  return opened.meta.changes === 1
 }
 
 /**
@@ -311,12 +329,15 @@ export async function deliverAlerts(
     .all<{ report_id: string; round: number; recipient: string; outcome: string; origin: string; received_at: string }>()
   for (const d of results) {
     const key = [d.report_id, d.round, d.recipient] as const
+    const claim = crypto.randomUUID()
+    // Claimed only while it is still due: unsent, under its tries, and its request still open.
     const claimed = await db
       .prepare(
-        `UPDATE report_alerts SET claimed_at = ?4, tries = tries + 1
-         WHERE report_id = ?1 AND round = ?2 AND recipient = ?3 AND state IN ('pending', 'failed') AND (claimed_at IS NULL OR claimed_at <= ?5)`,
+        `UPDATE report_alerts SET claimed_at = ?4, claim = ?6, tries = tries + 1
+         WHERE report_id = ?1 AND round = ?2 AND recipient = ?3 AND state IN ('pending', 'failed') AND tries < ?7
+           AND (claimed_at IS NULL OR claimed_at <= ?5) AND EXISTS (SELECT 1 FROM reports WHERE id = ?1 AND status = 'open')`,
       )
-      .bind(...key, now.toISOString(), stale)
+      .bind(...key, now.toISOString(), stale, claim, DELIVERY_TRIES)
       .run()
     if (claimed.meta.changes !== 1) continue
     const ok = await send(
@@ -329,13 +350,18 @@ export async function deliverAlerts(
         waitingHours: Math.floor((now.getTime() - new Date(d.received_at).getTime()) / HOUR_MS),
       }),
     ).catch(() => false)
-    await db
-      .prepare(
-        ok
-          ? "UPDATE report_alerts SET state = 'sent', sent_at = ?4 WHERE report_id = ?1 AND round = ?2 AND recipient = ?3"
-          : "UPDATE report_alerts SET state = 'failed', claimed_at = NULL WHERE report_id = ?1 AND round = ?2 AND recipient = ?3 AND ?4 IS NOT NULL",
-      )
-      .bind(...key, now.toISOString())
-      .run()
+    await completeDelivery(db, key, claim, ok, now)
   }
+}
+
+/** Records one send's result, only while that send still holds the claim: a late failure never undoes a delivery. */
+export async function completeDelivery(db: D1Database, key: readonly [string, number, string], claim: string, ok: boolean, now: Date) {
+  await db
+    .prepare(
+      ok
+        ? "UPDATE report_alerts SET state = 'sent', sent_at = ?5, claim = NULL WHERE report_id = ?1 AND round = ?2 AND recipient = ?3 AND claim = ?4"
+        : "UPDATE report_alerts SET state = 'failed', claimed_at = NULL, claim = NULL WHERE report_id = ?1 AND round = ?2 AND recipient = ?3 AND claim = ?4 AND ?5 IS NOT NULL",
+    )
+    .bind(...key, claim, now.toISOString())
+    .run()
 }

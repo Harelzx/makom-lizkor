@@ -274,3 +274,112 @@ describe("F4-A5: what moderators wrote about a hide has a deadline that only mov
     expect((await sup(id))!.notes_purge_after).toBe(new Date(after(2).getTime() + 90 * DAY).toISOString())
   })
 })
+
+describe("follow-up bc46a39c", () => {
+  const deps = { sendMail, purge: async () => true }
+  const opEnv = { db: env.DB, media: env.MEDIA, ledger: env.LEDGER, purge: async () => true }
+  /** Whether this request (not the earlier one that held it back) hid anything. */
+  const hiddenBy = async (ticket: string) =>
+    ((await env.DB.prepare("SELECT COUNT(*) AS n FROM field_suppressions WHERE report_id = ?").bind(ticket).first<number>("n")) ?? 0) > 0
+  async function heldBack() {
+    const { id } = await published()
+    await report({ placeId: id, elements: ["story_he"] }, { at: after(-1) })
+    const { ticket } = await (await report({ placeId: id })).json<{ ticket: string }>()
+    return { id, ticket }
+  }
+
+  it("F4-A1: a backstop that runs after the abuse codes expired doesn't hide, even with the codes still stored", async () => {
+    const { id, ticket } = await heldBack()
+    await runJobs(env, deps, undefined, after(25))
+    expect((await row(ticket))!.outcome).toBe("received")
+    expect(await hiddenBy(ticket)).toBe(false)
+  })
+
+  it("F4-A1: the expiry is read again at the update, so a ledger that takes long across it stops the hide", async () => {
+    const { precaution } = await import("../db/reports")
+    const a = await heldBack()
+    expect(await precaution(opEnv, a.ticket, after(24), { clock: () => after(25) })).toBe("refused")
+    expect(await hiddenBy(a.ticket)).toBe(false)
+    const b = await heldBack()
+    expect(await precaution(opEnv, b.ticket, after(24), { clock: () => after(24) })).toBe("hidden")
+  })
+
+  it("F4-A2: a run whose claim went stale can neither undo nor repeat the evaluation another run finished", async () => {
+    const { precaution } = await import("../db/reports")
+    const { finishBackstop } = await import("../jobs")
+    const { id, ticket } = await heldBack()
+    // Run A claimed at 24 h and stalled. The request is closed meanwhile, so run B's evaluation finishes as refused.
+    await env.DB.prepare("UPDATE reports SET backstop_claimed_at = ?, backstop_claim = 'A', status = 'closed' WHERE id = ?")
+      .bind(after(24).toISOString(), ticket)
+      .run()
+    await runJobs(env, deps, undefined, after(24 + 5 / 60))
+    expect((await row(ticket))!.backstop_claim).toBe("A")
+    await runJobs(env, deps, undefined, after(24.25))
+    expect((await row(ticket))!).toMatchObject({ backstop_at: null, backstop_claim: null })
+    // Reopened later; run A wakes and tries to act on its old claim: nothing happens.
+    await env.DB.prepare("UPDATE reports SET status = 'open' WHERE id = ?").bind(ticket).run()
+    expect(await precaution(opEnv, ticket, after(24.25), { claim: "A" })).toBe("refused")
+    await finishBackstop(env.DB, ticket, "A", "retry")
+    expect((await row(ticket))!).toMatchObject({ backstop_at: null, backstop_claim: null, outcome: "received" })
+    expect(await hiddenBy(ticket)).toBe(false)
+  })
+
+  it("F4-A4: a round that fails as a whole opens nothing, so the next run opens it and sends", async () => {
+    const { id } = await published()
+    const failingRound = {
+      ...env,
+      DB: new Proxy(env.DB, {
+        get(target, prop) {
+          if (prop === "batch")
+            return async (stmts: D1PreparedStatement[]) => {
+              if (stmts.length > 1 && String((stmts[1] as unknown as { statement?: string }).statement ?? "").includes("report_alerts"))
+                throw new Error("d1 down")
+              return target.batch(stmts)
+            }
+          const value = Reflect.get(target, prop)
+          return typeof value === "function" ? value.bind(target) : value
+        },
+      }),
+    }
+    const { ticket } = await (await report({ placeId: id, requesterType: "other" }, { e: failingRound })).json<{ ticket: string }>()
+    const r = (await row(ticket))!
+    if (r.alerts === 0) {
+      expect(r.alerted_at).toBeNull()
+      await runJobs(env, deps, undefined, after(0.25))
+    }
+    expect((await row(ticket))!.alerts).toBe(1)
+    expect(
+      await env.DB.prepare("SELECT COUNT(*) AS n FROM report_alerts WHERE report_id = ? AND state = 'sent'")
+        .bind(ticket)
+        .first<number>("n"),
+    ).toBe(1)
+  })
+
+  it("F4-A4: a late failure from a send whose claim went stale can't undo another send's delivery", async () => {
+    const { completeDelivery } = await import("../db/reports")
+    const { id } = await published()
+    const { ticket } = await (await report({ placeId: id, requesterType: "other" })).json<{ ticket: string }>()
+    const key = [ticket, 1, "dev@example.test"] as const
+    expect(await env.DB.prepare("SELECT state FROM report_alerts WHERE report_id = ?").bind(ticket).first("state")).toBe("sent")
+    await completeDelivery(env.DB, key, "stale-claim", false, after(1))
+    expect(await env.DB.prepare("SELECT state FROM report_alerts WHERE report_id = ?").bind(ticket).first("state")).toBe("sent")
+  })
+
+  it("F4-A4: a delivery past its tries isn't claimed again", async () => {
+    const { id } = await published()
+    const { ticket } = await (await report({ placeId: id, requesterType: "other" })).json<{ ticket: string }>()
+    await env.DB.prepare("UPDATE report_alerts SET state = 'failed', tries = 5, claimed_at = NULL WHERE report_id = ?").bind(ticket).run()
+    const before = await env.DB.prepare("SELECT COUNT(*) AS n FROM dev_outbox").first<number>("n")
+    await runJobs(env, deps, undefined, after(0.25))
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM dev_outbox").first<number>("n")).toBe(before)
+  })
+
+  it("F4-A5: a deadline can't be removed either", async () => {
+    const { id } = await published()
+    await report({ placeId: id })
+    const s = await env.DB.prepare("SELECT id FROM field_suppressions WHERE place_id = ?").bind(id).first<string>("id")
+    await expect(env.DB.prepare("UPDATE field_suppressions SET notes_purge_after = NULL WHERE id = ?").bind(s).run()).rejects.toThrow(
+      /suppression_notes_deadline/,
+    )
+  })
+})

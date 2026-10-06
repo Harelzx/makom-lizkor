@@ -1,6 +1,6 @@
 import { RETENTION } from "@/config"
-import { resumeOps } from "./db/ops"
-import { deliverAlerts, precaution, startAlertRound } from "./db/reports"
+import { resumeOps, type OpEnv } from "./db/ops"
+import { deliverAlerts, precaution, startAlertRound, type Precaution } from "./db/reports"
 import type { SendMail } from "./lib/mail"
 import { REPORT_GUARDS } from "./lib/guards"
 import type { Purge } from "./lib/purge"
@@ -45,24 +45,7 @@ export async function runJobs(env: Env, deps: { sendMail: SendMail; purge: Purge
     )
       .bind(at, stale)
       .all<{ id: string }>()
-    for (const { id } of results) {
-      // Claimed, so two runs at the same moment look once; a run that stops leaves a claim that goes stale.
-      const claimed = await env.DB.prepare(
-        "UPDATE reports SET backstop_claimed_at = ?2 WHERE id = ?1 AND backstop_at IS NOT NULL AND (backstop_claimed_at IS NULL OR backstop_claimed_at <= ?3)",
-      )
-        .bind(id, at, stale)
-        .run()
-      if (claimed.meta.changes !== 1) continue
-      const result = await precaution(opEnv, id, now).catch(() => "retry" as const)
-      // A finished evaluation (hidden or refused) is the backstop's one look; one that couldn't finish is taken again.
-      await env.DB.prepare(
-        result === "retry"
-          ? "UPDATE reports SET backstop_claimed_at = NULL WHERE id = ?"
-          : "UPDATE reports SET backstop_at = NULL, backstop_claimed_at = NULL WHERE id = ?",
-      )
-        .bind(id)
-        .run()
-    }
+    for (const { id } of results) await backstopOne(opEnv, id, now)
   })
 
   await part("alerts", async () => {
@@ -91,4 +74,36 @@ export async function runJobs(env: Env, deps: { sendMail: SendMail; purge: Purge
       )
       .run(),
   )
+}
+
+/**
+ * One backstop evaluation: claimed (so two runs at the same moment look once, and a run that stops leaves a claim
+ * that goes stale), evaluated under that claim, and finished or released only while the claim is still this run's.
+ * A finished evaluation (hidden or refused) is the backstop's one look; one that couldn't finish is taken again.
+ */
+export async function backstopOne(opEnv: OpEnv, id: string, now: Date) {
+  const stale = new Date(now.getTime() - BACKSTOP_CLAIM_MS).toISOString()
+  const claim = crypto.randomUUID()
+  const claimed = await opEnv.db
+    .prepare(
+      `UPDATE reports SET backstop_claimed_at = ?2, backstop_claim = ?3
+       WHERE id = ?1 AND backstop_at IS NOT NULL AND (backstop_claimed_at IS NULL OR backstop_claimed_at <= ?4)`,
+    )
+    .bind(id, now.toISOString(), claim, stale)
+    .run()
+  if (claimed.meta.changes !== 1) return
+  const result = await precaution(opEnv, id, now, { claim }).catch(() => "retry" as const)
+  await finishBackstop(opEnv.db, id, claim, result)
+}
+
+/** Finishes (hidden or refused) or releases (retry) one evaluation, only while `claim` still holds it. */
+export async function finishBackstop(db: D1Database, id: string, claim: string, result: Precaution) {
+  await db
+    .prepare(
+      result === "retry"
+        ? "UPDATE reports SET backstop_claimed_at = NULL, backstop_claim = NULL WHERE id = ?1 AND backstop_claim = ?2"
+        : "UPDATE reports SET backstop_at = NULL, backstop_claimed_at = NULL, backstop_claim = NULL WHERE id = ?1 AND backstop_claim = ?2",
+    )
+    .bind(id, claim)
+    .run()
 }
