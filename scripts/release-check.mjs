@@ -38,6 +38,16 @@ const { originBlockers } = await import("./release-origin.mjs")
 blockers.push(...originBlockers(raw))
 const { moderatorBlockers } = await import("./release-moderators.mjs")
 blockers.push(...moderatorBlockers(raw))
+const { readRegistry, registryBlockers } = await import("./access-registry.mjs")
+blockers.push(
+  ...registryBlockers(
+    readRegistry(),
+    (raw.vars?.MODERATORS ?? "")
+      .split(",")
+      .map((e) => e.trim())
+      .filter(Boolean),
+  ),
+)
 const { backupBlockers } = await import("./release-backup.mjs")
 blockers.push(...backupBlockers(raw))
 
