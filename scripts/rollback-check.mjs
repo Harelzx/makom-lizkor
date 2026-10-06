@@ -49,16 +49,18 @@ function statements(sql) {
 
 /**
  * A column added, by the only grammar the check accepts (a52): ALTER TABLE t ADD [COLUMN] c [type], then nothing, a
- * DEFAULT of a plain literal, or NOT NULL with such a DEFAULT. Anything else, CHECK, UNIQUE, REFERENCES, COLLATE, a
- * generated column, is refused: its compatibility with the earlier code's inserts isn't established.
+ * DEFAULT of a plain literal, or NOT NULL with a DEFAULT that is a value. A required column whose default is NULL is
+ * added to an empty table, and the earlier code's insert then fails (a53). Anything else, CHECK, UNIQUE, REFERENCES,
+ * COLLATE, a generated column, is refused: its compatibility with the earlier code's inserts isn't established.
  */
 function addColumnProblem(st) {
   const m = /^ALTER TABLE \S+ ADD (?:COLUMN )?\S+(?: (?:TEXT|INTEGER|REAL|BLOB|NUMERIC))?(?: (.*))?$/i.exec(st)
   if (!m) return null
   const rest = (m[1] ?? "").trim()
-  const LIT = "(?:-?\\d+(?:\\.\\d+)?|'\\?'|NULL)"
-  if (!rest || new RegExp(`^(?:DEFAULT ${LIT}(?: NOT NULL)?|NOT NULL DEFAULT ${LIT})$`, "i").test(rest)) return ""
+  const VALUE = "(?:-?\\d+(?:\\.\\d+)?|'\\?')"
+  if (!rest || new RegExp(`^(?:DEFAULT (?:${VALUE}|NULL)|DEFAULT ${VALUE} NOT NULL|NOT NULL DEFAULT ${VALUE})$`, "i").test(rest)) return ""
   if (/^NOT NULL$/i.test(rest)) return "adds a required column without a default"
+  if (/^(?:NOT NULL DEFAULT NULL|DEFAULT NULL NOT NULL)$/i.test(rest)) return "adds a required column whose default is NULL"
   return "adds a column with a constraint the check can't establish as compatible"
 }
 

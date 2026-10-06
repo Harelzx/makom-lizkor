@@ -48,6 +48,10 @@ test("refuses when today's schema would break the earlier code", () => {
     "ALTER TABLE places ADD flag INTEGER DEFAULT 0 CHECK (flag IN (1, 2));":
       "adds a column with a constraint the check can't establish as compatible",
     "ALTER TABLE places ADD code TEXT UNIQUE;": "adds a column with a constraint the check can't establish as compatible",
+    // A required column whose default is NULL, in either order: on an empty table it is added, and the earlier code's
+    // insert then fails (proved with SQLite below; a53, P6-ROLLBACK-2).
+    "ALTER TABLE places ADD must TEXT NOT NULL DEFAULT NULL;": "adds a required column whose default is NULL",
+    "ALTER TABLE places ADD must TEXT DEFAULT NULL NOT NULL;": "adds a required column whose default is NULL",
     "CREATE TRIGGER t BEFORE INSERT ON places BEGIN SELECT 1; END;": "adds a trigger",
     "CREATE UNIQUE INDEX u ON places(id);": "adds a unique index",
   }
@@ -114,4 +118,20 @@ test("the CHECK it refuses really does break the earlier code's insert (SQLite)"
   db.exec("ALTER TABLE places ADD flag INTEGER DEFAULT 0 CHECK (flag IN (1, 2))")
   // The earlier code knows nothing of flag: its insert takes the default, which the CHECK refuses.
   assert.throws(() => db.exec("INSERT INTO places (id) VALUES ('a')"), /CHECK constraint failed/)
+})
+
+test("a required column whose default is NULL is added to an empty table, then breaks the earlier code's insert (SQLite)", async () => {
+  const { DatabaseSync } = await import("node:sqlite")
+  for (const add of ["ADD must TEXT NOT NULL DEFAULT NULL", "ADD must TEXT DEFAULT NULL NOT NULL"]) {
+    const db = new DatabaseSync(":memory:")
+    db.exec("CREATE TABLE places (id TEXT PRIMARY KEY)")
+    db.exec(`ALTER TABLE places ${add}`)
+    assert.throws(() => db.exec("INSERT INTO places (id) VALUES ('a')"), /NOT NULL constraint failed/, add)
+  }
+  // Nullable with DEFAULT NULL, or required with a value for its default: the earlier insert still works.
+  const db = new DatabaseSync(":memory:")
+  db.exec("CREATE TABLE places (id TEXT PRIMARY KEY)")
+  db.exec("ALTER TABLE places ADD seen INTEGER DEFAULT NULL")
+  db.exec("ALTER TABLE places ADD n INTEGER NOT NULL DEFAULT 0")
+  db.exec("INSERT INTO places (id) VALUES ('a')")
 })
