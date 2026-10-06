@@ -7,7 +7,7 @@ import type { Siteverify } from "../lib/turnstile"
 /**
  * Stands in for Cloudflare's siteverify, so the tests need no network. The token names the answer:
  * "pass" a real success for the submit action, "testing-key" what Cloudflare's test keys return (no action),
- * "wrong-action" and "wrong-host" successes that don't match, "fail" a failure, "down" an unreachable service.
+ * "pass-revise" and "pass-report" successes for those actions, "wrong-action" and "wrong-host" successes that don't match, "fail" a failure, "down" an unreachable service.
  */
 export async function fakeSiteverify(_secret: string, token: string): Promise<Siteverify> {
   if (token === "down") throw new Error("unreachable")
@@ -16,6 +16,7 @@ export async function fakeSiteverify(_secret: string, token: string): Promise<Si
   if (token === "wrong-host") return { success: true, hostname: "evil.test", action: "submit" }
   if (token === "wrong-action") return { success: true, hostname: "example.com", action: "login" }
   if (token === "pass-revise") return { success: true, hostname: "example.com", action: "revise" }
+  if (token === "pass-report") return { success: true, hostname: "example.com", action: "report" }
   return { success: token === "pass", hostname: "example.com", action: "submit" }
 }
 

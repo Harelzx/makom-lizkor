@@ -20,7 +20,7 @@ const VERIFY_DAYS = 7
  * got, so two tabs re-sending at once, or a lost answer, never leave a device holding a token that stopped working.
  * Holding it still takes both the device's random key and the server's secret.
  */
-async function hmacHex(secret: string, message: string): Promise<string> {
+export async function hmacHex(secret: string, message: string): Promise<string> {
   const k = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"])
   const mac = new Uint8Array(await crypto.subtle.sign("HMAC", k, new TextEncoder().encode(message)))
   return [...mac].map((b) => b.toString(16).padStart(2, "0")).join("")

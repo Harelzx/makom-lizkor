@@ -137,6 +137,8 @@ describe("a decision as a durable operation", () => {
     expect(outcome).toBe("conflict")
     expect(await op(id!)).toMatchObject({ state: "refused", refused_reason: "conflict" })
     expect(await place(p.id)).toMatchObject({ status: "published", ledger_seq: p.ledger_seq })
+    // Its intent is followed by an abort, so a replay knows it never happened.
+    expect(await entryOf(ledgerKey({ place: p.id, seq_from: p.ledger_seq, op: id!, phase: "abort" }))).toMatchObject({ kind: "suppress" })
     expect(purged).toEqual([])
   })
 })
@@ -218,6 +220,7 @@ describe("an operation that stopped before the database step", () => {
     await resumeOps(opEnv, later(3))
     expect(await op(id!)).toMatchObject({ state: "refused", refused_reason: "interrupted" })
     expect(await place(p.id)).toMatchObject({ status: "published", rev: p.rev + 1 })
+    expect(await entryOf(ledgerKey({ place: p.id, seq_from: p.ledger_seq, op: id!, phase: "abort" }))).toBeTruthy()
   })
 
   it("a copy it prepared for publication is removed again", async () => {

@@ -74,7 +74,7 @@ const INTERRUPTED_MS = 2 * 60_000
 const tagsFor = (placeId: string) => ["feed", "tributes", `place:${placeId}`]
 const heldKey = (key: string) => key.replace(/^public\//, "held/")
 
-function entry(op: OpRow, phase: "intent" | "commit", at: string, late = false): LedgerEntry {
+function entry(op: OpRow, phase: LedgerEntry["phase"], at: string, late = false): LedgerEntry {
   const detail = JSON.parse(op.detail) as OpDetail
   const media = [...new Set([...(detail.media ?? []), ...(detail.toHeld ?? []), ...(detail.prepared ?? [])])]
   return {
@@ -142,6 +142,7 @@ export async function runOp(env: OpEnv, spec: OpSpec, now: Date): Promise<{ outc
       .prepare("UPDATE visibility_ops SET state = 'refused', refused_reason = ?2, updated_at = ?3 WHERE id = ?1 AND state = 'pending'")
       .bind(id, reason, at)
       .run()
+    await abortRecorded(env, id, at)
     await cleanPrepared(env, spec.kind, detail)
   }
 
@@ -252,8 +253,17 @@ export async function resumeOps(env: OpEnv, now: Date) {
       )
       .bind(op.id, now.toISOString())
       .run()
-    if (refused.meta.changes === 1) await cleanPrepared(env, op.kind, JSON.parse(op.detail) as OpDetail)
+    if (refused.meta.changes === 1) {
+      await abortRecorded(env, op.id, now.toISOString())
+      await cleanPrepared(env, op.kind, JSON.parse(op.detail) as OpDetail)
+    }
   }
+}
+
+/** A refused operation whose intent reached the ledger gets an abort beside it, so a replay knows it never happened. */
+async function abortRecorded(env: OpEnv, id: string, at: string) {
+  const op = await readOp(env.db, id)
+  if (op && (op.intent === "written" || op.intent === "late")) await writeLedger(env.ledger, entry(op, "abort", at))
 }
 
 /**

@@ -7,6 +7,7 @@ import { admin } from "./routes/admin"
 import { dev } from "./routes/dev"
 import { email } from "./routes/email"
 import { feed } from "./routes/feed"
+import { reports } from "./routes/reports"
 import { share } from "./routes/share"
 import { submissions } from "./routes/submissions"
 import { tributes } from "./routes/tributes"
@@ -28,6 +29,7 @@ export function createApp(deps: Deps) {
   app.route("/api/v1/submissions", submissions)
   app.route("/api/v1/email", email)
   app.route("/api/v1/tributes", tributes)
+  app.route("/api/v1/reports", reports)
   app.route("/api/v1", feed)
   app.route("/api/admin", admin)
   app.route("/__dev", dev)

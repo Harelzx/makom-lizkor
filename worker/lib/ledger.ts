@@ -11,7 +11,8 @@ export type Actor = "moderator" | "automatic" | "submitter"
 export type LedgerEntry = {
   op: string
   place: string
-  phase: "intent" | "commit"
+  /** intent before the decision; commit after it happened; abort when it was refused after its intent was written. */
+  phase: "intent" | "commit" | "abort"
   kind: OpKind
   actor: Actor
   /** The place's chain of recorded decisions: this one moves it from seq_from to seq_to. */
@@ -51,7 +52,10 @@ const ERASING: OpKind[] = ["withdraw", "erase"]
  * What a replay from a restore point does with one place's entries, given the place's chain step at that point.
  *
  * - A committed decision is applied, in chain order.
- * - A removal with an intent and no commit is applied anyway: when the record is incomplete, removal wins.
+ * - A removal with an intent and no commit is applied anyway: when the record is incomplete, removal wins. One with an
+ *   abort after its intent is not: the record is complete, and says it was refused (lost its race, failed a safeguard,
+ *   or was interrupted before the database step). An abort is our addition to spec 8.2, so a refused automatic hide
+ *   can't come back through a replay that skips the safeguards it failed.
  * - A publication, a restoration or anything else with an intent and no commit is not.
  * - A step missing from the committed chain quarantines the place: its elements stay hidden until a moderator looks.
  * - A withdrawal or an erasure, as intent or commit, blocks the place and its files from ever coming back.
@@ -59,7 +63,7 @@ const ERASING: OpKind[] = ["withdraw", "erase"]
  * Phase 5's restore runs this; it is pure so the rules are tested apart from any bucket.
  */
 export function replayDecision(entries: LedgerEntry[], fromSeq: number): { apply: LedgerEntry[]; quarantine: boolean; erased: boolean } {
-  const byOp = new Map<string, { intent?: LedgerEntry; commit?: LedgerEntry }>()
+  const byOp = new Map<string, { intent?: LedgerEntry; commit?: LedgerEntry; abort?: LedgerEntry }>()
   for (const e of entries) {
     const seen = byOp.get(e.op) ?? {}
     seen[e.phase] = e
@@ -67,9 +71,9 @@ export function replayDecision(entries: LedgerEntry[], fromSeq: number): { apply
   }
   const committed: LedgerEntry[] = []
   const removals: LedgerEntry[] = []
-  for (const { intent, commit } of byOp.values()) {
+  for (const { intent, commit, abort } of byOp.values()) {
     if (commit) committed.push(commit)
-    else if (intent?.removal) removals.push(intent)
+    else if (intent?.removal && !abort) removals.push(intent)
   }
   committed.sort((a, b) => a.seq_from - b.seq_from)
   removals.sort((a, b) => a.seq_from - b.seq_from)

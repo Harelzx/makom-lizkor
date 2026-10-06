@@ -6,7 +6,7 @@ const at = "2026-10-06T08:00:00.000Z"
 /** One ledger entry; a step of the place's chain from `seq` to `seq + 1`. */
 function entry(
   op: string,
-  phase: "intent" | "commit",
+  phase: LedgerEntry["phase"],
   kind: LedgerEntry["kind"],
   seq: number,
   extra: Partial<LedgerEntry> = {},
@@ -51,6 +51,11 @@ describe("replay rules (spec 8.2)", () => {
     )
     expect(ops(r)).toEqual(["a:commit", "h:intent"])
     expect(r.quarantine).toBe(false)
+  })
+
+  it("a removal recorded as refused (intent, then abort) is not replayed: the record is complete, and it didn't happen", () => {
+    const r = replayDecision([entry("h", "intent", "suppress", 0), entry("h", "abort", "suppress", 0)], 0)
+    expect(ops(r)).toEqual([])
   })
 
   it("a gap in the chain keeps the place hidden until a moderator looks", () => {
