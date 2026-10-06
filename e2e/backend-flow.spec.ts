@@ -41,11 +41,11 @@ test("a place submitted without email is moderated, published, and seen in anoth
   await dialog.getByLabel("שם המקום").fill(name)
   await dialog.getByLabel("לזכר (לא חובה)").fill("נועה דמו")
   await dialog.getByRole("button", { name: "המשך" }).click()
+  // The last step has two boxes (family, consent); wait for the step before it to finish leaving, or a box of
+  // the leaving step is collected and never comes back (and its photo note would read as the notice's).
+  await expect(dialog.getByRole("checkbox")).toHaveCount(2)
   await dialog.getByText("הודעת הפרטיות", { exact: true }).click()
   await expect(dialog.getByText("מתפרסמת רק אם המקום אושר", { exact: false })).toBeVisible()
-  // The last step has two boxes (family, consent); wait for the step before it to finish leaving, or a box of
-  // the leaving step is collected and never comes back.
-  await expect(dialog.getByRole("checkbox")).toHaveCount(2)
   for (const box of await dialog.getByRole("checkbox").all()) await box.check()
   const sent = visitor.waitForResponse((r) => r.url().endsWith("/api/v1/submissions") && r.status() === 201)
   await dialog.getByRole("button", { name: "שמירה והנחת כלנית" }).click()
