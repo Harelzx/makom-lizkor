@@ -8,10 +8,44 @@ const DAY_MS = 86_400_000
 /** Places erased in one run; the job runs every 15 minutes, so a backlog clears long before the day's bound. */
 const ERASE_BATCH = 100
 
-// Every content column of a revision: what an erasure blanks (the tombstone keeps the row's id, state and dates).
-const BLANK_REVISION = `kind = NULL, name_he = NULL, lat = NULL, lng = NULL, location_precision = NULL, on_private_property = 0,
-  location_permission_at = NULL, access_note_he = NULL, place_he = NULL, in_memory_of = NULL, story_he = NULL, link_url = NULL,
-  decision_note = NULL, photo_key = NULL, photo_alt = NULL, photo_credit = NULL`
+// Every content column of a revision and what an erasure leaves in it (the tombstone keeps the row's id, state and
+// dates). The filtered import (db/import.ts) blanks with the same list.
+export const BLANK_COLUMNS: Record<string, null | 0> = {
+  kind: null,
+  name_he: null,
+  lat: null,
+  lng: null,
+  location_precision: null,
+  on_private_property: 0,
+  location_permission_at: null,
+  access_note_he: null,
+  place_he: null,
+  in_memory_of: null,
+  story_he: null,
+  link_url: null,
+  decision_note: null,
+  photo_key: null,
+  photo_alt: null,
+  photo_credit: null,
+}
+const BLANK_REVISION = Object.entries(BLANK_COLUMNS)
+  .map(([c, v]) => `${c} = ${v === null ? "NULL" : v}`)
+  .join(", ")
+
+/**
+ * The dates each rule compares against, at a moment: the retention job binds these, and the filtered import applies
+ * the same ones, so a restore can never keep what the job would have deleted by then.
+ */
+export function retentionCutoffs(now: Date) {
+  const ago = (days: number) => new Date(now.getTime() - days * DAY_MS).toISOString()
+  return {
+    now: now.toISOString(),
+    returned: ago(RETENTION.returnedDays),
+    rejected: ago(RETENTION.rejectedTextDays),
+    noteClosed: ago(RETENTION.contactAfterCloseDays),
+    noteCeiling: ago(RETENTION.contactMaxMonths * 30),
+  }
+}
 const hasContent = (t: string) =>
   `(${["name_he", "story_he", "place_he", "in_memory_of", "lat", "access_note_he", "link_url", "decision_note", "photo_key"]
     .map((c) => `${t}.${c} IS NOT NULL`)
@@ -64,10 +98,7 @@ export async function runRetention(env: OpEnv, now: Date): Promise<{ id: string;
              WHERE decision_note IS NOT NULL
                AND (decided_at <= ?1 OR (state IN ('approved', 'rejected', 'superseded') AND decided_at <= ?2))`,
           )
-          .bind(
-            new Date(now.getTime() - RETENTION.contactMaxMonths * 30 * DAY_MS).toISOString(),
-            new Date(now.getTime() - RETENTION.contactAfterCloseDays * DAY_MS).toISOString(),
-          )
+          .bind(retentionCutoffs(now).noteCeiling, retentionCutoffs(now).noteClosed)
           .run()
       ).meta.changes,
   )
@@ -118,11 +149,7 @@ async function eraseAbandoned(env: OpEnv, now: Date) {
        WHERE (status = 'returned' AND status_changed_at <= ?1) OR (status = 'rejected' AND status_changed_at <= ?2)
        ORDER BY status_changed_at LIMIT ?3`,
     )
-    .bind(
-      new Date(now.getTime() - RETENTION.returnedDays * DAY_MS).toISOString(),
-      new Date(now.getTime() - RETENTION.rejectedTextDays * DAY_MS).toISOString(),
-      ERASE_BATCH,
-    )
+    .bind(retentionCutoffs(now).returned, retentionCutoffs(now).rejected, ERASE_BATCH)
     .all<{ id: string; rev: number; status: "returned" | "rejected" }>()
   let erased = 0
   for (const row of results) if (await eraseOne(env, row, now)) erased++
@@ -189,11 +216,7 @@ async function blankClosedCorrections(env: OpEnv, now: Date) {
          AND ((r.state = 'returned' AND r.decided_at <= ?1) OR (r.state = 'rejected' AND r.decided_at <= ?2))
        LIMIT ?3`,
     )
-    .bind(
-      new Date(now.getTime() - RETENTION.returnedDays * DAY_MS).toISOString(),
-      new Date(now.getTime() - RETENTION.rejectedTextDays * DAY_MS).toISOString(),
-      ERASE_BATCH,
-    )
+    .bind(retentionCutoffs(now).returned, retentionCutoffs(now).rejected, ERASE_BATCH)
     .all<{ id: string; photo_key: string | null }>()
   for (const r of results) {
     // A returned correction left uncorrected is closed with its text: an upload or a correction can't land in an empty row.

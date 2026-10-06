@@ -20,7 +20,11 @@ export default defineConfig({
   plugins: [
     cloudflareTest({
       wrangler: { configPath: "./wrangler.jsonc" },
-      miniflare: { bindings: { ...devVars, TEST_MIGRATIONS: migrations, DEPLOY_VARS: deployVars } },
+      // IMPORT_TEST: an empty database for the filtered import's tests (Route B), never a deployed binding.
+      miniflare: {
+        bindings: { ...devVars, TEST_MIGRATIONS: migrations, DEPLOY_VARS: deployVars },
+        d1Databases: { IMPORT_TEST: "import-test" },
+      },
     }),
   ],
   resolve: { alias: [{ find: "@", replacement: resolve(import.meta.dirname, "./src") }] },
