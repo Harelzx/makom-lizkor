@@ -142,6 +142,40 @@ export async function saveSnapshot(feed: unknown): Promise<void> {
   }
 }
 
+/**
+ * Contributions this browser learned are not public (their share page answered 404 or 410): kept off its offline copy
+ * of the feed, across reloads. Changed in one transaction each; a live feed removes only the ids it lists again (the
+ * server's word), so two tabs never clear each other's marks. Without storage it is simply empty.
+ */
+export async function markUnlisted(id: string): Promise<void> {
+  try {
+    const s = db()
+    if (s) await update<string[]>("unlisted", (old) => (old?.includes(id) ? old : [...(old ?? []), id]), s)
+  } catch {
+    /* the page itself still keeps it off while it is open */
+  }
+}
+
+export async function loadUnlisted(): Promise<string[]> {
+  try {
+    const s = db()
+    return (s ? await get<string[]>("unlisted", s) : undefined) ?? []
+  } catch {
+    return []
+  }
+}
+
+/** A live feed lists these again: they are public after all, and leave the list. */
+export async function relistPublished(ids: string[]): Promise<void> {
+  try {
+    const s = db()
+    const listed = new Set(ids)
+    if (s) await update<string[]>("unlisted", (old) => (old ?? []).filter((id) => !listed.has(id)), s)
+  } catch {
+    /* nothing to undo without storage */
+  }
+}
+
 export function downloadJSON(filename: string, data: unknown) {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" })
   const url = URL.createObjectURL(blob)

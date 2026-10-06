@@ -1,7 +1,9 @@
 import { afterEach, expect, it, vi } from "vitest"
 import type { Place } from "@/types"
 
+const marked = vi.hoisted(() => ({ ids: [] as string[] }))
 vi.mock("@/lib/storage", () => ({
+  markUnlisted: async (id: string) => void marked.ids.push(id),
   loadLocal: async () => [],
   loadTributes: async () => ({}),
   saveTributes: async () => undefined,
@@ -31,10 +33,14 @@ it("a share page for a place no longer public opens the overview, and keeps the 
     useStore.getState().setRemote("1", [place("p_x"), place("p_y")], false)
     expect(useStore.getState().remote.map((p) => p.id)).toEqual(["p_y"])
   }
+  // Noted in storage both times, so a reload of the overview keeps it off too (src/lib/feed.ts reads the note).
+  expect(marked.ids).toEqual(["p_x", "p_x"])
 })
 
 it("a share page for a public place opens it under the hash route", async () => {
+  marked.ids = []
   const { location, useStore } = await storeAt("/place/p_x", "")
+  expect(marked.ids).toEqual([])
   expect(location.hash).toBe("#/place/p_x")
   expect(useStore.getState().selectedId).toBe("p_x")
 })

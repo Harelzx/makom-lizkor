@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test"
+import { expect, test, type Page } from "@playwright/test"
 import { published } from "./publish"
 
 const DAY = { timeout: 20_000 }
@@ -34,16 +34,15 @@ test("the share button gives the share page's address, which link previews can r
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toMatch(/^http:\/\/[^/]+\/place\/car-wall-tkuma$/)
 })
 
-test("a place taken back opens the overview, even where this browser's offline copy still has it", async ({ browser }) => {
+test("a place taken back opens the overview, and stays off this browser's offline copy after a reload", async ({ browser }) => {
+  test.setTimeout(90_000)
   const name = `גינת דמו שנמשכה ${Date.now()}`
   const { id, trackingToken } = await published(browser, name)
   const page = await (await browser.newContext()).newPage()
-  // Seen once, so the browser's offline copy of the feed holds it.
-  const saved = page.waitForResponse((r) => r.url().includes("/api/v1/feed"))
+  // Seen once: the browser's offline copy of the feed holds it (read from storage, not assumed after a wait).
   await page.goto(`/#/place/${id}`)
   await expect(page.getByRole("heading", { name })).toBeVisible(DAY)
-  await saved
-  await page.waitForTimeout(500)
+  await expect.poll(() => snapshotIds(page), { timeout: 20_000 }).toContain(id)
   await page.request.post(`/api/v1/submissions/${id}/withdraw`, { headers: { Authorization: `Bearer ${trackingToken}` } })
 
   await page.route("**/api/v1/{version,feed}*", (route) => route.abort())
@@ -52,13 +51,36 @@ test("a place taken back opens the overview, even where this browser's offline c
   await expect(page).toHaveURL(/\/#\/$/)
   await expect(page.getByRole("heading", { name })).toHaveCount(0)
   await expect(page.getByRole("button", { name: "עם צליל" })).toHaveCount(0)
-  // Off the map and the list too, though the offline copy (the only feed this page has) still holds it; a search for
-  // a place that is listed (the site's own) proves the search itself works.
-  await page.getByRole("button", { name: /^חיפוש מקום/ }).click()
+  await expectUnlisted(page, name)
+  // A reload of the overview, still with no server: the address no longer says anything about the place, and the old
+  // offline copy still holds it, yet it stays off.
+  await page.reload()
+  // A plain visit now, so the opening plays; skip it as a visitor would.
+  await page.getByRole("button", { name: "דילוג", exact: true }).click()
+  await expectUnlisted(page, name)
+})
+
+/** The ids in this browser's offline copy of the feed, read from its storage. */
+const snapshotIds = (page: Page) =>
+  page.evaluate(
+    () =>
+      new Promise<string[]>((resolve) => {
+        const req = indexedDB.open("makom-lizkor-v2")
+        req.onsuccess = () => {
+          const get = req.result.transaction("v1").objectStore("v1").get("feed")
+          get.onsuccess = () => resolve(((get.result as { places?: { id: string }[] } | undefined)?.places ?? []).map((p) => p.id))
+        }
+      }),
+  )
+
+/** Off the map and the list: a search finds the site's own place (the search works) but not this one. */
+async function expectUnlisted(page: Page, name: string) {
+  await page.getByRole("button", { name: /^חיפוש מקום/ }).click({ timeout: 20_000 })
   const box = page.getByRole("dialog").getByRole("combobox")
   await box.fill("קיר המכוניות")
   await expect(page.getByRole("option", { name: /קיר המכוניות/ }).first()).toBeVisible(DAY)
   await box.fill(name)
   await page.waitForTimeout(500)
   await expect(page.getByRole("option", { name: new RegExp(name) })).toHaveCount(0)
-})
+  await page.keyboard.press("Escape")
+}

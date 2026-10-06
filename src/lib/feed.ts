@@ -1,6 +1,6 @@
 import { Feed, isNewer, PublicPlace } from "@/shared/contract"
 import { retryWaiting } from "@/lib/outbox"
-import { loadSnapshot, saveSnapshot } from "@/lib/storage"
+import { loadSnapshot, loadUnlisted, relistPublished, saveSnapshot } from "@/lib/storage"
 import { useStore } from "@/store"
 import type { Place } from "@/types"
 
@@ -64,6 +64,8 @@ export function startFeedSync(): () => void {
         useStore.getState().setRemote(feed.v, feed.places.map(toPlace))
         // The newest feed replaces the offline copy whole: nothing hidden since lingers in it.
         void saveSnapshot(feed)
+        // Places a share page had said weren't public, which this feed lists: the server's word now holds.
+        void relistPublished(feed.places.map((p) => p.id))
       }
     } catch {
       /* offline or the server is down: the map keeps what it already shows */
@@ -85,11 +87,13 @@ export function startFeedSync(): () => void {
   if (shared && !useStore.getState().feedVersion) useStore.setState({ remote: [shared] })
   // With no connection yet, the last feed this browser received fills the map; a newer one replaces it whole. An
   // offline copy older than the shared place keeps it: only the server's own feed can say it is gone.
-  void loadSnapshot().then((saved) => {
+  // Places this browser learned aren't public (a share page said so) stay off it, across reloads.
+  void Promise.all([loadSnapshot(), loadUnlisted()]).then(([saved, unlisted]) => {
     const snapshot = Feed.safeParse(saved)
     const current = useStore.getState().feedVersion
     if (!snapshot.success || (current && !isNewer(snapshot.data.v, current))) return
-    const places = snapshot.data.places.map(toPlace)
+    const off = new Set(unlisted)
+    const places = snapshot.data.places.filter((p) => !off.has(p.id)).map(toPlace)
     if (shared && !places.some((p) => p.id === shared.id)) places.push(shared)
     useStore.getState().setRemote(snapshot.data.v, places, false)
   })

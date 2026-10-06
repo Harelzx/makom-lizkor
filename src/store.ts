@@ -2,7 +2,7 @@ import { create } from "zustand"
 import seed from "@/data/places.json"
 import type { LocalFields, Place } from "@/types"
 import { importable } from "@/lib/export"
-import { changeLocal, loadLocal, loadTributes, saveTributes } from "@/lib/storage"
+import { changeLocal, loadLocal, loadTributes, markUnlisted, saveTributes } from "@/lib/storage"
 
 /** intro: 06:29, the dark map and the opening words · dawn: the sunrise is playing · day: the site itself */
 export type Phase = "intro" | "dawn" | "day"
@@ -30,6 +30,8 @@ const sharedPath = typeof location !== "undefined" ? /^\/place\/([^/]+)\/?$/.exe
 const shareStatus = sharedPath && document.querySelector('meta[name="place-status"]')?.getAttribute("content")
 if (sharedPath) history.replaceState(null, "", shareStatus ? "/#/" : `/#/place/${sharedPath[1]}`)
 const offMap = shareStatus ? decoded(sharedPath![1]) : null
+// …and after a reload too, when the address no longer says so: the browser keeps a note of it.
+if (offMap?.startsWith("p_")) void markUnlisted(offMap)
 /** The place a shared link names, chosen before the first render so the address is never rewritten under it. */
 const linkedPlaceId = () => {
   if (!linkedToPlace() || !location.hash.startsWith("#/place/")) return null
