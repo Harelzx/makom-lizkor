@@ -26,7 +26,7 @@
 **מחוץ לשלב הזה** (החלטות חשבון של הראל, ונשארים ברשימת ההשקה):
 
 - חשבון staging;
-- ריפו ב־GitHub ו־GitHub Pro עם environment;
+- ריפו ב־GitHub: נוצר ב־2026-10-06, פרטי, ב־GitHub Free, בלי environment protection (spec 12.2);
 - דומיין;
 - Workers Paid;
 - הרצה אמיתית של בדיקות הקצה ושל העומס.
