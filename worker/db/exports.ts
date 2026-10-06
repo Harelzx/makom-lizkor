@@ -64,7 +64,7 @@ export async function runExport(env: ExportEnv, retentionRun: string, now: Date)
   }
   const name = (schema.results[0] as { name: string } | undefined)?.name ?? null
 
-  const files = await backUpPhotos(env.media, env.exports)
+  const files = await backUpPhotos(env.media, env.exports, tables)
   const plain = new TextEncoder().encode(JSON.stringify({ format: 1, id, created_at: at, schema: name, tables }))
   const sealed = await seal(await gzip(plain), recipients)
   const dataKey = `exports/${id}/data.bin`
@@ -91,27 +91,33 @@ export async function runExport(env: ExportEnv, retentionRun: string, now: Date)
 }
 
 /**
- * Every published or held photo, copied into the export bucket under its sha256 unless a copy is already there. Not
+ * The photos the captured database shows or holds (spec 8.1): each published or hidden place's published photo, from
+ * public/ or, while a hide covers it, held/. Chosen from the rows just exported, never from the bucket's listing, so a
+ * file a deletion left behind (a withdrawal whose cleanup failed, a photo a correction replaced) is never listed again
+ * and its copy ends with the last manifest that rightly listed it. Copied under its sha256 unless already there. Not
  * quarantine/: an unapproved photo isn't restored (spec 8.3), and its sender can send it again.
  */
-async function backUpPhotos(media: R2Bucket, exports: R2Bucket) {
+async function backUpPhotos(media: R2Bucket, exports: R2Bucket, tables: Record<string, Record<string, unknown>[]>) {
+  const published = new Set(
+    (tables.places ?? []).filter((p) => p.status === "published" || p.status === "hidden").map((p) => p.published_revision_id),
+  )
+  const keys = new Set(
+    (tables.revisions ?? [])
+      .filter((r) => published.has(r.id) && typeof r.photo_key === "string" && r.photo_key.startsWith("public/"))
+      .map((r) => r.photo_key as string),
+  )
   const files: Manifest["files"] = []
-  for (const prefix of ["public/", "held/"]) {
-    let cursor: string | undefined
-    do {
-      const page = await media.list({ prefix, cursor })
-      for (const o of page.objects) {
-        const object = await media.get(o.key)
-        if (!object) continue
-        const bytes = new Uint8Array(await object.arrayBuffer())
-        const hash = await sha256(bytes)
-        const copy = `photos/${hash}`
-        if (!(await exports.head(copy))) await exports.put(copy, bytes, { httpMetadata: { contentType: "image/jpeg" } })
-        files.push({ key: o.key, sha256: hash, size: bytes.length })
-      }
-      cursor = page.truncated ? page.cursor : undefined
-    } while (cursor)
-  }
+  for (const key of keys)
+    for (const name of [key, key.replace(/^public\//, "held/")]) {
+      const object = await media.get(name)
+      if (!object) continue
+      const bytes = new Uint8Array(await object.arrayBuffer())
+      const hash = await sha256(bytes)
+      const copy = `photos/${hash}`
+      if (!(await exports.head(copy))) await exports.put(copy, bytes, { httpMetadata: { contentType: "image/jpeg" } })
+      files.push({ key: name, sha256: hash, size: bytes.length })
+      break
+    }
   return files
 }
 
