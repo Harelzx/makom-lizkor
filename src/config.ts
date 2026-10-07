@@ -33,9 +33,11 @@ export const RETENTION = {
   contactMaxMonths: 12,
   /** how long a deletion takes to leave our own backups and exports */
   backupTailDays: 37,
-  /** the drill database's Time Travel window, the provider's and not shortenable. On its own it bounds nothing; the
-   * backend spec's timeline (section 7) derives drill copies gone by deletion + 32 days and exports by + 37, provided
-   * a drill loads only the newest export, which the code enforces. Unproven until the end-to-end test sets `verified` */
+  /** the drill database's Time Travel window, the provider's and not shortenable: 30 days on Workers Paid, the design
+   * target for production; 7 on Workers Free, which staging runs on (Cloudflare's D1 docs, read 7 October 2026). No code
+   * reads it. A window of recovery, not of erasure: on its own it bounds nothing; the backend spec's timeline (section 7)
+   * derives drill copies gone by deletion + 32 days and exports by + 37, provided a drill loads only the newest export,
+   * which the code enforces. Unproven until the end-to-end test sets `verified` */
   restoreDrillCopyDays: 30 as number | null,
   /** the two codes a removal request keeps to catch abuse (one from the network address, one from the explanation): the
    * job clears them once this much has passed since the request came */
