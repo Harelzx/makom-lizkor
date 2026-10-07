@@ -465,7 +465,8 @@ test("after a correction expires (returned, then refused), the sender corrects a
     await dialog.getByLabel("שם המקום").fill(newName)
     await dialog.getByRole("checkbox").check()
     await dialog.getByRole("button", { name: "שליחה מחדש לבדיקה" }).click()
-    await expect(dialog.getByText("התיקון ששלחתם ממתין לבדיקה")).toBeVisible()
+    // The server's answer: late in a loaded full run it was still out after 5 s (the button disabled, the send waiting).
+    await expect(dialog.getByText("התיקון ששלחתם ממתין לבדיקה")).toBeVisible(DAY)
   }
   await correct("תיקון דמו שנדחה ופג")
   // Refused, and past its 30 days too.
