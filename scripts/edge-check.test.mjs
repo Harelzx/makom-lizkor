@@ -21,7 +21,7 @@ const deployment =
     const auth = new Headers(init.headers).get("Authorization") ?? new Headers(init.headers).get("Cookie") ?? ""
     const owner = /^\/api\/v1\/submissions\/(\w+)$/.exec(u.pathname)?.[1]
     const status =
-      u.pathname === "/api/v1/no-such-route"
+      u.pathname === "/api/v1/no-such-route" || u.pathname === "/place/p_00000000000000000000000000"
         ? 404
         : u.pathname.startsWith("/api/admin")
           ? auth.includes(`CF_Authorization=${MODERATOR}`)
@@ -63,6 +63,7 @@ test("locally (explicit), a deployment that keeps every rule passes what it can 
     headers: "pass",
     private_no_store: "pass",
     private_isolation: "pass",
+    place_page: "pass",
     no_shared_hit: "skip",
     purge_freshness: "skip",
     workers_dev_closed: "skip",
@@ -77,11 +78,68 @@ test("against a real deployment, what it can't show is incomplete, never passed 
     headers: "pass",
     private_no_store: "pass",
     private_isolation: "incomplete",
+    place_page: "incomplete",
     no_shared_hit: "incomplete",
     purge_freshness: "incomplete",
     workers_dev_closed: "incomplete",
   })
   assert.equal(outcome(results), "incomplete")
+})
+
+// From phase 7 a share page needs a place in the database, so a deployment names the place to check (a60, EDGE_PLACE).
+test("a named place's share page must answer 200; one never named leaves the check incomplete on a deployment (a60)", async () => {
+  const named = await edgeChecks("https://site.example", { fetch: deployment(), place: "car-wall-tkuma" })
+  assert.equal(status(named).place_page, "pass")
+  const asked = []
+  await edgeChecks("https://site.example", { fetch: deployment((u) => asked.push(u.pathname)), place: "p_01M49YXN0NET6BY2Z9PEXGWFHG" })
+  assert.ok(asked.includes("/place/p_01M49YXN0NET6BY2Z9PEXGWFHG"))
+  // Named and missing, hidden or broken: a failure, never an unavailable prerequisite.
+  for (const code of [404, 410, 500]) {
+    const results = await edgeChecks("https://site.example", {
+      fetch: deployment((u, _i, res) => u.pathname === "/place/car-wall-tkuma" && (res.status = code)),
+      place: "car-wall-tkuma",
+    })
+    assert.equal(status(results).place_page, "fail", String(code))
+    assert.equal(outcome(results), "fail")
+  }
+  const wrongType = await edgeChecks("https://site.example", {
+    fetch: deployment((u, _i, res) => u.pathname === "/place/car-wall-tkuma" && res.headers.set("Content-Type", "application/json")),
+    place: "car-wall-tkuma",
+  })
+  assert.equal(status(wrongType).place_page, "fail")
+})
+
+test("locally the seeded place is checked by default, and a missing seed fails (a60)", async () => {
+  const asked = []
+  const results = await edgeChecks("https://site.example", { fetch: deployment((u) => asked.push(u.pathname)), local: true })
+  assert.ok(asked.includes("/place/car-wall-tkuma"))
+  assert.equal(status(results).place_page, "pass")
+  const unseeded = await edgeChecks("https://site.example", {
+    fetch: deployment((u, _i, res) => u.pathname === "/place/car-wall-tkuma" && (res.status = 404)),
+    local: true,
+  })
+  assert.equal(status(unseeded).place_page, "fail")
+})
+
+test("an unnamed place never hides a failure elsewhere (a60)", async () => {
+  const results = await edgeChecks("https://site.example", {
+    fetch: deployment((u, _i, res) => u.pathname === "/" && res.headers.delete("X-Content-Type-Options")),
+  })
+  assert.equal(status(results).place_page, "incomplete")
+  assert.equal(status(results).headers, "fail")
+  assert.equal(outcome(results), "fail")
+})
+
+test("a place that was never public is the share route's 404, whatever is named (a60)", async () => {
+  const results = await edgeChecks("https://site.example", {
+    fetch: deployment((u, _i, res) => u.pathname === "/place/p_00000000000000000000000000" && (res.status = 200)),
+  })
+  assert.equal(status(results).responses, "fail")
+})
+
+test("a place named in a shape no place has is refused before anything is asked (a60)", async () => {
+  for (const place of ["local-1", "../admin", "Car Wall", "", "p_" + "x".repeat(40)])
+    await assert.rejects(edgeChecks("https://site.example", { fetch: deployment(), place }), /EDGE_PLACE/, place)
 })
 
 test("an unhealthy deployment fails, however right its headers (P6-EDGE-1)", async () => {

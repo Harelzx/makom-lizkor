@@ -21,6 +21,8 @@ test("the edge check passes on the production build, and skips only what needs t
     headers: "pass",
     private_no_store: "pass",
     private_isolation: "pass",
+    // The place the e2e seed imported: locally it is checked without being named (a60).
+    place_page: "pass",
     no_shared_hit: "skip",
     purge_freshness: "skip",
     workers_dev_closed: "skip",
