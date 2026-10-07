@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test"
+import { expect, test } from "./fixtures"
 import { CSP, SECURITY_HEADERS } from "../worker/lib/security-headers"
 
 // Spec 11 (adviser a49): the production build's own runtime carries the security headers on the page, a static file,

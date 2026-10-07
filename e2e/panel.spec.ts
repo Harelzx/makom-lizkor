@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test"
+import { expect, test } from "./fixtures"
 import { openPlace, record } from "./frames"
 
 const PANEL = 'aside[aria-label="מקומות וקהילות"]'

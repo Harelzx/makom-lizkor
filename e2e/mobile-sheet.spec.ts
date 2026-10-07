@@ -1,4 +1,4 @@
-import { devices, expect, test } from "@playwright/test"
+import { devices, expect, test } from "./fixtures"
 
 // The phone layout: a bottom sheet that is always open and never modal, under a row of map buttons.
 test.use({ ...devices["Pixel 7"], viewport: { width: 390, height: 844 } })

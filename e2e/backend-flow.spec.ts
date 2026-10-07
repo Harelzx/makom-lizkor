@@ -1,4 +1,4 @@
-import { expect, test, type Browser, type BrowserContextOptions, type Page } from "@playwright/test"
+import { expect, test, type Browser, type BrowserContextOptions, type Page } from "./fixtures"
 import { ownAddress } from "./publish"
 
 // The opening isn't what this file tests, and its sunrise took about 8 s on every page that went through it. A visitor
@@ -46,7 +46,10 @@ test("a place submitted without email is moderated, published, and seen in anoth
   // the leaving step is collected and never comes back (and its photo note would read as the notice's).
   await expect(dialog.getByRole("checkbox")).toHaveCount(2)
   await dialog.getByText("הודעת הפרטיות", { exact: true }).click()
-  await expect(dialog.getByText("מתפרסמת רק אם המקום אושר", { exact: false })).toBeVisible()
+  // The notice's own photo paragraph: the photo field's description above it says the same, in its own words.
+  const notice = dialog.getByText("תמונה: אם צירפתם תמונה", { exact: false })
+  await expect(notice).toBeVisible()
+  await expect(notice).toContainText("מתפרסמת רק אם המקום אושר")
   for (const box of await dialog.getByRole("checkbox").all()) await box.check()
   const sent = visitor.waitForResponse((r) => r.url().endsWith("/api/v1/submissions") && r.status() === 201)
   await dialog.getByRole("button", { name: "שמירה והנחת כלנית" }).click()
@@ -66,6 +69,10 @@ test("a place submitted without email is moderated, published, and seen in anoth
   await expect(await search(other, name)).toHaveCount(0)
   await other.keyboard.press("Escape")
 
+  // The submitter's page brings the approved place in with whichever check comes first after the approval (its own
+  // timer, or the tab coming back): waited for from before the approval, so a check that came early isn't missed.
+  const fed = visitor.waitForResponse(async (r) => r.url().includes("/api/v1/feed?") && r.status() === 200 && (await r.text()).includes(id))
+
   // A moderator approves it.
   const modCtx = await browser.newContext()
   await modCtx.request.post("/__dev/login", { data: { email: "dev@example.test" } })
@@ -80,7 +87,6 @@ test("a place submitted without email is moderated, published, and seen in anoth
   await expect(await search(other, name)).toBeVisible()
 
   // The submitter sees one copy, not their local one beside the published one.
-  const fed = visitor.waitForResponse((r) => r.url().includes("/api/v1/feed?") && r.status() === 200)
   await visitor.evaluate(() => document.dispatchEvent(new Event("visibilitychange")))
   await fed
   await expect(await search(visitor, name)).toHaveCount(1)
