@@ -148,6 +148,8 @@ function releaseProblems(w) {
     // Production's purge_freshness comes from the content-free probe, with its own token (L-PURGE).
     if (checks?.env?.EDGE_PROBE !== "${{ secrets.EDGE_PROBE }}")
       problems.push("release.yml's production checks must be given EDGE_PROBE (secrets.EDGE_PROBE)")
+    if (!/edge-check\.mjs[^\n]*--probe-freshness/.test(checks?.run ?? ""))
+      problems.push("release.yml's production checks must let the probe answer purge_freshness (--probe-freshness)")
     if (checks?.env?.WORKERS_DEV_URL !== "${{ vars.WORKERS_DEV_URL }}" || !/--workers-dev "\$WORKERS_DEV_URL"/.test(checks?.run ?? ""))
       problems.push('release.yml\'s production checks must be given --workers-dev "$WORKERS_DEV_URL" (vars.WORKERS_DEV_URL)')
     // The checks wait for the version this deploy tagged, and hold the Worker's answers to it (a61).
@@ -220,6 +222,9 @@ function stagingProblems(w, triggers) {
       ["EDGE_PROBE", "${{ secrets.STAGING_EDGE_PROBE }}"],
     ])
       if (all[edge]?.env?.[name] !== value) problems.push(`staging.yml's edge checks must be given ${name} (${value.slice(4, -3)})`)
+    // Staging's purge_freshness is its synthetic exercise; the probe never stands for it there (L-PURGE-STAGING-1).
+    if (all.some((st) => /--probe-freshness/.test(st.run ?? "")))
+      problems.push("staging.yml's edge checks must not let the probe answer purge_freshness (--probe-freshness is production's)")
     if (
       !String(last.uses ?? "").startsWith("actions/upload-artifact") ||
       "if" in last ||

@@ -260,7 +260,10 @@ test("the edge checks are given their synthetic owners, place, purge exercise an
     "release.yml's production checks must be given EDGE_PROBE",
   )
   // Only production's checks let the probe stand for purge_freshness (L-PURGE-STAGING-1); staging's never do.
-  fails(withChange("release.yml", " --probe-freshness", ""), "release.yml's production checks must let the probe answer purge_freshness")
+  fails(
+    withChange("release.yml", '"$WORKERS_DEV_URL" --probe-freshness', '"$WORKERS_DEV_URL"'),
+    "release.yml's production checks must let the probe answer purge_freshness",
+  )
   fails(
     withChange("staging.yml", '--workers-dev "$STAGING_PUBLIC_ORIGIN"', '--workers-dev "$STAGING_PUBLIC_ORIGIN" --probe-freshness'),
     "staging.yml's edge checks must not let the probe answer purge_freshness",

@@ -77,6 +77,7 @@ export async function edgeChecks(
     readiness = READINESS,
     purge = null,
     probe = null,
+    probeFreshness = false,
     purgeTiming = PURGE_TIMING,
   } = {},
 ) {
@@ -307,18 +308,23 @@ export async function edgeChecks(
     unseen("no_shared_hit", "the owners' own probes weren't all seen through the edge cache (CF-Cache-Status)")
   else record("no_shared_hit", [], `${ownerProbes.seen} owner probes through the edge cache, no HIT`)
 
-  // Staging hides a synthetic place (EDGE_PURGE); production, with no such place, moves the content-free probe
-  // (EDGE_PROBE, L-PURGE). Where both are given, the probe is checked on its own as purge_probe.
+  // Staging hides a synthetic place (EDGE_PURGE) for purge_freshness. The content-free probe (EDGE_PROBE, L-PURGE)
+  // stands for it only on production's explicit path (--probe-freshness, release.yml), where no such place exists;
+  // anywhere else it is checked on its own as purge_probe, and purge_freshness waits for the exercise
+  // (L-PURGE-STAGING-1).
+  const probeIsFreshness = probe && probeFreshness && !purge
   if (purge)
     // Anything before the hide is sent only stops the exercise; from the hide on, it handles its own end.
     await purgeExercise().catch((err) => record("purge_freshness", [`the exercise stopped before any hide: ${err.message}`], ""))
-  else if (!probe)
+  else if (!probeIsFreshness)
     unseen(
       "purge_freshness",
-      "needs a synthetic place and a moderator (EDGE_PURGE, staging) or the purge probe's token (EDGE_PROBE, production)",
+      probeFreshness
+        ? "needs the purge probe's token (EDGE_PROBE): production's purge_freshness"
+        : "needs a synthetic place and a moderator (EDGE_PURGE): the staging purge exercise",
     )
   if (probe) {
-    const check = purge ? "purge_probe" : "purge_freshness"
+    const check = probeIsFreshness ? "purge_freshness" : "purge_probe"
     await probeExercise(check).catch((err) => record(check, [`the probe stopped before it moved: ${err.message}`], ""))
   }
 
@@ -377,7 +383,7 @@ export async function edgeChecks(
       return {
         status: res.status,
         cache: res.headers.get("CF-Cache-Status"),
-        colo: /-([A-Z]{3})$/.exec(res.headers.get("CF-Ray") ?? "")?.[1] ?? "unknown",
+        colo: /-([A-Z]{3})$/.exec(res.headers.get("CF-Ray") ?? "")?.[1] ?? null,
         generation: valid ? body.generation : null,
       }
     }
@@ -386,6 +392,13 @@ export async function edgeChecks(
     const second = await read()
     for (const r of [first, second])
       if (r.generation === null) return record(check, [`the probe's address answered ${r.status} without a generation`], "")
+    // The purge is shown where the copy was warmed: one edge location, named by its answers (L-PURGE-OBSERVATION-1).
+    const at = first.colo
+    if (!at || second.colo !== at)
+      return unseen(
+        check,
+        `the warm reads didn't come from one named edge location (${first.colo ?? "unnamed"}, ${second.colo ?? "unnamed"}): nothing to watch`,
+      )
     if (first.cache !== "MISS" || second.cache !== "HIT")
       return unseen(
         check,
@@ -422,32 +435,49 @@ export async function edgeChecks(
     }
     if (!moved) return record(check, [`the probe didn't move and purge (last: ${last})`], "")
 
+    // Only an answer from the warmed location counts, and only with the generation this exercise moved to: a fresh
+    // answer elsewhere, or a later generation another exercise moved to, shows nothing about this copy.
     const failures = []
+    const to = from + 1
     let fresh = null
-    let freshAt = "unknown"
+    let jumped = null
+    let staleAfter = null
+    let elsewhere = 0
     let seen = "not read"
-    while (fresh === null && Date.now() - sent < t.deadlineMs) {
+    while (fresh === null && jumped === null && Date.now() - sent < t.deadlineMs) {
       const r = await read().catch(() => null)
       if (r?.generation === null) {
         failures.push(`the probe's address answered ${r.status} without a generation after the move`)
         break
       }
-      if (r && r.generation > from) {
-        fresh = Date.now() - sent
-        freshAt = r.colo
-      } else {
-        seen = r ? `${r.status} ${r.cache ?? "uncached"}, generation ${r.generation}` : "no answer in time"
+      if (r && r.colo === at && r.generation === to) fresh = Date.now() - sent
+      else if (r && r.colo === at && r.generation > to) jumped = r.generation
+      else {
+        if (r && r.colo === at) staleAfter = Date.now() - sent
+        else if (r) elsewhere++
+        seen = r ? `${r.colo ?? "unnamed"}: ${r.status} ${r.cache ?? "uncached"}, generation ${r.generation}` : "no answer in time"
         await sleep(t.everyMs)
       }
     }
-    if (!failures.length && fresh === null)
-      failures.push(`the probe's address still served generation ${from}, ${t.deadlineMs} ms after the move was sent (last: ${seen})`)
-    else if (!failures.length && fresh > t.freshMs)
-      failures.push(`the probe's address was not fresh until ${fresh} ms after the move was sent (bound ${t.freshMs} ms)`)
+    if (failures.length) return record(check, failures, "")
+    if (jumped !== null)
+      return unseen(check, `${at} answered generation ${jumped}, past the ${to} this exercise moved to: another exercise intervened`)
+    if (fresh === null && staleAfter !== null && staleAfter > t.freshMs)
+      return record(
+        check,
+        [`${at} still served generation ${from} ${staleAfter} ms after the move was sent (bound ${t.freshMs} ms; last: ${seen})`],
+        "",
+      )
+    if (fresh === null)
+      return unseen(
+        check,
+        `no answer came from the warmed location ${at} with generation ${to} within ${t.deadlineMs} ms (${elsewhere} from elsewhere; last: ${seen})`,
+      )
+    if (fresh > t.freshMs) failures.push(`${at} was not fresh until ${fresh} ms after the move was sent (bound ${t.freshMs} ms)`)
     record(
       check,
       failures,
-      `content-free probe: generation ${from} → ${from + 1}, fresh after ${fresh} ms from the move's dispatch (bound ${t.freshMs} ms); edge locations: ${first.colo}, ${second.colo}, ${freshAt}`,
+      `content-free probe at ${at}: generation ${from} → ${to}, fresh after ${fresh} ms from the move's dispatch (bound ${t.freshMs} ms)`,
     )
   }
 
@@ -677,7 +707,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const expectTag = args.includes("--expect-tag") ? (option("--expect-tag") ?? "") : null
   if (!base || (args.includes("--dev") && !local)) {
     console.error(
-      "usage: node scripts/edge-check.mjs <base-url> [--local [--dev]] [--workers-dev <url>] [--expect-tag <tag>] [--report <file>]",
+      "usage: node scripts/edge-check.mjs <base-url> [--local [--dev]] [--workers-dev <url>] [--expect-tag <tag>] [--probe-freshness] [--report <file>]",
     )
     process.exit(2)
   }
@@ -693,6 +723,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     // An unset secret arrives as an empty string: no exercise.
     purge: EDGE_PURGE ? JSON.parse(EDGE_PURGE) : null,
     probe: EDGE_PROBE ? JSON.parse(EDGE_PROBE) : null,
+    probeFreshness: args.includes("--probe-freshness"),
     expectTag,
   })
   for (const r of results) console.log(`${r.status.padEnd(10)}  ${r.check}: ${Array.isArray(r.detail) ? r.detail.join("; ") : r.detail}`)

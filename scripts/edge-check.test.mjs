@@ -1022,8 +1022,7 @@ test("production's purge_freshness: the probe's own address turns to the new gen
   const site = probeSite()
   const r = await probeOf(site, { access: { id: "deploy-id.access", secret: "deploy-secret" } })
   assert.equal(r.status, "pass", JSON.stringify(r))
-  assert.match(r.detail, /content-free probe: generation 4 → 5, fresh after \d+ ms from the move's dispatch/)
-  assert.match(r.detail, /edge locations: TLV, TLV, TLV/)
+  assert.match(r.detail, /content-free probe at TLV: generation 4 → 5, fresh after \d+ ms from the move's dispatch/)
   assert.equal(site.state.moves, 1)
   // The probe's own Access pair, whole; never the deployment's.
   assert.deepEqual(site.state.posts, [{ id: "probe-id.access", secret: "probe-secret" }])
