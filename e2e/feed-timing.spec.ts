@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test"
+import { expect, test } from "./fixtures"
 
 // The site's own places come with the feed (phase 7; adviser a50, review focus 1 and 2): the opening never waits for
 // it, a first visit whose feed is slow still opens and fills in when it comes, and a link to a place keeps its place

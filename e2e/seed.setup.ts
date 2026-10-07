@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises"
-import { expect, test as setup } from "@playwright/test"
+import { expect, test as setup } from "./fixtures"
 import fixtures from "../fixtures/curated.json" with { type: "json" }
 import { importCurated } from "../scripts/curated-import.mjs"
 
