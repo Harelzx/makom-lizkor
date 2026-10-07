@@ -70,12 +70,16 @@ jobs:
             --var "MODERATORS:$STAGING_MODERATORS"
       # It first waits, bounded, for the version just deployed (its tag) and holds every Worker answer to it (a61).
       # Through Access with the service token; the same address probed without it must be refused (Access closes this
-      # workers.dev address). Exit 3, incomplete (no purge exercise or synthetic owners yet), keeps the deploy and says
-      # so in the receipt; a release accepts only a receipt whose edge check passed (a51, P6-EDGE-1).
+      # workers.dev address). The synthetic owners, the named place and the purge exercise come from the repository;
+      # any of them unset leaves its check incomplete. Exit 3, incomplete, keeps the deploy and says so in the receipt;
+      # a release accepts only a receipt whose every check passed (a51, P6-EDGE-1).
       - name: Edge checks through Access
         env:
           CF_ACCESS_CLIENT_ID: ${{ secrets.STAGING_ACCESS_CLIENT_ID }}
           CF_ACCESS_CLIENT_SECRET: ${{ secrets.STAGING_ACCESS_CLIENT_SECRET }}
+          EDGE_IDENTITIES: ${{ secrets.STAGING_EDGE_IDENTITIES }}
+          EDGE_PLACE: ${{ vars.STAGING_EDGE_PLACE }}
+          EDGE_PURGE: ${{ secrets.STAGING_EDGE_PURGE }}
         run: |
           set -uo pipefail
           status=0
@@ -85,7 +89,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/receipt"
-          node -e 'const e=process.env; const edge=JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).outcome; console.log(JSON.stringify({ sha: e.SHA, tag: "staging-" + e.SHA.slice(0, 12), run_id: Number(e.GITHUB_RUN_ID), edge }))' "$RUNNER_TEMP/edge.json" > "$RUNNER_TEMP/receipt/receipt.json"
+          node scripts/staging-receipt.mjs "$RUNNER_TEMP/edge.json" > "$RUNNER_TEMP/receipt/receipt.json"
       # Last, so it exists only if every step before it passed; release.yml reads it (scripts/staging-evidence.mjs).
       - uses: actions/upload-artifact@v4
         with:

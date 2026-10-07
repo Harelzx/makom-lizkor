@@ -17,7 +17,8 @@
 //   files and Access's own answers carry no version and aren't counted. Without it a deployment's version is unknown:
 //   incomplete. This shows which version answered these requests, not that the rollout reached everywhere.
 // Behind Access (staging), CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET in the environment, a service token's, go
-// with every request. EDGE_PLACE names a published place whose share page must answer: since phase 7 every place is in
+// with every request. EDGE_PURGE (JSON: { place, moderator: { headers } }) is the staging purge exercise's synthetic place
+// and moderator: without it, or without an edge cache to see, purge_freshness is incomplete. EDGE_PLACE names a published place whose share page must answer: since phase 7 every place is in
 // the database, so a deployment names one that is there (a60); unnamed, that check is incomplete. Locally it is the
 // place the e2e seed imports. EDGE_IDENTITIES (JSON: [{ name, path, headers, marker }], two or more synthetic owners,
 // each with a private address of its own and a marker its answer carries) names who may read what. Both are read
@@ -25,6 +26,7 @@
 // Exit: 0 every check passed (or skipped, locally); 1 a check failed; 3 nothing failed but something is incomplete.
 import { writeFileSync } from "node:fs"
 import { pathToFileURL } from "node:url"
+import { Feed } from "../src/shared/contract.ts"
 import { CSP, SECURITY_HEADERS } from "../worker/lib/security-headers.ts"
 
 /** Each public address and the answer it must give: its status, and what its body must be where that's known. */
@@ -50,6 +52,14 @@ const PLACE_ID = /^(?!local-)(p_[0-9A-HJKMNP-TV-Z]{26}|[a-z0-9][a-z0-9-]{0,63})$
 const WORKER_PATH = /^\/(api|place|media|__dev)\//
 /** A version tag as the deploys give them: staging-<sha12>, or the release's tag. */
 const TAG = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
+/**
+ * The purge exercise's bounds (spec 5, 13): after a hide is sent, the place's page and the feed must be fresh within
+ * freshMs (a purge that took: seconds); it watches until deadlineMs, asking every everyMs. edgeTtlMs is how long the
+ * edge keeps both (the Worker's max-age=60, worker/routes/share.ts and feed.ts): the window must end before this run's
+ * entries could expire, or expiry would look like a purge. Each request may take requestMs, and finding and lifting
+ * the exercise's own hide cleanupMs.
+ */
+const PURGE_TIMING = { freshMs: 15_000, deadlineMs: 75_000, everyMs: 1_000, edgeTtlMs: 60_000, requestMs: 10_000, cleanupMs: 60_000 }
 /** How long a deploy's version gets to answer, how often health is asked, and how long one request may take. */
 const READINESS = { deadlineMs: 90_000, everyMs: 3_000, fetchMs: 10_000 }
 
@@ -65,12 +75,17 @@ export async function edgeChecks(
     place = null,
     expectTag = null,
     readiness = READINESS,
+    purge = null,
+    purgeTiming = PURGE_TIMING,
   } = {},
 ) {
   // A named place or an expected tag in a shape none has is a configuration mistake, refused before anything is asked.
   const named = place ?? (local ? SEEDED_PLACE : null)
   if (named !== null && !PLACE_ID.test(named)) throw new Error(`EDGE_PLACE is not a place's id: ${JSON.stringify(named)}`)
   if (expectTag !== null && !TAG.test(expectTag)) throw new Error(`--expect-tag is not a version tag: ${JSON.stringify(expectTag)}`)
+  const headersOk = (h) => !!h && typeof h === "object" && Object.keys(h).length > 0 && Object.values(h).every((v) => typeof v === "string")
+  if (purge !== null && !(typeof purge?.place === "string" && PLACE_ID.test(purge.place) && headersOk(purge.moderator?.headers)))
+    throw new Error("EDGE_PURGE must name a synthetic place's id and a moderator's headers")
   const url = (path) => new URL(path, base).toString()
   // Once the expected version has answered, every Worker answer measured must name it.
   const version = { holding: false, answers: 0, failures: [] }
@@ -277,7 +292,9 @@ export async function edgeChecks(
     unseen("no_shared_hit", "the owners' own probes weren't all seen through the edge cache (CF-Cache-Status)")
   else record("no_shared_hit", [], `${ownerProbes.seen} owner probes through the edge cache, no HIT`)
 
-  unseen("purge_freshness", "needs the edge cache and a moderator's action on a synthetic place: the staging purge exercise")
+  if (!purge) unseen("purge_freshness", "needs a synthetic place and a moderator (EDGE_PURGE): the staging purge exercise")
+  // Anything before the hide is sent only stops the exercise; from the hide on, it handles its own end.
+  else await purgeExercise().catch((err) => record("purge_freshness", [`the exercise stopped before any hide: ${err.message}`], ""))
 
   if (!workersDev) unseen("workers_dev_closed", "no workers.dev address given (--workers-dev)")
   else {
@@ -303,6 +320,215 @@ export async function edgeChecks(
     else if (res.status === 401 || res.status === 403 || toAccess) record("workers_dev_closed", [], `${workersDev} refused (${res.status})`)
     else unseen("workers_dev_closed", `${workersDev} answered ${res.status}, not a recognized refusal: inconclusive`)
   }
+  /**
+   * The staging purge exercise (spec 5, 13; STG-PURGE-*). The run reads its own addresses for the place's page and the
+   * current feed, new to the edge (a nonce in the query, which is part of the cache key), until the edge serves them
+   * from its cache: so each entry was stored by this run and lives edgeTtlMs from then (the Worker's 60 s), and a
+   * window that would outlast that is incomplete before anything is hidden. The moderator then hides the place whole,
+   * with this run's marker in the reason; timed from the moment the hide is sent, the page must answer 410 and the feed
+   * address stop naming the place (a valid feed without it, or the Worker's own 409 for an old version: no-store, a
+   * newer version) within freshMs. Errors, redirects, refusals and malformed answers never count as fresh. Once the hide
+   * is sent, whatever its answer, the hide with the marker (and only it: another moderator's stays) is found, lifted
+   * and shown gone within cleanupMs; one that can't be is a failure naming the place and the marker. Every request is
+   * bounded (requestMs) and goes through the same wrapper, so it is held to the deployed version too.
+   */
+  async function purgeExercise() {
+    const { place: id, moderator } = purge
+    const t = purgeTiming
+    const run = globalThis.crypto.randomUUID().replaceAll("-", "").slice(0, 12)
+    const marker = `edge-purge:${run}`
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)))
+    // Each request bounded by requestMs, or by less where a budget (the cleanup's) has less left.
+    const bounded = (path, init = {}, ms = t.requestMs) =>
+      fetch(url(path), { redirect: "manual", ...init, signal: AbortSignal.timeout(Math.max(1, Math.min(t.requestMs, ms))) })
+    const parse = (s) => {
+      try {
+        return JSON.parse(s)
+      } catch {
+        return null
+      }
+    }
+    const read = async (path) => {
+      const res = await bounded(path)
+      return {
+        status: res.status,
+        cache: res.headers.get("CF-Cache-Status"),
+        noStore: /\bno-store\b/.test(res.headers.get("Cache-Control") ?? ""),
+        html: (res.headers.get("Content-Type") ?? "").startsWith("text/html"),
+        body: await res.text(),
+      }
+    }
+    const asModerator = { ...moderator.headers, "Sec-Fetch-Site": "same-origin", "Content-Type": "application/json" }
+    // A moderator's view of the place, or an error: an answer that isn't one is never read as "nothing hidden".
+    const view = async (ms) => {
+      const res = await bounded(`/api/admin/places/${id}`, { headers: asModerator }, ms)
+      const body = parse(await res.text())
+      const valid =
+        res.status === 200 &&
+        Number.isInteger(body?.rev) &&
+        Array.isArray(body?.suppressions) &&
+        body.suppressions.every((s) => typeof s?.id === "string" && (typeof s.reason === "string" || s.reason === null))
+      if (!valid) throw new Error(`the moderator's view of ${id} answered ${res.status} without a valid place`)
+      return body
+    }
+    // The feed's version is epoch.n (worker/routes/feed.ts), and a feed is what the browser's own Feed.parse accepts
+    // (src/lib/feed.ts, the shared schema): a feed the site couldn't apply is never evidence.
+    const VERSION = /^\d{1,15}\.\d{1,15}$/
+    const answered = await read("/api/v1/version")
+    const version = answered.status === 200 ? parse(answered.body)?.v : null
+    if (typeof version !== "string" || !VERSION.test(version))
+      return record("purge_freshness", [`the feed's version answered ${answered.status} without an epoch.n version`], "")
+    const page = `/place/${id}?edge-purge=${run}`
+    const feed = `/api/v1/feed?v=${encodeURIComponent(version)}&edge-purge=${run}`
+    const pageServed = (r) => r.status === 200 && r.html
+    const feedNames = (r, present) => {
+      const feed = r.status === 200 ? Feed.safeParse(parse(r.body)) : null
+      return !!feed?.success && feed.data.v === version && feed.data.places.some((p) => p.id === id) === present
+    }
+    const feedFresh = (r) => {
+      if (feedNames(r, false)) return true
+      const body = r.status === 409 ? parse(r.body) : null
+      return (
+        body?.code === "stale_version" &&
+        typeof body.v === "string" &&
+        VERSION.test(body.v) &&
+        body.v !== version &&
+        r.noStore &&
+        r.cache !== "HIT"
+      )
+    }
+    // Warm: stored by this run (MISS), then served from the edge (HIT). Its earliest expiry is counted from before the
+    // first read was sent.
+    const born = Date.now()
+    const first = [await read(page), await read(feed)]
+    const second = [await read(page), await read(feed)]
+    for (const [r, what] of [
+      [first[0], "page"],
+      [second[0], "page"],
+    ])
+      if (!pageServed(r)) return record("purge_freshness", [`${id} isn't published: its ${what} answered ${r.status}`], "")
+    if (!feedNames(first[1], true) || !feedNames(second[1], true))
+      return record("purge_freshness", [`${id} isn't in the feed at ${version} (${first[1].status}, ${second[1].status})`], "")
+    if (first.some((r) => r.cache !== "MISS") || second.some((r) => r.cache !== "HIT"))
+      return unseen(
+        "purge_freshness",
+        `the edge cache didn't store this run's own addresses afresh (MISS, then HIT; saw ${[...first, ...second].map((r) => r.cache ?? "none").join(", ")}): nothing to tell a purge from`,
+      )
+    // The window is checked against the entries' life at the moment the hide would go, after the moderator's view
+    // (which may be slow): with too little left, nothing is hidden.
+    const expires = born + t.edgeTtlMs
+    const { rev } = await view()
+    if (Date.now() + t.freshMs >= expires)
+      return unseen(
+        "purge_freshness",
+        `this run's entries would expire within the bound (${t.freshMs} ms) of the hide: nothing to tell a purge from expiry`,
+      )
+
+    const failures = []
+    const fresh = { page: null, feed: null }
+    const last = { page: "not read", feed: "not read" }
+    // unsent | committed | refused (the deployment said no) | unknown (no answer, or not a clear one)
+    let hide = "unsent"
+    let sent = null
+    try {
+      sent = Date.now()
+      hide = "unknown"
+      try {
+        const res = await bounded("/api/admin/suppressions", {
+          method: "POST",
+          headers: asModerator,
+          body: JSON.stringify({
+            placeId: id,
+            fields: ["whole"],
+            expectedRev: rev,
+            reason: `תרגיל purge ב־staging, מקום סינתטי (${marker})`,
+          }),
+        })
+        await res.text()
+        if (res.status === 200) hide = "committed"
+        else if (res.status >= 400 && res.status < 500) {
+          hide = "refused"
+          failures.push(`the moderator's hide was refused (${res.status})`)
+        } else failures.push(`the hide answered ${res.status} (${marker} on ${id})`)
+      } catch {
+        failures.push(`the hide's answer was lost (${marker} on ${id})`)
+      }
+      if (hide === "committed") {
+        while (Date.now() - sent < t.deadlineMs && (fresh.page === null || fresh.feed === null)) {
+          for (const [what, path, ok] of [
+            ["page", page, (r) => r.status === 410],
+            ["feed", feed, feedFresh],
+          ]) {
+            if (fresh[what] !== null) continue
+            const r = await read(path).catch(() => null)
+            if (r && ok(r)) fresh[what] = Date.now() - sent
+            else last[what] = r ? `${r.status}${r.cache ? ` ${r.cache}` : ""}` : "no answer in time"
+          }
+          if (fresh.page === null || fresh.feed === null) await sleep(t.everyMs)
+        }
+        for (const [what, ms] of Object.entries(fresh))
+          if (ms === null)
+            failures.push(
+              `the ${what} still served the place, or nothing valid, ${t.deadlineMs} ms after the hide was sent (last: ${last[what]})`,
+            )
+          else if (ms > t.freshMs) failures.push(`the ${what} was not fresh until ${ms} ms after the hide was sent (bound ${t.freshMs} ms)`)
+      }
+    } catch (err) {
+      failures.push(`the exercise stopped: ${err.message}`)
+    } finally {
+      if (sent !== null) failures.push(...(await cleanup(hide)))
+    }
+    record(
+      "purge_freshness",
+      failures,
+      `page fresh after ${fresh.page} ms, feed after ${fresh.feed} ms, from the hide's dispatch (bound ${t.freshMs} ms); ${marker} lifted`,
+    )
+
+    // Finds this run's hide by its marker, lifts it and sees it gone, within cleanupMs: every pass is checked against
+    // the end, and every request is bounded by what is left of it. A hide with no clear answer may still land, so it is
+    // looked for until the end; one that was refused, or seen lifted, is done. A lift that says 200 but leaves the hide
+    // active is tried again until the end, then reported.
+    async function cleanup(state) {
+      const end = Date.now() + t.cleanupMs
+      let note = "not tried"
+      while (Date.now() < end) {
+        try {
+          const v = await view(end - Date.now())
+          const own = v.suppressions.find((s) => s.reason?.includes(marker))
+          if (!own && state !== "unknown") return []
+          if (own && state === "lifted") note = `lifting ${own.id} answered 200, and it is still active`
+          if (!own) note = `${marker} not seen yet`
+          else {
+            const res = await bounded(
+              `/api/admin/suppressions/${encodeURIComponent(own.id)}/lift`,
+              {
+                method: "POST",
+                headers: asModerator,
+                body: JSON.stringify({
+                  expectedRev: v.rev,
+                  basisCode: "hidden_in_error",
+                  basisNote: `תרגיל purge ב־staging: ההסתרה נעשתה לבדיקה בלבד (${marker}).`,
+                  confirm: { affirmativeBasis: true, notNonresponseOrDispute: true },
+                }),
+              },
+              end - Date.now(),
+            )
+            await res.text()
+            // A lift that took is seen only by a following view, after the usual pause.
+            if (res.status === 200) state = "lifted"
+            note = `lifting ${own.id} answered ${res.status}`
+          }
+        } catch (err) {
+          note = err.message
+        }
+        await sleep(Math.min(t.everyMs, end - Date.now()))
+      }
+      return [
+        `unresolved: this run's hide (${marker}) on ${id} couldn't be shown lifted within ${t.cleanupMs} ms (last: ${note}); the place may stay hidden`,
+      ]
+    }
+  }
+
   if (expectTag !== null) record("deployed_version", version.failures, `${version.answers} Worker answers named ${expectTag}`)
   else if (!local) unseen("deployed_version", "no version expected (--expect-tag): which version answered is unknown")
   return results
@@ -324,7 +550,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     )
     process.exit(2)
   }
-  const { CF_ACCESS_CLIENT_ID: id, CF_ACCESS_CLIENT_SECRET: secret, EDGE_IDENTITIES, EDGE_PLACE } = process.env
+  const { CF_ACCESS_CLIENT_ID: id, CF_ACCESS_CLIENT_SECRET: secret, EDGE_IDENTITIES, EDGE_PLACE, EDGE_PURGE } = process.env
   const results = await edgeChecks(base, {
     local,
     dev: args.includes("--dev"),
@@ -333,12 +559,17 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     identities: EDGE_IDENTITIES ? JSON.parse(EDGE_IDENTITIES) : null,
     // An unset repository variable arrives as an empty string: not named.
     place: EDGE_PLACE || null,
+    // An unset secret arrives as an empty string: no exercise.
+    purge: EDGE_PURGE ? JSON.parse(EDGE_PURGE) : null,
     expectTag,
   })
   for (const r of results) console.log(`${r.status.padEnd(10)}  ${r.check}: ${Array.isArray(r.detail) ? r.detail.join("; ") : r.detail}`)
   const result = outcome(results)
   // The report names checks and statuses only; never a credential or an answer's body.
   if (option("--report"))
-    writeFileSync(option("--report"), JSON.stringify({ mode: local ? "local" : "deployment", outcome: result, results }, null, 2))
+    writeFileSync(
+      option("--report"),
+      JSON.stringify({ mode: local ? "local" : "deployment", outcome: result, expect_tag: expectTag, results }, null, 2),
+    )
   process.exit({ pass: 0, fail: 1, incomplete: 3 }[result])
 }

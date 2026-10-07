@@ -1,6 +1,6 @@
-import { z } from "./zod"
-import { CURATED_KINDS, PublicCurated } from "./curated"
-import { cleanText } from "./text"
+import { z } from "./zod.ts"
+import { CURATED_KINDS, PublicCurated } from "./curated.ts"
+import { cleanText } from "./text.ts"
 
 /** Must match ADDABLE_KINDS in src/data/taxonomy.ts; a test keeps them equal. Communities are out of scope. */
 export const SUBMITTABLE_KINDS = ["bench", "lookout", "grove", "garden", "plaque", "monument", "other"] as const

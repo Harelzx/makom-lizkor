@@ -9,6 +9,21 @@ import { readFileSync } from "node:fs"
 import { pathToFileURL } from "node:url"
 
 const STAGING = ".github/workflows/staging.yml"
+/**
+ * Every check the edge check makes against a deployment, each of which must have passed (scripts/edge-check.mjs). The
+ * receipt carries each one's own result, so a release never rests on an overall word alone.
+ */
+export const REQUIRED_CHECKS = [
+  "responses",
+  "headers",
+  "private_no_store",
+  "private_isolation",
+  "place_page",
+  "no_shared_hit",
+  "purge_freshness",
+  "workers_dev_closed",
+  "deployed_version",
+]
 
 /** The run that uploaded this commit's newest unexpired receipt; there is none, the release has no staging evidence. */
 export function receiptRun(artifacts, sha) {
@@ -29,6 +44,11 @@ export function stagingEvidenceProblems({ sha, artifacts, run, receipt }) {
   if (receipt.sha !== sha) problems.push(`the receipt names ${receipt.sha}, not ${sha}`)
   if (receipt.run_id !== id) problems.push(`the receipt was written by run ${receipt.run_id}, not run ${id}`)
   if (receipt.edge !== "pass") problems.push(`staging's edge check was ${receipt.edge}, not passed`)
+  // Its checks were held to the version this commit's deploy tagged (edge-check --expect-tag), not some other one.
+  const tag = `staging-${sha.slice(0, 12)}`
+  if (receipt.expect_tag !== tag) problems.push(`the receipt's checks weren't held to ${tag} (${receipt.expect_tag})`)
+  for (const c of REQUIRED_CHECKS)
+    if (receipt.checks?.[c] !== "pass") problems.push(`staging's ${c} was ${receipt.checks?.[c] ?? "missing"}, not passed`)
   return problems
 }
 
