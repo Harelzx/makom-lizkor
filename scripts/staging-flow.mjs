@@ -84,7 +84,7 @@ export async function stagingFlow(base, { fetch: send = globalThis.fetch, header
   // 1. A synthetic submission, through the real route and its Turnstile check (test keys on staging).
   const submitted = await ask("/api/v1/submissions", {
     method: "POST",
-    headers: { "Content-Type": "application/json", "Idempotency-Key": `flow${run}`, "Turnstile-Token": turnstileToken },
+    headers: { "Content-Type": "application/json", "Idempotency-Key": `staging-flow-${run}-${run}`, "Turnstile-Token": turnstileToken },
     body: JSON.stringify({
       kind: "bench",
       name_he: `${SYNTHETIC_MARK}ספסל לבדיקת הזרימה ${run}`,
@@ -156,7 +156,8 @@ export async function stagingFlow(base, { fetch: send = globalThis.fetch, header
   return result()
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+// Run as a command only: imported (by the Worker's tests, inside workerd) there is no script path to compare.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const args = process.argv.slice(2)
   const base = args.find((a) => /^https?:\/\//.test(a))
   const at = args.indexOf("--report")
