@@ -84,8 +84,12 @@ describe("moving the probe on", () => {
     expect(unauthenticated.status).toBe(401)
     expect((await move(exercise(), g, await devToken("dev@example.test"))).status).toBe(403)
     expect((await move(exercise(), g, await serviceToken("not-listed.access"))).status).toBe(403)
-    // Read-only diagnostics never gain write access by being listed here as well (a73).
+    // Read-only diagnostics never gain write access by being listed here as well (a73), and the staging machine
+    // moderator (H1) never gains the probe's: one token, one power.
     expect((await move(exercise(), g, await serviceToken(ops), both)).status).toBe(403)
+    const machine = env.MODERATOR_SERVICE_TOKENS.split(",")[0]
+    const shared = { ...env, PROBE_SERVICE_TOKENS: `${probeId()},${machine}` }
+    expect((await move(exercise(), g, await serviceToken(machine), shared)).status).toBe(403)
     expect(await generation()).toBe(g)
     expect(purged).toEqual([])
   })
