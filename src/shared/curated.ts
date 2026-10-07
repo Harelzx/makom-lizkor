@@ -1,4 +1,5 @@
-import { z } from "./zod"
+// With its extension: scripts load this file in Node directly (curated-fixtures.test.mjs), with no bundler to resolve it.
+import { z } from "./zod.ts"
 
 /**
  * Curated records (spec 3, 9; phase 7): the operator's own places, kept in D1 beside contributions. What only they

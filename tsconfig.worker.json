@@ -8,6 +8,7 @@
     "types": ["@cloudflare/vitest-plugin/types"],
     "skipLibCheck": true,
     "verbatimModuleSyntax": true,
+    "allowImportingTsExtensions": true,
     "noEmit": true,
     "strict": true,
     "noUnusedLocals": true,
