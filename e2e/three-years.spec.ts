@@ -5,6 +5,10 @@ import { expect, test, type Page } from "./fixtures"
 test.use({ timezoneId: "America/New_York" })
 
 const panelLine = (years: string, days: string) => `${years} · ${days} ימים · לא נשכח`
+// The day (and the panel with it) comes once both steps of the sunrise have painted, and each waits for the map's style
+// to load (intro.tsx, shiftLight); skipping the film takes the same path, after the map's own chunk. On GitHub's runner
+// the page was still in the sunrise 15 s after its line, and 15 s after a skip (three-years:47 on 1e650ef's CI).
+const DAY_COMES = { timeout: 30_000 }
 /** A typed line: whole for screen readers and letter by letter on screen, so it is found by the paragraph that holds it. */
 const typedLine = (page: Page, text: string) => page.locator("p", { hasText: text })
 
@@ -39,9 +43,7 @@ test("the opening stops at 06:29, counts the days to today, and says how long it
 
   await page.getByRole("button", { name: "אל הבוקר" }).click()
   await expect(page.getByText("שלושה חורפים עברו מאז. ובכל אחד מהם, הכלניות חזרו לפרוח.")).toBeVisible()
-  // The day (and the panel with it) comes once both steps of the sunrise have painted, and each waits for the map's
-  // style to load (intro.tsx, shiftLight): on GitHub's runner the page was still in the sunrise 15 s after its line.
-  await expect(page.getByText(panelLine("שלוש שנים", "1,093"))).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByText(panelLine("שלוש שנים", "1,093"))).toBeVisible(DAY_COMES)
 })
 
 test("the count follows the date in Israel, not the visitor's own", async ({ page }) => {
@@ -49,7 +51,7 @@ test("the count follows the date in Israel, not the visitor's own", async ({ pag
   await page.clock.setFixedTime(new Date("2026-10-06T22:30:00Z"))
   await page.goto("/")
   await page.getByRole("button", { name: "דילוג" }).click()
-  await expect(page.getByText(panelLine("שלוש שנים", "1,096"))).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByText(panelLine("שלוש שנים", "1,096"))).toBeVisible(DAY_COMES)
 })
 
 for (const [date, years] of [
@@ -60,6 +62,6 @@ for (const [date, years] of [
     await page.clock.setFixedTime(new Date(date))
     await page.goto("/")
     await page.getByRole("button", { name: "דילוג" }).click()
-    await expect(page.getByText(new RegExp(`^${years} · [\\d,]+ ימים · לא נשכח$`))).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByText(new RegExp(`^${years} · [\\d,]+ ימים · לא נשכח$`))).toBeVisible(DAY_COMES)
   })
 }
