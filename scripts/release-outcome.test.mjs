@@ -6,16 +6,19 @@ import { releaseOutcome } from "./release-outcome.mjs"
 const at = (migrated, deployed, checked, published = "skipped") =>
   releaseOutcome({ release: "release-2026-11-02", migrated, deployed, checked, published })
 
-test("stopped before the migrations: nothing in production changed", () => {
+test("stopped before the migrations: this attempt changed nothing, and what is live is read, not assumed", () => {
   const text = at("skipped", "skipped", "skipped")
-  assert.match(text, /Nothing in production changed/)
-  assert.doesNotMatch(text, /live/i)
+  assert.match(text, /This attempt changed nothing in production/)
+  assert.match(text, /deployments list/)
+  assert.doesNotMatch(text, /previous release/)
 })
 
-test("the migrations failed: the schema may be partly migrated, the code is the previous release's", () => {
+test("the migrations failed: the schema may be partly migrated, and this attempt deployed no code", () => {
   const text = at("failure", "skipped", "skipped")
   assert.match(text, /migrations may be partly applied/)
-  assert.match(text, /previous release/)
+  assert.match(text, /This attempt deployed no code/)
+  assert.match(text, /deployments list/)
+  assert.doesNotMatch(text, /previous release/)
 })
 
 test("migrated, then the deploy failed: the code may or may not have changed, and that is said, not assumed", () => {
@@ -44,9 +47,24 @@ test("an outcome it doesn't know is never read as a good one", () => {
   assert.doesNotMatch(text, /Nothing in production changed/)
 })
 
-test("migrated, then stopped before the deploy: the previous release's code on the new schema", () => {
+test("migrated, then stopped before the deploy: this attempt deployed no code, on a schema it migrated", () => {
   const text = at("success", "skipped", "skipped")
   assert.match(text, /The deploy never ran/)
-  assert.match(text, /previous release's code/)
-  assert.doesNotMatch(text, /may or may not/)
+  assert.match(text, /This attempt deployed no code/)
+  assert.match(text, /deployments list/)
+  assert.doesNotMatch(text, /previous release|may or may not/)
+})
+
+// L-RELEASE-STATE-1 (a79): attempt A deploys release-2026-11-02 and its checks fail, so it stays live, unverified and a
+// draft; attempt B of the same release then stops before deploying. B's summary can't know what A left, so it never
+// names a previous or verified release as live: it says what B itself did, that an earlier attempt may have left the
+// release live, and where to look.
+test("a retry that stops before deploying never claims the previous release is what's live", () => {
+  const first = at("success", "success", "failure")
+  assert.match(first, /release-2026-11-02 is live in production and not verified/)
+  for (const retry of [at("failure", "skipped", "skipped"), at("success", "skipped", "skipped"), at("skipped", "skipped", "skipped")]) {
+    assert.doesNotMatch(retry, /previous release|is still|Nothing in production changed|verified release is live/)
+    assert.match(retry, /An earlier attempt of release-2026-11-02 may have left it live and unverified/)
+    assert.match(retry, /release-attempt-release-2026-11-02-/)
+  }
 })

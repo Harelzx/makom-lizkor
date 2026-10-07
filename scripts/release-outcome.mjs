@@ -1,25 +1,34 @@
-// What a failed release left in production, from its steps' outcomes. release.yml runs this
-// when any step fails, so whoever opens the run reads the state before choosing what to do.
-// An outcome it doesn't recognise is read as "may have happened": a failed final check is not
-// proof that nothing was deployed.
+// What a failed release attempt left in production, from its steps' outcomes. release.yml runs this when any step
+// fails or the run is cancelled, so whoever opens the run reads the state before choosing what to do. It knows only
+// this attempt: an earlier attempt of the same release may have deployed it and left it live, unverified and a draft
+// (L-RELEASE-STATE-1), so a summary that deployed nothing never names what is live; it says where to look. An outcome
+// it doesn't recognise is read as "may have happened": a failed final check is not proof that nothing was deployed.
 //   node scripts/release-outcome.mjs <release> <migrated> <deployed> <checked> <published>
 
 const ran = (outcome) => outcome !== "skipped"
 const done = (outcome) => outcome === "success"
 
 export function releaseOutcome({ release, migrated, deployed, checked, published }) {
-  const lines = [`## ${release}: the release failed`, ""]
+  const lines = [`## ${release}: this attempt failed`, ""]
+  // What is live when this attempt deployed nothing: not known from here.
+  const look = [
+    `An earlier attempt of ${release} may have left it live and unverified: what is live is not known from this run.`,
+    "Read `wrangler deployments list` for the active version, and the attempt records",
+    `(release-attempt-${release}-<attempt>) and their checks, before choosing rollback.yml (code only, schema-checked) or a fix forward.`,
+  ]
   if (!ran(migrated) && !ran(deployed)) {
-    lines.push("It stopped before the migrations. Nothing in production changed; the release stays a draft.")
+    lines.push("It stopped before the migrations. This attempt changed nothing in production; the release stays a draft.", ...look)
   } else if (!done(migrated)) {
     lines.push(
-      "The migrations failed: the migrations may be partly applied. The code is still the previous release's.",
-      "Check the schema against the Time Travel bookmark in this run's artifacts before anything else; the release stays a draft.",
+      "The migrations failed: the migrations may be partly applied. This attempt deployed no code.",
+      "Check the schema against this run's Time Travel bookmark first; the release stays a draft.",
+      ...look,
     )
   } else if (!ran(deployed)) {
     lines.push(
-      "The migrations were applied. The deploy never ran: production serves the previous release's code on the new schema.",
-      "The migrations are expand-only, so that code still works on it. The release stays a draft; run it again, or fix forward.",
+      "The migrations were applied. The deploy never ran. This attempt deployed no code; whatever is live now runs on",
+      "the schema it migrated (the migrations are expand-only). The release stays a draft.",
+      ...look,
     )
   } else if (!done(deployed)) {
     lines.push(
