@@ -1067,7 +1067,12 @@ test("the probe's headers must be an Access pair, whole", async () => {
 })
 
 test("with both the staging exercise and the probe, the probe is checked on its own as purge_probe", async () => {
-  const results = await edgeChecks("https://site.example", { fetch: probeSite().fetch, purge: PURGE, probe: PROBE, purgeTiming: PURGE_TIMING })
+  const results = await edgeChecks("https://site.example", {
+    fetch: probeSite().fetch,
+    purge: PURGE,
+    probe: PROBE,
+    purgeTiming: PURGE_TIMING,
+  })
   const r = results.find((x) => x.check === "purge_probe")
   assert.equal(r?.status, "pass", JSON.stringify(r))
   assert.doesNotMatch(String(results.find((x) => x.check === "purge_freshness").detail), /content-free probe/)

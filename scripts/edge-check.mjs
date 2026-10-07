@@ -76,6 +76,7 @@ export async function edgeChecks(
     expectTag = null,
     readiness = READINESS,
     purge = null,
+    probe = null,
     purgeTiming = PURGE_TIMING,
   } = {},
 ) {
@@ -91,6 +92,9 @@ export async function edgeChecks(
   }
   if (purge !== null && !(typeof purge?.place === "string" && PLACE_ID.test(purge.place) && headersOk(purge.moderator?.headers)))
     throw new Error("EDGE_PURGE must name a synthetic place's id and a moderator's headers")
+  // The probe's token goes as an Access pair, whole (worker/lib/access.ts probeCaller verifies what Access passes on).
+  if (probe !== null && !(headersOk(probe?.headers) && new Headers(probe.headers).has("CF-Access-Client-Id")))
+    throw new Error("EDGE_PROBE must give the purge probe's Access pair (CF-Access-Client-Id and CF-Access-Client-Secret)")
   const url = (path) => new URL(path, base).toString()
   // Once the expected version has answered, every Worker answer measured must name it.
   const version = { holding: false, answers: 0, failures: [] }
@@ -303,9 +307,20 @@ export async function edgeChecks(
     unseen("no_shared_hit", "the owners' own probes weren't all seen through the edge cache (CF-Cache-Status)")
   else record("no_shared_hit", [], `${ownerProbes.seen} owner probes through the edge cache, no HIT`)
 
-  if (!purge) unseen("purge_freshness", "needs a synthetic place and a moderator (EDGE_PURGE): the staging purge exercise")
-  // Anything before the hide is sent only stops the exercise; from the hide on, it handles its own end.
-  else await purgeExercise().catch((err) => record("purge_freshness", [`the exercise stopped before any hide: ${err.message}`], ""))
+  // Staging hides a synthetic place (EDGE_PURGE); production, with no such place, moves the content-free probe
+  // (EDGE_PROBE, L-PURGE). Where both are given, the probe is checked on its own as purge_probe.
+  if (purge)
+    // Anything before the hide is sent only stops the exercise; from the hide on, it handles its own end.
+    await purgeExercise().catch((err) => record("purge_freshness", [`the exercise stopped before any hide: ${err.message}`], ""))
+  else if (!probe)
+    unseen(
+      "purge_freshness",
+      "needs a synthetic place and a moderator (EDGE_PURGE, staging) or the purge probe's token (EDGE_PROBE, production)",
+    )
+  if (probe) {
+    const check = purge ? "purge_probe" : "purge_freshness"
+    await probeExercise(check).catch((err) => record(check, [`the probe stopped before it moved: ${err.message}`], ""))
+  }
 
   if (!workersDev) unseen("workers_dev_closed", "no workers.dev address given (--workers-dev)")
   else {
@@ -331,6 +346,111 @@ export async function edgeChecks(
     else if (res.status === 401 || res.status === 403 || toAccess) record("workers_dev_closed", [], `${workersDev} refused (${res.status})`)
     else unseen("workers_dev_closed", `${workersDev} answered ${res.status}, not a recognized refusal: inconclusive`)
   }
+  /**
+   * The production purge probe (L-PURGE; a73, Q2): the purge mechanism seen working with no place, person or content
+   * involved. The run reads its own address of the probe (a nonce in the query) until the edge serves it from its cache,
+   * so the entry was stored by this run and lives edgeTtlMs from then; a window that would outlast that is incomplete
+   * before anything moves. The probe's own token then moves the generation on, and purges its tag; timed from the
+   * move's dispatch, the address must answer the new generation within freshMs. A lost answer or a refused purge is sent
+   * again as the same exercise, which never moves twice. Another exercise moving first leaves it incomplete; a refused
+   * token, an invalid answer or a stale one past the bound fails. The edge locations (CF-Ray) are recorded: this shows
+   * the purge at the locations that answered, not everywhere.
+   */
+  async function probeExercise(check) {
+    const t = purgeTiming
+    const nonce = () => globalThis.crypto.randomUUID().replaceAll("-", "").slice(0, 16)
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)))
+    const bounded = (path, init = {}) => fetch(url(path), { redirect: "manual", ...init, signal: AbortSignal.timeout(t.requestMs) })
+    const parse = (text) => {
+      try {
+        return JSON.parse(text)
+      } catch {
+        return null
+      }
+    }
+    const address = `/api/v1/purge-probe?run=${nonce()}`
+    const read = async () => {
+      const res = await bounded(address)
+      const body = parse(await res.text())
+      const valid =
+        res.status === 200 && Object.keys(body ?? {}).length === 1 && Number.isSafeInteger(body?.generation) && body.generation >= 0
+      return {
+        status: res.status,
+        cache: res.headers.get("CF-Cache-Status"),
+        colo: /-([A-Z]{3})$/.exec(res.headers.get("CF-Ray") ?? "")?.[1] ?? "unknown",
+        generation: valid ? body.generation : null,
+      }
+    }
+    const born = Date.now()
+    const first = await read()
+    const second = await read()
+    for (const r of [first, second])
+      if (r.generation === null) return record(check, [`the probe's address answered ${r.status} without a generation`], "")
+    if (first.cache !== "MISS" || second.cache !== "HIT")
+      return unseen(
+        check,
+        `the edge cache didn't store this run's own address afresh (MISS, then HIT; saw ${first.cache ?? "none"}, ${second.cache ?? "none"}): nothing to tell a purge from`,
+      )
+    if (second.generation !== first.generation)
+      return unseen(check, "the probe's generation moved between this run's own reads: another exercise is running")
+    const from = second.generation
+    if (Date.now() + t.freshMs >= born + t.edgeTtlMs)
+      return unseen(
+        check,
+        `this run's entry would expire within the bound (${t.freshMs} ms) of the move: nothing to tell a purge from expiry`,
+      )
+
+    const move = { method: "POST", headers: { ...probe.headers, "Content-Type": "application/json" } }
+    move.body = JSON.stringify({ exercise: nonce(), expected: from })
+    const sent = Date.now()
+    let moved = false
+    let last = "no answer"
+    for (let n = 0; n < 3 && !moved && Date.now() - sent < t.freshMs; n++) {
+      try {
+        const res = await bounded("/api/ops/purge-probe", move)
+        const body = parse(await res.text())
+        if (res.status === 200 && body?.generation === from + 1 && body?.purged === true) moved = true
+        else if (res.status === 409)
+          return unseen(check, "another exercise moved the probe first (exercises are serialized): nothing measured")
+        else if (res.status === 401 || res.status === 403) {
+          last = `refused (${res.status})`
+          break
+        } else last = `${res.status}${typeof body?.code === "string" ? ` ${body.code}` : ""}`
+      } catch {
+        last = "no answer in time"
+      }
+    }
+    if (!moved) return record(check, [`the probe didn't move and purge (last: ${last})`], "")
+
+    const failures = []
+    let fresh = null
+    let freshAt = "unknown"
+    let seen = "not read"
+    while (fresh === null && Date.now() - sent < t.deadlineMs) {
+      const r = await read().catch(() => null)
+      if (r?.generation === null) {
+        failures.push(`the probe's address answered ${r.status} without a generation after the move`)
+        break
+      }
+      if (r && r.generation > from) {
+        fresh = Date.now() - sent
+        freshAt = r.colo
+      } else {
+        seen = r ? `${r.status} ${r.cache ?? "uncached"}, generation ${r.generation}` : "no answer in time"
+        await sleep(t.everyMs)
+      }
+    }
+    if (!failures.length && fresh === null)
+      failures.push(`the probe's address still served generation ${from}, ${t.deadlineMs} ms after the move was sent (last: ${seen})`)
+    else if (!failures.length && fresh > t.freshMs)
+      failures.push(`the probe's address was not fresh until ${fresh} ms after the move was sent (bound ${t.freshMs} ms)`)
+    record(
+      check,
+      failures,
+      `content-free probe: generation ${from} → ${from + 1}, fresh after ${fresh} ms from the move's dispatch (bound ${t.freshMs} ms); edge locations: ${first.colo}, ${second.colo}, ${freshAt}`,
+    )
+  }
+
   /**
    * The staging purge exercise (spec 5, 13; STG-PURGE-*). The run reads its own addresses for the place's page and the
    * current feed, new to the edge (a nonce in the query, which is part of the cache key), until the edge serves them
@@ -561,7 +681,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     )
     process.exit(2)
   }
-  const { CF_ACCESS_CLIENT_ID: id, CF_ACCESS_CLIENT_SECRET: secret, EDGE_IDENTITIES, EDGE_PLACE, EDGE_PURGE } = process.env
+  const { CF_ACCESS_CLIENT_ID: id, CF_ACCESS_CLIENT_SECRET: secret, EDGE_IDENTITIES, EDGE_PLACE, EDGE_PURGE, EDGE_PROBE } = process.env
   const results = await edgeChecks(base, {
     local,
     dev: args.includes("--dev"),
@@ -572,6 +692,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     place: EDGE_PLACE || null,
     // An unset secret arrives as an empty string: no exercise.
     purge: EDGE_PURGE ? JSON.parse(EDGE_PURGE) : null,
+    probe: EDGE_PROBE ? JSON.parse(EDGE_PROBE) : null,
     expectTag,
   })
   for (const r of results) console.log(`${r.status.padEnd(10)}  ${r.check}: ${Array.isArray(r.detail) ? r.detail.join("; ") : r.detail}`)
