@@ -67,24 +67,38 @@ test("a family's place on private property is shown approximately, with no way t
 })
 
 test("after one visit, the approved places are there with no connection, from the last snapshot", async ({ browser }) => {
+  // Where the time goes, printed as it passes so a timeout still shows it (a57, CI-EVIDENCE-1: this test timed out
+  // late in a full run, with pages of earlier tests still open).
+  const t0 = Date.now()
+  const pages = () => browser.contexts().reduce((n, c) => n + c.pages().length, 0)
+  const mark = (step: string) =>
+    console.log(
+      `OFFLINE-TIMING +${((Date.now() - t0) / 1000).toFixed(2)}s ${step} (open: ${browser.contexts().length} contexts, ${pages()} pages)`,
+    )
+  mark("start")
   const name = `ספסל דמו לאופליין ${Date.now()}`
   await published(browser, name)
+  mark("published (submitted and approved)")
   const ctx = await ownAddress(await browser.newContext())
   const page = await ctx.newPage()
   const fed = page.waitForResponse((r) => r.url().includes("/api/v1/feed?") && r.status() === 200)
   await page.goto("/")
   await page.getByRole("button", { name: "דילוג", exact: true }).click()
   await fed
+  mark("first feed received")
   await snapshotSaved(page, name)
+  mark("offline copy stored")
 
   // Now the server can't be reached at all.
   await page.route("**/api/**", (r) => r.abort())
   await page.reload()
   await page.getByRole("button", { name: "דילוג", exact: true }).click()
   await expect(page.getByRole("button", { name: /^חיפוש מקום/ })).toBeVisible(DAY)
+  mark("reloaded with no connection, day reached")
   await page.getByRole("button", { name: /^חיפוש מקום/ }).click()
   await page.getByRole("dialog").getByRole("combobox").fill(name)
   await expect(page.getByRole("option", { name: new RegExp(name) })).toBeVisible()
+  mark("found offline")
 })
 
 test("a link to a newly approved place opens it even when this browser holds an older offline copy", async ({ browser }) => {
