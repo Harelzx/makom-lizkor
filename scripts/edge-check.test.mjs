@@ -425,6 +425,23 @@ const PLACE_ROW = {
   summary_he: "ספסל סינתטי לבדיקת הקצה, לא מקום אמיתי.",
 }
 const OTHER_ROW = { ...PLACE_ROW, id: "other-place", name_he: "מקום סינתטי אחר" }
+/** One of the site's own places, as the feed carries it (src/shared/curated.ts PublicCurated). */
+const CURATED_ROW = {
+  ...PLACE_ROW,
+  id: "curated-place",
+  kind: "community",
+  name_he: "קהילה סינתטית",
+  curated: { links: [], coord_source: "manual", region: "envelope", photos: [] },
+}
+/** A contribution with every optional field it may carry. */
+const RICH_ROW = {
+  ...PLACE_ROW,
+  id: "rich-place",
+  in_memory_of: "לזכר מישהו",
+  link_url: "https://example.org/x",
+  access_note: "בתיאום מראש",
+  photo: { url: "/media/public/p_x.webp", alt: "ספסל", credit: "צלם" },
+}
 /**
  * A deployment behind an edge cache, as the Worker and Workers Caching behave: each address (its path and query, as
  * the cache key) kept until purged by tag or until its TTL passes (the version's own is shorter in the Worker: 10 s
@@ -447,6 +464,7 @@ function edgeSite({
   liftNoop = false,
   viewDelayMs = 0,
   versionAnswer = null,
+  extraRow = null,
   viewAfterHide = null,
   feedAfterHide = null,
   stall = null,
@@ -454,6 +472,8 @@ function edgeSite({
 } = {}) {
   const state = { rev: 3, v: 7, hiddenOnce: false, suppressions: [], calls: [] }
   const cache = new Map()
+  // Another row the feed carries throughout, before and after the hide.
+  const extra = extraRow ? [extraRow] : []
   const active = () => state.suppressions.filter((s) => !s.lifted)
   const html = { "Content-Type": "text/html" }
   const json = { "Content-Type": "application/json" }
@@ -471,7 +491,10 @@ function edgeSite({
       return v === `0.${state.v}`
         ? {
             status: 200,
-            body: JSON.stringify({ v, places: active().some((s) => s.field === "whole") ? [OTHER_ROW] : [PLACE_ROW, OTHER_ROW] }),
+            body: JSON.stringify({
+              v,
+              places: active().some((s) => s.field === "whole") ? [OTHER_ROW, ...extra] : [PLACE_ROW, OTHER_ROW, ...extra],
+            }),
             headers: json,
             tag: "feed",
           }
@@ -764,6 +787,40 @@ test(
     assert.equal(site.state.suppressions.find((s) => s.id === "s_other").lifted, false)
   },
 )
+
+// What the browser's own Feed.parse refuses (src/lib/feed.ts) is never a feed here, warm or measured.
+const BAD_ROWS = [
+  ["an unknown kind", { ...OTHER_ROW, kind: "bogus" }],
+  ["a contribution's photo that isn't one", { ...OTHER_ROW, photo: null }],
+  ["a contribution's photo without its fields", { ...OTHER_ROW, photo: { url: 1 } }],
+  ["a curated-only kind without its curated data", { ...OTHER_ROW, kind: "community" }],
+  ["a curated place with malformed curated data", { ...CURATED_ROW, curated: { ...CURATED_ROW.curated, coord_source: "gps" } }],
+]
+
+test("a feed row the public place schema refuses fails the exercise, warm (nothing hidden) or measured (the hide lifted) (STG-PURGE-RESPONSE-1)", async () => {
+  for (const [what, row] of BAD_ROWS) {
+    const warm = edgeSite({ extraRow: row })
+    const w = await purgeOf(warm)
+    assert.equal(w.status, "fail", `warm, ${what}: ${JSON.stringify(w)}`)
+    assert.ok(!warm.state.calls.some((c) => c.startsWith("POST")), `warm, ${what}`)
+    const measured = edgeSite({ feedAfterHide: { status: 200, body: JSON.stringify({ v: "0.7", places: [row] }) } })
+    const m = await purgeOf(measured)
+    assert.equal(m.status, "fail", `measured, ${what}: ${JSON.stringify(m)}`)
+    assert.ok(liftedAll(measured), `measured, ${what}`)
+  }
+})
+
+test("valid contributions with their optional fields and valid curated places are feeds, warm and measured (STG-PURGE-RESPONSE-1)", async () => {
+  for (const extraRow of [RICH_ROW, CURATED_ROW]) {
+    // Warm with the row, then the genuine uncached 409.
+    const r = await purgeOf(edgeSite({ extraRow }))
+    assert.equal(r.status, "pass", `${extraRow.id}: ${JSON.stringify(r)}`)
+  }
+  const measured = await purgeOf(
+    edgeSite({ feedAfterHide: { status: 200, body: JSON.stringify({ v: "0.7", places: [OTHER_ROW, RICH_ROW, CURATED_ROW] }) } }),
+  )
+  assert.equal(measured.status, "pass", JSON.stringify(measured))
+})
 
 test("the purge exercise is incomplete without a moderator and a synthetic place, or without an edge cache to see (spec 13)", async () => {
   const none = await edgeChecks("https://site.example", { fetch: edgeSite().fetch })

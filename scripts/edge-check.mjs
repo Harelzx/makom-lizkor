@@ -26,6 +26,7 @@
 // Exit: 0 every check passed (or skipped, locally); 1 a check failed; 3 nothing failed but something is incomplete.
 import { writeFileSync } from "node:fs"
 import { pathToFileURL } from "node:url"
+import { Feed } from "../src/shared/contract.ts"
 import { CSP, SECURITY_HEADERS } from "../worker/lib/security-headers.ts"
 
 /** Each public address and the answer it must give: its status, and what its body must be where that's known. */
@@ -370,16 +371,9 @@ export async function edgeChecks(
       if (!valid) throw new Error(`the moderator's view of ${id} answered ${res.status} without a valid place`)
       return body
     }
-    // The feed's version is epoch.n (worker/routes/feed.ts); a place row carries what every public place has
-    // (src/shared/contract.ts PublicPlace). A feed the site couldn't read is never evidence.
+    // The feed's version is epoch.n (worker/routes/feed.ts), and a feed is what the browser's own Feed.parse accepts
+    // (src/lib/feed.ts, the shared schema): a feed the site couldn't apply is never evidence.
     const VERSION = /^\d{1,15}\.\d{1,15}$/
-    const placeRow = (p) =>
-      !!p &&
-      typeof p === "object" &&
-      ["id", "kind", "name_he", "place_he", "summary_he"].every((k) => typeof p[k] === "string") &&
-      Number.isFinite(p.lat) &&
-      Number.isFinite(p.lng) &&
-      (p.precision === "exact" || p.precision === "approx")
     const answered = await read("/api/v1/version")
     const version = answered.status === 200 ? parse(answered.body)?.v : null
     if (typeof version !== "string" || !VERSION.test(version))
@@ -388,10 +382,8 @@ export async function edgeChecks(
     const feed = `/api/v1/feed?v=${encodeURIComponent(version)}&edge-purge=${run}`
     const pageServed = (r) => r.status === 200 && r.html
     const feedNames = (r, present) => {
-      const body = r.status === 200 ? parse(r.body) : null
-      return (
-        body?.v === version && Array.isArray(body.places) && body.places.every(placeRow) && body.places.some((p) => p.id === id) === present
-      )
+      const feed = r.status === 200 ? Feed.safeParse(parse(r.body)) : null
+      return !!feed?.success && feed.data.v === version && feed.data.places.some((p) => p.id === id) === present
     }
     const feedFresh = (r) => {
       if (feedNames(r, false)) return true
