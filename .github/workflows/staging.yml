@@ -37,6 +37,8 @@ jobs:
       STAGING_PUBLIC_ORIGIN: ${{ vars.STAGING_PUBLIC_ORIGIN }}
       STAGING_TURNSTILE_HOSTNAMES: ${{ vars.STAGING_TURNSTILE_HOSTNAMES }}
       STAGING_MODERATORS: ${{ vars.STAGING_MODERATORS }}
+      # The synthetic machine moderator's service token client id (H1); unset, there is none and nothing changes.
+      STAGING_MODERATOR_SERVICE_TOKENS: ${{ vars.STAGING_MODERATOR_SERVICE_TOKENS }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -67,7 +69,7 @@ jobs:
           npx wrangler deploy --tag "staging-${SHA:0:12}" --message "staging $SHA" --secrets-file "$secrets" \
             --var "ACCESS_TEAM_DOMAIN:$STAGING_ACCESS_TEAM_DOMAIN" --var "ACCESS_AUD:$STAGING_ACCESS_AUD" \
             --var "PUBLIC_ORIGIN:$STAGING_PUBLIC_ORIGIN" --var "TURNSTILE_HOSTNAMES:$STAGING_TURNSTILE_HOSTNAMES" \
-            --var "MODERATORS:$STAGING_MODERATORS"
+            --var "MODERATORS:$STAGING_MODERATORS" --var "MODERATOR_SERVICE_TOKENS:$STAGING_MODERATOR_SERVICE_TOKENS"
       # It first waits, bounded, for the version just deployed (its tag) and holds every Worker answer to it (a61).
       # Through Access with the service token; the same address probed without it must be refused (Access closes this
       # workers.dev address). The synthetic owners, the named place and the purge exercise come from the repository;

@@ -14,9 +14,10 @@ import type { AppEnv } from "../index"
 import { moderator } from "../lib/access"
 import { clock } from "../lib/clock"
 import { PRIVATE, problem } from "../lib/http"
+import { machineMay, syntheticRev } from "../lib/synthetic"
 import { opEnv } from "../lib/purge"
 
-type AdminEnv = { Bindings: Env; Variables: AppEnv["Variables"] & { actor: string } }
+type AdminEnv = { Bindings: Env; Variables: AppEnv["Variables"] & { actor: string; machine: boolean; machineRev: number | null } }
 type AdminContext = Context<AdminEnv>
 export const admin = new Hono<AdminEnv>()
 
@@ -28,10 +29,24 @@ admin.use("*", async (c, next) => {
   const who = await moderator(c.req.raw, c.env)
   if (!who.ok) return problem(c, who.status, who.status === 401 ? "sign_in" : "not_allowed")
   c.set("actor", who.email)
+  c.set("machine", who.machine)
+  // Staging's synthetic machine moderator: only its few routes, only on synthetic places, each change made against the
+  // rev that was found synthetic (H1).
+  if (who.machine) {
+    const may = await machineMay(c.env.DB, c.req.method, c.req.path.replace(/^\/api\/admin/, ""), () => c.req.json())
+    if (!may.ok) return problem(c, 403, "not_allowed")
+    c.set("machineRev", may.rev)
+  }
   await next()
 })
 
-admin.get("/queue", async (c) => c.json({ items: await listQueue(c.env.DB) }))
+admin.get("/queue", async (c) => {
+  const items = await listQueue(c.env.DB)
+  if (!c.get("machine")) return c.json({ items })
+  // Each listed at the rev it was read at, and that rev found synthetic: a correction since leaves it out.
+  const revs = await Promise.all(items.map((i) => syntheticRev(c.env.DB, String(i.id))))
+  return c.json({ items: items.filter((i, n) => revs[n] !== null && revs[n] === i.rev) })
+})
 
 // Returning asks the sender for a change, so it carries a note; the note is all the moderator writes.
 const Transition = z
@@ -222,7 +237,14 @@ const outcomeOf = (c: Parameters<typeof problem>[0], outcome: string) =>
 
 admin.get("/places/:id", async (c) => {
   const view = await placeView(c.env.DB, c.req.param("id"))
-  return view ? c.json(view) : problem(c, 404, "not_found")
+  if (!view) return problem(c, 404, "not_found")
+  // The machine's view only when the place, read again, is still the synthetic one it was checked at: nothing changed
+  // while the view was read.
+  if (c.get("machine")) {
+    const now = await syntheticRev(c.env.DB, c.req.param("id"))
+    if (now === null || now !== c.get("machineRev") || view.rev !== now) return problem(c, 409, "changed_meanwhile")
+  }
+  return c.json(view)
 })
 
 // A manual hide: elements of a public place, or the whole place, with a reason; never limited by the safeguards.

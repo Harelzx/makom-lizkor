@@ -83,17 +83,28 @@ export async function edgeChecks(
   const named = place ?? (local ? SEEDED_PLACE : null)
   if (named !== null && !PLACE_ID.test(named)) throw new Error(`EDGE_PLACE is not a place's id: ${JSON.stringify(named)}`)
   if (expectTag !== null && !TAG.test(expectTag)) throw new Error(`--expect-tag is not a version tag: ${JSON.stringify(expectTag)}`)
-  const headersOk = (h) => !!h && typeof h === "object" && Object.keys(h).length > 0 && Object.values(h).every((v) => typeof v === "string")
+  const headersOk = (h) => {
+    if (!h || typeof h !== "object" || !Object.keys(h).length || !Object.values(h).every((v) => typeof v === "string")) return false
+    // An Access pair goes whole or not at all.
+    const x = new Headers(h)
+    return x.has("CF-Access-Client-Id") === x.has("CF-Access-Client-Secret")
+  }
   if (purge !== null && !(typeof purge?.place === "string" && PLACE_ID.test(purge.place) && headersOk(purge.moderator?.headers)))
     throw new Error("EDGE_PURGE must name a synthetic place's id and a moderator's headers")
   const url = (path) => new URL(path, base).toString()
   // Once the expected version has answered, every Worker answer measured must name it.
   const version = { holding: false, answers: 0, failures: [] }
-  // Past Access with a service token, on every request but the workers.dev probe (which must be refused on its own).
+  // Past Access with the deployment's service token, on every request but the workers.dev probe (which must be refused
+  // on its own) and those that carry an Access pair of their own: the purge exercise's moderator (H1), whose pair then
+  // goes whole, never mixed with the deployment's, so the deployment's token never moderates (H1-PROBE-IDENTITY-1).
   const fetch = async (u, init = {}) => {
+    const own = new Headers(init.headers)
+    const carries = own.has("CF-Access-Client-Id") || own.has("CF-Access-Client-Secret")
     const res = await send(
       u,
-      access ? { ...init, headers: { ...init.headers, "CF-Access-Client-Id": access.id, "CF-Access-Client-Secret": access.secret } } : init,
+      access && !carries
+        ? { ...init, headers: { ...Object.fromEntries(own), "CF-Access-Client-Id": access.id, "CF-Access-Client-Secret": access.secret } }
+        : init,
     )
     const path = new URL(u).pathname
     if (version.holding && WORKER_PATH.test(path)) {

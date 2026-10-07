@@ -4,6 +4,7 @@
 ENVIRONMENT=development
 MODERATORS=dev@example.test
 OPS_SERVICE_TOKENS=dev-ops.access
+MODERATOR_SERVICE_TOKENS=dev-staging-moderator.access
 DEV_ACCESS_SECRET=development-only-not-a-secret
 # Cloudflare's published Turnstile test secret (always passes); its test tokens come back for example.com.
 TURNSTILE_SECRET=1x0000000000000000000000000000000AA

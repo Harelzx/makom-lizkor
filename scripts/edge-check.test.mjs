@@ -880,3 +880,48 @@ test("an EDGE_PURGE in a shape no exercise can use is refused before anything is
   ])
     await assert.rejects(edgeChecks("https://site.example", { fetch: deployment(), purge }), /EDGE_PURGE/, JSON.stringify(purge))
 })
+
+test("the purge exercise moderates with its own Access pair; every other probe goes with the deployment's, and workers.dev with none (H1-PROBE-IDENTITY-1)", async () => {
+  const site = edgeSite()
+  const seen = []
+  const fetch = async (input, init = {}) => {
+    const u = new URL(input)
+    const h = new Headers(init.headers)
+    seen.push({ host: u.host, path: u.pathname, id: h.get("CF-Access-Client-Id"), secret: h.get("CF-Access-Client-Secret") })
+    return site.fetch(input, init)
+  }
+  const moderator = {
+    headers: { ...MOD, "CF-Access-Client-Id": "staging-moderator.access", "CF-Access-Client-Secret": "moderator-secret" },
+  }
+  const results = await edgeChecks("https://site.example", {
+    fetch,
+    access: { id: "deploy.access", secret: "deploy-secret" },
+    workersDev: "https://w.example.workers.dev",
+    purge: { place: "syn-place", moderator },
+    purgeTiming: PURGE_TIMING,
+  })
+  assert.equal(status(results).purge_freshness, "pass", JSON.stringify(results.find((r) => r.check === "purge_freshness")))
+  const admin = seen.filter((s) => s.host === "site.example" && s.path.startsWith("/api/admin/places/syn-place"))
+  const mutations = seen.filter((s) => s.host === "site.example" && /^\/api\/admin\/suppressions/.test(s.path))
+  assert.ok(admin.length > 0 && mutations.length >= 2, "views, the hide and the lift were made")
+  for (const s of [...admin, ...mutations]) assert.deepEqual([s.id, s.secret], ["staging-moderator.access", "moderator-secret"], s.path)
+  const ordinary = seen.filter(
+    (s) => s.host === "site.example" && !s.path.startsWith("/api/admin/places/syn-place") && !/^\/api\/admin\/suppressions/.test(s.path),
+  )
+  assert.ok(ordinary.length > 0)
+  for (const s of ordinary) assert.deepEqual([s.id, s.secret], ["deploy.access", "deploy-secret"], s.path)
+  const closed = seen.filter((s) => s.host === "w.example.workers.dev")
+  assert.ok(closed.length > 0)
+  for (const s of closed) assert.deepEqual([s.id, s.secret], [null, null], s.path)
+})
+
+test("an EDGE_PURGE moderator with half an Access pair is refused before anything is asked", async () => {
+  for (const half of [{ "CF-Access-Client-Id": "x.access" }, { "cf-access-client-secret": "s" }])
+    await assert.rejects(
+      edgeChecks("https://site.example", {
+        fetch: deployment(),
+        purge: { place: "syn-place", moderator: { headers: { ...MOD, ...half } } },
+      }),
+      /EDGE_PURGE/,
+    )
+})
