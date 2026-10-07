@@ -245,6 +245,7 @@ test("the edge checks are given their synthetic owners, place, purge exercise an
     ["          EDGE_IDENTITIES: ${{ secrets.STAGING_EDGE_IDENTITIES }}\n", "EDGE_IDENTITIES"],
     ["          EDGE_PLACE: ${{ vars.STAGING_EDGE_PLACE }}\n", "EDGE_PLACE"],
     ["          EDGE_PURGE: ${{ secrets.STAGING_EDGE_PURGE }}\n", "EDGE_PURGE"],
+    ["          EDGE_PROBE: ${{ secrets.STAGING_EDGE_PROBE }}\n", "EDGE_PROBE"],
   ])
     fails(withChange("staging.yml", line, ""), `staging.yml's edge checks must be given ${why}`)
   fails(withChange("staging.yml", 'node scripts/staging-receipt.mjs "$RUNNER_TEMP/edge.json"', "echo {}"), "upload its receipt")
@@ -253,6 +254,20 @@ test("the edge checks are given their synthetic owners, place, purge exercise an
     "release.yml's production checks must be given EDGE_IDENTITIES",
   )
   fails(withChange("release.yml", ' --workers-dev "$WORKERS_DEV_URL"', ""), "release.yml's production checks must be given --workers-dev")
+  // Production's purge_freshness comes from the content-free probe, with its own token (L-PURGE).
+  fails(
+    withChange("release.yml", "          EDGE_PROBE: ${{ secrets.EDGE_PROBE }}\n", ""),
+    "release.yml's production checks must be given EDGE_PROBE",
+  )
+  // Only production's checks let the probe stand for purge_freshness (L-PURGE-STAGING-1); staging's never do.
+  fails(
+    withChange("release.yml", '"$WORKERS_DEV_URL" --probe-freshness', '"$WORKERS_DEV_URL"'),
+    "release.yml's production checks must let the probe answer purge_freshness",
+  )
+  fails(
+    withChange("staging.yml", '--workers-dev "$STAGING_PUBLIC_ORIGIN"', '--workers-dev "$STAGING_PUBLIC_ORIGIN" --probe-freshness'),
+    "staging.yml's edge checks must not let the probe answer purge_freshness",
+  )
 })
 
 test("a failed command inside a pipe fails its step, so no migration runs without the bookmark (P6-BOOKMARK-1)", () => {

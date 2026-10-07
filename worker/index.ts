@@ -16,6 +16,7 @@ import { ogResponse } from "./lib/og"
 import { log } from "./lib/log"
 import { ops } from "./routes/ops"
 import { csp } from "./routes/csp"
+import { probe, probeMove } from "./routes/purge-probe"
 import { secure } from "./lib/security-headers"
 import type { ErrorRates } from "./lib/ops-summary"
 
@@ -59,8 +60,10 @@ export function createApp(deps: Deps) {
   app.route("/api/v1/email", email)
   app.route("/api/v1/tributes", tributes)
   app.route("/api/v1/reports", reports)
+  app.route("/api/v1/purge-probe", probe)
   app.route("/api/v1", feed)
   app.route("/api/admin", admin)
+  app.route("/api/ops/purge-probe", probeMove)
   app.route("/api/ops", ops)
   app.route("/api/csp-report", csp)
   app.route("/__dev", dev)

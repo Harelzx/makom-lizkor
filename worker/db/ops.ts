@@ -101,7 +101,7 @@ const MEDIA_RETRY_MS = 15 * 60_000
 /** Photos one scheduled run looks at. */
 const MEDIA_BATCH = 50
 
-const tagsFor = (placeId: string) => ["feed", "tributes", `place:${placeId}`]
+export const tagsFor = (placeId: string) => ["feed", "tributes", `place:${placeId}`]
 const heldKey = (key: string) => key.replace(/^public\//, "held/")
 
 function entry(op: OpRow, phase: LedgerEntry["phase"], at: string, late = false): LedgerEntry {
