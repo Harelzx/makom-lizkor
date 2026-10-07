@@ -135,9 +135,9 @@ Red checks where a test's sensitivity was in doubt (logs in `runs/*-c1*-mutation
 
 ## Next action
 
-1. When the full dev run at `d097826` passes: the affected report for a56 (corrective `1f0d288..d097826`, full `937c2a0..d097826`), with the context-leak diagnosis and the measured counts. On proceed: merge `claude/staging-ready` into `main` (`--no-ff`), push (authorized), watch CI; then merge `main` into the working branch.
-2. Phase 7: after `main` (with the CI fixes and `e2e/fixtures.ts`) is merged in, a full dev and prod checkpoint; Phase 7's specs written since (`feed-timing`, `seed.setup`) import `test` from `./fixtures` too. Then the whole-phase Phase 7 review, then tell the privacy session (it reworks notice 10-2/10-3 and the takedown text for curated places from D1).
-3. Staging deploy: only after Harel adds his approval to the adviser's register and `STAGING_MODERATORS` is decided within it (the placeholder `staging-moderator@example.test` allows no human moderator; human moderation, notifications and the full submission-to-publication path stay unverified).
+1. **Done (a58, `20261007T001006Z-80358acf`: proceed):** CI-EVIDENCE-1 closed (the original call log names the final offline-search wait; four diagnostic invocations, eight tests each, all exit 0, at `1f0d288`+marks and `15c5064`+marks; the measured interval includes opening the dialog, filling it and waiting for the result, so no isolated CPU bottleneck is claimed). `claude/staging-ready` at `215f85e` merged into `main` as **`fd6b5ff`** (tree identical to the reviewed one) and pushed; CI run `37550790542` on GitHub. Tested heads carried: `d097826` (full dev: exit 0, 89 passed, 3 skipped), `1f0d288` (Worker 407/407). `main` merged into the working branch (`dd7d19b` also points Phase 7's own specs at `./fixtures`).
+2. **Now:** watch CI `37550790542` (staging.yml will stop at `staging-check --deploy`: `STAGING_MODERATORS` unset, as intended). Phase 7 checkpoint at `dd7d19b` (client, scripts, static, worker, dev, prod) running: `backend-phase4/logs/p7-checkpoint-dd7d19b.log`. Then the fresh whole-phase Phase 7 review, keeping its open findings (the tributes and reports:636 timeouts not separately diagnosed). Then tell the privacy session (notice 10-2/10-3 and the takedown text for curated places from D1).
+3. Staging deploy: only after Harel adds his 7 October approval to the adviser's register and `STAGING_MODERATORS` is decided within it.
 
 Every staging and release gate stays, including `RETENTION.verified=false`.
 
