@@ -39,6 +39,8 @@ jobs:
       STAGING_MODERATORS: ${{ vars.STAGING_MODERATORS }}
       # The synthetic machine moderator's service token client id (H1); unset, there is none and nothing changes.
       STAGING_MODERATOR_SERVICE_TOKENS: ${{ vars.STAGING_MODERATOR_SERVICE_TOKENS }}
+      # The purge probe's service token client id (L-PURGE); unset, the probe refuses everyone.
+      STAGING_PROBE_SERVICE_TOKENS: ${{ vars.STAGING_PROBE_SERVICE_TOKENS }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -69,7 +71,8 @@ jobs:
           npx wrangler deploy --tag "staging-${SHA:0:12}" --message "staging $SHA" --secrets-file "$secrets" \
             --var "ACCESS_TEAM_DOMAIN:$STAGING_ACCESS_TEAM_DOMAIN" --var "ACCESS_AUD:$STAGING_ACCESS_AUD" \
             --var "PUBLIC_ORIGIN:$STAGING_PUBLIC_ORIGIN" --var "TURNSTILE_HOSTNAMES:$STAGING_TURNSTILE_HOSTNAMES" \
-            --var "MODERATORS:$STAGING_MODERATORS" --var "MODERATOR_SERVICE_TOKENS:$STAGING_MODERATOR_SERVICE_TOKENS"
+            --var "MODERATORS:$STAGING_MODERATORS" --var "MODERATOR_SERVICE_TOKENS:$STAGING_MODERATOR_SERVICE_TOKENS" \
+            --var "PROBE_SERVICE_TOKENS:$STAGING_PROBE_SERVICE_TOKENS"
       # It first waits, bounded, for the version just deployed (its tag) and holds every Worker answer to it (a61).
       # Through Access with the service token; the same address probed without it must be refused (Access closes this
       # workers.dev address). The synthetic owners, the named place and the purge exercise come from the repository;
@@ -82,6 +85,8 @@ jobs:
           EDGE_IDENTITIES: ${{ secrets.STAGING_EDGE_IDENTITIES }}
           EDGE_PLACE: ${{ vars.STAGING_EDGE_PLACE }}
           EDGE_PURGE: ${{ secrets.STAGING_EDGE_PURGE }}
+          # The purge probe's own Access pair (L-PURGE): checked as purge_probe beside the exercise; unset, not run.
+          EDGE_PROBE: ${{ secrets.STAGING_EDGE_PROBE }}
         run: |
           set -uo pipefail
           status=0

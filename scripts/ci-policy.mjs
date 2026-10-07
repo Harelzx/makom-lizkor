@@ -145,6 +145,9 @@ function releaseProblems(w) {
       .find((st) => /edge-check\.mjs/.test(st.run ?? ""))
     if (checks?.env?.EDGE_IDENTITIES !== "${{ secrets.EDGE_IDENTITIES }}")
       problems.push("release.yml's production checks must be given EDGE_IDENTITIES (secrets.EDGE_IDENTITIES)")
+    // Production's purge_freshness comes from the content-free probe, with its own token (L-PURGE).
+    if (checks?.env?.EDGE_PROBE !== "${{ secrets.EDGE_PROBE }}")
+      problems.push("release.yml's production checks must be given EDGE_PROBE (secrets.EDGE_PROBE)")
     if (checks?.env?.WORKERS_DEV_URL !== "${{ vars.WORKERS_DEV_URL }}" || !/--workers-dev "\$WORKERS_DEV_URL"/.test(checks?.run ?? ""))
       problems.push('release.yml\'s production checks must be given --workers-dev "$WORKERS_DEV_URL" (vars.WORKERS_DEV_URL)')
     // The checks wait for the version this deploy tagged, and hold the Worker's answers to it (a61).
@@ -214,6 +217,7 @@ function stagingProblems(w, triggers) {
       ["EDGE_IDENTITIES", "${{ secrets.STAGING_EDGE_IDENTITIES }}"],
       ["EDGE_PLACE", "${{ vars.STAGING_EDGE_PLACE }}"],
       ["EDGE_PURGE", "${{ secrets.STAGING_EDGE_PURGE }}"],
+      ["EDGE_PROBE", "${{ secrets.STAGING_EDGE_PROBE }}"],
     ])
       if (all[edge]?.env?.[name] !== value) problems.push(`staging.yml's edge checks must be given ${name} (${value.slice(4, -3)})`)
     if (

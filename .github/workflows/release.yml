@@ -162,6 +162,8 @@ jobs:
           EDGE_PLACE: ${{ vars.EDGE_PLACE }}
           EDGE_IDENTITIES: ${{ secrets.EDGE_IDENTITIES }}
           WORKERS_DEV_URL: ${{ vars.WORKERS_DEV_URL }}
+          # The purge probe's own Access pair: production's purge_freshness (L-PURGE); unset, it is incomplete.
+          EDGE_PROBE: ${{ secrets.EDGE_PROBE }}
         # Waits, bounded, for the version just deployed and holds every Worker answer to its tag (a61).
         run: node scripts/edge-check.mjs "$PUBLIC_ORIGIN" --expect-tag "$RELEASE" --workers-dev "$WORKERS_DEV_URL"
       - name: Publish the release, which notifies the owner
