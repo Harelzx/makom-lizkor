@@ -74,9 +74,9 @@ jobs:
       # not been established as giving valid performance evidence (main's first run, 2026-10-07: 3.4 long frames a
       # second against 0.95). It runs, unchanged, on a suitable machine as its own stage (agent-evidence stages.sh
       # perf-dev, perf-prod); finding P1 and its launch obligation stay open there.
-      # The panel's motion check (a spring, not a snap) runs below against the production build instead: on this runner the
-      # dev server's React development runtime made its samples unsuitable (two CI failures, each a stall and a catch-up;
-      # locally the production build kept the same scenario within its bound at 1x to 6x CPU; CI-MOTION-1, a99).
+      # The panel's motion check (a spring, not a snap): two development-mode CI runs showed a stall followed by a large
+      # step; the cause remains unresolved. This unchanged scenario runs against the production build, in the step below
+      # (CI-MOTION-1, a99, a100).
       # (The | below is the pattern's alternation, not a pipe; pipefail keeps ci-policy's pipe rule satisfied regardless.)
       - run: |
           set -o pipefail
