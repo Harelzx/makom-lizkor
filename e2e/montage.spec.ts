@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test"
+import { expect, test, type Page } from "./fixtures"
 
 // The count told in headlines: only what had happened by the day of the visit, and smooth on a slow device.
 // Both run the whole opening's first scenes, so they take their time.

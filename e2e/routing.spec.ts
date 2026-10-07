@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test"
+import { expect, test } from "./fixtures"
 
 test("a shared link to a place opens that place and keeps its address", async ({ page }) => {
   await page.goto("/#/place/car-wall-tkuma")

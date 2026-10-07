@@ -80,8 +80,8 @@
         {
           "binding": "DB",
           "database_name": "makom-staging",
-          // Set once the staging database exists (created with jurisdiction eu); an id is not a secret.
-          "database_id": "00000000-0000-0000-0000-000000000000",
+          // The staging database, created 2026-10-07 in jurisdiction eu (an id is not a secret).
+          "database_id": "6cebc14f-18b1-41fd-9d21-fd885e71ce25",
           "migrations_dir": "migrations",
         },
       ],

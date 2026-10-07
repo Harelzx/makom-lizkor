@@ -1,4 +1,4 @@
-import { devices, expect, test } from "@playwright/test"
+import { devices, expect, test } from "./fixtures"
 
 test.use({ ...devices["Pixel 7"], viewport: { width: 390, height: 844 } })
 
