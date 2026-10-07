@@ -4,6 +4,7 @@ import { ulid, ulidTime } from "../lib/ids"
 import type { SendMail } from "../lib/mail"
 import { tellModerators, uploadedAt } from "./retention"
 import { gzip, publicKeys, seal, sha256, type Manifest } from "../lib/sealed"
+import { log } from "../lib/log"
 
 /**
  * What a backup holds, table by table (spec 8.1). Content and moderation, so a restore loses at most what came after
@@ -174,19 +175,38 @@ async function listedPhotos(exports: R2Bucket, objects: { key: string; at: numbe
 /**
  * The 35-day end (spec 7): every export of that age is deleted, whatever its row says (an unfinished one too), and then
  * every photo copy that no younger manifest lists, once it is a day old (an export under way may not have written its
- * manifest yet). A deletion that fails is tried again at the next pass, and the nightly check reports it.
+ * manifest yet). Each file on its own: a deletion the bucket refuses (a copy still under its lock, L-RET-LOCK-1) or
+ * that fails is counted in the log and tried again at the next pass, and never stops the files after it, so one young
+ * file can't hold back every expired one. An export is recorded deleted only once all its files are. The nightly check
+ * reports whatever is still there.
  */
 export async function pruneExports(env: { db: D1Database; exports: R2Bucket; durations?: Durations }, now: Date) {
   const { day } = env.durations ?? REAL
   const cutoff = now.getTime() - EXPORT_KEEP_DAYS * day
+  const refused = { exports: 0, photos: 0 }
+  const remove = async (key: string) => {
+    try {
+      await env.exports.delete(key)
+      return true
+    } catch {
+      return false
+    }
+  }
   const objects = await listExports(env.exports)
   const old = objects.filter((o) => !(o.at > cutoff))
-  for (const o of old) await env.exports.delete(o.key)
+  const unfinished = new Set<string>()
+  for (const o of old)
+    if (!(await remove(o.key))) {
+      refused.exports++
+      unfinished.add(o.id)
+    }
   for (const id of new Set(old.map((o) => o.id)))
-    await env.db.prepare("UPDATE exports SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL").bind(now.toISOString(), id).run()
+    if (!unfinished.has(id))
+      await env.db.prepare("UPDATE exports SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL").bind(now.toISOString(), id).run()
   const listed = await listedPhotos(env.exports, objects, cutoff)
   for (const p of await listPhotos(env.exports))
-    if (!listed.has(p.hash) && p.uploaded <= now.getTime() - day) await env.exports.delete(p.key)
+    if (!listed.has(p.hash) && p.uploaded <= now.getTime() - day && !(await remove(p.key))) refused.photos++
+  if (refused.exports || refused.photos) log("warn", "export_prune_refused", { counts: refused })
 }
 
 /**
