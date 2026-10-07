@@ -70,7 +70,8 @@ function stagingSite({
     }
     if (u.pathname === "/api/v1/version") return json(200, { v: `0.${state.v}` })
     if (u.pathname === "/api/v1/feed") {
-      if (u.searchParams.get("v") !== `0.${state.v}`) return json(409, { code: "stale_version", v: `0.${state.v}` }, { "Cache-Control": "no-store" })
+      if (u.searchParams.get("v") !== `0.${state.v}`)
+        return json(409, { code: "stale_version", v: `0.${state.v}` }, { "Cache-Control": "no-store" })
       const shown = [...state.places.values()].filter(
         (p) => p.status === "published" && (!p.hidden || !feedFollowsHide) && (feedFollowsApproval || p.rev < 2),
       )
@@ -98,7 +99,8 @@ function stagingSite({
   }
   return { fetch, state }
 }
-const run = (site) => stagingFlow("https://staging.example", { fetch: site.fetch, headers: MACHINE, turnstileToken: "dummy", timing: TIMING })
+const run = (site) =>
+  stagingFlow("https://staging.example", { fetch: site.fetch, headers: MACHINE, turnstileToken: "dummy", timing: TIMING })
 
 test("one synthetic submission is approved, published and removed, every step answered and kept", async () => {
   const site = stagingSite()
@@ -146,7 +148,11 @@ test("each way the flow can break fails at its own step, and nothing after it is
 
 test("the machine's Access pair is required, whole", async () => {
   await assert.rejects(
-    stagingFlow("https://staging.example", { fetch: stagingSite().fetch, headers: { "CF-Access-Client-Id": "x" }, turnstileToken: "dummy" }),
+    stagingFlow("https://staging.example", {
+      fetch: stagingSite().fetch,
+      headers: { "CF-Access-Client-Id": "x" },
+      turnstileToken: "dummy",
+    }),
     /FLOW_HEADERS/,
   )
   await assert.rejects(
