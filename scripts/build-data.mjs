@@ -98,12 +98,14 @@ for (const p of [...read("oct7.json", []), ...read("extra.json", [])]) {
 
 writeFileSync("src/data/places.json", JSON.stringify(out, null, 1))
 writeFileSync("src/data/context.json", JSON.stringify(revival.context ?? {}, null, 1))
-// Landscapes of the western Negev in bloom, for the revival chapters.
+// Landscapes of the western Negev in bloom, for the revival chapters. A picture that is also a place's photo is the
+// place's: served as a static file it would outlive that photo's hide, so it is never a landscape (P7-MEDIA-1).
+const placePhotos = new Set(Object.values(photoMap).flat())
 writeFileSync(
   "src/data/landscapes.json",
   JSON.stringify(
     photos
-      .filter((p) => p.category === "landscape")
+      .filter((p) => p.category === "landscape" && !placePhotos.has(p.file))
       .map(({ file, title, commons_url, author, license, license_url, subject_he }) => ({
         file,
         title,
