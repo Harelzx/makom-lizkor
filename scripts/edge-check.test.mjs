@@ -925,3 +925,150 @@ test("an EDGE_PURGE moderator with half an Access pair is refused before anythin
       /EDGE_PURGE/,
     )
 })
+
+// The production purge probe (L-PURGE; a73, Q2): production has no synthetic place to hide, so its purge_freshness is
+// shown by a content-free generation the edge keeps under its own tag. The run warms its own address (MISS, then HIT),
+// moves the generation with the probe's own token, and must see the new one within the bound, timed from dispatch;
+// the edge locations are recorded. Natural expiry never counts, a retry never moves twice, and nothing else is touched.
+const PROBE = { headers: { "CF-Access-Client-Id": "probe-id.access", "CF-Access-Client-Secret": "probe-secret" } }
+/**
+ * A deployment with the probe behind an edge cache, as the Worker (worker/routes/purge-probe.ts) and Workers Caching
+ * behave. The options stand in for what may go wrong: a purge that doesn't take, no cache, entries already aged, a
+ * move whose answer is lost, purges the edge refuses (503 purge_failed) a number of times, a refused token, another
+ * exercise moving the generation first, an invalid answer after the move.
+ */
+function probeSite({
+  purgeWorks = true,
+  cached = true,
+  ttlMs = 5000,
+  ignoreQuery = false,
+  preAgedMs = 0,
+  loseFirstAnswer = false,
+  refusePurges = 0,
+  tokenOk = true,
+  movedByOther = false,
+  invalidAfterMove = false,
+} = {}) {
+  const state = { generation: 4, exercise: null, moves: 0, purges: 0, posts: [] }
+  const cache = new Map()
+  const json = { "Content-Type": "application/json" }
+  const respond = (status, body, headers = {}) => new Response(body, { status, headers: { ...json, ...headers } })
+  const keyOf = (u) => (ignoreQuery ? u.pathname : u.pathname + u.search)
+  const origin = () =>
+    invalidAfterMove && state.moves
+      ? { status: 200, body: "<html>not the probe</html>" }
+      : { status: 200, body: JSON.stringify({ generation: state.generation }) }
+  if (preAgedMs) cache.set(keyOf(new URL("/api/v1/purge-probe?run=x", "https://site.example")), { ...origin(), at: Date.now() - preAgedMs })
+  let answersLost = 0
+  const fetch = async (input, init = {}) => {
+    const u = new URL(input)
+    if (u.pathname === "/api/ops/purge-probe" && init.method === "POST") {
+      const h = new Headers(init.headers)
+      state.posts.push({ id: h.get("CF-Access-Client-Id"), secret: h.get("CF-Access-Client-Secret") })
+      if (!tokenOk || h.get("CF-Access-Client-Id") !== PROBE.headers["CF-Access-Client-Id"]) return respond(403, "{}")
+      const { exercise, expected } = JSON.parse(init.body)
+      if (movedByOther && !state.moves) {
+        state.generation++
+        state.moves++
+      }
+      const replay = state.exercise === exercise && state.generation === expected + 1
+      if (!replay) {
+        if (state.generation !== expected) return respond(409, JSON.stringify({ code: "changed_meanwhile" }))
+        state.generation++
+        state.exercise = exercise
+        state.moves++
+      }
+      if (state.purges < refusePurges) {
+        state.purges++
+        return respond(503, JSON.stringify({ code: "purge_failed", generation: expected + 1 }))
+      }
+      state.purges++
+      if (purgeWorks) cache.clear()
+      if (loseFirstAnswer && !answersLost++) throw new TypeError("fetch failed")
+      return respond(200, JSON.stringify({ generation: expected + 1, purged: true }))
+    }
+    if (u.pathname !== "/api/v1/purge-probe") return deployment()(input, init)
+    const key = keyOf(u)
+    const hit = cached && cache.get(key)
+    const ray = { "CF-Ray": "8c0ffee000000000-TLV" }
+    if (hit && Date.now() - hit.at < ttlMs) return respond(hit.status, hit.body, { ...ray, "CF-Cache-Status": "HIT" })
+    const o = origin()
+    if (cached) cache.set(key, { ...o, at: Date.now() })
+    return respond(o.status, o.body, { ...ray, ...(cached ? { "CF-Cache-Status": "MISS" } : {}) })
+  }
+  return { fetch, state }
+}
+const probeOf = async (site, extra = {}) =>
+  (await edgeChecks("https://site.example", { fetch: site.fetch, probe: PROBE, purgeTiming: PURGE_TIMING, ...extra })).find(
+    (x) => x.check === "purge_freshness",
+  )
+
+test("production's purge_freshness: the probe's own address turns to the new generation within the bound (L-PURGE)", async () => {
+  const site = probeSite()
+  const r = await probeOf(site, { access: { id: "deploy-id.access", secret: "deploy-secret" } })
+  assert.equal(r.status, "pass", JSON.stringify(r))
+  assert.match(r.detail, /content-free probe: generation 4 → 5, fresh after \d+ ms from the move's dispatch/)
+  assert.match(r.detail, /edge locations: TLV, TLV, TLV/)
+  assert.equal(site.state.moves, 1)
+  // The probe's own Access pair, whole; never the deployment's.
+  assert.deepEqual(site.state.posts, [{ id: "probe-id.access", secret: "probe-secret" }])
+})
+
+test("a probe purge that doesn't take fails once the bound passes, expiry notwithstanding", async () => {
+  const r = await probeOf(probeSite({ purgeWorks: false }))
+  assert.equal(r.status, "fail")
+  assert.match(r.detail.join(" "), /still served generation 4|not fresh until/)
+})
+
+test("without an edge cache to see, or with entries too near their end, the probe moves nothing and stays incomplete", async () => {
+  for (const site of [probeSite({ cached: false }), probeSite({ ignoreQuery: true, preAgedMs: 4850 })]) {
+    const r = await probeOf(site)
+    assert.equal(r.status, "incomplete", JSON.stringify(r))
+    assert.match(r.detail, /didn't store this run's own address afresh|would expire within the bound/)
+    assert.equal(site.state.moves, 0)
+  }
+})
+
+test("a move whose answer is lost is sent again as the same exercise: it moves once and purges again", async () => {
+  const site = probeSite({ loseFirstAnswer: true })
+  const r = await probeOf(site)
+  assert.equal(r.status, "pass", JSON.stringify(r))
+  assert.equal(site.state.moves, 1)
+  assert.equal(site.state.purges, 2)
+})
+
+test("a purge the edge refuses is retried as the same exercise; refused every time, the probe fails", async () => {
+  const once = probeSite({ refusePurges: 1 })
+  assert.equal((await probeOf(once)).status, "pass")
+  assert.equal(once.state.moves, 1)
+  const always = probeSite({ refusePurges: 99 })
+  const r = await probeOf(always)
+  assert.equal(r.status, "fail")
+  assert.match(r.detail.join(" "), /didn't move and purge \(last: 503 purge_failed\)/)
+  assert.equal(always.state.moves, 1)
+})
+
+test("a refused token fails; another exercise moving first leaves it incomplete; an invalid answer after the move fails", async () => {
+  const refused = await probeOf(probeSite({ tokenOk: false }))
+  assert.equal(refused.status, "fail")
+  assert.match(refused.detail.join(" "), /refused \(403\)/)
+  const other = await probeOf(probeSite({ movedByOther: true }))
+  assert.equal(other.status, "incomplete", JSON.stringify(other))
+  const invalid = await probeOf(probeSite({ invalidAfterMove: true }))
+  assert.equal(invalid.status, "fail")
+  assert.match(invalid.detail.join(" "), /without a generation/)
+})
+
+test("the probe's headers must be an Access pair, whole", async () => {
+  await assert.rejects(
+    edgeChecks("https://site.example", { fetch: probeSite().fetch, probe: { headers: { "CF-Access-Client-Id": "x" } } }),
+    /EDGE_PROBE/,
+  )
+})
+
+test("with both the staging exercise and the probe, the probe is checked on its own as purge_probe", async () => {
+  const results = await edgeChecks("https://site.example", { fetch: probeSite().fetch, purge: PURGE, probe: PROBE, purgeTiming: PURGE_TIMING })
+  const r = results.find((x) => x.check === "purge_probe")
+  assert.equal(r?.status, "pass", JSON.stringify(r))
+  assert.doesNotMatch(String(results.find((x) => x.check === "purge_freshness").detail), /content-free probe/)
+})
