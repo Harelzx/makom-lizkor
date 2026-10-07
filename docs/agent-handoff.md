@@ -2,6 +2,39 @@
 
 The backend session's current handoff. Read it after any restart, compaction or recovery, together with the CLAUDE.md section "Delegated adviser while Harel is away" and the bundle's `WORKFLOW-V5.md` and `policy-v5.md` (workflow 5: reports go with `--review-access snapshot`; launch target 7 October 2026). Earlier history is in this file's git history and the bundle's `runtime/`.
 
+## Current state (2026-10-07, 11:40 Israel time)
+
+The one current block; everything below "History" is superseded record.
+
+- **Adviser:** bridge 5.3.0. Resume instructions: the bundle's `RESUME-PHASE7-20261007.txt`.
+- **Phase 7 whole-phase review: completed, decision revise** (`20261007T044919Z-b055dc34`, reviewed head `1bac235`, full proposed merge base main `79761ac`).
+  - P7-IMPORT-1 closed. Accepted coverage carried: validation, feed hydration, pending links, jitless initialisation, deployment-version integration.
+  - Finite correction scope: seven findings, all now implemented with focused regressions (red first):
+
+| finding            | commit    | what                                                                                                                                                                                       |
+| ------------------ | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| P7-EDGE-HEADERS-1  | `3d9d363` | the named share page keeps the page-policy assertion                                                                                                                                       |
+| P7-OFFLINE-1       | `7b5bae7` | a curated 410 is noted, so an offline reload keeps it off; the server's feed relists it                                                                                                    |
+| P7-PROJECTION-1    | `09628f0` | a hidden name leaves curated links, revival sources and photo titles/subjects/source pages                                                                                                 |
+| P7-OG-1            | `f983a4c` | photos embedded by their real type; WebP decoded (`@jsquash/webp`); resvg 2.6.2 drew WebP as an empty panel (measured)                                                                     |
+| P7-MEDIA-1         | `6c60a86` | no curated photo anywhere in the build, by name or bytes; three overlapping landscapes removed (About unchanged)                                                                           |
+| P7-RET-1, P7-REC-1 | `6749d72` | curated photo expiry, refusal cleanup, import filter, deletion check; approval photo keys in the ledger, replay reconciles photo/source rows or quarantines; replayed erasure removes them |
+
+- P7-REC-1 qualification (source at `1bac235`): the failed-deletion-run Route A erasure scenario is not established. `restoreRoute` takes the latest `finished_at` over successful and failed runs, and an unfinished run forces Route B, which filters erased child rows. Unchanged.
+- **Code head `6749d72`** (later commits: this handoff only).
+- **Checkpoint at `6749d72`** (`backend-phase4/runs/20261007T083740-6749d72`): client 99/99, scripts 134/134, static clean, Worker 439/439, dev 94 passed 3 skipped. **prod: pending** (running).
+- **Next machine action:** when prod finishes, submit ONE corrective report (`reports/phase7-corrective.json`, built by `scratchpad/p7-corrective-report.py`): range `1bac235..head`, full base `79761ac`, linking `20261007T044919Z-b055dc34`. On proceed: merge into `main`, push, CI, staging. Then tell the privacy session (notice 10-2/10-3, the takedown text for curated places from D1).
+- **Independent track (separate branch, not part of this review):** the staging purge and edge-verification harness (`purge_freshness` is always incomplete; staging passes neither EDGE_IDENTITIES nor EDGE_PLACE; release passes EDGE_PLACE but neither identities nor `--workers-dev`).
+- **main `79761ac`** (Phase 6, staging readiness, CI waits, version-aware edge checks, resend waits). CI green.
+- **Staging receipt:** run `37569976129` deployed `79761ac` (version `093c1249`) under `HAREL-STAGING-DEPLOY-20261007` (register sha256 `887022cb…f788`).
+  - Edge check exit 3. Passed: responses, headers, private_no_store, workers_dev_closed, deployed_version (15 Worker answers named `staging-79761acb2c6c`).
+  - Incomplete, and stays so until the harness and its prerequisites exist: private_isolation, no_shared_hit, purge_freshness.
+  - R2 empty. RETENTION.verified false.
+- **Launch gates carried, unresolved:** retention/recovery on real cloud, share previews on real previewers (L4, Workers Paid for per-place images), P1 frame rate on a suitable machine.
+- **Harel's choices only:** production selection and provenance of the curated places; a real moderator identity or Access change; production setup (domain, operator, mail); paid usage. None blocks the local work above.
+
+## History (superseded)
+
 ## State (2026-10-07, 06:50 Israel time)
 
 - Worktree: `/Users/harel/Desktop/remember_07102026/web/.claude/worktrees/system-architecture-design-9a660f`, branch `claude/system-architecture-design-9a660f`.
