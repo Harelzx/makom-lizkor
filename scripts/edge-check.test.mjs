@@ -956,6 +956,8 @@ function probeSite({
   purgeReaches = () => true,
   noRay = false,
   movedByOtherAfter = false,
+  // Another exercise moving the generation on once this many ms have passed since our move (and clearing every copy).
+  otherMovesAfterMs = null,
 } = {}) {
   const state = { generation: 4, exercise: null, moves: 0, purges: 0, posts: [], reads: 0 }
   const cache = new Map()
@@ -992,6 +994,7 @@ function probeSite({
         return respond(503, JSON.stringify({ code: "purge_failed", generation: expected + 1 }))
       }
       state.purges++
+      state.movedAt ??= Date.now()
       if (purgeWorks) for (const k of [...cache.keys()]) if (purgeReaches(k.split(" ")[0])) cache.delete(k)
       if (movedByOtherAfter && !replay) {
         state.generation++
@@ -1002,6 +1005,12 @@ function probeSite({
       return respond(200, JSON.stringify({ generation: expected + 1, purged: true }))
     }
     if (u.pathname !== "/api/v1/purge-probe") return deployment()(input, init)
+    if (otherMovesAfterMs !== null && state.movedAt && !state.otherMoved && Date.now() - state.movedAt >= otherMovesAfterMs) {
+      state.generation++
+      state.moves++
+      state.otherMoved = true
+      cache.clear()
+    }
     const colo = coloOf(state.reads++)
     const key = `${colo} ${keyOf(u)}`
     const hit = cached && cache.get(key)
@@ -1162,4 +1171,12 @@ test("a staging run with the probe and no synthetic exercise can't qualify a rel
     problems.some((p) => p.includes("purge_freshness was incomplete")),
     problems.join("; "),
   )
+})
+
+test("a stale copy already seen past the bound still fails when another exercise's generation comes after it", async () => {
+  // TLV keeps 4 past the bound (300 ms); then another exercise moves to 6 and TLV answers that.
+  const site = probeSite({ purgeWorks: false, otherMovesAfterMs: 400 })
+  const r = await probeOf(site)
+  assert.equal(r.status, "fail", JSON.stringify(r))
+  assert.match(r.detail.join(" "), /TLV still served generation 4/)
 })
