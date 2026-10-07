@@ -16,6 +16,11 @@ export function releaseOutcome({ release, migrated, deployed, checked, published
       "The migrations failed: the migrations may be partly applied. The code is still the previous release's.",
       "Check the schema against the Time Travel bookmark in this run's artifacts before anything else; the release stays a draft.",
     )
+  } else if (!ran(deployed)) {
+    lines.push(
+      "The migrations were applied. The deploy never ran: production serves the previous release's code on the new schema.",
+      "The migrations are expand-only, so that code still works on it. The release stays a draft; run it again, or fix forward.",
+    )
   } else if (!done(deployed)) {
     lines.push(
       "The migrations were applied. The deploy did not finish cleanly, so the code may or may not have changed:",

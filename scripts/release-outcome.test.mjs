@@ -43,3 +43,10 @@ test("an outcome it doesn't know is never read as a good one", () => {
   assert.match(text, /deployments list/)
   assert.doesNotMatch(text, /Nothing in production changed/)
 })
+
+test("migrated, then stopped before the deploy: the previous release's code on the new schema", () => {
+  const text = at("success", "skipped", "skipped")
+  assert.match(text, /The deploy never ran/)
+  assert.match(text, /previous release's code/)
+  assert.doesNotMatch(text, /may or may not/)
+})
