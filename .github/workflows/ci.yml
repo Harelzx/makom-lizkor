@@ -69,7 +69,10 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      # The browser and its system packages: normally under a minute. A stalled package mirror once held this step for
+      # two hours with no output (CI 37667926353, 7 October); bounded, a stall fails in minutes and is rerun.
       - run: npx playwright install --with-deps chromium
+        timeout-minutes: 10
       # Every spec but the frame-rate check: it measures the machine as much as the code, and this runner (no GPU) has
       # not been established as giving valid performance evidence (main's first run, 2026-10-07: 3.4 long frames a
       # second against 0.95). It runs, unchanged, on a suitable machine as its own stage (agent-evidence stages.sh

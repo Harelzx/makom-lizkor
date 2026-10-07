@@ -427,6 +427,9 @@ const PLACE_ROW = {
   summary_he: "ספסל סינתטי לבדיקת הקצה, לא מקום אמיתי.",
 }
 const OTHER_ROW = { ...PLACE_ROW, id: "other-place", name_he: "מקום סינתטי אחר" }
+/** The synthetic place's own share image and photo, as its page and the feed name them. */
+const SYN_OG = `/media/og/syn-place/${"a".repeat(64)}.png`
+const SYN_PHOTO = "/media/public/syn-place/photo.jpg"
 /** One of the site's own places, as the feed carries it (src/shared/curated.ts PublicCurated). */
 const CURATED_ROW = {
   ...PLACE_ROW,
@@ -471,6 +474,10 @@ function edgeSite({
   feedAfterHide = null,
   stall = null,
   otherHide = false,
+  // The place's own media: the share image its page names and the photo the feed gives; and a route that keeps
+  // serving them after the hide.
+  media = false,
+  staleMedia = false,
 } = {}) {
   const state = { rev: 3, v: 7, hiddenOnce: false, suppressions: [], calls: [] }
   const cache = new Map()
@@ -479,11 +486,21 @@ function edgeSite({
   const active = () => state.suppressions.filter((s) => !s.lifted)
   const html = { "Content-Type": "text/html" }
   const json = { "Content-Type": "application/json" }
+  const hasPhoto = media === true || media === "photo"
+  const hasOg = media === true || media === "og"
+  const row = hasPhoto ? { ...PLACE_ROW, photo: { url: SYN_PHOTO, alt: "ספסל סינתטי" } } : PLACE_ROW
+  const page = hasOg
+    ? `<!doctype html><meta property="og:image" content="https://site.example${SYN_OG}"><p>page</p>`
+    : "<!doctype html><p>page</p>"
   const origin = (path, v) => {
     if (path === "/place/syn-place")
       return active().some((s) => s.field === "whole")
         ? { status: 410, body: "gone", headers: html, tag: "place:syn-place" }
-        : { status: 200, body: "<!doctype html><p>page</p>", headers: html, tag: "place:syn-place" }
+        : { status: 200, body: page, headers: html, tag: "place:syn-place" }
+    if ((hasOg && path === SYN_OG) || (hasPhoto && path === SYN_PHOTO))
+      return active().some((s) => s.field === "whole") && !staleMedia
+        ? { status: 404, body: JSON.stringify({ code: "not_found" }), headers: json, tag: "place:syn-place" }
+        : { status: 200, body: "image", headers: { "Content-Type": path === SYN_OG ? "image/png" : "image/jpeg" }, tag: "place:syn-place" }
     if (path === "/api/v1/version")
       return versionAnswer
         ? { headers: json, ...versionAnswer, uncached: true }
@@ -495,7 +512,7 @@ function edgeSite({
             status: 200,
             body: JSON.stringify({
               v,
-              places: active().some((s) => s.field === "whole") ? [OTHER_ROW, ...extra] : [PLACE_ROW, OTHER_ROW, ...extra],
+              places: active().some((s) => s.field === "whole") ? [OTHER_ROW, ...extra] : [row, OTHER_ROW, ...extra],
             }),
             headers: json,
             tag: "feed",
@@ -1179,4 +1196,209 @@ test("a stale copy already seen past the bound still fails when another exercise
   const r = await probeOf(site)
   assert.equal(r.status, "fail", JSON.stringify(r))
   assert.match(r.detail.join(" "), /TLV still served generation 4/)
+})
+
+// C-CACHE: the launch runs with the Worker's cache off (EDGE_CACHE=off). Cloudflare then stores none of the Worker's
+// answers, so a deployment that says off and answers from a cache fails, and a removal must be fresh at once: the
+// page, the feed, and the place's own share image and photo, read straight after the hide.
+const OFF = { edgeCache: "off" }
+
+test("an edge cache mode other than on or off is refused before anything is asked (C-CACHE)", async () => {
+  const asked = []
+  for (const edgeCache of ["", "OFF", "none"])
+    await assert.rejects(
+      edgeChecks("https://site.example", { fetch: deployment((u) => asked.push(u.pathname)), edgeCache }),
+      /edge cache mode/,
+    )
+  assert.deepEqual(asked, [])
+})
+
+test("with no Worker cache, no_shared_hit passes when no Worker answer carries CF-Cache-Status, and fails on any that does (C-CACHE)", async () => {
+  const none = (await edgeChecks("https://site.example", { fetch: deployment(), identities: OWNERS, ...OFF })).find(
+    (x) => x.check === "no_shared_hit",
+  )
+  assert.equal(none.status, "pass", JSON.stringify(none))
+  assert.match(none.detail, /no Worker cache \(EDGE_CACHE=off\): \d+ Worker answers, none from a cache/)
+  // DYNAMIC, BYPASS, MISS or HIT: any of them means a cache this deployment says it doesn't have.
+  for (const seen of ["DYNAMIC", "MISS", "HIT"]) {
+    const fetch = deployment((u, _i, res) => u.pathname === "/api/admin/queue" && res.headers.set("CF-Cache-Status", seen))
+    const r = (await edgeChecks("https://site.example", { fetch, identities: OWNERS, ...OFF })).find((x) => x.check === "no_shared_hit")
+    assert.equal(r.status, "fail", seen)
+    assert.match(r.detail.join(" "), new RegExp(`/api/admin/queue.*${seen}`))
+  }
+  // Static files carry what the asset layer gives them, and aren't the Worker's answers.
+  const statics = deployment((u, _i, res) => u.pathname === "/favicon.svg" && res.headers.set("CF-Cache-Status", "HIT"))
+  assert.equal(status(await edgeChecks("https://site.example", { fetch: statics, identities: OWNERS, ...OFF })).no_shared_hit, "pass")
+})
+
+test("locally, the mode changes nothing: what needs the edge is still skipped (C-CACHE)", async () => {
+  const results = await edgeChecks("https://site.example", { fetch: deployment(), local: true, dev: true, ...OFF })
+  assert.equal(status(results).no_shared_hit, "skip")
+  assert.equal(status(results).purge_freshness, "skip")
+})
+
+const offPurge = async (site, timing = PURGE_TIMING) =>
+  (await edgeChecks("https://site.example", { fetch: site.fetch, purge: PURGE, purgeTiming: timing, ...OFF })).find(
+    (x) => x.check === "purge_freshness",
+  )
+
+test("with no Worker cache, the removal exercise passes when the page, the feed, the share image and the photo are gone straight after the hide, and lifts its hide (C-CACHE)", async () => {
+  const site = edgeSite({ cached: false, media: true })
+  const r = await offPurge(site)
+  assert.equal(r.status, "pass", JSON.stringify(r))
+  assert.match(
+    r.detail,
+    /^no Worker cache \(EDGE_CACHE=off\): page fresh after \d+ ms, feed after \d+ ms, share image after \d+ ms, photo after \d+ ms/,
+  )
+  assert.ok(liftedAll(site))
+  // Each was served before the hide, and read again after it.
+  for (const path of [SYN_OG, SYN_PHOTO]) assert.ok(site.state.calls.filter((c) => c === `GET ${path}`).length >= 2, path)
+})
+
+test("with no Worker cache, a share image or photo still served past the bound fails, and the hide is still lifted (C-CACHE)", async () => {
+  const site = edgeSite({ cached: false, media: true, staleMedia: true })
+  const r = await offPurge(site)
+  assert.equal(r.status, "fail")
+  assert.match(r.detail.join(" "), /the share image still served/)
+  assert.match(r.detail.join(" "), /the photo still served/)
+  assert.ok(liftedAll(site))
+})
+
+test("with no Worker cache, a page or feed that comes from a cache fails the exercise before anything is hidden (C-CACHE)", async () => {
+  const site = edgeSite({ media: true })
+  const r = await offPurge(site)
+  assert.equal(r.status, "fail")
+  assert.match(r.detail.join(" "), /EDGE_CACHE=off.*CF-Cache-Status/)
+  assert.equal(site.owned().length, 0)
+})
+
+test("with no Worker cache, no expiry window applies: entries' life doesn't make the exercise incomplete (C-CACHE)", async () => {
+  // A cache's timing rule (STG-PURGE-TIMING-1) has nothing to time without a cache: a slow view still runs the exercise.
+  const site = edgeSite({ cached: false, media: true, viewDelayMs: 200 })
+  const r = await offPurge(site, { ...PURGE_TIMING, edgeTtlMs: 100 })
+  assert.equal(r.status, "pass", JSON.stringify(r))
+  assert.ok(liftedAll(site))
+})
+
+test("with no Worker cache, a place without its own share image or photo leaves the exercise incomplete, and nothing is hidden (C-CACHE-MEDIA-1)", async () => {
+  for (const [media, missing] of [
+    [false, /share image and photo/],
+    ["og", /no photo of its own/],
+    ["photo", /no share image of its own/],
+  ]) {
+    const site = edgeSite({ cached: false, media })
+    const r = await offPurge(site)
+    assert.equal(r.status, "incomplete", JSON.stringify(r))
+    assert.match(r.detail, missing)
+    assert.equal(site.owned().length, 0, `hidden with media ${media}`)
+  }
+})
+
+test("with no Worker cache, a share image the page names but that isn't served before the hide is incomplete, not watched (C-CACHE-MEDIA-1)", async () => {
+  // The share image's own route can fall back (302 to the site's image) when drawing it fails.
+  const site = edgeSite({ cached: false, media: true })
+  const fetch = async (input, init) =>
+    new URL(input).pathname === SYN_OG ? new Response(null, { status: 302, headers: { Location: "/og.png" } }) : site.fetch(input, init)
+  const r = (await edgeChecks("https://site.example", { fetch, purge: PURGE, purgeTiming: PURGE_TIMING, ...OFF })).find(
+    (x) => x.check === "purge_freshness",
+  )
+  assert.equal(r.status, "incomplete", JSON.stringify(r))
+  assert.match(r.detail, /share image answered 302 before the hide/)
+  assert.equal(site.owned().length, 0)
+})
+
+test("a staging run whose removal exercise lacked either medium can't qualify a release: its receipt fails the evidence check (C-CACHE-MEDIA-1)", async () => {
+  const exercise = async (media) =>
+    (
+      await edgeChecks("https://site.example", {
+        fetch: edgeSite({ cached: false, media }).fetch,
+        purge: PURGE,
+        purgeTiming: PURGE_TIMING,
+        ...OFF,
+      })
+    ).filter((r) => r.check === "purge_freshness")
+  const evidence = async (media) => {
+    const results = [
+      ...REQUIRED_CHECKS.filter((c) => c !== "purge_freshness").map((check) => ({ check, status: "pass", detail: "" })),
+      ...(await exercise(media)),
+    ]
+    const SHA = "c".repeat(40)
+    const report = { mode: "deployment", outcome: outcome(results), expect_tag: `staging-${SHA.slice(0, 12)}`, results }
+    const receipt = receiptFor(report, { SHA, GITHUB_RUN_ID: "9" })
+    const artifacts = { artifacts: [{ name: `staging-receipt-${SHA}`, expired: false, created_at: "x", workflow_run: { id: 9 } }] }
+    const run = { id: 9, path: ".github/workflows/staging.yml", status: "completed", conclusion: "success" }
+    return { receipt, problems: stagingEvidenceProblems({ sha: SHA, artifacts, run, receipt }) }
+  }
+  for (const media of [false, "og", "photo"]) {
+    const { receipt, problems } = await evidence(media)
+    assert.equal(receipt.checks.purge_freshness, "incomplete", String(media))
+    assert.ok(
+      problems.some((p) => p.includes("purge_freshness was incomplete")),
+      problems.join("; "),
+    )
+  }
+  // With both, the same path qualifies.
+  const { receipt, problems } = await evidence(true)
+  assert.equal(receipt.checks.purge_freshness, "pass")
+  assert.deepEqual(problems, [])
+})
+
+test("with no Worker cache, production's probe passes when the new generation is read straight after the move (C-CACHE)", async () => {
+  const site = probeSite({ cached: false })
+  const r = await probeOf(site, OFF)
+  assert.equal(r.status, "pass", JSON.stringify(r))
+  assert.match(
+    r.detail,
+    /^no Worker cache \(EDGE_CACHE=off\): content-free probe, generation 4 → 5, fresh after \d+ ms from the move's dispatch/,
+  )
+  assert.equal(site.state.moves, 1)
+})
+
+test("with no Worker cache, a probe answered from a cache fails, and one never fresh fails once the bound passes (C-CACHE)", async () => {
+  const cachedSite = probeSite()
+  const r = await probeOf(cachedSite, OFF)
+  assert.equal(r.status, "fail")
+  assert.match(r.detail.join(" "), /EDGE_CACHE=off.*CF-Cache-Status/)
+  assert.equal(cachedSite.state.moves, 0)
+  // The generation never turns: the database or the route keeps answering the old one.
+  const stuck = probeSite({ cached: false, invalidAfterMove: false })
+  const stuckFetch = async (input, init) => {
+    const res = await stuck.fetch(input, init)
+    return new URL(input).pathname === "/api/v1/purge-probe" && stuck.state.moves
+      ? new Response(JSON.stringify({ generation: 4 }), { status: 200, headers: res.headers })
+      : res
+  }
+  const s = await probeOf({ fetch: stuckFetch, state: stuck.state }, OFF)
+  assert.equal(s.status, "fail")
+  assert.match(s.detail.join(" "), /still served generation 4/)
+})
+
+// The rollout settles before anything is held to it (staging run 37687653687, 7 October): health named the new version
+// 0.1 s after the deploy, then six other addresses were answered by the previous one for the next 10 s; minutes later
+// every answer named the new one. One health answer isn't the rollout reaching every machine.
+const SETTLE = { ...FAST, deadlineMs: 600, settleMs: 100 }
+
+test("health must keep naming the new version for settleMs before anything is checked; an old answer meanwhile starts the wait again", async () => {
+  const healthTimes = []
+  let other = 0
+  // The new version on health from the second probe; one old answer on the fourth; the new one after that.
+  const fetch = versioned(
+    (path, n) => (path === "/api/v1/health" ? (n <= 1 || n === 4 ? "staging-old" : "staging-new") : "staging-new"),
+    (u) => (u.pathname === "/api/v1/health" ? healthTimes.push(Date.now()) : other++),
+  )
+  const started = Date.now()
+  const results = await edgeChecks("https://site.example", { fetch, expectTag: "staging-new", readiness: SETTLE })
+  assert.equal(status(results).deployed_version, "pass")
+  // The streak that counted began after the old answer on the fourth probe, and lasted the settle period.
+  assert.ok(healthTimes.length >= 6, `health asked ${healthTimes.length} times`)
+  assert.ok(healthTimes.at(-1) - healthTimes[4] >= SETTLE.settleMs, "the settle period counts from the last old answer")
+  assert.ok(Date.now() - started >= SETTLE.settleMs)
+})
+
+test("a version that answers but never settles within the deadline fails the run before anything else is checked", async () => {
+  // Every other health answer from the previous version: never settled.
+  const fetch = versioned((path, n) => (path === "/api/v1/health" && n % 2 ? "staging-old" : "staging-new"))
+  const results = await edgeChecks("https://site.example", { fetch, expectTag: "staging-new", readiness: SETTLE })
+  assert.deepEqual(status(results), { deployed_version: "fail" })
+  assert.match(results[0].detail.join(" "), /didn't settle|didn't answer/)
 })

@@ -43,6 +43,10 @@
     "TURNSTILE_HOSTNAMES": "",
     // Past this many submissions waiting for review, the form stops politely (spec 12, load shedding).
     "QUEUE_LIMIT": "200",
+    // The Worker's own cache, as this configuration's `cache` block sets it: off, so Cloudflare stores none of the
+    // Worker's answers and a removal has no edge copy to purge (C-CACHE, worker/lib/purge.ts). release-cache.mjs holds
+    // the two together; edge-check fails a deployment that says off and answers from a cache.
+    "EDGE_CACHE": "off",
     // The site's own address, for absolute links in share pages (og:url, og:image); set with the domain, a launch item.
     "PUBLIC_ORIGIN": "",
     // The public keys each export is encrypted to (a JSON array of RSA-OAEP JWKs): the owner's, whose private half
@@ -111,6 +115,8 @@
         "ACCESS_AUD": "",
         "TURNSTILE_HOSTNAMES": "",
         "QUEUE_LIMIT": "200",
+        // As production: the Worker's cache off (C-CACHE).
+        "EDGE_CACHE": "off",
         "PUBLIC_ORIGIN": "",
         "EXPORT_PUBLIC_KEYS": "",
       },

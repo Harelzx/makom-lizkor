@@ -176,6 +176,9 @@ function releaseProblems(w) {
       problems.push("release.yml's production checks must be given EDGE_PROBE (secrets.EDGE_PROBE)")
     if (!/edge-check\.mjs[^\n]*--probe-freshness/.test(checks?.run ?? ""))
       problems.push("release.yml's production checks must let the probe answer purge_freshness (--probe-freshness)")
+    // Production's Worker cache stays off (release-cache.mjs), and its checks are told so (C-CACHE).
+    if (!/edge-check\.mjs[^\n]*--edge-cache off(\s|$)/.test(checks?.run ?? ""))
+      problems.push("release.yml's production checks must say the Worker cache is off (--edge-cache off), as production's stays off")
     if (checks?.env?.WORKERS_DEV_URL !== "${{ vars.WORKERS_DEV_URL }}" || !/--workers-dev "\$WORKERS_DEV_URL"/.test(checks?.run ?? ""))
       problems.push('release.yml\'s production checks must be given --workers-dev "$WORKERS_DEV_URL" (vars.WORKERS_DEV_URL)')
     // The checks wait for the version this deploy tagged, and hold the Worker's answers to it (a61).
@@ -235,6 +238,9 @@ function stagingProblems(w, triggers) {
       !steps.some((r) => /edge-check\.mjs[^\n]*--expect-tag "staging-\$\{SHA:0:12\}"/.test(r))
     )
       problems.push(`job ${id}'s edge checks must expect the version it deployed (--expect-tag "staging-\${SHA:0:12}")`)
+    // Staging runs as production does, its Worker cache off (wrangler.jsonc's env.staging), and its checks are told so.
+    if (!steps.some((r) => /edge-check\.mjs[^\n]*--edge-cache off(\s|$)/.test(r)))
+      problems.push(`job ${id}'s edge checks must say the Worker cache is off (--edge-cache off), as env.staging sets it (C-CACHE)`)
     // Staging's retention scale comes from its own repository variable alone, given to the deploy (L-RET A2, a87); the
     // Worker accepts only 7200 there, so a wrong value fails the deploy's own checks rather than shortening anything.
     if (

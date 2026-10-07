@@ -76,7 +76,8 @@ export const LAST_UPDATED = "2026-10-05"
  * that implements it, with its test.
  */
 export const PENDING_PROMISES: string[] = [
-  // The purge call is built (phase 4: one per change, tags feed, tributes and place:<id>); what remains is seeing the
-  // edge drop the share page and the photo on staging, and measuring how long it takes.
-  "a withdrawn, erased or hidden place's share page and photo are purged from the edge cache (Cache-Tag place:<id>; verified on staging)",
+  // The edge purge left this list with C-CACHE (8 October): the site runs with the Worker's cache off (EDGE_CACHE), so
+  // Cloudflare keeps no copy of a share page, photo or share image, and each stops at the Worker the moment the place is
+  // withdrawn, erased or hidden. Staging's edge check watches the page, the feed, the share image and the photo go at
+  // once after a hide (purge_freshness, --edge-cache off), and a release needs that receipt for its commit.
 ]

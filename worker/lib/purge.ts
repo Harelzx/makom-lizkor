@@ -8,11 +8,15 @@ type EdgeCache = { purge(options: { tags: string[] }): Promise<{ success: boolea
 
 /**
  * The Workers cache's purge: ctx.cache.purge({ tags }), which resolves to { success, errors } (Cloudflare's "Purge and
- * invalidate the cache", checked 2026-10-06). Only in development, where there is no edge cache, is its absence nothing
- * to clear; anywhere else it is a failure, recorded and retried, never taken as done. Workers Caching itself is off
- * until `cache.enabled` is set in wrangler.jsonc, a staging decision (L1): it caches every response the Worker gives.
+ * invalidate the cache", checked 2026-10-06). The site launches with the Worker's cache off (EDGE_CACHE=off, C-CACHE):
+ * then Cloudflare runs the Worker on every request and stores none of its answers (Workers Cache docs, read 7 October),
+ * so the edge holds no copy and there is nothing to clear. With the cache on, a missing cache is nothing to clear only in
+ * development; anywhere else it is a failure, recorded and retried, never taken as done. Any mode but "off" counts as on,
+ * so a missing or mistyped one shows as failed purges rather than skipped ones. release-cache.mjs holds the mode to
+ * wrangler.jsonc's `cache` block, and edge-check fails a deployment in off mode whose answers come from a cache.
  */
 export const edgePurge: Purge = async (env, ctx, tags) => {
+  if (env.EDGE_CACHE === "off") return true
   const cache = (ctx as { cache?: EdgeCache } | undefined)?.cache
   if (!cache) return env.ENVIRONMENT === "development"
   try {

@@ -23,10 +23,11 @@ share.get("/place/*", (c) => sharePage(c, null))
 async function sharePage(c: Context<AppEnv>, id: string | null) {
   const found = !id ? ({ kind: "none" } as const) : await publicPlace(c.env.DB, id)
   const site = await c.env.ASSETS.fetch(new Request(new URL("/", c.req.url)))
-  // The page's own headers (any security headers the assets carry) stay; the length and validators no longer fit it.
+  // The page's own headers (any security headers the assets carry) stay; the length and validators no longer fit it,
+  // nor does the static file's cache status: this page is the Worker's answer, built now, never a cache's (C-CACHE).
   const headers = (set: Record<string, string>) => {
     const h = new Headers(site.headers)
-    for (const k of ["Content-Length", "ETag", "Last-Modified"]) h.delete(k)
+    for (const k of ["Content-Length", "ETag", "Last-Modified", "CF-Cache-Status", "Age"]) h.delete(k)
     for (const [k, v] of Object.entries(set)) h.set(k, v)
     return h
   }

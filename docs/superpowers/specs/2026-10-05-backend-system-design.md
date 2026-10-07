@@ -196,6 +196,8 @@ WHERE place_id = ?6
 
 **Workers Cache** פועל לפני ה־Worker. כשיש hit, הקוד שלנו לא רץ. לכן חסם הזמן של הסרה הוא זמן ה־purge, או ה־TTL אם ה־purge לא הצליח.
 
+> **מצב ההשקה (8.10, C-CACHE): בלי cache.** הייצור מסרב ל־Workers Caching (`scripts/release-cache.mjs`), ולכן Cloudflare מריץ את ה־Worker בכל בקשה ולא שומר אף תשובה שלו (התיעוד של Workers Cache, נקרא ב־7.10). `EDGE_CACHE=off` אומר את זה ל־Worker: אין מה לנקות, וה־purge לא נשלח ולא נרשם כנכשל. החסמים אחרי הסרה הם הטור "אם ה־purge הצליח", ומהירים ממנו: הדף, התמונה ותמונת השיתוף נבדקים מול המסד בכל בקשה, ולכן נעצרים מיד. דפדפן יכול להחזיק תמונה שכבר טען עד 60 שניות, ופיד פתוח מתעדכן עד 30 שניות. הכותרות לקצה (`Cloudflare-CDN-Cache-Control`, `Cache-Tag`) נשארות, כי אין להן השפעה בלי cache, והן מוכנות אם יוחלט להפעיל אותו. החלטה כזו מחזירה את ה־purge ואת בדיקת ה־purge (edge-check עם `--edge-cache on`). מכסת ה־hit של בדיקת העומס (סעיף 13) לא חלה במצב הזה.
+
 - הנכונות **לא נשענת** על `stale-while-revalidate`, שה־Cache API לא תומך בו.
 - כל תגובה מגדירה `Cloudflare-CDN-Cache-Control` לקצה ו־`Cache-Control` לדפדפן.
 
