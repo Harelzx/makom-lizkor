@@ -410,71 +410,131 @@ test("a named place's share page is held to the deployed version too (a60 with a
 // place, the edge's copies of its page and of the feed must turn fresh within seconds, and the hide is lifted again
 // whatever happened. It needs a moderator and a synthetic place (EDGE_PURGE), and an edge cache it can see; without
 // either it stays incomplete, never passed.
-const PURGE_TIMING = { freshMs: 300, deadlineMs: 1200, everyMs: 20 }
+const PURGE_TIMING = { freshMs: 300, deadlineMs: 1200, everyMs: 20, edgeTtlMs: 5000, requestMs: 150, cleanupMs: 500 }
 const MOD = { "Cf-Access-Jwt-Assertion": "synthetic-moderator" }
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 /**
- * A deployment behind an edge cache: answers kept per address until purged (by tag) or until their TTL passes (the
- * version's own, shorter in the Worker: 10 s against 60 s). As the Worker's feed, an address naming an old version
- * answers 409, uncached.
+ * A deployment behind an edge cache, as the Worker and Workers Caching behave: each address (its path and query, as
+ * the cache key) kept until purged by tag or until its TTL passes (the version's own is shorter in the Worker: 10 s
+ * against 60 s); the feed at an old version answers 409 stale_version, no-store, uncached. The options stand in for
+ * what a real edge or Worker may do instead: a purge that doesn't take; entries already aged (a cache that keys by
+ * path only); a hide answered late, or committed with its answer lost; an error after the hide; an admin view that
+ * fails; a request that never answers; another moderator's hide on the same place meanwhile.
  */
-function edgeSite({ purgeWorks = true, cached = true, ttlMs = 5000, versionTtlMs = ttlMs, hideStatus = 200, liftStatus = 200 } = {}) {
-  const state = { hidden: false, rev: 3, v: 7, suppressions: [], lifted: [], calls: [] }
+function edgeSite({
+  purgeWorks = true,
+  cached = true,
+  ttlMs = 5000,
+  versionTtlMs = ttlMs,
+  ignoreQuery = false,
+  preAgedMs = 0,
+  hideStatus = 200,
+  hideDelayMs = 0,
+  hideLost = false,
+  liftStatus = 200,
+  viewAfterHide = null,
+  feedAfterHide = null,
+  stall = null,
+  otherHide = false,
+} = {}) {
+  const state = { rev: 3, v: 7, hiddenOnce: false, suppressions: [], calls: [] }
   const cache = new Map()
+  const active = () => state.suppressions.filter((s) => !s.lifted)
+  const html = { "Content-Type": "text/html" }
+  const json = { "Content-Type": "application/json" }
   const origin = (path, v) => {
     if (path === "/place/syn-place")
-      return state.hidden ? { status: 410, body: "gone", tag: "place:syn-place" } : { status: 200, body: "page", tag: "place:syn-place" }
-    if (path === "/api/v1/version") return { status: 200, body: JSON.stringify({ v: `0.${state.v}` }), tag: "feed" }
-    if (path === "/api/v1/feed")
+      return active().some((s) => s.field === "whole")
+        ? { status: 410, body: "gone", headers: html, tag: "place:syn-place" }
+        : { status: 200, body: "<!doctype html><p>page</p>", headers: html, tag: "place:syn-place" }
+    if (path === "/api/v1/version") return { status: 200, body: JSON.stringify({ v: `0.${state.v}` }), headers: json, tag: "feed" }
+    if (path === "/api/v1/feed") {
+      if (feedAfterHide && state.hiddenOnce) return { headers: {}, ...feedAfterHide, uncached: true }
       return v === `0.${state.v}`
-        ? { status: 200, body: JSON.stringify({ places: state.hidden ? [] : [{ id: "syn-place" }] }), tag: "feed" }
-        : { status: 409, body: JSON.stringify({ code: "stale_version", v: `0.${state.v}` }), uncached: true }
+        ? {
+            status: 200,
+            body: JSON.stringify({ v, places: active().some((s) => s.field === "whole") ? [] : [{ id: "syn-place" }] }),
+            headers: json,
+            tag: "feed",
+          }
+        : {
+            status: 409,
+            body: JSON.stringify({ code: "stale_version", v: `0.${state.v}` }),
+            headers: { ...json, "Cache-Control": "no-store" },
+            uncached: true,
+          }
+    }
     return null
   }
-  const respond = (status, body, extra = {}) => new Response(body, { status, headers: { "Content-Type": "application/json", ...extra } })
+  const keyOf = (u) => (ignoreQuery ? u.pathname : u.pathname + u.search)
+  const purgeTags = () => {
+    if (purgeWorks) for (const [k, c] of cache) if (c.tag === "feed" || c.tag === "place:syn-place") cache.delete(k)
+  }
+  // Entries that were already there, near the end of their life, before the exercise came.
+  if (preAgedMs)
+    for (const path of ["/place/syn-place", "/api/v1/feed"]) {
+      const u = new URL(path, "https://site.example")
+      cache.set(keyOf(u), { ...origin(path, `0.${state.v}`), at: Date.now() - preAgedMs })
+    }
+  const respond = (status, body, headers = {}) => new Response(body, { status, headers: { ...json, ...headers } })
   const fetch = async (input, init = {}) => {
     const u = new URL(input)
-    const key = u.pathname + u.search
     const auth = new Headers(init.headers).get("Cf-Access-Jwt-Assertion")
     state.calls.push(`${init.method ?? "GET"} ${u.pathname}`)
+    // A request that never answers: only its own bound ends it.
+    if (stall?.(u.pathname, state))
+      return new Promise((_, reject) => init.signal?.addEventListener("abort", () => reject(init.signal.reason)))
     if (u.pathname.startsWith("/api/admin/")) {
       if (auth !== MOD["Cf-Access-Jwt-Assertion"]) return respond(403, "{}")
-      if (u.pathname === "/api/admin/places/syn-place")
+      if (u.pathname === "/api/admin/places/syn-place") {
+        if (viewAfterHide && state.hiddenOnce) return respond(viewAfterHide.status, viewAfterHide.body)
         return respond(
           200,
-          JSON.stringify({
-            rev: state.rev,
-            suppressions: state.suppressions.filter((s) => !state.lifted.includes(s)).map((id) => ({ id, field: "whole" })),
-          }),
+          JSON.stringify({ rev: state.rev, suppressions: active().map(({ id, field, reason }) => ({ id, field, reason })) }),
         )
+      }
       if (u.pathname === "/api/admin/suppressions" && init.method === "POST") {
+        const body = JSON.parse(init.body)
         if (hideStatus !== 200) return respond(hideStatus, "{}")
-        state.hidden = true
+        if (body.expectedRev !== state.rev) return respond(409, JSON.stringify({ code: "changed_meanwhile" }))
+        state.suppressions.push({ id: `s_${state.suppressions.length}`, field: "whole", reason: body.reason, lifted: false })
+        state.hiddenOnce = true
         state.rev++
         state.v++
-        state.suppressions.push(`s_${state.suppressions.length}`)
-        if (purgeWorks) for (const [k, c] of cache) if (c.tag === "feed" || c.tag === "place:syn-place") cache.delete(k)
+        if (otherHide) {
+          state.suppressions.push({ id: "s_other", field: "photo", reason: "הסתרה של מנחה אחר", lifted: false })
+          state.rev++
+          state.v++
+        }
+        purgeTags()
+        // Committed, and then the answer never arrives, or arrives late.
+        if (hideLost) throw new TypeError("fetch failed")
+        if (hideDelayMs) await sleep(hideDelayMs)
         return respond(200, JSON.stringify({ ok: true }))
       }
-      const lift = /^\/api\/admin\/suppressions\/(s_\d+)\/lift$/.exec(u.pathname)
+      const lift = /^\/api\/admin\/suppressions\/(s_\w+)\/lift$/.exec(u.pathname)
       if (lift && init.method === "POST") {
         if (liftStatus !== 200) return respond(liftStatus, "{}")
-        state.lifted.push(lift[1])
-        state.hidden = false
+        if (JSON.parse(init.body).expectedRev !== state.rev) return respond(409, JSON.stringify({ code: "changed_meanwhile" }))
+        const s = active().find((x) => x.id === lift[1])
+        if (!s) return respond(404, "{}")
+        s.lifted = true
         state.rev++
         state.v++
-        if (purgeWorks) for (const [k, c] of cache) if (c.tag === "feed" || c.tag === "place:syn-place") cache.delete(k)
+        purgeTags()
         return respond(200, JSON.stringify({ ok: true }))
       }
     }
     const o = origin(u.pathname, u.searchParams.get("v"))
     if (!o) return deployment()(input, init)
+    const key = keyOf(u)
     const hit = cached && cache.get(key)
     const ttl = u.pathname === "/api/v1/version" ? versionTtlMs : ttlMs
-    if (hit && Date.now() - hit.at < ttl) return respond(hit.status, hit.body, { "CF-Cache-Status": "HIT" })
+    if (hit && Date.now() - hit.at < ttl) return respond(hit.status, hit.body, { ...hit.headers, "CF-Cache-Status": "HIT" })
     if (cached && !o.uncached) cache.set(key, { ...o, at: Date.now() })
-    return respond(o.status, o.body, cached && !o.uncached ? { "CF-Cache-Status": "MISS" } : {})
+    return respond(o.status, o.body, { ...o.headers, ...(cached && !o.uncached ? { "CF-Cache-Status": "MISS" } : {}) })
   }
-  return { fetch, state }
+  return { fetch, state, owned: () => state.suppressions.filter((s) => s.id !== "s_other") }
 }
 const PURGE = { place: "syn-place", moderator: { headers: MOD } }
 
@@ -484,8 +544,10 @@ test("the purge exercise passes when a hide reaches the page and the feed within
   const r = results.find((x) => x.check === "purge_freshness")
   assert.equal(r.status, "pass", JSON.stringify(r))
   assert.match(r.detail, /page fresh after \d+ ms, feed after \d+ ms/)
-  assert.equal(site.state.hidden, false)
-  assert.deepEqual(site.state.lifted, ["s_0"])
+  assert.deepEqual(
+    site.owned().map((s) => [s.id, s.lifted]),
+    [["s_0", true]],
+  )
 })
 
 test("a purge that doesn't take fails once the bound passes, and the hide is still lifted (spec 13)", async () => {
@@ -494,7 +556,10 @@ test("a purge that doesn't take fails once the bound passes, and the hide is sti
   const r = results.find((x) => x.check === "purge_freshness")
   assert.equal(r.status, "fail")
   assert.match(r.detail.join(" "), /still served|not fresh/)
-  assert.deepEqual(site.state.lifted, ["s_0"])
+  assert.deepEqual(
+    site.owned().map((s) => [s.id, s.lifted]),
+    [["s_0", true]],
+  )
   assert.equal(outcome(results), "fail")
 })
 
@@ -506,8 +571,121 @@ test("an unpurged feed fails even once the version's own short TTL has turned it
   const r = results.find((x) => x.check === "purge_freshness")
   assert.equal(r.status, "fail", JSON.stringify(r))
   assert.match(r.detail.join(" "), /the feed (still served|was not fresh)/)
-  assert.deepEqual(site.state.lifted, ["s_0"])
+  assert.deepEqual(
+    site.owned().map((s) => [s.id, s.lifted]),
+    [["s_0", true]],
+  )
 })
+
+const purgeOf = async (site, timing = PURGE_TIMING) =>
+  (await edgeChecks("https://site.example", { fetch: site.fetch, purge: PURGE, purgeTiming: timing })).find(
+    (x) => x.check === "purge_freshness",
+  )
+const liftedAll = (site) => site.owned().length > 0 && site.owned().every((s) => s.lifted)
+
+test("after the hide, only a genuine fresh feed counts: errors, refusals, redirects and malformed answers never do (STG-PURGE-RESPONSE-1)", async () => {
+  const stale = (v, headers = { "Cache-Control": "no-store" }) => ({
+    status: 409,
+    body: JSON.stringify({ code: "stale_version", v }),
+    headers,
+  })
+  for (const [what, answer] of [
+    ["a Worker error naming the version", { status: 503, body: JSON.stringify({ code: "unavailable", v: "0.8" }) }],
+    ["Access's sign-in page", { status: 403, body: "<html>sign in</html>", headers: { "Content-Type": "text/html" } }],
+    ["a redirect", { status: 302, body: "", headers: { Location: "/cdn-cgi/access/login" } }],
+    ["a body that isn't JSON", { status: 200, body: "<html>oops</html>" }],
+    ["a feed without its places", { status: 200, body: JSON.stringify({ v: "0.7" }) }],
+    ["a 409 that names the same version", stale("0.7")],
+    ["a 409 the edge may keep", stale("0.8", {})],
+  ]) {
+    const site = edgeSite({ feedAfterHide: answer })
+    const r = await purgeOf(site)
+    assert.equal(r.status, "fail", `${what}: ${JSON.stringify(r)}`)
+    assert.match(r.detail.join(" "), /the feed/, what)
+    assert.ok(liftedAll(site), what)
+  }
+})
+
+test("entries the edge already held, near their end, can't pass through expiry: the run's own addresses must be new (STG-PURGE-TIMING-1)", async () => {
+  // A cache that ignores the query serves what was there before; with purge broken, those entries would expire
+  // inside the bound and look like a purge.
+  const site = edgeSite({ purgeWorks: false, ignoreQuery: true, preAgedMs: 4850 })
+  const r = await purgeOf(site)
+  assert.equal(r.status, "incomplete", JSON.stringify(r))
+  assert.match(r.detail, /edge cache/)
+  assert.ok(!site.state.calls.some((c) => c.startsWith("POST")), "nothing is hidden when nothing can be told apart")
+})
+
+test("a hide answered late can't pass through expiry: freshness is timed from the hide's dispatch (STG-PURGE-TIMING-1)", async () => {
+  // The entries live 450 ms; the hide is committed at once and answered 350 ms later; purge is broken. Timed from the
+  // answer, expiry would look fresh within 100 ms.
+  const site = edgeSite({ purgeWorks: false, ttlMs: 450, hideDelayMs: 350 })
+  const r = await purgeOf(site, { ...PURGE_TIMING, edgeTtlMs: 450 })
+  assert.equal(r.status, "fail", JSON.stringify(r))
+  assert.ok(liftedAll(site))
+})
+
+test("a window longer than the entries' life is incomplete, and nothing is hidden (STG-PURGE-TIMING-1)", async () => {
+  const site = edgeSite({ ttlMs: 200 })
+  const r = await purgeOf(site, { ...PURGE_TIMING, edgeTtlMs: 200 })
+  assert.equal(r.status, "incomplete", JSON.stringify(r))
+  assert.ok(!site.state.calls.some((c) => c.startsWith("POST")))
+})
+
+test("a hide committed with its answer lost is found by this run's marker and lifted (STG-PURGE-CLEANUP-1)", async () => {
+  const site = edgeSite({ hideLost: true })
+  const r = await purgeOf(site)
+  assert.equal(r.status, "fail", JSON.stringify(r))
+  assert.match(r.detail.join(" "), /edge-purge:[0-9a-f]+/)
+  assert.ok(liftedAll(site), JSON.stringify(site.state.suppressions))
+})
+
+test("another moderator's hide on the same place is left as it was; only this run's is lifted (STG-PURGE-CLEANUP-1)", async () => {
+  const site = edgeSite({ otherHide: true })
+  const r = await purgeOf(site)
+  assert.equal(r.status, "pass", JSON.stringify(r))
+  assert.ok(liftedAll(site))
+  assert.equal(site.state.suppressions.find((s) => s.id === "s_other").lifted, false)
+})
+
+test("an admin view that fails or is malformed is never taken for a clean lift (STG-PURGE-CLEANUP-1)", async () => {
+  for (const view of [
+    { status: 500, body: "{}" },
+    { status: 200, body: "{}" },
+    { status: 200, body: "not json" },
+    { status: 200, body: JSON.stringify({ rev: 5, suppressions: "none" }) },
+  ]) {
+    const site = edgeSite({ viewAfterHide: view })
+    const r = await purgeOf(site)
+    assert.equal(r.status, "fail", JSON.stringify(r))
+    // The failure says which place and which hide to look for, and nothing secret.
+    assert.match(
+      r.detail.join(" "),
+      /unresolved[^]*edge-purge:[0-9a-f]+[^]*syn-place|syn-place[^]*edge-purge:[0-9a-f]+[^]*unresolved/,
+      JSON.stringify(view),
+    )
+    assert.doesNotMatch(JSON.stringify(r), /synthetic-moderator/)
+  }
+})
+
+test("a request that never answers is bounded, and the hide is still lifted (STG-PURGE-CLEANUP-1)", { timeout: 10_000 }, async () => {
+  const site = edgeSite({ stall: (path, s) => path === "/api/v1/feed" && s.hiddenOnce })
+  const r = await purgeOf(site)
+  assert.equal(r.status, "fail", JSON.stringify(r))
+  assert.match(r.detail.join(" "), /the feed/)
+  assert.ok(liftedAll(site))
+})
+
+test(
+  "a lift that never answers is bounded, and reported unresolved with the place and the marker (STG-PURGE-CLEANUP-1)",
+  { timeout: 10_000 },
+  async () => {
+    const site = edgeSite({ stall: (path) => /\/lift$/.test(path) })
+    const r = await purgeOf(site)
+    assert.equal(r.status, "fail", JSON.stringify(r))
+    assert.match(r.detail.join(" "), /unresolved[^]*edge-purge:[0-9a-f]+[^]*syn-place/)
+  },
+)
 
 test("the purge exercise is incomplete without a moderator and a synthetic place, or without an edge cache to see (spec 13)", async () => {
   const none = await edgeChecks("https://site.example", { fetch: edgeSite().fetch })
@@ -534,7 +712,7 @@ test("a hide the deployment refuses, or a lift it refuses, fails the exercise (s
     (x) => x.check === "purge_freshness",
   )
   assert.equal(r.status, "fail")
-  assert.match(r.detail.join(" "), /stays hidden/)
+  assert.match(r.detail.join(" "), /unresolved[^]*may stay hidden/)
 })
 
 test("the exercise's own answers are held to the deployed version too", async () => {
