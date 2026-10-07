@@ -98,6 +98,9 @@ export async function stagingFlow(
     return { status: r.status, places: parsed?.success ? parsed.data.places.map((p) => p.id) : null }
   }
   const page = async () => ({ status: (await ask(`/place/${place}?flow=${run}`)).status })
+  // What the share page last answered for the record: its status, the unknown outcome if no answer could be read, or
+  // that it was never asked.
+  const pageSaid = (p) => (p.last?.error ? UNKNOWN : (p.last?.status ?? "not asked"))
 
   const steps = []
   const started = Date.now()
@@ -179,7 +182,7 @@ export async function stagingFlow(
     !step(
       "published",
       inFeed.ok && pageUp.ok,
-      `feed ${inFeed.ok ? "names it" : `doesn't (last: ${inFeed.last?.error ? UNKNOWN : inFeed.last?.status})`}; share page ${pageUp.last?.status ?? "not asked"}`,
+      `feed ${inFeed.ok ? "names it" : `doesn't (last: ${inFeed.last?.error ? UNKNOWN : inFeed.last?.status})`}; share page ${pageSaid(pageUp)}`,
     )
   )
     return result()
@@ -205,7 +208,7 @@ export async function stagingFlow(
   step(
     "removed",
     outOfFeed.ok && pageGone.ok,
-    `feed ${outOfFeed.ok ? "without it" : `still names it (last: ${outOfFeed.last?.error ? UNKNOWN : outOfFeed.last?.status})`}; share page ${pageGone.last?.status}`,
+    `feed ${outOfFeed.ok ? "without it" : `still names it (last: ${outOfFeed.last?.error ? UNKNOWN : outOfFeed.last?.status})`}; share page ${pageSaid(pageGone)}`,
   )
   return result()
 }
