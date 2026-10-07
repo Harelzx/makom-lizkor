@@ -207,6 +207,17 @@ test("staging deploys only the commit CI passed on main, with staging's secrets 
   )
 })
 
+// Each deploy's checks wait for the version that deploy tagged and hold the Worker's answers to it (a61): a check
+// answered by the previous version would describe a commit other than the one its receipt or release names.
+test("the edge checks expect the very tag the deploy gave its version", () => {
+  const staging = 'node scripts/edge-check.mjs "$STAGING_PUBLIC_ORIGIN" --expect-tag "staging-${SHA:0:12}"'
+  fails(withChange("staging.yml", staging, 'node scripts/edge-check.mjs "$STAGING_PUBLIC_ORIGIN"'), "expect the version it deployed")
+  fails(withChange("staging.yml", staging, staging.replace("${SHA:0:12}", "${SHA:0:8}")), "expect the version it deployed")
+  const release = 'node scripts/edge-check.mjs "$PUBLIC_ORIGIN" --expect-tag "$RELEASE"'
+  fails(withChange("release.yml", release, 'node scripts/edge-check.mjs "$PUBLIC_ORIGIN"'), "expect the version it deployed")
+  fails(withChange("release.yml", release, release.replace('"$RELEASE"', '"latest"')), "expect the version it deployed")
+})
+
 test("a failed command inside a pipe fails its step, so no migration runs without the bookmark (P6-BOOKMARK-1)", () => {
   // GitHub runs an unspecified shell as `bash -e {0}`, without pipefail (workflow syntax, jobs.<id>.steps[*].shell).
   fails(withChange("ci.yml", "      - run: npm test\n", "      - run: npm test | tee test.log\n"), "a pipe that hides a failure")

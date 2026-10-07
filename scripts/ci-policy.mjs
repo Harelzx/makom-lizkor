@@ -123,6 +123,9 @@ function releaseProblems(w) {
       problems.push(
         `job ${id} must run, in order: release:check, the Time Travel bookmark, the migrations, the deploy (tagged with the release and its commit), the production checks`,
       )
+    // The checks wait for the version this deploy tagged, and hold the Worker's answers to it (a61).
+    if (!steps.some((r) => /edge-check\.mjs[^\n]*--expect-tag "\$RELEASE"/.test(r)))
+      problems.push(`job ${id}'s production checks must expect the version it deployed (--expect-tag "$RELEASE")`)
   }
   return problems
 }
@@ -155,6 +158,12 @@ function stagingProblems(w, triggers) {
       problems.push(
         `job ${id} must confirm the commit, check the staging config, migrate, deploy tagged with the commit, then run the edge checks`,
       )
+    // The edge checks wait for the version this deploy tagged, and hold the Worker's answers to it (a61).
+    if (
+      !steps.some((r) => /wrangler deploy --tag "staging-\$\{SHA:0:12\}"/.test(r)) ||
+      !steps.some((r) => /edge-check\.mjs[^\n]*--expect-tag "staging-\$\{SHA:0:12\}"/.test(r))
+    )
+      problems.push(`job ${id}'s edge checks must expect the version it deployed (--expect-tag "staging-\${SHA:0:12}")`)
     // The receipt release.yml reads (P6-STAGING-1): the last step, so it exists only if every step before it passed,
     // named for the commit deployed, from the edge check's own report, kept a modest while.
     const all = job.steps ?? []

@@ -8,9 +8,14 @@
 // owners, the edge cache, the purge timing, a conclusive workers.dev answer) is "incomplete": the run exits 3, and an
 // incomplete run never qualifies a release (a51, P6-EDGE-1). Only the explicit --local mode, for a preview with no edge,
 // may "skip" them.
-//   node scripts/edge-check.mjs <base-url> [--local [--dev]] [--workers-dev <url>] [--report <file>]
+//   node scripts/edge-check.mjs <base-url> [--local [--dev]] [--workers-dev <url>] [--expect-tag <tag>] [--report <file>]
 //   --local: a local preview; what needs the edge is skipped, and labelled so.
 //   --dev:   with --local, sign in through the development stand-in (/__dev/login), as a moderator and as a stranger.
+//   --expect-tag: the tag the deploy just gave its version. The previous version may answer for a while after a deploy,
+//   so the run first waits, bounded, for health to answer 200 under that tag (X-Worker-Version), then holds every Worker
+//   answer it measures to it; one from another version, or naming none, fails (a61, DEPLOY-VERSION-1). The static
+//   files and Access's own answers carry no version and aren't counted. Without it a deployment's version is unknown:
+//   incomplete. This shows which version answered these requests, not that the rollout reached everywhere.
 // Behind Access (staging), CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET in the environment, a service token's, go
 // with every request. EDGE_IDENTITIES (JSON: [{ name, path, headers, marker }], two or more synthetic owners,
 // each with a private address of its own and a marker its answer carries) names who may read what. Both are read
@@ -34,18 +39,77 @@ const PAGES = {
 const AUTHENTICATED = ["/api/admin/queue", "/api/ops/summary", "/api/v1/submissions/p_00000000000000000000000000"]
 const IDENTITIES = { moderator: "dev@example.test", stranger: "not-a-moderator@example.test" }
 const refused = (status) => status >= 400 && status < 500
+/** The addresses the Worker answers itself (run_worker_first); everything else is a static file. */
+const WORKER_PATH = /^\/(api|place|media|__dev)\//
+/** A version tag as the deploys give them: staging-<sha12>, or the release's tag. */
+const TAG = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
+/** How long a deploy's version gets to answer, how often health is asked, and how long one request may take. */
+const READINESS = { deadlineMs: 90_000, everyMs: 3_000, fetchMs: 10_000 }
 
 export async function edgeChecks(
   base,
-  { fetch: send = globalThis.fetch, local = false, dev = false, workersDev = null, access = null, identities = null } = {},
+  {
+    fetch: send = globalThis.fetch,
+    local = false,
+    dev = false,
+    workersDev = null,
+    access = null,
+    identities = null,
+    expectTag = null,
+    readiness = READINESS,
+  } = {},
 ) {
+  if (expectTag !== null && !TAG.test(expectTag)) throw new Error(`--expect-tag is not a version tag: ${JSON.stringify(expectTag)}`)
   const url = (path) => new URL(path, base).toString()
+  // Once the expected version has answered, every Worker answer measured must name it.
+  const version = { holding: false, answers: 0, failures: [] }
   // Past Access with a service token, on every request but the workers.dev probe (which must be refused on its own).
-  const fetch = (u, init = {}) =>
-    send(
+  const fetch = async (u, init = {}) => {
+    const res = await send(
       u,
       access ? { ...init, headers: { ...init.headers, "CF-Access-Client-Id": access.id, "CF-Access-Client-Secret": access.secret } } : init,
     )
+    const path = new URL(u).pathname
+    if (version.holding && WORKER_PATH.test(path)) {
+      version.answers++
+      const tag = res.headers.get("X-Worker-Version")
+      if (tag !== expectTag) version.failures.push(`${path}: answered by ${tag ?? "a version naming none"}`)
+    }
+    return res
+  }
+  // Readiness only: health is asked until it answers 200 under the expected tag, within the deadline, each request
+  // bounded by what is left of it and at its own address (no cache answers one probe for another). Nothing else is
+  // retried: the checks below run once.
+  if (expectTag !== null) {
+    const end = Date.now() + readiness.deadlineMs
+    let last = "no answer"
+    for (let n = 1; Date.now() < end; n++) {
+      try {
+        const res = await fetch(url(`/api/v1/health?ready=${n}`), {
+          cache: "no-store",
+          signal: AbortSignal.timeout(Math.max(1, Math.min(readiness.fetchMs, end - Date.now()))),
+        })
+        await res.text()
+        const tag = res.headers.get("X-Worker-Version")
+        if (res.status === 200 && tag === expectTag) {
+          version.holding = true
+          break
+        }
+        last = `${res.status} from ${tag ?? "a version naming none"}`
+      } catch {
+        last = "no answer in time"
+      }
+      await new Promise((resolve) => setTimeout(resolve, Math.max(0, Math.min(readiness.everyMs, end - Date.now()))))
+    }
+    if (!version.holding)
+      return [
+        {
+          check: "deployed_version",
+          status: "fail",
+          detail: [`${expectTag} didn't answer /api/v1/health within ${readiness.deadlineMs / 1000} s (last: ${last})`],
+        },
+      ]
+  }
   const results = []
   const record = (check, failures, detail) =>
     results.push({ check, status: failures.length ? "fail" : "pass", detail: failures.length ? failures : detail })
@@ -211,6 +275,8 @@ export async function edgeChecks(
     else if (res.status === 401 || res.status === 403 || toAccess) record("workers_dev_closed", [], `${workersDev} refused (${res.status})`)
     else unseen("workers_dev_closed", `${workersDev} answered ${res.status}, not a recognized refusal: inconclusive`)
   }
+  if (expectTag !== null) record("deployed_version", version.failures, `${version.answers} Worker answers named ${expectTag}`)
+  else if (!local) unseen("deployed_version", "no version expected (--expect-tag): which version answered is unknown")
   return results
 }
 
@@ -223,8 +289,11 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const option = (name) => (args.includes(name) ? args[args.indexOf(name) + 1] : null)
   const base = args.find((a, i) => /^https?:\/\//.test(a) && args[i - 1] !== "--workers-dev")
   const local = args.includes("--local")
+  const expectTag = args.includes("--expect-tag") ? (option("--expect-tag") ?? "") : null
   if (!base || (args.includes("--dev") && !local)) {
-    console.error("usage: node scripts/edge-check.mjs <base-url> [--local [--dev]] [--workers-dev <url>] [--report <file>]")
+    console.error(
+      "usage: node scripts/edge-check.mjs <base-url> [--local [--dev]] [--workers-dev <url>] [--expect-tag <tag>] [--report <file>]",
+    )
     process.exit(2)
   }
   const { CF_ACCESS_CLIENT_ID: id, CF_ACCESS_CLIENT_SECRET: secret, EDGE_IDENTITIES } = process.env
@@ -234,6 +303,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     workersDev: option("--workers-dev"),
     access: id && secret ? { id, secret } : null,
     identities: EDGE_IDENTITIES ? JSON.parse(EDGE_IDENTITIES) : null,
+    expectTag,
   })
   for (const r of results) console.log(`${r.status.padEnd(10)}  ${r.check}: ${Array.isArray(r.detail) ? r.detail.join("; ") : r.detail}`)
   const result = outcome(results)
