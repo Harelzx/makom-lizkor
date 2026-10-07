@@ -594,10 +594,16 @@ type CuratedPhotoRow = { key: string; thumb_key: string; title: string; author: 
 /**
  * A curated place as the public sees it: the same hides as a contribution's (a hidden name reads as its kind and
  * community, a hidden text is blank), and a hidden photo takes every photo of the place with it, files and credits.
- * Only photos that reached public/ are named, as for a contribution's.
+ * Only photos that reached public/ are named, as for a contribution's. A hidden name leaves nothing that could repeat
+ * it (P7-PROJECTION-1), as a contribution's link and photo description: the links and the revival's sources are left
+ * out, and each photo keeps its author and licence (what attribution needs) under the place's neutral words, without
+ * its subject or its source page, which is often named after the place.
  */
 function toPublicCurated(r: Record<string, string | number | null>, hidden: Set<string>): PublicCuratedPlace {
-  const fields = CuratedFields.parse(JSON.parse(r.curated as string))
+  const stored = CuratedFields.parse(JSON.parse(r.curated as string))
+  const nameHidden = hidden.has("name_he")
+  const neutral = hiddenName(r.kind as string, r.place_he as string | null)
+  const fields = nameHidden ? { ...stored, links: [], ...(stored.revival ? { revival: { ...stored.revival, sources: [] } } : {}) } : stored
   const photos = hidden.has("photo")
     ? []
     : (JSON.parse((r.curated_photos as string | null) ?? "[]") as CuratedPhotoRow[])
@@ -605,17 +611,17 @@ function toPublicCurated(r: Record<string, string | number | null>, hidden: Set<
         .map(({ key, thumb_key, ...meta }) => ({
           url: `/media/${key}`,
           thumb_url: `/media/${thumb_key}`,
-          title: meta.title,
+          title: nameHidden ? neutral : meta.title,
           author: meta.author,
           license: meta.license,
           ...(meta.license_url ? { license_url: meta.license_url } : {}),
-          ...(meta.commons_url ? { commons_url: meta.commons_url } : {}),
-          ...(meta.subject_he ? { subject_he: meta.subject_he } : {}),
+          ...(meta.commons_url && !nameHidden ? { commons_url: meta.commons_url } : {}),
+          ...(meta.subject_he && !nameHidden ? { subject_he: meta.subject_he } : {}),
         }))
   return {
     id: r.id as string,
     kind: r.kind as PublicCuratedPlace["kind"],
-    name_he: hidden.has("name_he") ? hiddenName(r.kind as string, r.place_he as string | null) : (r.name_he as string),
+    name_he: nameHidden ? neutral : (r.name_he as string),
     lat: r.lat as number,
     lng: r.lng as number,
     precision: r.location_precision === "approximate" ? "approx" : "exact",
