@@ -116,6 +116,12 @@ describe("the nightly export (spec 8.1)", () => {
     await runJobs({ ...withKeys, EXPORT_PUBLIC_KEYS: "" }, deps, undefined, at)
     expect(await exportsAfter(at.toISOString())).toHaveLength(0)
   })
+
+  it("is reported missing by the nightly check while there is no key, as on staging until its keys are set (a104)", async () => {
+    const at = new Date(Date.now() + 1310 * DAY)
+    expect((await checkDeletion({ db: env.DB, exports: env.EXPORTS, keys: "" }, at)).no_export_key).toBe(1)
+    expect((await checkDeletion({ db: env.DB, exports: env.EXPORTS, keys: withKeys.EXPORT_PUBLIC_KEYS }, at)).no_export_key).toBeUndefined()
+  })
 })
 
 describe("an export's 35 days (spec 7, 8.4)", () => {

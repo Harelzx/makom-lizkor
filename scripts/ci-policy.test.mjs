@@ -318,6 +318,23 @@ test("staging alone is given the retention time scale, from its own variable; pr
   )
 })
 
+test("staging's export keys come from a repository variable, and only staging.yml names them (L-RET A2, a104)", () => {
+  const given = ' \\\n            --var "EXPORT_PUBLIC_KEYS:$STAGING_EXPORT_PUBLIC_KEYS"'
+  fails(withChange("staging.yml", given, ""), "EXPORT_PUBLIC_KEYS")
+  fails(
+    withChange("staging.yml", "${{ vars.STAGING_EXPORT_PUBLIC_KEYS }}", "${{ secrets.STAGING_EXPORT_PUBLIC_KEYS }}"),
+    "EXPORT_PUBLIC_KEYS",
+  )
+  fails(
+    withChange(
+      "release.yml",
+      'wrangler deploy --tag "$RELEASE" --message "release $RELEASE $SHA"',
+      'wrangler deploy --tag "$RELEASE" --message "release $RELEASE $SHA" --var "EXPORT_PUBLIC_KEYS:${{ vars.STAGING_EXPORT_PUBLIC_KEYS }}"',
+    ),
+    "STAGING_EXPORT_PUBLIC_KEYS",
+  )
+})
+
 test("the release checks its built configuration for Workers Caching after the build and before the deploy (L-CACHE-STG, a95)", () => {
   const step = "      - run: node scripts/release-cache.mjs dist/makom_lizkor/wrangler.json\n"
   fails(withChange("release.yml", step, ""), "release.yml must check its built configuration for Workers Caching")
