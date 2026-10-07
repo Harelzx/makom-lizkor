@@ -80,8 +80,8 @@ export async function opsCaller(req: Request, env: Env): Promise<{ ok: true } | 
 
 /**
  * The purge probe's own caller (L-PURGE, a73): an Access service token whose client id is on PROBE_SERVICE_TOKENS and on
- * neither the ops list nor any other, so read-only diagnostics never gain write access by being listed here as well. It
- * may move the probe on and nothing else.
+ * neither the ops list nor the machine moderators', so read-only diagnostics never gain write access by being listed
+ * here as well, and no token holds two powers. It may move the probe on and nothing else.
  */
 export async function probeCaller(req: Request, env: Env): Promise<{ ok: true } | { ok: false; status: 401 | 403 }> {
   const token = readToken(req)
@@ -97,7 +97,8 @@ export async function probeCaller(req: Request, env: Env): Promise<{ ok: true } 
         .map((e) => e.trim())
         .filter(Boolean)
         .includes(id)
-    return id && listed(env.PROBE_SERVICE_TOKENS) && !listed(env.OPS_SERVICE_TOKENS) ? { ok: true } : { ok: false, status: 403 }
+    const own = listed(env.PROBE_SERVICE_TOKENS) && !listed(env.OPS_SERVICE_TOKENS) && !listed(env.MODERATOR_SERVICE_TOKENS)
+    return id && own ? { ok: true } : { ok: false, status: 403 }
   } catch {
     return { ok: false, status: 401 }
   }
