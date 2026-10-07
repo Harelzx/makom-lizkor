@@ -78,6 +78,15 @@ export function policyProblems(workflows) {
         if (change >= 0 && (check < 0 || check > change)) say(`job ${id} must search its build before the migrations and the deploy`)
       }
     }
+    // The panel's motion check stays in CI (CI-MOTION-1, a99): the dev run may leave it out only for a run of the same
+    // scenario against the production build.
+    if (name === "ci.yml") {
+      const steps = Object.values(w.jobs ?? {}).flatMap((job) => runs(job))
+      const scenario = "collapses and opens again without losing its rounded corners"
+      const leftOut = steps.some((r) => /npm run e2e\b(?!:)[^\n]*--grep-invert[^\n]*/.test(r) && r.includes(scenario))
+      const inProd = steps.some((r) => /npm run e2e:prod -- e2e\/panel\.spec\.ts -g/.test(r) && r.includes(scenario))
+      if (leftOut && !inProd) say("ci.yml must run the panel's motion check, against the production build when the dev run leaves it out")
+    }
     // Workers Caching stays off in production (L-CACHE-STG, a95): the release reads the configuration it built, the one
     // it deploys, after the build and before any migration or deploy.
     if (name === "release.yml") {

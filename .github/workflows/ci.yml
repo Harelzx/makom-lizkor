@@ -74,7 +74,14 @@ jobs:
       # not been established as giving valid performance evidence (main's first run, 2026-10-07: 3.4 long frames a
       # second against 0.95). It runs, unchanged, on a suitable machine as its own stage (agent-evidence stages.sh
       # perf-dev, perf-prod); finding P1 and its launch obligation stay open there.
-      - run: npm run e2e -- --grep-invert "keeps the frame rate"
+      # The panel's motion check (a spring, not a snap) runs below against the production build instead: on this runner the
+      # dev server's React development runtime made its samples unsuitable (two CI failures, each a stall and a catch-up;
+      # locally the production build kept the same scenario within its bound at 1x to 6x CPU; CI-MOTION-1, a99).
+      # (The | below is the pattern's alternation, not a pipe; pipefail keeps ci-policy's pipe rule satisfied regardless.)
+      - run: |
+          set -o pipefail
+          npm run e2e -- --grep-invert "keeps the frame rate|collapses and opens again without losing its rounded corners"
+      - run: npm run e2e:prod -- e2e/panel.spec.ts -g "collapses and opens again without losing its rounded corners"
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
