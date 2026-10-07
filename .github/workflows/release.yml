@@ -169,7 +169,7 @@ jobs:
         # Waits, bounded, for the version just deployed and holds every Worker answer to its tag (a61).
         # --probe-freshness: production has no synthetic place to hide, so the content-free probe answers purge_freshness
         # here, and only here (L-PURGE-STAGING-1).
-        run: node scripts/edge-check.mjs "$PUBLIC_ORIGIN" --expect-tag "$RELEASE" --workers-dev "$WORKERS_DEV_URL" --probe-freshness
+        run: node scripts/edge-check.mjs "$PUBLIC_ORIGIN" --expect-tag "$RELEASE" --workers-dev "$WORKERS_DEV_URL" --probe-freshness --edge-cache off
       - name: Publish the release, which notifies the owner
         id: publish
         run: gh release edit "$RELEASE" --draft=false

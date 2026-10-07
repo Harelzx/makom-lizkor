@@ -8,7 +8,10 @@
 // owners, the edge cache, the purge timing, a conclusive workers.dev answer) is "incomplete": the run exits 3, and an
 // incomplete run never qualifies a release (a51, P6-EDGE-1). Only the explicit --local mode, for a preview with no edge,
 // may "skip" them.
-//   node scripts/edge-check.mjs <base-url> [--local [--dev]] [--workers-dev <url>] [--expect-tag <tag>] [--probe-freshness] [--report <file>]
+//   node scripts/edge-check.mjs <base-url> (--edge-cache on|off | --local [--dev]) [--workers-dev <url>] [--expect-tag <tag>] [--probe-freshness] [--report <file>]
+//   --edge-cache: what the deployment's EDGE_CACHE says of its Worker cache (C-CACHE), required against a deployment. "off"
+//   (the launch): no Worker answer may carry CF-Cache-Status (no_shared_hit), and a removal must be fresh at once, with no
+//   expiry to wait out: the page, the feed, the place's own share image and photo (staging's exercise), or the probe.
 //   --probe-freshness: production only (release.yml): the content-free purge probe (EDGE_PROBE) answers purge_freshness,
 //   since production has no synthetic place to hide; anywhere else the probe is checked as purge_probe (L-PURGE).
 //   --local: a local preview; what needs the edge is skipped, and labelled so.
@@ -81,8 +84,14 @@ export async function edgeChecks(
     probe = null,
     probeFreshness = false,
     purgeTiming = PURGE_TIMING,
+    // The deployment's Worker cache, as its EDGE_CACHE says (C-CACHE): "off" at launch. The CLI takes it explicitly.
+    edgeCache = "on",
   } = {},
 ) {
+  if (edgeCache !== "on" && edgeCache !== "off") throw new Error(`the edge cache mode is "on" or "off", not ${JSON.stringify(edgeCache)}`)
+  // With the Worker's cache off, Cloudflare stores none of its answers: any cache status on one is a failure, and a
+  // removal must be fresh at once, with no expiry to wait out. Locally there is no edge either way.
+  const cacheless = edgeCache === "off" && !local
   // A named place or an expected tag in a shape none has is a configuration mistake, refused before anything is asked.
   const named = place ?? (local ? SEEDED_PLACE : null)
   if (named !== null && !PLACE_ID.test(named)) throw new Error(`EDGE_PLACE is not a place's id: ${JSON.stringify(named)}`)
@@ -101,6 +110,8 @@ export async function edgeChecks(
   const url = (path) => new URL(path, base).toString()
   // Once the expected version has answered, every Worker answer measured must name it.
   const version = { holding: false, answers: 0, failures: [] }
+  // Every Worker answer this run saw, and those that came with a cache status (C-CACHE: with no Worker cache, none may).
+  const workerAnswers = { n: 0, cached: [] }
   // Past Access with the deployment's service token, on every request but the workers.dev probe (which must be refused
   // on its own) and those that carry an Access pair of their own: the purge exercise's moderator (H1), whose pair then
   // goes whole, never mixed with the deployment's, so the deployment's token never moderates (H1-PROBE-IDENTITY-1).
@@ -114,6 +125,11 @@ export async function edgeChecks(
         : init,
     )
     const path = new URL(u).pathname
+    if (WORKER_PATH.test(path)) {
+      workerAnswers.n++
+      const cached = res.headers.get("CF-Cache-Status")
+      if (cached) workerAnswers.cached.push(`${path}: ${cached}`)
+    }
     if (version.holding && WORKER_PATH.test(path)) {
       version.answers++
       const tag = res.headers.get("X-Worker-Version")
@@ -305,10 +321,13 @@ export async function edgeChecks(
     },
   )
   // Shown only by the owners' own probes, each seen through the edge cache (a52); locally, by whatever passed through.
-  if (hits.length) record("no_shared_hit", hits, "")
-  else if (local ? !cacheStatuses.length : !ownerProbes.total || ownerProbes.seen < ownerProbes.total)
-    unseen("no_shared_hit", "the owners' own probes weren't all seen through the edge cache (CF-Cache-Status)")
-  else record("no_shared_hit", [], `${ownerProbes.seen} owner probes through the edge cache, no HIT`)
+  // With no Worker cache it is recorded after the exercises, from every Worker answer the run saw.
+  if (!cacheless) {
+    if (hits.length) record("no_shared_hit", hits, "")
+    else if (local ? !cacheStatuses.length : !ownerProbes.total || ownerProbes.seen < ownerProbes.total)
+      unseen("no_shared_hit", "the owners' own probes weren't all seen through the edge cache (CF-Cache-Status)")
+    else record("no_shared_hit", [], `${ownerProbes.seen} owner probes through the edge cache, no HIT`)
+  }
 
   // Staging hides a synthetic place (EDGE_PURGE) for purge_freshness. The content-free probe (EDGE_PROBE, L-PURGE)
   // stands for it only on production's explicit path (--probe-freshness, release.yml), where no such place exists;
@@ -329,6 +348,13 @@ export async function edgeChecks(
     const check = probeIsFreshness ? "purge_freshness" : "purge_probe"
     await probeExercise(check).catch((err) => record(check, [`the probe stopped before it moved: ${err.message}`], ""))
   }
+  // No shared HIT without a Worker cache: nothing the Worker answered came from a cache, the owners' probes included.
+  if (cacheless)
+    record(
+      "no_shared_hit",
+      workerAnswers.cached.map((c) => `${c}: an answer from a cache, though this deployment runs without one (EDGE_CACHE=off)`),
+      `no Worker cache (EDGE_CACHE=off): ${workerAnswers.n} Worker answers, none from a cache (no CF-Cache-Status)`,
+    )
 
   if (!workersDev) unseen("workers_dev_closed", "no workers.dev address given (--workers-dev)")
   else {
@@ -395,13 +421,24 @@ export async function edgeChecks(
     for (const r of [first, second])
       if (r.generation === null) return record(check, [`the probe's address answered ${r.status} without a generation`], "")
     // The purge is shown where the copy was warmed: one edge location, named by its answers (L-PURGE-OBSERVATION-1).
+    // With no Worker cache there is no copy anywhere: any answer counts, and none may come from a cache.
     const at = first.colo
-    if (!at || second.colo !== at)
+    if (cacheless) {
+      const cached = [first, second].filter((r) => r.cache).map((r) => r.cache)
+      if (cached.length)
+        return record(
+          check,
+          [
+            `this deployment runs without a Worker cache (EDGE_CACHE=off), yet the probe's address came with CF-Cache-Status ${cached.join(", ")}`,
+          ],
+          "",
+        )
+    } else if (!at || second.colo !== at)
       return unseen(
         check,
         `the warm reads didn't come from one named edge location (${first.colo ?? "unnamed"}, ${second.colo ?? "unnamed"}): nothing to watch`,
       )
-    if (first.cache !== "MISS" || second.cache !== "HIT")
+    else if (first.cache !== "MISS" || second.cache !== "HIT")
       return unseen(
         check,
         `the edge cache didn't store this run's own address afresh (MISS, then HIT; saw ${first.cache ?? "none"}, ${second.cache ?? "none"}): nothing to tell a purge from`,
@@ -409,7 +446,7 @@ export async function edgeChecks(
     if (second.generation !== first.generation)
       return unseen(check, "the probe's generation moved between this run's own reads: another exercise is running")
     const from = second.generation
-    if (Date.now() + t.freshMs >= born + t.edgeTtlMs)
+    if (!cacheless && Date.now() + t.freshMs >= born + t.edgeTtlMs)
       return unseen(
         check,
         `this run's entry would expire within the bound (${t.freshMs} ms) of the move: nothing to tell a purge from expiry`,
@@ -438,9 +475,11 @@ export async function edgeChecks(
     if (!moved) return record(check, [`the probe didn't move and purge (last: ${last})`], "")
 
     // Only an answer from the warmed location counts, and only with the generation this exercise moved to: a fresh
-    // answer elsewhere, or a later generation another exercise moved to, shows nothing about this copy.
+    // answer elsewhere, or a later generation another exercise moved to, shows nothing about this copy. With no Worker
+    // cache, every location answers from the database itself.
     const failures = []
     const to = from + 1
+    const here = (r) => cacheless || r.colo === at
     let fresh = null
     let jumped = null
     let staleAfter = null
@@ -452,10 +491,16 @@ export async function edgeChecks(
         failures.push(`the probe's address answered ${r.status} without a generation after the move`)
         break
       }
-      if (r && r.colo === at && r.generation === to) fresh = Date.now() - sent
-      else if (r && r.colo === at && r.generation > to) jumped = r.generation
+      if (cacheless && r?.cache) {
+        failures.push(
+          `this deployment runs without a Worker cache (EDGE_CACHE=off), yet the probe's address came with CF-Cache-Status ${r.cache}`,
+        )
+        break
+      }
+      if (r && here(r) && r.generation === to) fresh = Date.now() - sent
+      else if (r && here(r) && r.generation > to) jumped = r.generation
       else {
-        if (r && r.colo === at) staleAfter = Date.now() - sent
+        if (r && here(r)) staleAfter = Date.now() - sent
         else if (r) elsewhere++
         seen = r ? `${r.colo ?? "unnamed"}: ${r.status} ${r.cache ?? "uncached"}, generation ${r.generation}` : "no answer in time"
         await sleep(t.everyMs)
@@ -467,7 +512,9 @@ export async function edgeChecks(
     if (fresh === null && staleAfter !== null && staleAfter > t.freshMs)
       return record(
         check,
-        [`${at} still served generation ${from} ${staleAfter} ms after the move was sent (bound ${t.freshMs} ms; last: ${seen})`],
+        [
+          `${cacheless ? "the probe's address" : at} still served generation ${from} ${staleAfter} ms after the move was sent (bound ${t.freshMs} ms; last: ${seen})`,
+        ],
         "",
       )
     if (jumped !== null)
@@ -477,11 +524,16 @@ export async function edgeChecks(
         check,
         `no answer came from the warmed location ${at} with generation ${to} within ${t.deadlineMs} ms (${elsewhere} from elsewhere; last: ${seen})`,
       )
-    if (fresh > t.freshMs) failures.push(`${at} was not fresh until ${fresh} ms after the move was sent (bound ${t.freshMs} ms)`)
+    if (fresh > t.freshMs)
+      failures.push(
+        `${cacheless ? "the probe's address" : at} was not fresh until ${fresh} ms after the move was sent (bound ${t.freshMs} ms)`,
+      )
     record(
       check,
       failures,
-      `content-free probe at ${at}: generation ${from} → ${to}, fresh after ${fresh} ms from the move's dispatch (bound ${t.freshMs} ms)`,
+      cacheless
+        ? `no Worker cache (EDGE_CACHE=off): content-free probe, generation ${from} → ${to}, fresh after ${fresh} ms from the move's dispatch (bound ${t.freshMs} ms)`
+        : `content-free probe at ${at}: generation ${from} → ${to}, fresh after ${fresh} ms from the move's dispatch (bound ${t.freshMs} ms)`,
     )
   }
 
@@ -574,24 +626,63 @@ export async function edgeChecks(
       if (!pageServed(r)) return record("purge_freshness", [`${id} isn't published: its ${what} answered ${r.status}`], "")
     if (!feedNames(first[1], true) || !feedNames(second[1], true))
       return record("purge_freshness", [`${id} isn't in the feed at ${version} (${first[1].status}, ${second[1].status})`], "")
-    if (first.some((r) => r.cache !== "MISS") || second.some((r) => r.cache !== "HIT"))
+    // With no Worker cache, nothing may come from one; with it, this run's own addresses must be stored afresh.
+    const fromCache = (pairs) => pairs.filter(([, r]) => r.cache).map(([what, r]) => `the ${what} came with CF-Cache-Status ${r.cache}`)
+    // What a deployment without a Worker cache answered from one.
+    const uncached = (found) => found.map((c) => `this deployment runs without a Worker cache (EDGE_CACHE=off), yet ${c}`)
+    if (cacheless) {
+      const found = fromCache([
+        ["page", first[0]],
+        ["feed", first[1]],
+        ["page", second[0]],
+        ["feed", second[1]],
+      ])
+      if (found.length) return record("purge_freshness", uncached(found), "")
+    } else if (first.some((r) => r.cache !== "MISS") || second.some((r) => r.cache !== "HIT"))
       return unseen(
         "purge_freshness",
         `the edge cache didn't store this run's own addresses afresh (MISS, then HIT; saw ${[...first, ...second].map((r) => r.cache ?? "none").join(", ")}): nothing to tell a purge from`,
       )
+    // The place's own media, each served before the hide: the share image its page names (its own, under /media/og/,
+    // not the site's general one) and the photo the feed gives it.
+    const pathOf = (u) => {
+      try {
+        return new URL(u, base).pathname
+      } catch {
+        return null
+      }
+    }
+    const media = []
+    const og = pathOf(/property="og:image" content="([^"]+)"/.exec(first[0].body)?.[1] ?? "")
+    if (og?.startsWith("/media/og/")) media.push(["share image", `${og}?edge-purge=${run}`])
+    const photo = Feed.safeParse(parse(first[1].body)).data?.places.find((p) => p.id === id)?.photo?.url
+    const photoPath = photo ? pathOf(photo) : null
+    if (photoPath?.startsWith("/media/")) media.push(["photo", `${photoPath}?edge-purge=${run}`])
+    for (const [what, path] of media) {
+      const r = await read(path)
+      if (r.status !== 200) return unseen("purge_freshness", `the place's ${what} answered ${r.status} before the hide: nothing to watch`)
+      if (cacheless && r.cache) return record("purge_freshness", uncached(fromCache([[what, r]])), "")
+    }
     // The window is checked against the entries' life at the moment the hide would go, after the moderator's view
-    // (which may be slow): with too little left, nothing is hidden.
+    // (which may be slow): with too little left, nothing is hidden. With no Worker cache there is no entry to expire.
     const expires = born + t.edgeTtlMs
     const { rev } = await view()
-    if (Date.now() + t.freshMs >= expires)
+    if (!cacheless && Date.now() + t.freshMs >= expires)
       return unseen(
         "purge_freshness",
         `this run's entries would expire within the bound (${t.freshMs} ms) of the hide: nothing to tell a purge from expiry`,
       )
 
     const failures = []
-    const fresh = { page: null, feed: null }
-    const last = { page: "not read", feed: "not read" }
+    const watched = [
+      ["page", page, (r) => r.status === 410],
+      ["feed", feed, feedFresh],
+      ...media.map(([what, path]) => [what, path, (r) => r.status === 404]),
+    ]
+    const fresh = Object.fromEntries(watched.map(([what]) => [what, null]))
+    const last = Object.fromEntries(watched.map(([what]) => [what, "not read"]))
+    const open = () => Object.values(fresh).some((ms) => ms === null)
+    const cachedAfter = new Set()
     // unsent | committed | refused (the deployment said no) | unknown (no answer, or not a clear one)
     let hide = "unsent"
     let sent = null
@@ -619,17 +710,15 @@ export async function edgeChecks(
         failures.push(`the hide's answer was lost (${marker} on ${id})`)
       }
       if (hide === "committed") {
-        while (Date.now() - sent < t.deadlineMs && (fresh.page === null || fresh.feed === null)) {
-          for (const [what, path, ok] of [
-            ["page", page, (r) => r.status === 410],
-            ["feed", feed, feedFresh],
-          ]) {
+        while (Date.now() - sent < t.deadlineMs && open()) {
+          for (const [what, path, ok] of watched) {
             if (fresh[what] !== null) continue
             const r = await read(path).catch(() => null)
+            if (cacheless && r?.cache) cachedAfter.add(...fromCache([[what, r]]))
             if (r && ok(r)) fresh[what] = Date.now() - sent
             else last[what] = r ? `${r.status}${r.cache ? ` ${r.cache}` : ""}` : "no answer in time"
           }
-          if (fresh.page === null || fresh.feed === null) await sleep(t.everyMs)
+          if (open()) await sleep(t.everyMs)
         }
         for (const [what, ms] of Object.entries(fresh))
           if (ms === null)
@@ -637,16 +726,22 @@ export async function edgeChecks(
               `the ${what} still served the place, or nothing valid, ${t.deadlineMs} ms after the hide was sent (last: ${last[what]})`,
             )
           else if (ms > t.freshMs) failures.push(`the ${what} was not fresh until ${ms} ms after the hide was sent (bound ${t.freshMs} ms)`)
+        failures.push(...uncached([...cachedAfter]))
       }
     } catch (err) {
       failures.push(`the exercise stopped: ${err.message}`)
     } finally {
       if (sent !== null) failures.push(...(await cleanup(hide)))
     }
+    const others = media.length
+      ? media.map(([what]) => `, ${what} after ${fresh[what]} ms`).join("")
+      : cacheless
+        ? ", no share image or photo of its own to watch"
+        : ""
     record(
       "purge_freshness",
       failures,
-      `page fresh after ${fresh.page} ms, feed after ${fresh.feed} ms, from the hide's dispatch (bound ${t.freshMs} ms); ${marker} lifted`,
+      `${cacheless ? "no Worker cache (EDGE_CACHE=off): " : ""}page fresh after ${fresh.page} ms, feed after ${fresh.feed} ms${others}, from the hide's dispatch (bound ${t.freshMs} ms); ${marker} lifted`,
     )
 
     // Finds this run's hide by its marker, lifts it and sees it gone, within cleanupMs: every pass is checked against
@@ -709,9 +804,10 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const base = args.find((a, i) => /^https?:\/\//.test(a) && args[i - 1] !== "--workers-dev")
   const local = args.includes("--local")
   const expectTag = args.includes("--expect-tag") ? (option("--expect-tag") ?? "") : null
-  if (!base || (args.includes("--dev") && !local)) {
+  const edgeCache = option("--edge-cache")
+  if (!base || (args.includes("--dev") && !local) || (!local && edgeCache !== "on" && edgeCache !== "off")) {
     console.error(
-      "usage: node scripts/edge-check.mjs <base-url> [--local [--dev]] [--workers-dev <url>] [--expect-tag <tag>] [--probe-freshness] [--report <file>]",
+      "usage: node scripts/edge-check.mjs <base-url> (--edge-cache on|off | --local [--dev]) [--workers-dev <url>] [--expect-tag <tag>] [--probe-freshness] [--report <file>]",
     )
     process.exit(2)
   }
@@ -729,6 +825,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     probe: EDGE_PROBE ? JSON.parse(EDGE_PROBE) : null,
     probeFreshness: args.includes("--probe-freshness"),
     expectTag,
+    ...(edgeCache ? { edgeCache } : {}),
   })
   for (const r of results) console.log(`${r.status.padEnd(10)}  ${r.check}: ${Array.isArray(r.detail) ? r.detail.join("; ") : r.detail}`)
   const result = outcome(results)

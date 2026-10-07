@@ -98,7 +98,7 @@ jobs:
         run: |
           set -uo pipefail
           status=0
-          node scripts/edge-check.mjs "$STAGING_PUBLIC_ORIGIN" --expect-tag "staging-${SHA:0:12}" --workers-dev "$STAGING_PUBLIC_ORIGIN" --report "$RUNNER_TEMP/edge.json" || status=$?
+          node scripts/edge-check.mjs "$STAGING_PUBLIC_ORIGIN" --expect-tag "staging-${SHA:0:12}" --workers-dev "$STAGING_PUBLIC_ORIGIN" --edge-cache off --report "$RUNNER_TEMP/edge.json" || status=$?
           test "$status" -eq 0 -o "$status" -eq 3
       - name: The receipt for this commit's deploy and checks
         run: |

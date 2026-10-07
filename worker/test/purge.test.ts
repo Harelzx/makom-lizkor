@@ -3,10 +3,25 @@ import { describe, expect, it } from "vitest"
 import { edgePurge } from "../lib/purge"
 
 const tags = ["feed", "place:p_x"]
-const as = (ENVIRONMENT: string) => ({ ...env, ENVIRONMENT }) as Env
+// The Worker's cache on (EDGE_CACHE=on), unless a test says otherwise: the purge then has an edge to clear.
+const as = (ENVIRONMENT: string, EDGE_CACHE = "on") => ({ ...env, ENVIRONMENT, EDGE_CACHE }) as Env
 const withCache = (purge: () => Promise<{ success: boolean }>) => ({ cache: { purge } })
 
 describe("the edge purge (L1)", () => {
+  it("with the Worker's cache off (EDGE_CACHE=off, production's launch mode) the edge holds no copy: done, and no cache is asked", async () => {
+    let asked = 0
+    const cache = withCache(async () => (asked++, { success: false }))
+    for (const where of ["production", "staging", "development"]) {
+      expect(await edgePurge(as(where, "off"), undefined, tags)).toBe(true)
+      expect(await edgePurge(as(where, "off"), cache, tags)).toBe(true)
+    }
+    expect(asked).toBe(0)
+  })
+
+  it("anything but off is taken as a cache to clear, so a missing or mistyped mode fails loudly rather than skipping purges", async () => {
+    for (const mode of ["", "Off", "false"]) expect(await edgePurge(as("production", mode), undefined, tags)).toBe(false)
+  })
+
   it("with no edge cache, counts as done only in development; anywhere else it is a failure to retry", async () => {
     expect(await edgePurge(as("development"), undefined, tags)).toBe(true)
     expect(await edgePurge(as("production"), undefined, tags)).toBe(false)

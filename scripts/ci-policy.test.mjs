@@ -352,3 +352,15 @@ test("the panel's motion check runs in CI, against the production build when the
     "ci.yml must run the panel's motion check",
   )
 })
+
+// Each deployment's checks are told its Worker cache is off (C-CACHE): production's stays off (release-cache.mjs), and
+// staging runs as production does. Told nothing, or on, the checks would wait for cache HITs that never come.
+test("both deployments' edge checks say the Worker cache is off", () => {
+  fails(withChange("release.yml", " --edge-cache off", ""), "release.yml's production checks must say the Worker cache is off")
+  fails(
+    withChange("release.yml", "--edge-cache off", "--edge-cache on"),
+    "release.yml's production checks must say the Worker cache is off",
+  )
+  fails(withChange("staging.yml", " --edge-cache off", ""), "edge checks must say the Worker cache is off")
+  fails(withChange("staging.yml", "--edge-cache off", "--edge-cache on"), "edge checks must say the Worker cache is off")
+})
