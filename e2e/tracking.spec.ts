@@ -288,18 +288,20 @@ test("a withdrawal whose photo erasure is still pending can be finished after a 
   const view = page.getByRole("dialog", { name: "מצב ההצעה" })
   await view.getByRole("button", { name: "משיכת ההצעה" }).click()
   await page.getByRole("alertdialog").getByRole("button", { name: "למשוך ולמחוק" }).click()
-  await expect(view.getByText("התמונה כבר לא מוצגת", { exact: false })).toBeVisible()
+  await expect(view.getByText("התמונה כבר לא מוצגת", { exact: false })).toBeVisible(DAY)
   // After a reload the way back is still there: the address reopens the place's card, which still opens the tracking
-  // view, and the view offers to finish.
+  // view, and the view offers to finish. After the reload the view loads afresh (its own chunk) and asks the server
+  // again: both wait DAY.
   await page.reload()
   await page.getByRole("button", { name: "מעקב אחרי ההצעה" }).click()
   const again = page.getByRole("dialog", { name: "מצב ההצעה" })
-  await expect(again.getByRole("button", { name: "להשלים את מחיקת התמונה" })).toBeVisible()
+  await expect(again).toBeVisible(DAY)
+  await expect(again.getByRole("button", { name: "להשלים את מחיקת התמונה" })).toBeVisible(DAY)
   expect(await storedToken(page, name)).toBeTruthy()
   // The storage works again: finishing erases the rest, and only then does the device let the link go.
   await page.unrouteAll({ behavior: "wait" })
   await again.getByRole("button", { name: "להשלים את מחיקת התמונה" }).click()
-  await expect(again.getByText("נמשכה. ההצעה, השם והמייל שלכם והתמונה נמחקו מהשרת")).toBeVisible()
+  await expect(again.getByText("נמשכה. ההצעה, השם והמייל שלכם והתמונה נמחקו מהשרת")).toBeVisible(DAY)
   await expect(again.getByRole("button", { name: "להשלים את מחיקת התמונה" })).toHaveCount(0)
   await expect.poll(() => storedToken(page, name)).toBeUndefined()
 })
