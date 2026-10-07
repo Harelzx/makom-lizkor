@@ -8,11 +8,34 @@ function readToken(req: Request): string | null {
   return /(?:^|;\s*)CF_Authorization=([^;]+)/.exec(req.headers.get("Cookie") ?? "")?.[1] ?? null
 }
 
+/** The audit trail's actor for staging's synthetic machine moderator: never a person, and never shown as one. */
+export const MACHINE_ACTOR = "machine:staging-synthetic"
+
+/**
+ * Whether an Access service token (its client id, `common_name`) moderates here: only staging's synthetic machine
+ * moderator (Harel's approval H1, 7 October 2026), and only in staging, or locally in development (never deployed).
+ * Production refuses it whatever MODERATOR_SERVICE_TOKENS holds; a token on OPS_SERVICE_TOKENS never moderates, so the
+ * read-only diagnostics can't gain a moderator's powers; any other token (the deployment's own) is refused as before.
+ * What it may then do is narrower than a person's: worker/lib/synthetic.ts.
+ */
+export function machineModerator(id: string, env: Env): boolean {
+  if (env.ENVIRONMENT !== "staging" && env.ENVIRONMENT !== "development") return false
+  const list = (s: string | undefined) =>
+    (s ?? "")
+      .split(",")
+      .map((e) => e.trim())
+      .filter(Boolean)
+  return !!id && list(env.MODERATOR_SERVICE_TOKENS).includes(id) && !list(env.OPS_SERVICE_TOKENS).includes(id)
+}
+
 /**
  * In production, Cloudflare Access signs in at the edge and passes a JWT; we verify it again here, so a route
  * that somehow skipped Access still gets nothing. In development, a dev-only issuer stands in for Access.
  */
-export async function moderator(req: Request, env: Env): Promise<{ ok: true; email: string } | { ok: false; status: 401 | 403 }> {
+export async function moderator(
+  req: Request,
+  env: Env,
+): Promise<{ ok: true; email: string; machine: boolean } | { ok: false; status: 401 | 403 }> {
   const token = readToken(req)
   if (!token) return { ok: false, status: 401 }
   const dev = env.ENVIRONMENT === "development" && env.DEV_ACCESS_SECRET
@@ -21,8 +44,13 @@ export async function moderator(req: Request, env: Env): Promise<{ ok: true; ema
   try {
     const { payload } = await verify(token, env, !!dev)
     const email = typeof payload.email === "string" ? payload.email.toLowerCase() : ""
+    if (!email) {
+      // A service token: a moderator only as the synthetic machine moderator, never by its id alone elsewhere.
+      const id = typeof payload.common_name === "string" ? payload.common_name : ""
+      return machineModerator(id, env) ? { ok: true, email: MACHINE_ACTOR, machine: true } : { ok: false, status: 403 }
+    }
     const allowed = env.MODERATORS.split(",").map((e) => e.trim().toLowerCase())
-    return email && allowed.includes(email) ? { ok: true, email } : { ok: false, status: 403 }
+    return allowed.includes(email) ? { ok: true, email, machine: false } : { ok: false, status: 403 }
   } catch {
     return { ok: false, status: 401 }
   }

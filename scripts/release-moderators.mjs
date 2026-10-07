@@ -10,6 +10,9 @@ export function moderatorBlockers(raw) {
     .filter(Boolean)
   if (!list.length) return ["MODERATORS is empty in wrangler.jsonc: no one would be alerted to a request or a stalled deletion job"]
   const blockers = []
+  // Staging's synthetic machine moderator (H1) never ships: production refuses it at runtime too (worker/lib/access.ts).
+  if ((raw.vars?.MODERATOR_SERVICE_TOKENS ?? "").trim())
+    blockers.push("MODERATOR_SERVICE_TOKENS is set in wrangler.jsonc: a machine moderator is staging's alone, never production's")
   for (const e of list)
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) || /@(.+\.)?(example\.(com|net|org)|example|test|invalid|localhost)$/i.test(e))
       blockers.push(`MODERATORS holds ${e}, which is not a real address`)

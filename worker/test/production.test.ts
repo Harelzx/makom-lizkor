@@ -5,6 +5,7 @@ import { createApp } from "../index"
 import { fakeSiteverify } from "./app"
 import { sendMail } from "../lib/mail"
 import { devToken } from "./helpers"
+import { machineModerator } from "../lib/access"
 
 // What a deploy gets: the top-level vars of wrangler.jsonc, without the development values from .dev.vars.
 const production = { ...env, ENVIRONMENT: "production", DEV_ACCESS_SECRET: "", MODERATORS: "", ACCESS_TEAM_DOMAIN: "", ACCESS_AUD: "" }
@@ -21,6 +22,11 @@ describe("in production", () => {
     const e = { ...production, DEV_ACCESS_SECRET: env.DEV_ACCESS_SECRET, MODERATORS: "dev@example.test" }
     const res = await call("/api/admin/queue", { headers: { "Cf-Access-Jwt-Assertion": await devToken("dev@example.test") } }, e)
     expect(res.status).toBe(401)
+  })
+  it("a machine moderator's token moderates nothing, even when the config lists it (H1)", () => {
+    expect(
+      machineModerator("dev-staging-moderator.access", { ...production, MODERATOR_SERVICE_TOKENS: "dev-staging-moderator.access" }),
+    ).toBe(false)
   })
   it("the clock can't be set from outside", async () => {
     const res = await call("/api/v1/submissions", {
@@ -43,6 +49,8 @@ it("the config a deploy ships is production, with no development secret", () => 
   expect(env.DEPLOY_VARS.ENVIRONMENT).toBe("production")
   expect(env.DEPLOY_VARS.DEV_ACCESS_SECRET).toBeUndefined()
   expect(env.DEPLOY_VARS.MODERATORS ?? "").not.toContain("example.test")
+  // Staging's synthetic machine moderator never ships (H1).
+  expect(env.DEPLOY_VARS.MODERATOR_SERVICE_TOKENS ?? "").toBe("")
   // Locally, .dev.vars (never deployed) turns development on; the tests run with it.
   expect(env.ENVIRONMENT).toBe("development")
 })
