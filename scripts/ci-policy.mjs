@@ -78,6 +78,18 @@ export function policyProblems(workflows) {
         if (change >= 0 && (check < 0 || check > change)) say(`job ${id} must search its build before the migrations and the deploy`)
       }
     }
+    // Workers Caching stays off in production (L-CACHE-STG, a95): the release reads the configuration it built, the one
+    // it deploys, after the build and before any migration or deploy.
+    if (name === "release.yml") {
+      const cacheChecked = Object.values(w.jobs ?? {}).some((job) => {
+        const steps = runs(job)
+        const build = steps.findIndex((r) => /npm run build\b/.test(r))
+        const check = steps.findIndex((r) => /node scripts\/release-cache\.mjs dist\/makom_lizkor\/wrangler\.json/.test(r))
+        const change = steps.findIndex((r) => /\bwrangler\s+(deploy|d1\s+migrations\s+apply)\b/.test(r))
+        return build >= 0 && check > build && (change < 0 || check < change)
+      })
+      if (!cacheChecked) say("release.yml must check its built configuration for Workers Caching after the build, before any change")
+    }
     if (name === "release.yml") problems.push(...releaseProblems(w).map((p) => `${name}: ${p}`))
     if (name === STAGING) problems.push(...stagingProblems(w, triggers).map((p) => `${name}: ${p}`))
     if (name === "ci.yml" && text(w.on?.push?.branches) !== text(["main"]))

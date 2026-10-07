@@ -50,6 +50,9 @@ blockers.push(
 )
 const { retentionScaleBlockers } = await import("./release-retention-scale.mjs")
 blockers.push(...retentionScaleBlockers(raw))
+// Workers Caching stays off in production (L-CACHE-STG); the built configuration is checked again after the build.
+const { cacheBlockers } = await import("./release-cache.mjs")
+blockers.push(...cacheBlockers(raw))
 const { backupBlockers } = await import("./release-backup.mjs")
 blockers.push(...backupBlockers(raw))
 const { platformBlockers } = await import("./release-platform.mjs")
