@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers"
 import { describe, expect, it } from "vitest"
 import { CURRENT_SUBMISSION_NOTICE } from "@/shared/contract"
+import { checkTurnstile } from "../lib/turnstile"
 import { call } from "./app"
 
 const body = (name: string) =>
@@ -34,8 +35,15 @@ describe("Turnstile on a new submission", () => {
   it("passes a real check for the submit action", async () => {
     expect((await post("ספסל דמו עובר", "pass")).status).toBe(201)
   })
-  it("accepts Cloudflare's test keys only in development", async () => {
+  it("accepts Cloudflare's test keys in development and on staging, never in production", async () => {
     expect((await post("ספסל דמו מפתח בדיקה", "testing-key")).status).toBe(201)
+    // Staging's synthetic submissions (H-TURNSTILE): the test keys answer for example.com, which staging must list.
+    const staging = { ...env, ENVIRONMENT: "staging", TURNSTILE_HOSTNAMES: "example.com" }
+    expect((await post("ספסל דמו מפתח בדיקה ב־staging", "testing-key", {}, staging)).status).toBe(201)
+    const unlisted = { ...env, ENVIRONMENT: "staging", TURNSTILE_HOSTNAMES: "makom-lizkor-staging.makom-staging.workers.dev" }
+    expect((await post("ספסל דמו מפתח בדיקה ב־staging בלי המארח", "testing-key", {}, unlisted)).status).toBe(403)
+    // A real answer for another action stays refused on staging: only the test keys' missing action is excused.
+    expect((await post("ספסל דמו פעולה אחרת ב־staging", "wrong-action", {}, staging)).status).toBe(403)
     const production = { ...env, ENVIRONMENT: "production", TURNSTILE_HOSTNAMES: "example.com" }
     expect((await post("ספסל דמו מפתח בדיקה בייצור", "testing-key", {}, production)).status).toBe(403)
   })
@@ -72,4 +80,22 @@ describe("limits", () => {
     // No column for a visitor's IP in any form (an email's to_address is not one).
     expect(tables).not.toMatch(/\b(remote_?|client_?)?ip(_?address|_?hash)?\b/i)
   })
+})
+
+// L-TURNSTILE-PROD-1 (a81): an answer marked as a test-key result is refused outside development and staging even when
+// its hostname and action both match, for every action the check guards. The marker, not a missing action, decides.
+describe("a test-key result whose host and action match", () => {
+  const marked = (action: string) => async () => ({
+    success: true,
+    hostname: "example.com",
+    action,
+    metadata: { result_with_testing_key: true },
+  })
+  const at = (ENVIRONMENT: string) => ({ ...env, ENVIRONMENT, TURNSTILE_SECRET: "a-secret", TURNSTILE_HOSTNAMES: "example.com" })
+  for (const action of ["submit", "revise", "report"])
+    it(`is refused in production and accepted in development and on staging (${action})`, async () => {
+      expect(await checkTurnstile(at("production"), marked(action), "token", action)).toBe("failed")
+      expect(await checkTurnstile(at("staging"), marked(action), "token", action)).toBe("ok")
+      expect(await checkTurnstile(at("development"), marked(action), "token", action)).toBe("ok")
+    })
 })

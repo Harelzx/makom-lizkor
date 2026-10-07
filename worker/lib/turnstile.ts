@@ -24,8 +24,9 @@ export type TurnstileOutcome = "ok" | "required" | "failed" | "unavailable"
 
 /**
  * A browser check passed, for this action, on one of our hostnames (spec 12). Cloudflare's test keys answer without an
- * action and for example.com; that is accepted only in development. A missing secret in production refuses
- * everything rather than letting anything through.
+ * action and for example.com; that is accepted in development, and on staging, whose submissions are synthetic and
+ * whose host Access guards (Harel, H-TURNSTILE), never in production. A staging run with them proves the flow, not the
+ * real bot check. A missing secret in production refuses everything rather than letting anything through.
  */
 export async function checkTurnstile(
   env: Env,
@@ -48,8 +49,12 @@ export async function checkTurnstile(
       .map((h) => h.trim())
       .filter(Boolean),
   )
-  const testing = env.ENVIRONMENT === "development" && r.metadata?.result_with_testing_key === true
+  // A test-key result is refused outright where test keys aren't allowed, whatever its action (L-TURNSTILE-PROD-1);
+  // where they are, it is excused only from the action match, since the test keys give none.
+  const marked = r.metadata?.result_with_testing_key === true
+  const testKeysAllowed = env.ENVIRONMENT === "development" || env.ENVIRONMENT === "staging"
+  if (marked && !testKeysAllowed) return "failed"
   if (!r.success || !r.hostname || !hostnames.has(r.hostname)) return "failed"
-  if (r.action !== action && !testing) return "failed"
+  if (r.action !== action && !marked) return "failed"
   return "ok"
 }
