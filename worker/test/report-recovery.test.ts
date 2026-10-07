@@ -473,7 +473,10 @@ describe("L-RET-ABUSE-1 (a89): on staging's scale, the spam checks read the abus
     return ticket
   }
   const explanation = () => `השם של אחי מופיע כאן בלי רשות, נבקש להסיר אותו. ${crypto.randomUUID()}`
-  const ip = () => `198.51.100.${Math.floor(Math.random() * 200) + 20}`
+  // Each reporter its own address, by construction: the per-address cap (5 a minute) is real here, and two random
+  // draws that met put eight reports on one address, so the eighth came back 429 without a ticket.
+  let nextIp = 20
+  const ip = () => `198.51.100.${nextIp++}`
 
   it("a copy older than the staged day but within a real day doesn't stop the hide; one within the staged day does", async () => {
     const { precaution } = await import("../db/reports")
