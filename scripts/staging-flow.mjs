@@ -17,8 +17,12 @@ import { SYNTHETIC_MARK } from "../worker/lib/synthetic.ts"
 const TIMING = { everyMs: 1_000, deadlineMs: 75_000, requestMs: 10_000 }
 
 export async function stagingFlow(base, { fetch: send = globalThis.fetch, headers, turnstileToken, timing = TIMING } = {}) {
+  // On staging, the machine moderator's Access pair, whole; against a local Worker (its tests), the signed assertion
+  // Access would pass on instead.
   const pair = new Headers(headers ?? {})
-  if (!pair.get("CF-Access-Client-Id") || !pair.get("CF-Access-Client-Secret"))
+  const whole = !!pair.get("CF-Access-Client-Id") && !!pair.get("CF-Access-Client-Secret")
+  const half = pair.has("CF-Access-Client-Id") !== pair.has("CF-Access-Client-Secret")
+  if (half || (!whole && !pair.get("Cf-Access-Jwt-Assertion")))
     throw new Error("FLOW_HEADERS must give the machine moderator's Access pair (CF-Access-Client-Id and CF-Access-Client-Secret)")
   if (!turnstileToken) throw new Error("FLOW_TURNSTILE_TOKEN must give the Turnstile test keys' dummy token")
   const run = globalThis.crypto.randomUUID().replaceAll("-", "").slice(0, 12)
