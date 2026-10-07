@@ -18,6 +18,10 @@ export default defineConfig({
   testDir: "e2e",
   fullyParallel: false,
   workers: 1,
+  // Each test's whole budget, not any check's: the longer recovery and accessibility walks take 23 to 28 s on a good CI
+  // runner and about a fifth more on a slow one, where every step costs seconds, so 30 s timed them out midway. Each
+  // assertion keeps its own deadline, and the tests that set their own budget keep it.
+  timeout: 60_000,
   reporter: [["list"]],
   use: {
     baseURL: `http://localhost:${port}`,

@@ -517,9 +517,32 @@ test("a card closed and opened while its request is out finds that same request,
   await expect(page.getByRole("heading", { name })).toBeVisible()
   const again = page.getByRole("region", { name: "בקשת הסרה או תיקון" })
   await expect(again.getByLabel("מה לבדוק, ולמה")).toHaveValue(why)
-  await expect(again.getByLabel("מה לבדוק, ולמה")).toBeDisabled()
-  await expect(again.getByRole("button", { name: "שליחה שוב" })).toBeDisabled()
-  await expect(again.getByRole("button", { name: "הסרה מהמכשיר הזה" })).toBeDisabled()
+  // The three locked controls are read together, in one round trip: the request is out only until the client's own
+  // 10 s timeout (src/lib/api.ts), and on a slow runner each separate check cost seconds of it (CI 37615772991). All
+  // three must be there and disabled; a missing one fails.
+  const locked = again
+    .getByLabel("מה לבדוק, ולמה")
+    .or(again.getByRole("button", { name: "שליחה שוב" }))
+    .or(again.getByRole("button", { name: "הסרה מהמכשיר הזה" }))
+  await expect
+    .poll(() =>
+      locked.evaluateAll((els) =>
+        els
+          .map((e) => ({
+            control: e instanceof HTMLTextAreaElement ? "why" : (e.textContent ?? "").trim(),
+            // As toBeDisabled reads it: disabled itself or by its fieldset (:disabled), or marked aria-disabled.
+            disabled: e.matches(":disabled") || e.getAttribute("aria-disabled") === "true",
+          }))
+          .sort((a, b) => a.control.localeCompare(b.control)),
+      ),
+    )
+    .toEqual(
+      [
+        { control: "why", disabled: true },
+        { control: "שליחה שוב", disabled: true },
+        { control: "הסרה מהמכשיר הזה", disabled: true },
+      ].sort((a, b) => a.control.localeCompare(b.control)),
+    )
 
   release()
   await expect(again.getByRole("alert")).toHaveText(/לא ברור אם הבקשה הגיעה אלינו/, DAY)
