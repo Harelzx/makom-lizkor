@@ -150,6 +150,22 @@ function releaseProblems(w) {
     // The checks wait for the version this deploy tagged, and hold the Worker's answers to it (a61).
     if (!steps.some((r) => /edge-check\.mjs[^\n]*--expect-tag "\$RELEASE"/.test(r)))
       problems.push(`job ${id}'s production checks must expect the version it deployed (--expect-tag "$RELEASE")`)
+    // A failed or cancelled release says what it left in production, from the outcomes of the steps that change and
+    // check it (L-RELEASE-FAIL): a failed final check is not proof that nothing was deployed.
+    const last = all.at(-1) ?? {}
+    const ids = { migrate: /d1 migrations apply/, deploy: /wrangler deploy --tag/, checks: /edge-check\.mjs/, publish: /gh release edit/ }
+    const wired = Object.entries(ids).every(([sid, p]) => all.find((st) => st.id === sid && p.test(st.run ?? "")))
+    const env = { MIGRATED: "migrate", DEPLOYED: "deploy", CHECKED: "checks", PUBLISHED: "publish" }
+    if (
+      !wired ||
+      String(last.if).replace(/\s/g, "") !== "failure()||cancelled()" ||
+      !/node scripts\/release-outcome\.mjs "\$RELEASE" "\$MIGRATED" "\$DEPLOYED" "\$CHECKED" "\$PUBLISHED"/.test(last.run ?? "") ||
+      !/\$GITHUB_STEP_SUMMARY/.test(last.run ?? "") ||
+      Object.entries(env).some(([k, sid]) => last.env?.[k] !== `\${{ steps.${sid}.outcome }}`)
+    )
+      problems.push(
+        `job ${id} must end by saying what a failed release left in production (scripts/release-outcome.mjs, on failure() || cancelled())`,
+      )
   }
   return problems
 }
