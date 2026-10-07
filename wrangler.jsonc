@@ -32,6 +32,8 @@
     // A machine moderator's service token client ids: staging only (H1). Production refuses any, and release:check
     // refuses a release that sets one.
     "MODERATOR_SERVICE_TOKENS": "",
+    // The purge probe's own service token (L-PURGE): set for a deployment that runs the probe, empty refuses it.
+    "PROBE_SERVICE_TOKENS": "",
     "ACCESS_TEAM_DOMAIN": "",
     "ACCESS_AUD": "",
     // The hostnames Turnstile may vouch for; set per deploy. The secret is a secret, never a var.
@@ -99,6 +101,7 @@
         "OPS_SERVICE_TOKENS": "",
         // Staging's synthetic machine moderator (H1): filled from STAGING_MODERATOR_SERVICE_TOKENS at deploy time.
         "MODERATOR_SERVICE_TOKENS": "",
+        "PROBE_SERVICE_TOKENS": "",
         "ACCESS_TEAM_DOMAIN": "",
         "ACCESS_AUD": "",
         "TURNSTILE_HOSTNAMES": "",

@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import { createExecutionContext } from "cloudflare:test"
 import { env } from "cloudflare:workers"
 import { SignJWT } from "jose"
@@ -27,7 +28,8 @@ const probeId = () => env.PROBE_SERVICE_TOKENS.split(",")[0]
 const purged: string[][] = []
 const edge = { refuses: false }
 const app = createApp({ verifyTurnstile: fakeSiteverify, sendMail, purge: async (_e, _c, tags) => (purged.push(tags), !edge.refuses) })
-const call = (path: string, init: RequestInit = {}, e: Env = env) => app.fetch(new Request(`http://local${path}`, init), e, createExecutionContext())
+const call = (path: string, init: RequestInit = {}, e: Env = env) =>
+  app.fetch(new Request(`http://local${path}`, init), e, createExecutionContext())
 const read = () => call("/api/v1/purge-probe?run=abcdef012345")
 const generation = async () => ((await (await read()).json()) as { generation: number }).generation
 const move = async (exercise: string, expected: number, token?: string, e: Env = env) =>
@@ -75,7 +77,10 @@ describe("moving the probe on", () => {
     const g = await generation()
     const ops = env.OPS_SERVICE_TOKENS.split(",")[0]
     const both = { ...env, PROBE_SERVICE_TOKENS: `${probeId()},${ops}` }
-    const unauthenticated = await call("/api/ops/purge-probe", { method: "POST", body: JSON.stringify({ exercise: exercise(), expected: g }) })
+    const unauthenticated = await call("/api/ops/purge-probe", {
+      method: "POST",
+      body: JSON.stringify({ exercise: exercise(), expected: g }),
+    })
     expect(unauthenticated.status).toBe(401)
     expect((await move(exercise(), g, await devToken("dev@example.test"))).status).toBe(403)
     expect((await move(exercise(), g, await serviceToken("not-listed.access"))).status).toBe(403)
@@ -125,7 +130,7 @@ describe("moving the probe on", () => {
     const id = exercise()
     edge.refuses = true
     const res = await move(id, g)
-    expect(res.status).toBe(502)
+    expect(res.status).toBe(503)
     expect(await res.json()).toMatchObject({ code: "purge_failed", generation: g + 1 })
     edge.refuses = false
     expect(await (await move(id, g)).json()).toEqual({ generation: g + 1, purged: true })
@@ -134,7 +139,12 @@ describe("moving the probe on", () => {
 
   it("refuses a body that isn't an exercise of its shape and a whole-number generation", async () => {
     const g = await generation()
-    for (const body of [{}, { exercise: "short", expected: g }, { exercise: exercise(), expected: "1" }, { exercise: exercise(), expected: -1 }]) {
+    for (const body of [
+      {},
+      { exercise: "short", expected: g },
+      { exercise: exercise(), expected: "1" },
+      { exercise: exercise(), expected: -1 },
+    ]) {
       const res = await call("/api/ops/purge-probe", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Cf-Access-Jwt-Assertion": await serviceToken(probeId()) },
@@ -177,7 +187,10 @@ describe("what the edge keeps, and what clears it", () => {
   // the feed's in feed.test.ts, a photo's in visibility.test.ts, a share image's in og.test.ts, and the share page's,
   // the anemones' and the probe's above. A new one fails here until its tags are mapped.
   it("no other source marks an answer for the edge to keep", () => {
-    const sources = import.meta.glob(["../**/*.ts", "!../test/**"], { query: "?raw", import: "default", eager: true }) as Record<string, string>
+    const sources = import.meta.glob(["../**/*.ts", "!../test/**"], { query: "?raw", import: "default", eager: true }) as Record<
+      string,
+      string
+    >
     const keeping = Object.entries(sources)
       .filter(([, text]) => /"Cloudflare-CDN-Cache-Control": [`"]max-age/.test(text))
       .map(([path]) => path.replace(/^\.\.\//, ""))

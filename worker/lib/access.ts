@@ -78,6 +78,31 @@ export async function opsCaller(req: Request, env: Env): Promise<{ ok: true } | 
   }
 }
 
+/**
+ * The purge probe's own caller (L-PURGE, a73): an Access service token whose client id is on PROBE_SERVICE_TOKENS and on
+ * neither the ops list nor any other, so read-only diagnostics never gain write access by being listed here as well. It
+ * may move the probe on and nothing else.
+ */
+export async function probeCaller(req: Request, env: Env): Promise<{ ok: true } | { ok: false; status: 401 | 403 }> {
+  const token = readToken(req)
+  if (!token) return { ok: false, status: 401 }
+  const dev = env.ENVIRONMENT === "development" && env.DEV_ACCESS_SECRET
+  if (!dev && (!env.ACCESS_TEAM_DOMAIN || !env.ACCESS_AUD)) return { ok: false, status: 401 }
+  try {
+    const { payload } = await verify(token, env, !!dev)
+    const id = typeof payload.common_name === "string" && typeof payload.email !== "string" ? payload.common_name : ""
+    const listed = (names: string | undefined) =>
+      (names ?? "")
+        .split(",")
+        .map((e) => e.trim())
+        .filter(Boolean)
+        .includes(id)
+    return id && listed(env.PROBE_SERVICE_TOKENS) && !listed(env.OPS_SERVICE_TOKENS) ? { ok: true } : { ok: false, status: 403 }
+  } catch {
+    return { ok: false, status: 401 }
+  }
+}
+
 const verify = (token: string, env: Env, dev: boolean) =>
   dev
     ? jwtVerify(token, new TextEncoder().encode(env.DEV_ACCESS_SECRET), { issuer: "dev-access", audience: "makom-dev" })
