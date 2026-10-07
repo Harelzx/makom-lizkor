@@ -303,3 +303,17 @@ test("a failed release says what it left in production", () => {
   assert.match(readFileSync(summary, "utf8"), /release-2026-11-02 is live in production and not verified/)
   assert.deepEqual(Object.keys(last.env).sort(), ["CHECKED", "DEPLOYED", "MIGRATED", "PUBLISHED"])
 })
+
+test("staging alone is given the retention time scale, from its own variable; production never (L-RET A2, a87)", () => {
+  const given = ' \\\n            --var "RETENTION_DAY_SECONDS:$STAGING_RETENTION_DAY_SECONDS"'
+  fails(withChange("staging.yml", given, ""), "RETENTION_DAY_SECONDS")
+  fails(withChange("staging.yml", "${{ vars.STAGING_RETENTION_DAY_SECONDS }}", "7200"), "RETENTION_DAY_SECONDS")
+  fails(
+    withChange(
+      "release.yml",
+      'wrangler deploy --tag "$RELEASE" --message "release $RELEASE $SHA"',
+      'wrangler deploy --tag "$RELEASE" --message "release $RELEASE $SHA" --var "RETENTION_DAY_SECONDS:7200"',
+    ),
+    "RETENTION_DAY_SECONDS",
+  )
+})
