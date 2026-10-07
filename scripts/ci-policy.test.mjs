@@ -326,3 +326,12 @@ test("the release checks its built configuration for Workers Caching after the b
     "release.yml must check its built configuration for Workers Caching",
   )
 })
+
+test("the panel's motion check runs in CI, against the production build when the dev run leaves it out (CI-MOTION-1, a99)", () => {
+  const prodStep = '      - run: npm run e2e:prod -- e2e/panel.spec.ts -g "collapses and opens again without losing its rounded corners"\n'
+  fails(withChange("ci.yml", prodStep, ""), "ci.yml must run the panel's motion check")
+  fails(
+    withChange("ci.yml", prodStep, '      - run: npm run e2e:prod -- e2e/panel.spec.ts -g "scroll"\n'),
+    "ci.yml must run the panel's motion check",
+  )
+})
