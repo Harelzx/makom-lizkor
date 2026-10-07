@@ -39,7 +39,9 @@ test("the opening stops at 06:29, counts the days to today, and says how long it
 
   await page.getByRole("button", { name: "אל הבוקר" }).click()
   await expect(page.getByText("שלושה חורפים עברו מאז. ובכל אחד מהם, הכלניות חזרו לפרוח.")).toBeVisible()
-  await expect(page.getByText(panelLine("שלוש שנים", "1,093"))).toBeVisible({ timeout: 15_000 })
+  // The day (and the panel with it) comes once both steps of the sunrise have painted, and each waits for the map's
+  // style to load (intro.tsx, shiftLight): on GitHub's runner the page was still in the sunrise 15 s after its line.
+  await expect(page.getByText(panelLine("שלוש שנים", "1,093"))).toBeVisible({ timeout: 30_000 })
 })
 
 test("the count follows the date in Israel, not the visitor's own", async ({ page }) => {
