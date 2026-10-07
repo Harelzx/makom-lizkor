@@ -2,7 +2,7 @@ import { RETENTION } from "@/config"
 import { ulid, ulidTime } from "../lib/ids"
 import type { SendMail } from "../lib/mail"
 import { runOp, WATCH_FIRST_LOOK_MS, type OpEnv } from "./ops"
-import { erasePhotos } from "./photos"
+import { erasePhotos, retirePhotos } from "./photos"
 import { log } from "../lib/log"
 
 const DAY_MS = 86_400_000
@@ -28,6 +28,8 @@ export const BLANK_COLUMNS: Record<string, null | 0> = {
   photo_key: null,
   photo_alt: null,
   photo_credit: null,
+  // A curated revision's own fields (phase 7); its photos and sources are rows of their own, deleted with it.
+  curated: null,
 }
 const BLANK_REVISION = Object.entries(BLANK_COLUMNS)
   .map(([c, v]) => `${c} = ${v === null ? "NULL" : v}`)
@@ -51,7 +53,7 @@ export function retentionCutoffs(now: Date) {
   }
 }
 const hasContent = (t: string) =>
-  `(${["name_he", "story_he", "place_he", "in_memory_of", "lat", "access_note_he", "link_url", "decision_note", "photo_key"]
+  `(${["name_he", "story_he", "place_he", "in_memory_of", "lat", "access_note_he", "link_url", "decision_note", "photo_key", "curated"]
     .map((c) => `${t}.${c} IS NOT NULL`)
     .join(" OR ")})`
 
@@ -238,6 +240,11 @@ async function eraseOne(env: OpEnv, row: { id: string; rev: number; status: "ret
           )
           .bind(row.id, tid, at, row.rev, reason, row.status),
         db.prepare(`UPDATE revisions SET ${BLANK_REVISION} WHERE place_id = ?1 AND ${happened}`).bind(row.id, tid),
+        // A curated revision's photos and their credits, and every revision's sources, go with the content (P7-REC-1).
+        db
+          .prepare(`DELETE FROM revision_photos WHERE revision_id IN (SELECT id FROM revisions WHERE place_id = ?1) AND ${happened}`)
+          .bind(row.id, tid),
+        db.prepare(`DELETE FROM place_sources WHERE place_id = ?1 AND ${happened}`).bind(row.id, tid),
         db.prepare(`DELETE FROM contacts WHERE place_id = ?1 AND ${happened}`).bind(row.id, tid),
         // On the photo watch, as a withdrawal is: it erases whatever files the place still has.
         db
@@ -275,13 +282,16 @@ async function blankClosedCorrections(env: OpEnv, now: Date) {
     .all<{ id: string; photo_key: string | null }>()
   for (const r of results) {
     // A returned correction left uncorrected is closed with its text: an upload or a correction can't land in an empty row.
-    await db
-      .prepare(
-        `UPDATE revisions SET ${BLANK_REVISION}, state = CASE state WHEN 'returned' THEN 'superseded' ELSE state END
-         WHERE id = ? AND state IN ('returned', 'rejected')`,
-      )
-      .bind(r.id)
-      .run()
+    await db.batch([
+      db
+        .prepare(
+          `UPDATE revisions SET ${BLANK_REVISION}, state = CASE state WHEN 'returned' THEN 'superseded' ELSE state END
+           WHERE id = ? AND state IN ('returned', 'rejected')`,
+        )
+        .bind(r.id),
+      db.prepare("DELETE FROM revision_photos WHERE revision_id = ?").bind(r.id),
+      db.prepare("DELETE FROM place_sources WHERE revision_id = ?").bind(r.id),
+    ])
     // Its photo waited in quarantine; once no revision names it, the file goes too.
     if (r.photo_key?.startsWith("quarantine/")) {
       const named = await db.prepare("SELECT 1 FROM revisions WHERE photo_key = ?").bind(r.photo_key).first()
@@ -331,6 +341,50 @@ async function expireUnapprovedPhotos(env: OpEnv, now: Date) {
     if (moved.meta.changes !== 1) continue
     n++
     await env.media.delete(r.photo_key).catch(() => undefined)
+  }
+  return n + (await expireCuratedPhotos(env, now))
+}
+
+/** When a curated photo's waiting files were uploaded: the earlier of the two quarantined keys (P7-RET-1). */
+const waitingSince = (key: string, thumb: string) => Math.min(...[key, thumb].filter((k) => k.startsWith("quarantine/")).map(uploadedAt))
+
+/**
+ * A curated revision's photo still waiting in quarantine/ past the same days, its revision undecided (a draft whose
+ * publication never landed, say): the photo's row and its source go and the place's rev moves on, in one step under
+ * the same condition, so an approval made on the view that showed it conflicts; then its files, unless a live
+ * revision names them (retirePhotos). A published photo is never in quarantine/, so it is never touched.
+ */
+async function expireCuratedPhotos(env: OpEnv, now: Date) {
+  const db = env.db
+  const { results } = await db
+    .prepare(
+      `SELECT rp.revision_id, rp.idx, rp.key, rp.thumb_key, r.place_id FROM revision_photos rp JOIN revisions r ON r.id = rp.revision_id
+       WHERE r.state IN ('pending', 'returned') AND (rp.key LIKE 'quarantine/%' OR rp.thumb_key LIKE 'quarantine/%')`,
+    )
+    .all<{ revision_id: string; idx: number; key: string; thumb_key: string; place_id: string }>()
+  let n = 0
+  for (const r of results) {
+    if (!(waitingSince(r.key, r.thumb_key) <= retentionCutoffs(now).photo)) continue
+    const still = `EXISTS (SELECT 1 FROM revision_photos rp JOIN revisions r ON r.id = rp.revision_id
+      WHERE rp.revision_id = ?2 AND rp.idx = ?3 AND rp.key = ?4 AND rp.thumb_key = ?5 AND r.state IN ('pending', 'returned'))`
+    const [moved] = await db.batch([
+      db.prepare(`UPDATE places SET rev = rev + 1 WHERE id = ?1 AND ${still}`).bind(r.place_id, r.revision_id, r.idx, r.key, r.thumb_key),
+      db
+        .prepare(`DELETE FROM place_sources WHERE revision_id = ?2 AND field = 'photo' AND photo_idx = ?3 AND place_id = ?1 AND ${still}`)
+        .bind(r.place_id, r.revision_id, r.idx, r.key, r.thumb_key),
+      db
+        .prepare(
+          `DELETE FROM revision_photos WHERE revision_id = ?2 AND idx = ?3 AND ${still} AND EXISTS (SELECT 1 FROM revisions WHERE id = ?2 AND place_id = ?1)`,
+        )
+        .bind(r.place_id, r.revision_id, r.idx, r.key, r.thumb_key),
+    ])
+    if (moved.meta.changes !== 1) continue
+    n++
+    await retirePhotos(
+      db,
+      env.media,
+      [r.key, r.thumb_key].filter((k) => k.startsWith("quarantine/")),
+    )
   }
   return n
 }

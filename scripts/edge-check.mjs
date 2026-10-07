@@ -17,7 +17,9 @@
 //   files and Access's own answers carry no version and aren't counted. Without it a deployment's version is unknown:
 //   incomplete. This shows which version answered these requests, not that the rollout reached everywhere.
 // Behind Access (staging), CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET in the environment, a service token's, go
-// with every request. EDGE_IDENTITIES (JSON: [{ name, path, headers, marker }], two or more synthetic owners,
+// with every request. EDGE_PLACE names a published place whose share page must answer: since phase 7 every place is in
+// the database, so a deployment names one that is there (a60); unnamed, that check is incomplete. Locally it is the
+// place the e2e seed imports. EDGE_IDENTITIES (JSON: [{ name, path, headers, marker }], two or more synthetic owners,
 // each with a private address of its own and a marker its answer carries) names who may read what. Both are read
 // from the environment only, never from an argument.
 // Exit: 0 every check passed (or skipped, locally); 1 a check failed; 3 nothing failed but something is incomplete.
@@ -32,13 +34,18 @@ const PAGES = {
   // The moderators' page: theirs behind Access, the page itself locally.
   "/admin/": { status: [200, 302, 401, 403] },
   "/api/v1/health": { status: [200], json: { ok: true } },
-  "/place/car-wall-tkuma": { status: [200], type: "text/html" },
+  // A place that was never public: the share route's own 404 page, whatever place is named below.
+  "/place/p_00000000000000000000000000": { status: [404] },
   "/api/v1/no-such-route": { status: [404] },
 }
 /** Addresses behind a credential: each answer, a refusal too, must stay out of shared caches. */
 const AUTHENTICATED = ["/api/admin/queue", "/api/ops/summary", "/api/v1/submissions/p_00000000000000000000000000"]
 const IDENTITIES = { moderator: "dev@example.test", stranger: "not-a-moderator@example.test" }
 const refused = (status) => status >= 400 && status < 500
+/** The place the local seed imports (fixtures/curated.json), checked when no place is named locally. */
+const SEEDED_PLACE = "car-wall-tkuma"
+/** A contribution's id or one of the site's own slugs, as the share route takes them; a visitor's local- id never is. */
+const PLACE_ID = /^(?!local-)(p_[0-9A-HJKMNP-TV-Z]{26}|[a-z0-9][a-z0-9-]{0,63})$/
 /** The addresses the Worker answers itself (run_worker_first); everything else is a static file. */
 const WORKER_PATH = /^\/(api|place|media|__dev)\//
 /** A version tag as the deploys give them: staging-<sha12>, or the release's tag. */
@@ -55,10 +62,14 @@ export async function edgeChecks(
     workersDev = null,
     access = null,
     identities = null,
+    place = null,
     expectTag = null,
     readiness = READINESS,
   } = {},
 ) {
+  // A named place or an expected tag in a shape none has is a configuration mistake, refused before anything is asked.
+  const named = place ?? (local ? SEEDED_PLACE : null)
+  if (named !== null && !PLACE_ID.test(named)) throw new Error(`EDGE_PLACE is not a place's id: ${JSON.stringify(named)}`)
   if (expectTag !== null && !TAG.test(expectTag)) throw new Error(`--expect-tag is not a version tag: ${JSON.stringify(expectTag)}`)
   const url = (path) => new URL(path, base).toString()
   // Once the expected version has answered, every Worker answer measured must name it.
@@ -137,6 +148,23 @@ export async function edgeChecks(
     for (const [name, value] of Object.entries(SECURITY_HEADERS))
       if (h.get(name) !== value) headerFailures.push(`${path}: ${name} is ${h.get(name)}`)
     if (h.get("Content-Security-Policy-Report-Only") !== CSP) headerFailures.push(`${path}: the page policy differs`)
+  }
+
+  // The named place's share page: there, and the site's page, with the same headers. A named place that is missing,
+  // hidden or broken fails: only an unnamed one is a check this run couldn't make (a60).
+  if (named === null) unseen("place_page", "no published place named (EDGE_PLACE): its share page wasn't checked")
+  else {
+    const path = `/place/${named}`
+    const res = await fetch(url(path), { redirect: "manual" })
+    await res.text()
+    const failures = []
+    if (res.status !== 200) failures.push(`${path}: ${res.status}, not 200`)
+    else if (!(res.headers.get("Content-Type") ?? "").startsWith("text/html"))
+      failures.push(`${path}: ${res.headers.get("Content-Type")}, not text/html`)
+    for (const [name, value] of Object.entries(SECURITY_HEADERS))
+      if (res.headers.get(name) !== value) headerFailures.push(`${path}: ${name} is ${res.headers.get(name)}`)
+    if (res.headers.get("Content-Security-Policy-Report-Only") !== CSP) headerFailures.push(`${path}: the page policy differs`)
+    record("place_page", failures, `${path} answered`)
   }
 
   // Who asks: no credential, a bearer that isn't one, and with --dev the two signed-in identities.
@@ -296,13 +324,15 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     )
     process.exit(2)
   }
-  const { CF_ACCESS_CLIENT_ID: id, CF_ACCESS_CLIENT_SECRET: secret, EDGE_IDENTITIES } = process.env
+  const { CF_ACCESS_CLIENT_ID: id, CF_ACCESS_CLIENT_SECRET: secret, EDGE_IDENTITIES, EDGE_PLACE } = process.env
   const results = await edgeChecks(base, {
     local,
     dev: args.includes("--dev"),
     workersDev: option("--workers-dev"),
     access: id && secret ? { id, secret } : null,
     identities: EDGE_IDENTITIES ? JSON.parse(EDGE_IDENTITIES) : null,
+    // An unset repository variable arrives as an empty string: not named.
+    place: EDGE_PLACE || null,
     expectTag,
   })
   for (const r of results) console.log(`${r.status.padEnd(10)}  ${r.check}: ${Array.isArray(r.detail) ? r.detail.join("; ") : r.detail}`)

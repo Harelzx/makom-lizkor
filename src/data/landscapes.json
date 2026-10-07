@@ -1,23 +1,5 @@
 [
  {
-  "file": "zikim-beach-sunset.webp",
-  "title": "File:Zikim beach.jpg",
-  "commons_url": "https://commons.wikimedia.org/wiki/File:Zikim_beach.jpg",
-  "author": "Shulamit Zimmerman",
-  "license": "CC BY-SA 4.0",
-  "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
-  "subject_he": "שקיעה בחוף קיבוץ זיקים, קיץ 2023"
- },
- {
-  "file": "zikim-beach-2025.webp",
-  "title": "File:Zikim beach, 16 October 2025 13.jpg",
-  "commons_url": "https://commons.wikimedia.org/wiki/File:Zikim_beach,_16_October_2025_13.jpg",
-  "author": "Nizzan Cohen",
-  "license": "CC BY 4.0",
-  "license_url": "https://creativecommons.org/licenses/by/4.0",
-  "subject_he": "חוף זיקים באור בוקר, אוקטובר 2025"
- },
- {
   "file": "beeri-autumn-tree.webp",
   "title": "File:PikiWiki Israel 29962 Autumn at Kibbutz Beeri.JPG",
   "commons_url": "https://commons.wikimedia.org/wiki/File:PikiWiki_Israel_29962_Autumn_at_Kibbutz_Beeri.JPG",
@@ -88,15 +70,6 @@
   "license": "CC BY-SA 4.0",
   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
   "subject_he": "שקיעה ושיטה סמוך לגשר החבלים בנחל הבשור"
- },
- {
-  "file": "beeri-forest-anemones.webp",
-  "title": "File:PikiWiki Israel 18958 Anemones in Beeri forest.jpg",
-  "commons_url": "https://commons.wikimedia.org/wiki/File:PikiWiki_Israel_18958_Anemones_in_Beeri_forest.jpg",
-  "author": "Alex Gall",
-  "license": "CC BY 2.5",
-  "license_url": "https://creativecommons.org/licenses/by/2.5",
-  "subject_he": "כלניות ביער בארי"
  },
  {
   "file": "beeri-forest-anemone-view.webp",

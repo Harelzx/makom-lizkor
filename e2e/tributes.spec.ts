@@ -2,6 +2,8 @@ import { expect, test, type Browser, type Page } from "./fixtures"
 import { published } from "./publish"
 
 const DAY = { timeout: 20_000 }
+let started = 0
+test.beforeEach(() => void (started = Date.now()))
 
 async function open(browser: Browser, id: string, init?: string) {
   const page = await (await browser.newContext()).newPage()
@@ -10,8 +12,22 @@ async function open(browser: Browser, id: string, init?: string) {
   page.on("request", (r) => {
     if (r.method() === "POST" && r.url().endsWith("/api/v1/tributes")) posts.push(r.headers()["idempotency-key"])
   })
+  // What the page's feed sync was answered, kept for a failure's report: this step has twice failed after a full run's
+  // earlier specs (34e24af, Phase 7 at e903100..503ce11) with an empty list, and never alone (cause not established).
+  const feed: string[] = []
+  page.on("response", (r) => {
+    if (/\/api\/v1\/(version|feed)\b/.test(r.url()))
+      feed.push(`${new Date().toISOString()} ${r.status()} ${r.url().replace(/^.*\/api/, "/api")}`)
+  })
+  const opened = Date.now()
   await page.goto(`/#/place/${id}`)
-  await expect(page.getByRole("button", { name: "השארת כלנית" })).toBeVisible(DAY)
+  feed.push(`${new Date(opened).toISOString()} goto started (test ${((opened - started) / 1000).toFixed(2)}s in)`)
+  try {
+    await expect(page.getByRole("button", { name: "השארת כלנית" })).toBeVisible(DAY)
+  } catch (e) {
+    await test.info().attach("feed-requests", { body: feed.join("\n") || "(none)", contentType: "text/plain" })
+    throw e
+  }
   return { page, posts }
 }
 const total = async (page: Page, id: string) =>
@@ -61,13 +77,14 @@ test("a browser that can't store anything keeps its flowers here and sends nothi
   expect(posts).toHaveLength(0)
 })
 
-test("at one of the site's own places the flowers stay on this device, and say so", async ({ browser }) => {
+test("at one of the site's own places, from the database since phase 7, an anemone is counted for everyone too", async ({ browser }) => {
+  const before = 0
   const { page, posts } = await open(browser, "nova-memorial-reim")
   await page.getByRole("button", { name: "השארת כלנית" }).click()
   await expect(page.getByText("השארתם כאן כלנית אחת")).toBeVisible()
-  await expect(page.getByText("נשמר רק במכשיר הזה")).toBeVisible()
-  await page.waitForTimeout(1500)
-  expect(posts).toHaveLength(0)
+  await expect(page.getByText("נשמר רק במכשיר הזה")).toHaveCount(0)
+  await expect.poll(() => posts.length).toBe(1)
+  await expect.poll(() => total(page, "nova-memorial-reim")).toBe(before + 1)
 })
 
 test("an anemone that waited more than seven days unsent is dropped, not counted", async ({ browser }) => {

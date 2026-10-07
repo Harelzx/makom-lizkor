@@ -60,6 +60,22 @@ export function policyProblems(workflows) {
       const toStaging = name === STAGING && job.env?.CLOUDFLARE_ENV === "staging" && !runs(job).some((r) => /--env\s+(?!staging\b)/.test(r))
       if (deploys && !production && !toStaging) say(`job ${id} changes production from outside release.yml and rollback.yml`)
     }
+    // Phase 7 task 6: a build that is checked or deployed is searched for curated records first, before anything
+    // migrates or deploys (the records live in D1 alone; a copy in the bundle would outlive a takedown).
+    if (["ci.yml", STAGING, "release.yml"].includes(name)) {
+      const searched = Object.values(w.jobs ?? {}).some((job) => {
+        const steps = runs(job)
+        const build = steps.findIndex((r) => /npm run build\b/.test(r))
+        return build >= 0 && steps.findIndex((r, i) => i > build && /node scripts\/bundle-check\.mjs/.test(r)) > build
+      })
+      if (!searched) say(`${name} must build, then run scripts/bundle-check.mjs`)
+      for (const [id, job] of Object.entries(w.jobs ?? {})) {
+        const steps = runs(job)
+        const check = steps.findIndex((r) => /node scripts\/bundle-check\.mjs/.test(r))
+        const change = steps.findIndex((r) => /\bwrangler\s+(deploy|d1\s+migrations\s+apply)\b/.test(r))
+        if (change >= 0 && (check < 0 || check > change)) say(`job ${id} must search its build before the migrations and the deploy`)
+      }
+    }
     if (name === "release.yml") problems.push(...releaseProblems(w).map((p) => `${name}: ${p}`))
     if (name === STAGING) problems.push(...stagingProblems(w, triggers).map((p) => `${name}: ${p}`))
     if (name === "ci.yml" && text(w.on?.push?.branches) !== text(["main"]))

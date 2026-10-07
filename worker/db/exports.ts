@@ -13,6 +13,9 @@ import { gzip, publicKeys, seal, sha256, type Manifest } from "../lib/sealed"
 export const EXPORT_TABLES = [
   "places",
   "revisions",
+  // A curated revision's photos and every revision's sources (phase 7), after the revisions they belong to.
+  "revision_photos",
+  "place_sources",
   "contacts",
   "reports",
   "field_suppressions",
@@ -101,11 +104,16 @@ async function backUpPhotos(media: R2Bucket, exports: R2Bucket, tables: Record<s
   const published = new Set(
     (tables.places ?? []).filter((p) => p.status === "published" || p.status === "hidden").map((p) => p.published_revision_id),
   )
-  const keys = new Set(
-    (tables.revisions ?? [])
+  const keys = new Set([
+    ...(tables.revisions ?? [])
       .filter((r) => published.has(r.id) && typeof r.photo_key === "string" && r.photo_key.startsWith("public/"))
       .map((r) => r.photo_key as string),
-  )
+    // A curated place's photos and thumbnails (phase 7).
+    ...(tables.revision_photos ?? [])
+      .filter((p) => published.has(p.revision_id))
+      .flatMap((p) => [p.key, p.thumb_key])
+      .filter((k): k is string => typeof k === "string" && k.startsWith("public/")),
+  ])
   const files: Manifest["files"] = []
   for (const key of keys)
     for (const name of [key, key.replace(/^public\//, "held/")]) {
@@ -114,7 +122,8 @@ async function backUpPhotos(media: R2Bucket, exports: R2Bucket, tables: Record<s
       const bytes = new Uint8Array(await object.arrayBuffer())
       const hash = await sha256(bytes)
       const copy = `photos/${hash}`
-      if (!(await exports.head(copy))) await exports.put(copy, bytes, { httpMetadata: { contentType: "image/jpeg" } })
+      if (!(await exports.head(copy)))
+        await exports.put(copy, bytes, { httpMetadata: { contentType: object.httpMetadata?.contentType ?? "image/jpeg" } })
       files.push({ key: name, sha256: hash, size: bytes.length })
       break
     }
@@ -226,6 +235,14 @@ export async function checkDeletion(env: { db: D1Database; exports: R2Bucket; ke
     db
       .prepare("SELECT COUNT(*) AS n FROM contacts WHERE email IS NOT NULL AND email_verified_at IS NULL AND email_verify_expires <= ?")
       .bind(late),
+    // A curated revision's waiting photos and thumbnails count too (P7-RET-1).
+    db.prepare(
+      `SELECT rp.key AS k FROM revision_photos rp JOIN revisions r ON r.id = rp.revision_id
+       WHERE rp.key LIKE 'quarantine/%' AND r.state IN ('pending', 'returned')
+       UNION ALL
+       SELECT rp.thumb_key FROM revision_photos rp JOIN revisions r ON r.id = rp.revision_id
+       WHERE rp.thumb_key LIKE 'quarantine/%' AND r.state IN ('pending', 'returned')`,
+    ),
   ])
   const n = (i: number) => (counts[i].results[0] as { n: number }).n
   const found: Record<string, number> = {
@@ -237,7 +254,7 @@ export async function checkDeletion(env: { db: D1Database; exports: R2Bucket; ke
     tributes: n(7),
     audit: n(8),
     unverified_emails: n(10),
-    unapproved_photos: (counts[9].results as { k: string }[]).filter(
+    unapproved_photos: [...(counts[9].results as { k: string }[]), ...(counts[11].results as { k: string }[])].filter(
       (r) => uploadedAt(r.k) <= now.getTime() - RETENTION.rejectedPhotoDays * DAY_MS,
     ).length,
   }

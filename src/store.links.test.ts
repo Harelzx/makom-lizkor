@@ -37,6 +37,18 @@ it("a share page for a place no longer public opens the overview, and keeps the 
   expect(marked.ids).toEqual(["p_x", "p_x"])
 })
 
+it("one of the site's own places taken back is noted too, so an offline reload keeps it off (P7-OFFLINE-1)", async () => {
+  marked.ids.length = 0
+  const { location, useStore } = await storeAt("/place/car-wall-tkuma", "", "gone")
+  expect(location.hash).toBe("#/")
+  useStore.getState().setRemote("1", [place("car-wall-tkuma"), place("p_y")], false)
+  expect(useStore.getState().remote.map((p) => p.id)).toEqual(["p_y"])
+  expect(marked.ids).toEqual(["car-wall-tkuma"])
+  // An address no place could have, or a visitor's own id, is noted for nothing.
+  for (const id of ["local-1", "Not%20A%20Place"]) await storeAt(`/place/${id}`, "", "none")
+  expect(marked.ids).toEqual(["car-wall-tkuma"])
+})
+
 it("a share page for a public place opens it under the hash route", async () => {
   marked.ids = []
   const { location, useStore } = await storeAt("/place/p_x", "")

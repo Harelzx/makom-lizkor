@@ -34,6 +34,11 @@ export type LedgerEntry = {
    * whether the restored copy holds the same photo, and the description and credit that go with it.
    */
   source?: string | null
+  /**
+   * On the approval of a curated revision: for each photo index, the keys the revision named and the keys the approval
+   * published, so a replay onto a copy taken while it waited publishes exactly those (P7-REC-1). Keys only.
+   */
+  photos?: { idx: number; from: string; key: string; thumb_from: string; thumb_key: string }[]
   /** On an approval, a refusal or a return: the revision decided (an id, never its content). */
   revision?: string
   /** When the entry was written: for a record repaired later (a late intent, a commit the job wrote), after the fact. */

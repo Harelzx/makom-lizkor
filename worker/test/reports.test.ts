@@ -5,6 +5,7 @@ import { REPORT_GUARDS } from "../lib/guards"
 import type { LedgerEntry } from "../lib/ledger"
 import { call, purges } from "./app"
 import { approve, submit } from "./helpers"
+import { seedCurated } from "./curated-helpers"
 
 const EXPLANATION = "שם אחי מופיע כאן בלי שביקשנו, ואנחנו מבקשים להסיר אותו בינתיים."
 /** Each test gets its own day, so the hourly and daily safeguards of one test never count another's requests. */
@@ -209,6 +210,7 @@ describe("idempotency", () => {
 
 describe("what can be reported", () => {
   it("a curated place: stored with its origin, reviewed urgently, never hidden automatically", async () => {
+    await seedCurated(["nova-memorial-reim"])
     const before = await alertCount()
     const res = await report({ placeId: "nova-memorial-reim", elements: ["whole"] })
     expect(res.status).toBe(202)

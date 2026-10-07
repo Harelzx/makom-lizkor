@@ -3,7 +3,6 @@ import { Hono, type Context } from "hono"
 import { ReportInput, type ReportResult } from "@/shared/contract"
 import { deliverAlerts, insertReport, precaution, replayReport, startAlertRound, type Target } from "../db/reports"
 import { clock } from "../lib/clock"
-import { curatedPlace } from "../lib/curated"
 import { PRIVATE, problem } from "../lib/http"
 import { rateKey } from "../lib/ids"
 import { opEnv } from "../lib/purge"
@@ -22,16 +21,16 @@ async function overLimit(c: Context<AppEnv>, key: string | null): Promise<Respon
   return null
 }
 
-/** The place a request names: a published or hidden contribution, or one of the site's own places (curated, until phase 7). */
+/** The place a request names: a published or hidden place, a contribution or one of the site's own (curated). */
 async function targetOf(db: D1Database, placeId: string): Promise<Target | null> {
-  if (placeId.startsWith("p_")) {
-    const status = await db.prepare("SELECT status FROM places WHERE id = ?").bind(placeId).first<string>("status")
-    // A place hidden whole can still be asked about (another element, or by someone else): a person reviews it, and the
-    // automatic path never acts on it.
-    if (status === "hidden") return { origin: "contribution", published: false }
-    return status === "published" ? { origin: "contribution", published: true } : null
-  }
-  return curatedPlace(placeId).kind === "published" ? { origin: "curated", published: true } : null
+  const place = await db
+    .prepare("SELECT status, origin FROM places WHERE id = ?")
+    .bind(placeId)
+    .first<{ status: string; origin: Target["origin"] }>()
+  // A place hidden whole can still be asked about (another element, or by someone else): a person reviews it, and the
+  // automatic path never acts on it.
+  if (place?.status === "hidden") return { origin: place.origin, published: false }
+  return place?.status === "published" ? { origin: place.origin, published: true } : null
 }
 
 /**

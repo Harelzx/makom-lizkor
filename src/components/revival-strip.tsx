@@ -45,7 +45,7 @@ export function RevivalStrip() {
   useEffect(() => {
     played = true
   }, [])
-  const communities = useStore((s) => s.seed)
+  const communities = useStore((s) => s.remote)
     .filter((p) => p.kind === "community" && p.revival)
     .sort((a, b) => ORDER[a.revival!.status] - ORDER[b.revival!.status] || b.lat - a.lat)
   const home = communities.filter((c) => c.revival!.status === "full").length

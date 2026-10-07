@@ -1,6 +1,7 @@
 import { ulid } from "../lib/ids"
 import { writeLedger, type Actor, type LedgerEntry, type OpKind } from "../lib/ledger"
 import { erasePhotos, photosRemain, retirePhotos } from "./photos"
+import { revisionKeys } from "./curated"
 import { log } from "../lib/log"
 
 /** What an operation reaches: the database, the files, the ledger and the edge cache. */
@@ -17,6 +18,8 @@ export type OpDetail = {
   report?: string
   /** On an approval: the photo key the revision named when it was approved, or null (the ledger's `source`). */
   source?: string | null
+  /** On a curated approval: each photo index's stored and published keys (the ledger's `photos`). */
+  photos?: { idx: number; from: string; key: string; thumb_from: string; thumb_key: string }[]
   /** The revision a decision on a submission or a correction decided: a restore replays it onto that revision. */
   revision?: string
   /** After the database step: public files to take out of view (their held/ copy stays, so nothing is lost). */
@@ -122,6 +125,7 @@ function entry(op: OpRow, phase: LedgerEntry["phase"], at: string, late = false)
     ...(detail.basis ? { basis: detail.basis } : {}),
     ...(detail.revision ? { revision: detail.revision } : {}),
     ...(detail.source !== undefined ? { source: detail.source } : {}),
+    ...(detail.photos?.length ? { photos: detail.photos } : {}),
     at,
     // The database step ran with the moment the operation was stored (runOp uses one clock for both).
     decided_at: op.created_at,
@@ -477,16 +481,17 @@ export async function placePhoto(env: OpEnv, placeId: string, now = new Date(), 
   for (let pass = 0; pass < PLACE_PASSES; pass++) {
     const row = await env.db
       .prepare(
-        `SELECT p.status, r.photo_key,
+        `SELECT p.status, p.published_revision_id AS rid,
            EXISTS (SELECT 1 FROM field_suppressions s WHERE s.place_id = p.id AND s.lifted_at IS NULL AND s.field IN ('photo', 'whole')) AS hidden
-         FROM places p LEFT JOIN revisions r ON r.id = p.published_revision_id WHERE p.id = ?`,
+         FROM places p WHERE p.id = ?`,
       )
       .bind(placeId)
-      .first<{ status: string; photo_key: string | null; hidden: number }>()
-    const key = row?.photo_key
+      .first<{ status: string; rid: string | null; hidden: number }>()
+    // A contribution's one photo, or a curated place's photos and thumbnails (phase 7): each moved the same way.
+    const keys = (await revisionKeys(env.db, row?.rid ?? null)).filter((k) => k.startsWith("public/"))
     // A withdrawn or erased place's files are the erasure's: once that state is seen, nothing is copied here. A write a
     // move issued before it can still land; the watch erases it (erasedRemains).
-    if (!row || !key?.startsWith("public/") || row.status === "withdrawn" || row.status === "erased") return "none"
+    if (!row || !keys.length || row.status === "withdrawn" || row.status === "erased") return "none"
     // On the watch before any write, with a look soon after this move (sooner than one already booked, never later).
     if (register && pass === 0)
       await env.db
@@ -497,18 +502,20 @@ export async function placePhoto(env: OpEnv, placeId: string, now = new Date(), 
         .bind(placeId, new Date(now.getTime() + WATCH_FIRST_LOOK_MS).toISOString())
         .run()
     const served = row.status === "published" && !row.hidden
-    const held = heldKey(key)
     let changed = false
-    // The kept copy first, from the served one, before anything can take the served one away.
-    if (!(await env.media.head(held))) changed = (await copy(env.media, key, held)) || changed
-    // Neither copy: the photo's bytes are gone. A failure that stays listed, never a move that completed.
-    if (!(await env.media.head(held))) throw new Error("photo_missing")
-    if (served) {
-      if (!(await env.media.head(key))) changed = (await copy(env.media, held, key)) || changed
-    } else if (await env.media.head(key)) {
-      // The kept copy is there (checked just above), so the photo is never left with no copy at all.
-      await env.media.delete(key)
-      changed = true
+    for (const key of keys) {
+      const held = heldKey(key)
+      // The kept copy first, from the served one, before anything can take the served one away.
+      if (!(await env.media.head(held))) changed = (await copy(env.media, key, held)) || changed
+      // Neither copy: the photo's bytes are gone. A failure that stays listed, never a move that completed.
+      if (!(await env.media.head(held))) throw new Error("photo_missing")
+      if (served) {
+        if (!(await env.media.head(key))) changed = (await copy(env.media, held, key)) || changed
+      } else if (await env.media.head(key)) {
+        // The kept copy is there (checked just above), so the photo is never left with no copy at all.
+        await env.media.delete(key)
+        changed = true
+      }
     }
     if (!changed) return "placed"
   }

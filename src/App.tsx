@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { Toaster } from "@/components/ui/sonner"
-import { useStore } from "@/store"
+import { placeIdShape, useStore } from "@/store"
 import { Intro } from "@/components/intro"
 import { Celebration } from "@/components/celebration"
 
@@ -41,9 +41,9 @@ function useHashRoute() {
         history.replaceState(null, "", "#/")
       } else if (route === "place" && id) {
         const pid = decodeURIComponent(id)
-        // A link to a place that isn't here (a typo, an old link) opens the overview instead. Local places and approved
-        // contributions (p_…) load later, so they're trusted.
-        if (pid.startsWith("local-") || pid.startsWith("p_") || s.seed.some((p) => p.id === pid)) s.select(pid)
+        // Every place loads after the first render (the feed, or this browser's own), so an id of a place's shape is
+        // trusted until the server's feed has come (below); anything else opens the overview.
+        if (placeIdShape(pid)) s.select(pid)
         else {
           history.replaceState(null, "", "#/")
           void import("@/map/controller").then((m) => m.flyToEnvelope(2400))
@@ -61,22 +61,22 @@ function useHashRoute() {
     window.addEventListener("hashchange", onHash)
     return () => window.removeEventListener("hashchange", onHash)
   }, [phase])
-  // A contribution's link is trusted until the server's feed has come; if that feed doesn't have it (a typo, a rejected
-  // or hidden place), the link falls back to the overview, as any unknown link does. The offline copy doesn't count:
-  // a place approved since it was saved would fall back wrongly.
+  // A place's link is trusted until the server's feed has come; if that feed doesn't have it (a typo, an old link, a
+  // rejected or hidden place), the link falls back to the overview, as any unknown link does. The offline copy doesn't
+  // count, and neither does a feed that failed or hasn't answered yet: a place approved since would fall back wrongly.
   const feedVersion = useStore((s) => s.feedVersion)
   const feedLive = useStore((s) => s.feedLive)
-  // The contribution whose card was last shown with its place, so its disappearing can be told from a bad link. Only
-  // recorded here: a selection is never checked against the feed already held, which may predate the place.
+  // The place whose card was last shown with its place, so its disappearing can be told from a bad link. Only recorded
+  // here: a selection is never checked against the feed already held, which may predate the place.
   const shown = useRef<string | null>(null)
   const remote = useStore((s) => s.remote)
   useEffect(() => {
-    if (selectedId?.startsWith("p_") && remote.some((p) => p.id === selectedId)) shown.current = selectedId
+    if (selectedId && !selectedId.startsWith("local-") && remote.some((p) => p.id === selectedId)) shown.current = selectedId
   }, [selectedId, remote])
   useEffect(() => {
     const s = useStore.getState()
     const id = s.selectedId
-    if (!feedVersion || !feedLive || !id?.startsWith("p_") || s.remote.some((p) => p.id === id)) return
+    if (!feedVersion || !feedLive || !id || id.startsWith("local-") || s.remote.some((p) => p.id === id)) return
     history.replaceState(null, "", "#/")
     s.select(null)
     // A place taken out of view while its card was open (hidden, or withdrawn by its sender) closes quietly, saying
@@ -128,8 +128,10 @@ export default function App() {
     prevPhase.current = phase
   }, [phase])
 
+  // The visitor's own places, read from the device once; the day waits for them before sending any still waiting.
+  const ready = useRef<Promise<void> | null>(null)
   useEffect(() => {
-    void init()
+    ready.current = init()
   }, [init])
 
   // While the opening plays, fetch the panel's code in the background so it's ready at sunrise.
@@ -138,22 +140,34 @@ export default function App() {
     return () => clearTimeout(t)
   }, [])
 
-  // Approved contributions come from the server once the day has begun. The sync loads on its own, so the opening's
-  // bundle stays free of network code, and a server that is down changes nothing the visitor sees.
+  // Every place comes from the server (phase 7), so the feed loads from the start of the opening, in the background:
+  // the offline copy first, then the server's. The sync loads on its own, so the opening's bundle stays free of
+  // network code, and nothing in the opening waits for it (the count and the fall use what is there when they need it).
   useEffect(() => {
-    if (phase !== "day") return
     let stop: (() => void) | undefined
     let cancelled = false
-    let stopTributes: (() => void) | undefined
     void import("@/lib/feed").then((m) => {
       if (!cancelled) stop = m.startFeedSync()
+    })
+    return () => {
+      cancelled = true
+      stop?.()
+    }
+  }, [])
+  // The anemone totals once the day has begun, and the visitor's places that a closed tab or a lost connection left
+  // waiting: sent as the day begins, once the device's list is read (the feed's first wake comes before it).
+  useEffect(() => {
+    if (phase !== "day") return
+    let stopTributes: (() => void) | undefined
+    let cancelled = false
+    void ready.current?.then(async () => {
+      if (!cancelled) await (await import("@/lib/outbox")).retryWaiting()
     })
     void import("@/lib/tributes").then((m) => {
       if (!cancelled) stopTributes = m.startTributeSync()
     })
     return () => {
       cancelled = true
-      stop?.()
       stopTributes?.()
     }
   }, [phase])

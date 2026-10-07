@@ -19,14 +19,19 @@ export async function readLedger(ledger: R2Bucket) {
 type Row = Record<string, unknown>
 const same = (a: unknown, b: unknown) => Object.is(a, b) || JSON.stringify(a) === JSON.stringify(b)
 
-/** The statements that turn `before` into `after`, row by row and column by column: nothing else is written. */
-function changes(db: D1Database, table: string, before: Row[], after: Row[], key = "id") {
+/**
+ * The statements that turn `before` into `after`, row by row and column by column: nothing else is written. A row is
+ * known by its key columns (a curated photo by its revision and index).
+ */
+function changes(db: D1Database, table: string, before: Row[], after: Row[], key: string[] = ["id"]) {
   const out: D1PreparedStatement[] = []
-  const was = new Map(before.map((r) => [r[key], r]))
-  const now = new Set(after.map((r) => r[key]))
-  for (const r of before) if (!now.has(r[key])) out.push(db.prepare(`DELETE FROM ${table} WHERE ${key} = ?`).bind(r[key]))
+  const id = (r: Row) => JSON.stringify(key.map((k) => r[k]))
+  const where = key.map((k, i) => `${k} = ?${i + 1}`).join(" AND ")
+  const was = new Map(before.map((r) => [id(r), r]))
+  const now = new Set(after.map(id))
+  for (const r of before) if (!now.has(id(r))) out.push(db.prepare(`DELETE FROM ${table} WHERE ${where}`).bind(...key.map((k) => r[k])))
   for (const r of after) {
-    const old = was.get(r[key])
+    const old = was.get(id(r))
     if (!old) {
       const names = Object.keys(r)
       out.push(
@@ -40,8 +45,8 @@ function changes(db: D1Database, table: string, before: Row[], after: Row[], key
     if (changed.length)
       out.push(
         db
-          .prepare(`UPDATE ${table} SET ${changed.map((c, i) => `${c} = ?${i + 2}`).join(", ")} WHERE ${key} = ?1`)
-          .bind(r[key], ...changed.map((c) => r[c])),
+          .prepare(`UPDATE ${table} SET ${changed.map((c, i) => `${c} = ?${i + key.length + 1}`).join(", ")} WHERE ${where}`)
+          .bind(...key.map((k) => r[k]), ...changed.map((c) => r[c])),
       )
   }
   return out
@@ -60,11 +65,17 @@ export async function replayLedger(db: D1Database, ledger: R2Bucket | Map<string
   let changed = false
   for (const [placeId, entries] of entriesByPlace) {
     result.places++
-    const [p, revisions, contacts, suppressions] = await db.batch([
+    const [p, revisions, contacts, suppressions, photos, sources] = await db.batch([
       db.prepare("SELECT * FROM places WHERE id = ?").bind(placeId),
       db.prepare("SELECT * FROM revisions WHERE place_id = ? ORDER BY rowid").bind(placeId),
       db.prepare("SELECT * FROM contacts WHERE place_id = ? ORDER BY rowid").bind(placeId),
       db.prepare("SELECT * FROM field_suppressions WHERE place_id = ? ORDER BY rowid").bind(placeId),
+      db
+        .prepare(
+          "SELECT * FROM revision_photos WHERE revision_id IN (SELECT id FROM revisions WHERE place_id = ?) ORDER BY revision_id, idx",
+        )
+        .bind(placeId),
+      db.prepare("SELECT * FROM place_sources WHERE place_id = ? ORDER BY rowid").bind(placeId),
     ])
     const place = p.results[0] as Row | undefined
     if (!place) {
@@ -78,6 +89,8 @@ export async function replayLedger(db: D1Database, ledger: R2Bucket | Map<string
       revisions: revisions.results as Row[],
       contacts: contacts.results as Row[],
       suppressions: suppressions.results as Row[],
+      photos: photos.results as Row[],
+      sources: sources.results as Row[],
     }
     const r = reconcilePlace(before, entries, now)
     const statements = [
@@ -85,6 +98,9 @@ export async function replayLedger(db: D1Database, ledger: R2Bucket | Map<string
       ...changes(db, "revisions", before.revisions, r.rows.revisions),
       ...changes(db, "contacts", before.contacts, r.rows.contacts),
       ...changes(db, "field_suppressions", before.suppressions, r.rows.suppressions),
+      // A revision is never deleted here, so the photos and sources that name it can follow in any order.
+      ...changes(db, "revision_photos", before.photos, r.rows.photos!, ["revision_id", "idx"]),
+      ...changes(db, "place_sources", before.sources, r.rows.sources!),
     ]
     if (statements.length) await db.batch(statements)
     changed ||= statements.length > 0
@@ -119,10 +135,14 @@ export async function restorePhotos(db: D1Database, media: R2Bucket, exports: R2
   const recorded = new Map(manifest.files.map((f) => [f.key.replace(/^held\//, "public/"), f.sha256]))
   const { results } = await db
     .prepare(
-      `SELECT r.photo_key AS key, EXISTS (SELECT 1 FROM field_suppressions s WHERE s.place_id = p.id AND s.lifted_at IS NULL
+      `SELECT k.key, EXISTS (SELECT 1 FROM field_suppressions s WHERE s.place_id = p.id AND s.lifted_at IS NULL
          AND s.field IN ('photo', 'whole')) AS hidden
-       FROM places p JOIN revisions r ON r.id = p.published_revision_id
-       WHERE p.status IN ('published', 'hidden') AND r.photo_key LIKE 'public/%'`,
+       FROM places p JOIN (
+         SELECT id AS rid, photo_key AS key FROM revisions
+         UNION ALL SELECT revision_id, key FROM revision_photos
+         UNION ALL SELECT revision_id, thumb_key FROM revision_photos
+       ) k ON k.rid = p.published_revision_id
+       WHERE p.status IN ('published', 'hidden') AND k.key LIKE 'public/%'`,
     )
     .all<{ key: string; hidden: number }>()
   for (const { key, hidden } of results) {
@@ -139,7 +159,7 @@ export async function restorePhotos(db: D1Database, media: R2Bucket, exports: R2
       result.damaged++
       continue
     }
-    await media.put(target, bytes, { httpMetadata: { contentType: "image/jpeg" } })
+    await media.put(target, bytes, { httpMetadata: { contentType: key.endsWith(".webp") ? "image/webp" : "image/jpeg" } })
     result.restored++
   }
   return result

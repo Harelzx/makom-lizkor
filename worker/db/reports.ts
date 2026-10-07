@@ -5,6 +5,7 @@ import { sha256Hex, ulid } from "../lib/ids"
 import type { Mail } from "../lib/mail"
 import { reportAlertMail } from "../lib/messages"
 import { runOp, type OpEnv } from "./ops"
+import { revisionKeys } from "./curated"
 import { hmacHex } from "./places"
 
 // An approximation of a month, as for contacts; phase 5 reads calendar months from RETENTION (src/config.ts).
@@ -177,10 +178,11 @@ export async function precaution(
 
   const place = await db
     .prepare(
-      `SELECT p.rev, r.n, r.photo_key FROM places p JOIN revisions r ON r.id = p.published_revision_id WHERE p.id = ? AND p.status = 'published'`,
+      `SELECT p.rev, r.n, r.photo_key, p.published_revision_id AS rid FROM places p JOIN revisions r ON r.id = p.published_revision_id
+       WHERE p.id = ? AND p.status = 'published'`,
     )
     .bind(report.place_id)
-    .first<{ rev: number; n: number; photo_key: string | null }>()
+    .first<{ rev: number; n: number; photo_key: string | null; rid: string }>()
   if (!place) return "refused"
   // The safeguards read first, so a routine refusal writes nothing to the ledger; the same conditions are checked
   // again inside the place's own update.
@@ -210,7 +212,8 @@ export async function precaution(
   if (!(await safeNow())) return "refused"
   const elements = JSON.parse(report.elements) as Element[]
   const whole = elements.includes("whole")
-  const photo = (whole || elements.includes("photo")) && place.photo_key?.startsWith("public/") ? [place.photo_key] : []
+  // Every served file of the published revision, a curated place's photos and thumbnails included (phase 7).
+  const photo = whole || elements.includes("photo") ? (await revisionKeys(db, place.rid)).filter((k) => k.startsWith("public/")) : []
   const happened = "EXISTS (SELECT 1 FROM places WHERE id = ?1 AND last_transition_id = ?2)"
   // Named before the decision, so the ledger records which rows it creates.
   const targets = elements.map(() => `s_${ulid(now.getTime())}`)

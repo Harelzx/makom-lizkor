@@ -9,8 +9,11 @@ const JERUSALEM = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem",
 /** Today in Jerusalem by this device's clock: only to avoid sending what the server would not count anyway. */
 const today = () => JERUSALEM.format(new Date())
 
-/** Whether anemones at a place reach the shared count: only places published on the server do (until phase 7). */
-export const shared = (placeId: string) => placeId.startsWith("p_")
+/**
+ * Whether anemones at a place reach the shared count: every place the server publishes does, the site's own places
+ * included since they moved into the database (phase 7); a place kept only on this device never does.
+ */
+export const shared = (placeId: string) => !placeId.startsWith("local-")
 
 /** Whether this browser can take part in the shared count: it keeps a device id. */
 export const canShare = () => storageWorks()

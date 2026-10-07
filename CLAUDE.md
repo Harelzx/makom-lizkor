@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-"מקום לזכור" (Makom Lizkor) is a static, Hebrew, RTL memorial map for the people murdered and killed on 7 October 2023. It shows monuments, lookouts, benches, groves and gardens, plus a page for each of the 22 attacked communities with its return status. The site opens at 06:29 on a dark map, and a sunrise turns it to morning. The curated data ships in JSON. A backend is being built in phases (`docs/superpowers/specs/2026-10-05-backend-system-design.md`, plan in `docs/superpowers/plans/`): phase 1 runs locally only, with synthetic data, and nothing is deployed. A place a visitor adds is kept in their browser's IndexedDB and also sent to the local Worker for review; approved places reach every browser through a versioned feed.
+"מקום לזכור" (Makom Lizkor) is a static, Hebrew, RTL memorial map for the people murdered and killed on 7 October 2023. It shows monuments, lookouts, benches, groves and gardens, plus a page for each of the 22 attacked communities with its return status. The site opens at 06:29 on a dark map, and a sunrise turns it to morning. Every place, the site's own included, comes from the server's database (D1) through a versioned feed; the site's own places are imported from `fixtures/curated.json` through the moderators' route (phase 7). A backend is being built in phases (`docs/superpowers/specs/2026-10-05-backend-system-design.md`, plan in `docs/superpowers/plans/`): phase 1 runs locally only, with synthetic data, and nothing is deployed. A place a visitor adds is kept in their browser's IndexedDB and also sent to the local Worker for review; approved places reach every browser through a versioned feed.
 
 ## Repository layout
 
@@ -37,6 +37,7 @@ npm test                   # the Worker's tests (Vitest inside workerd, fresh lo
 npm run test:client        # the browser code's own logic (the store) in Node, storage stood in for; heavy: scripts/heavy npm run test:client
 npm run test:scripts       # node:test for scripts/ (the release check's mail rules)
 npm run db:migrate:local   # apply migrations/ to the local D1 the dev server uses (e2e runs migrate their own fresh copy)
+npm run db:seed:local      # import the site's own places into the running dev server's D1 (insert-only)
 npm run cf-typegen         # regenerate worker-configuration.d.ts after changing wrangler.jsonc or .dev.vars
 ```
 
@@ -61,13 +62,13 @@ Several Claude Code sessions may work on this repo at once, each in its own work
 
 Harel delegated routine decisions for the backend work (branch `claude/system-architecture-design-9a660f`) to a Codex adviser. Other sessions: this section is not yours.
 
-Backend adviser: `/Users/harel/Documents/Codex/2026-10-05/b/outputs/codex-supervisor/CLAUDE-HANDOFF.md` (active workflow 5.1; read after compaction/restart). Project state: `docs/agent-handoff.md`; reconcile its HEAD and open findings with actual Git and the latest completed `runtime/decisions.jsonl` entry before continuing. Implementation reports use `--review-access snapshot` (now the default); no source-packet shrinking. Follow `policy-v5.md` for authority, review and failure handling. Do not edit the adviser bundle. Historical workflow instructions are superseded.
+Backend adviser: `/Users/harel/Documents/Codex/2026-10-05/b/outputs/codex-supervisor/CLAUDE-HANDOFF.md` (bridge 5.3; read it and any `RESUME-*.txt` there after compaction/restart). Project state: `docs/agent-handoff.md`; reconcile its HEAD and open findings with actual Git and the latest completed `runtime/decisions.jsonl` entry before continuing. Implementation reports use `--review-access snapshot` (now the default); no source-packet shrinking. Follow `policy-v5.md` for authority, review and failure handling. Do not edit the adviser bundle. Historical workflow instructions are superseded.
 
 ## Architecture
 
 ### State and phases (`src/store.ts`)
 
-A single Zustand store holds everything: the seed places, the visitor's local places, tributes, the selection, the tab, open dialogs and the journey index. The `phase` field is the app's main state machine:
+A single Zustand store holds everything: the places from the feed, the visitor's local places, tributes, the selection, the tab, open dialogs and the journey index. The `phase` field is the app's main state machine:
 
 - `intro` (the 06:29 opening) → `dawn` (the sunrise is playing) → `day` (the site itself). `components/intro.tsx` drives this sequence: it sets `dawn`, awaits `shiftLight("first")` and then `shiftLight("morning")` (7 s in all, `SUNRISE`), fades the place names in near its end (`fadeInLabels`), then sets `day`.
 - `App.tsx` toggles `.dark` on `<html>`, and the `theme-color` meta, from `phase` and `light`. The interface is dark during the intro and in night mode.
@@ -75,13 +76,13 @@ A single Zustand store holds everything: the seed places, the visitor's local pl
 
 ### Routing (`useHashRoute` in `App.tsx`)
 
-The only route is `#/place/<id>`, kept in sync with `selectedId`. The share button gives `/place/<id>` instead: the Worker (`worker/routes/share.ts`) serves the site's page with that place's preview tags (and an approved contribution's public fields in `#place-data`, so the card opens before the feed), 404 for a place never public and 410 for one taken back; `store.ts` turns the path into `#/place/<id>` before anything reads it, or into `#/` for a 404 or 410. Absolute addresses there come from `PUBLIC_ORIGIN` (the request's origin only in development), and `release:check` refuses it unset. Opening a card from the list pushes a history entry, so the browser Back button (or a swipe back on a phone) closes the card. Moving from one place to another replaces the entry instead. An unknown id falls back to `#/` and flies to the envelope view. Ids that start with `local-` are visitor-added places. They load asynchronously, so the router trusts them. When the day starts, the router reads the hash as an entrance (`apply(true)`), so a place opened during the sunrise stays open instead of being read as Back.
+The only route is `#/place/<id>`, kept in sync with `selectedId`. The share button gives `/place/<id>` instead: the Worker (`worker/routes/share.ts`) serves the site's page with that place's preview tags (and the place's public fields in `#place-data`, so the card opens before the feed), 404 for a place never public and 410 for one taken back; `store.ts` turns the path into `#/place/<id>` before anything reads it, or into `#/` for a 404 or 410. Absolute addresses there come from `PUBLIC_ORIGIN` (the request's origin only in development), and `release:check` refuses it unset. Opening a card from the list pushes a history entry, so the browser Back button (or a swipe back on a phone) closes the card. Moving from one place to another replaces the entry instead. Every place loads after the first render, so the router trusts an id of a place's shape (`placeIdShape`: `local-…`, `p_…` or a slug) until the server's own feed has answered; a feed that answered without it sends the link to `#/` and the envelope view, and one that failed or hasn't come yet drops nothing. Ids that start with `local-` are visitor-added places and are never dropped. When the day starts, the router reads the hash as an entrance (`apply(true)`), so a place opened during the sunrise stays open instead of being read as Back.
 
 ### Backend, phase 1 (`worker/`, `migrations/`, `src/shared/`)
 
 - One Hono Worker runs inside `npm run dev` through `@cloudflare/vite-plugin`. Only `/api/*`, `/__dev/*`, `/media/*` and `/place/*` reach it (`run_worker_first` in `wrangler.jsonc`); everything else is the static site. The dev server's local D1 and R2 live in `.wrangler/state` (git-ignored); each e2e run uses its own fresh copy (`.wrangler/e2e-state-*`), so demo places never accumulate in the dev server's.
 - **The vars in `wrangler.jsonc` are what a deploy ships, and they are production.** Development (the stand-in Access sign-in at `/__dev/login`, the `X-Test-Now` clock) is switched on only by `.dev.vars`: untracked, created from the committed template `.dev.vars.example` (synthetic values only) by `npm run dev` and the e2e servers when missing, and never deployed. The Worker tests read the template itself, not a local `.dev.vars`. A test fails if the deploy vars stop being production.
-- `src/shared/contract.ts` holds the Zod schemas both sides use; `src/shared/text.ts` strips bidi controls from anything stored. The client reads approved places through `src/lib/feed.ts` (loaded once the day begins, never in the opening's bundle) into `remote` in the store. `allPlaces()` takes `seed`, `remote` and `local`, and hides a local copy once its `remoteId` is published. Ids that start with `p_` are contributions; the router trusts them until the feed has come.
+- `src/shared/contract.ts` holds the Zod schemas both sides use; `src/shared/text.ts` strips bidi controls from anything stored. The client reads every published place through `src/lib/feed.ts` into `remote` in the store. It loads from the start of the opening, in the background and in its own chunk (nothing in the opening waits for it: the count line shows a number only once there is one, and the fall lands on the sites there are). `allPlaces()` takes `remote` and `local`, and hides a local copy once its `remoteId` is published. Ids that start with `p_` are contributions; the site's own places keep their slugs. Anemones at any published place reach the shared count (`shared()` in `src/lib/tributes.ts`).
 - The moderators' queue is `/admin/` (`admin/index.html`, outside `src/`, with its code in `src/admin/`). Locally, sign in with `POST /__dev/login {"email":"dev@example.test"}`.
 
 ### Persistence (`src/lib/storage.ts`)
@@ -177,7 +178,7 @@ The opening paints from a small first bundle. `MapCanvas`, `Shell`, `Search`, `A
 
 ### Data pipeline (`scripts/build-data.mjs`)
 
-`data-src/` (research files) → `src/data/places.json`, `context.json`, `landscapes.json`. **Those three outputs are generated, so never edit them by hand.** The pipeline works like this:
+`data-src/` (research files) → `src/data/places.json`, `context.json`, `landscapes.json`, and `fixtures/curated.json` (each place as the record a moderator would send, with its sources). **Those outputs are generated, so never edit them by hand.** `places.json` is a development file only: no production bundle may carry a curated record or photo (`scripts/bundle-check.mjs`, run after every build in CI, staging and release). The site's own places reach D1 through `scripts/curated-import.mjs`, a client of `POST /api/admin/places` that only inserts (a place already there, hidden or edited, stays as it is): the e2e `seed` project runs it before every spec, `npm run db:seed:local` runs it against the dev server, and production runs it only with Harel's approval of the selection. Their photos are in `fixtures/photos/` (uploaded through the media gate by the importer, never served as files); About's landscapes, the site's own pictures, are in `public/landscapes/`. The pipeline works like this:
 
 - Inputs are `oct7.json` and `extra.json`, which share one schema. Only records with `scope` of `oct7` or `mixed` pass. `war-later` records stay in the source file but never reach the map.
 - `exclude.txt` drops records by id.

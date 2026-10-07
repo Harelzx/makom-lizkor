@@ -207,6 +207,25 @@ test("staging deploys only the commit CI passed on main, with staging's secrets 
   )
 })
 
+test("every build that is checked or deployed is searched for curated records first (Phase 7 task 6)", () => {
+  // CI builds and checks, staging and the release check before they migrate or deploy.
+  fails(withChange("ci.yml", "      - run: node scripts/bundle-check.mjs\n", ""), "ci.yml must build, then run scripts/bundle-check.mjs")
+  fails(
+    withChange("staging.yml", "      - run: node scripts/bundle-check.mjs\n", ""),
+    "staging.yml must build, then run scripts/bundle-check.mjs",
+  )
+  fails(
+    withChange("release.yml", "      - run: node scripts/bundle-check.mjs\n", ""),
+    "release.yml must build, then run scripts/bundle-check.mjs",
+  )
+  // Searched after the migrations: too late, they already ran.
+  const source = real["release.yml"]
+  const check = "      - run: node scripts/bundle-check.mjs\n"
+  const deploy = "      - name: Deploy, the version tagged with the release and its commit\n"
+  assert.ok(source.includes(check) && source.includes(deploy))
+  fails({ ...real, "release.yml": source.replace(check, "").replace(deploy, check + deploy) }, "before the migrations")
+})
+
 // Each deploy's checks wait for the version that deploy tagged and hold the Worker's answers to it (a61): a check
 // answered by the previous version would describe a commit other than the one its receipt or release names.
 test("the edge checks expect the very tag the deploy gave its version", () => {

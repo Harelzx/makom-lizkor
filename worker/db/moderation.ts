@@ -1,6 +1,7 @@
 import type { Element } from "@/shared/contract"
 import { ulid } from "../lib/ids"
 import { runOp, type OpEnv, type OpOutcome } from "./ops"
+import { revisionKeys } from "./curated"
 import { notesCeiling } from "./reports"
 
 const DAY_MS = 24 * 3600 * 1000
@@ -23,12 +24,22 @@ export type BasisCode = (typeof BASIS_CODES)[number]
 export async function placeView(db: D1Database, id: string) {
   const place = await db
     .prepare(
-      `SELECT p.id, p.status, p.rev, r.n AS revision_n, r.name_he, r.photo_key FROM places p
+      `SELECT p.id, p.status, p.rev, p.published_revision_id, r.n AS revision_n, r.name_he, r.photo_key FROM places p
        LEFT JOIN revisions r ON r.id = p.published_revision_id WHERE p.id = ?`,
     )
     .bind(id)
-    .first<{ id: string; status: string; rev: number; revision_n: number | null; name_he: string | null; photo_key: string | null }>()
+    .first<{
+      id: string
+      status: string
+      rev: number
+      published_revision_id: string | null
+      revision_n: number | null
+      name_he: string | null
+      photo_key: string | null
+    }>()
   if (!place) return null
+  // Every served file of the published revision: a contribution's photo, or a curated place's photos and thumbnails.
+  const photos = (await revisionKeys(db, place.published_revision_id)).filter((k) => k.startsWith("public/"))
   const { results } = await db
     .prepare(
       `SELECT id, field, kind, report_id, created_at, created_by, reason FROM field_suppressions
@@ -36,7 +47,7 @@ export async function placeView(db: D1Database, id: string) {
     )
     .bind(id)
     .all()
-  return { ...place, suppressions: results }
+  return { ...place, photos, suppressions: results }
 }
 
 /**
@@ -56,7 +67,7 @@ export async function suppress(
   if (i.reportId && !(await db.prepare("SELECT 1 FROM reports WHERE id = ? AND place_id = ?").bind(i.reportId, i.placeId).first()))
     return "invalid_report"
   const whole = i.fields.includes("whole")
-  const photo = (whole || i.fields.includes("photo")) && place.photo_key?.startsWith("public/") ? [place.photo_key] : []
+  const photo = whole || i.fields.includes("photo") ? place.photos : []
   const at = now.toISOString()
   const happened = "EXISTS (SELECT 1 FROM places WHERE id = ?1 AND last_transition_id = ?2)"
   // Named before the decision, so the ledger records which rows it creates.
@@ -172,7 +183,7 @@ export async function lift(
   const restorePlace = sup.field === "whole" && !others.has("whole")
   // The photo is served again only when nothing else still hides it, by itself or with the whole place.
   const photoBack = (sup.field === "photo" || sup.field === "whole") && !others.has("photo") && !others.has("whole")
-  const photo = photoBack && place.photo_key?.startsWith("public/") ? place.photo_key : null
+  const photos = photoBack ? place.photos : []
   const at = now.toISOString()
   const happened = "EXISTS (SELECT 1 FROM places WHERE id = ?1 AND last_transition_id = ?2)"
   const { basisCode, basisNote, expectedRev, ...detail } = i
@@ -190,11 +201,15 @@ export async function lift(
       detail: { fields: [sup.field], targets: [suppressionId], basis: basisCode, report: sup.report_id ?? undefined },
       // The held file is copied back before the decision, and served only once the database says it is public again.
       prepare: async () => {
-        if (!photo) return
-        const held = await env.media.get(heldKey(photo))
-        if (!held) return
-        await env.media.put(photo, await held.arrayBuffer(), { httpMetadata: held.httpMetadata })
-        return { prepared: [photo], dropHeld: [heldKey(photo)], media: [photo] }
+        const back: string[] = []
+        for (const photo of photos) {
+          const held = await env.media.get(heldKey(photo))
+          if (!held) continue
+          await env.media.put(photo, await held.arrayBuffer(), { httpMetadata: held.httpMetadata })
+          back.push(photo)
+        }
+        if (!back.length) return
+        return { prepared: back, dropHeld: back.map(heldKey), media: back }
       },
       statements: (tid) => [
         db

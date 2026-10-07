@@ -46,7 +46,19 @@ export async function photosBefore(db: D1Database, placeId: string, revisionId: 
     )
     .bind(revisionId, placeId)
     .first<{ source: string | null; published: string | null }>()
-  return { source: row?.source?.startsWith("quarantine/") ? row.source : null, published: row?.published ?? null }
+  // A curated revision's photos and thumbnails still waiting in quarantine: a refusal retires them with it (P7-RET-1).
+  const { results } = await db
+    .prepare(
+      `SELECT key AS k FROM revision_photos WHERE revision_id = ?1 AND key LIKE 'quarantine/%'
+       UNION SELECT thumb_key FROM revision_photos WHERE revision_id = ?1 AND thumb_key LIKE 'quarantine/%'`,
+    )
+    .bind(revisionId)
+    .all<{ k: string }>()
+  return {
+    source: row?.source?.startsWith("quarantine/") ? row.source : null,
+    published: row?.published ?? null,
+    quarantined: results.map((r) => r.k),
+  }
 }
 
 /**
@@ -64,7 +76,8 @@ export async function retirePhotos(db: D1Database, media: R2Bucket, keys: (strin
       const named = await db
         .prepare(
           `SELECT 1 FROM revisions r JOIN places p ON p.id = r.place_id
-           WHERE r.photo_key = ? AND r.state IN ('pending', 'returned', 'approved') AND p.status NOT IN ('withdrawn', 'erased')`,
+           WHERE r.state IN ('pending', 'returned', 'approved') AND p.status NOT IN ('withdrawn', 'erased')
+             AND (r.photo_key = ?1 OR EXISTS (SELECT 1 FROM revision_photos rp WHERE rp.revision_id = r.id AND ?1 IN (rp.key, rp.thumb_key)))`,
         )
         .bind(key)
         .first()
@@ -125,9 +138,15 @@ export async function erasePhotos(media: R2Bucket, placeId: string) {
  */
 export async function sweepPhotos(db: D1Database, media: R2Bucket, now: Date) {
   const [named, busy, gone] = await db.batch([
+    // A curated revision's photos and thumbnails are named like a contribution's photo (phase 7).
     db.prepare(
       `SELECT r.photo_key AS k FROM revisions r JOIN places p ON p.id = r.place_id
-       WHERE r.photo_key IS NOT NULL AND r.state IN ('pending', 'returned', 'approved') AND p.status NOT IN ('withdrawn', 'erased')`,
+       WHERE r.photo_key IS NOT NULL AND r.state IN ('pending', 'returned', 'approved') AND p.status NOT IN ('withdrawn', 'erased')
+       UNION ALL
+       SELECT k FROM (SELECT rp.key AS k, r.state, p.status FROM revision_photos rp JOIN revisions r ON r.id = rp.revision_id JOIN places p ON p.id = r.place_id
+                      UNION ALL
+                      SELECT rp.thumb_key, r.state, p.status FROM revision_photos rp JOIN revisions r ON r.id = rp.revision_id JOIN places p ON p.id = r.place_id)
+       WHERE state IN ('pending', 'returned', 'approved') AND status NOT IN ('withdrawn', 'erased')`,
     ),
     db.prepare("SELECT place_id AS k FROM visibility_ops WHERE state = 'pending' OR media IN ('pending', 'failed')"),
     db.prepare("SELECT id AS k FROM places WHERE status IN ('withdrawn', 'erased')"),

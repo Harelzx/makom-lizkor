@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import { call } from "./app"
 import { withSite } from "./helpers"
 import { decide, queued, rev, revise, send, upload } from "./submission-helpers"
+import { seedCurated } from "./curated-helpers"
 
 const page = (id: string, e: Env = withSite) => call(`http://local/place/${encodeURIComponent(id)}`, {}, e)
 const meta = (html: string, key: string) => new RegExp(`<meta (?:property|name)="${key}" content="([^"]*)"`).exec(html)?.[1]
@@ -40,13 +41,12 @@ describe("a place's share page", () => {
     expect(html).not.toContain("quarantine")
   })
 
-  it("names one of the site's own places too, without carrying its data (it ships with the site)", async () => {
+  it("names one of the site's own places too, from the database, with its data and its own image (phase 7)", async () => {
+    await seedCurated(["nova-memorial-reim"])
     const html = await (await page("nova-memorial-reim")).text()
-    expect(meta(html, "og:title")).toBeTruthy()
-    expect(meta(html, "og:title")).not.toBe("מקום לזכור · שלוש שנים")
-    expect(html).not.toContain('id="place-data"')
-    // The general image until the site's own places move into the database (phase 7).
-    expect(meta(html, "og:image")).toBe("http://local/og.png")
+    expect(meta(html, "og:title")).toBe("אתר ההנצחה לנרצחי פסטיבל נובה")
+    expect(JSON.parse(/id="place-data">([^<]*)<\/script>/.exec(html)![1])).toMatchObject({ id: "nova-memorial-reim", kind: "monument" })
+    expect(meta(html, "og:image")).toMatch(/^http:\/\/local\/media\/og\/nova-memorial-reim\/[0-9a-f]{64}\.png$/)
   })
 
   it("keeps a hostile name from breaking the page or running anything", async () => {
@@ -60,6 +60,7 @@ describe("a place's share page", () => {
   })
 
   it("is the site's page at any /place/ address: a trailing slash names the place, a deeper path is a 404 page", async () => {
+    await seedCurated(["nova-memorial-reim"])
     const slash = await call("http://local/place/nova-memorial-reim/", {}, withSite)
     expect(slash.status).toBe(200)
     expect(meta(await slash.text(), "og:title")).not.toBe("מקום לזכור · שלוש שנים")

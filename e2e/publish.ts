@@ -1,4 +1,4 @@
-import { expect, type Browser, type BrowserContext } from "@playwright/test"
+import { expect, test, type Browser, type BrowserContext } from "@playwright/test"
 
 /** A contribution published through the API: Cloudflare's dummy token passes the development test secret. */
 // Each demo place comes from its own sender (a documentation address, synthetic), so the server's per-address limit on
@@ -6,6 +6,11 @@ import { expect, type Browser, type BrowserContext } from "@playwright/test"
 let senders = Date.now() % 200
 
 export async function published(browser: Browser, name: string) {
+  // How long each step took, kept with the test's results: the tributes spec's "ten taps" has timed out after a full
+  // run's earlier specs with this helper and the page both slow (a53: diagnose on the Phase 7 tree; cause not yet known).
+  const t0 = Date.now()
+  const marks: string[] = []
+  const mark = (step: string) => marks.push(`${((Date.now() - t0) / 1000).toFixed(2)}s ${step}`)
   const ctx = await browser.newContext()
   const res = await ctx.request.post("/api/v1/submissions", {
     headers: {
@@ -17,6 +22,7 @@ export async function published(browser: Browser, name: string) {
   })
   if (res.status() !== 201) throw new Error(`demo submission refused: ${res.status()} ${await res.text()}`)
   const { id, trackingToken } = (await res.json()) as { id: string; trackingToken: string }
+  mark("submitted")
   await ctx.request.post("/__dev/login", { data: { email: "dev@example.test" } })
   const { items } = (await (await ctx.request.get("/api/admin/queue")).json()) as {
     items: { id: string; rev: number; revisionId: string }[]
@@ -29,15 +35,20 @@ export async function published(browser: Browser, name: string) {
   // A refused approval (changed meanwhile, the ledger or the bucket unavailable) would leave a spec waiting for a card
   // that can't come: say what the server said instead.
   if (approved.status() !== 200) throw new Error(`demo approval refused: ${approved.status()} ${await approved.text()}`)
+  mark("approved")
+  let polls = 0
   // Public once the feed lists it: what every visitor's page reads.
   await expect
     .poll(async () => {
+      polls++
       const { v } = (await (await ctx.request.get("/api/v1/version")).json()) as { v: string }
       const feed = await ctx.request.get(`/api/v1/feed?v=${encodeURIComponent(v)}`)
       return feed.ok() && ((await feed.json()) as { places: { id: string }[] }).places.some((p) => p.id === id)
     })
     .toBe(true)
+  mark(`in the feed after ${polls} poll(s)`)
   await ctx.close()
+  await test.info().attach(`published ${id}`, { body: marks.join("\n"), contentType: "text/plain" })
   return { id, trackingToken }
 }
 

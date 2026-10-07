@@ -35,12 +35,17 @@ export function filterForImport(tables: Record<string, Row[]>, now: Date): Recor
     }
   })
   const status = new Map(places.map((p) => [p.id, p.status]))
+  // Revisions blanked here lose their curated photos and sources too, as the job deletes them (P7-REC-1).
+  const blanked = new Set<unknown>()
   const revisions = (tables.revisions ?? []).map((r0) => {
     const r = { ...r0 }
+    if (erased.has(r.place_id) || status.get(r.place_id) === "erased" || status.get(r.place_id) === "withdrawn") blanked.add(r.id)
     if (erased.has(r.place_id)) return { ...r, ...BLANK_COLUMNS }
     const live = status.get(r.place_id) === "published" || status.get(r.place_id) === "hidden"
-    if (live && ((r.state === "returned" && due(r.decided_at, c.returned)) || (r.state === "rejected" && due(r.decided_at, c.rejected))))
+    if (live && ((r.state === "returned" && due(r.decided_at, c.returned)) || (r.state === "rejected" && due(r.decided_at, c.rejected)))) {
+      blanked.add(r.id)
       return { ...r, ...BLANK_COLUMNS, state: r.state === "returned" ? "superseded" : r.state }
+    }
     const closed = r.state === "approved" || r.state === "rejected" || r.state === "superseded"
     if (r.decision_note !== null && (due(r.decided_at, c.noteCeiling) || (closed && due(r.decided_at, c.noteClosed))))
       r.decision_note = null
@@ -65,7 +70,26 @@ export function filterForImport(tables: Record<string, Row[]>, now: Date): Recor
     due(x.notes_purge_after, c.now) ? { ...x, reason: null, basis_detail: null, basis_note: x.basis_note === null ? null : "" } : x,
   )
   const audit_log = (tables.audit_log ?? []).filter((x) => !due(x.at, c.audit))
-  const out = { places, revisions, contacts, reports, field_suppressions, audit_log } as Record<string, Row[]>
+  // A curated photo still waiting past its days, as the job takes it: its row and its source (P7-RET-1).
+  const waiting = new Set(revisions.filter((r) => r.state === "pending" || r.state === "returned").map((r) => r.id))
+  const expired = new Set(
+    (tables.revision_photos ?? [])
+      .filter((x) => {
+        const queued = [x.key, x.thumb_key].filter((k): k is string => typeof k === "string" && k.startsWith("quarantine/"))
+        return waiting.has(x.revision_id) && queued.length > 0 && Math.min(...queued.map(uploadedAt)) <= c.photo
+      })
+      .map((x) => `${x.revision_id}/${x.idx}`),
+  )
+  const revision_photos = (tables.revision_photos ?? []).filter(
+    (x) => !blanked.has(x.revision_id) && !expired.has(`${x.revision_id}/${x.idx}`),
+  )
+  const place_sources = (tables.place_sources ?? []).filter(
+    (x) => !blanked.has(x.revision_id) && !(x.field === "photo" && expired.has(`${x.revision_id}/${x.photo_idx}`)),
+  )
+  const out = { places, revisions, revision_photos, place_sources, contacts, reports, field_suppressions, audit_log } as Record<
+    string,
+    Row[]
+  >
   return Object.fromEntries(EXPORT_TABLES.map((t) => [t, out[t] ?? tables[t] ?? []])) as Record<ExportTable, Row[]>
 }
 

@@ -111,6 +111,23 @@ test("every safeguard path exists in this repository, so the list can't silently
   for (const path of SAFEGUARDS) assert.ok(existsSync(new URL(`../${path}`, import.meta.url)), path)
 })
 
+test("every migration since the rule existed can be rolled back across, one at a time", async () => {
+  const { readdirSync, readFileSync } = await import("node:fs")
+  const dir = new URL("../migrations/", import.meta.url)
+  const files = readdirSync(dir)
+    .filter((f) => f.endsWith(".sql"))
+    .sort()
+  // 0001–0016 came before the rule and before any release (nothing has been deployed): 0002's unique index and 0010's
+  // trigger would be refused now. From 0017 on, each must leave the code before it working.
+  const since = files.filter((f) => f >= "0017")
+  assert.ok(since.length >= 1)
+  for (const file of since) {
+    const { repo, base } = start()
+    const now = repo.commit(file, { [`migrations/${file}`]: readFileSync(new URL(file, dir), "utf8") })
+    assert.deepEqual(rollbackProblems({ cwd: repo.dir, target: base, deployed: now }), [], file)
+  }
+})
+
 test("the CHECK it refuses really does break the earlier code's insert (SQLite)", async () => {
   const { DatabaseSync } = await import("node:sqlite")
   const db = new DatabaseSync(":memory:")

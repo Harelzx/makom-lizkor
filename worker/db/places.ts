@@ -1,7 +1,8 @@
 import { KINDS } from "@/data/taxonomy"
 import { RETENTION } from "@/config"
 import type { Kind } from "@/types"
-import type { Feed, PublicPlace, RevisionInput, SubmissionInput } from "@/shared/contract"
+import type { Feed, PublicContribution, PublicCuratedPlace, PublicPlace, RevisionInput, SubmissionInput } from "@/shared/contract"
+import { CuratedFields } from "@/shared/curated"
 import { newToken, placeId, sameHash, sha256Hex, ulid } from "../lib/ids"
 import { stripJpeg } from "../lib/jpeg"
 import { runOp, WATCH_FIRST_LOOK_MS, type OpEnv } from "./ops"
@@ -546,8 +547,12 @@ export async function revise(
 
 // Each place carries the elements hidden now (the union of its active suppressions), applied in toPublic, so the feed,
 // the share page and anything else built from this projection hide exactly the same things.
-const PUBLIC_COLUMNS = `p.id, r.kind, r.name_he, r.lat, r.lng, r.location_precision, r.place_he, r.story_he, r.in_memory_of,
-  r.link_url, r.photo_key, r.photo_alt, r.photo_credit, r.access_note_he,
+// A curated place's own fields and its photos (phase 7) come with it: the photos as one JSON array, in order.
+const PUBLIC_COLUMNS = `p.id, p.origin, r.kind, r.name_he, r.lat, r.lng, r.location_precision, r.place_he, r.story_he, r.in_memory_of,
+  r.link_url, r.photo_key, r.photo_alt, r.photo_credit, r.access_note_he, r.curated,
+  (SELECT json_group_array(json_object('key', rp.key, 'thumb_key', rp.thumb_key, 'title', rp.title, 'author', rp.author,
+     'license', rp.license, 'license_url', rp.license_url, 'commons_url', rp.commons_url, 'subject_he', rp.subject_he))
+   FROM (SELECT * FROM revision_photos WHERE revision_id = r.id ORDER BY idx) rp) AS curated_photos,
   (SELECT GROUP_CONCAT(s.field) FROM field_suppressions s WHERE s.place_id = p.id AND s.lifted_at IS NULL) AS hidden_fields`
 
 /** One batch, so the version and the places come from the same moment. Only public fields leave the database. */
@@ -584,12 +589,59 @@ export function hiddenName(kind: string, community: string | null): string {
   return community ? `${label} · ${community}` : label
 }
 
+type CuratedPhotoRow = { key: string; thumb_key: string; title: string; author: string; license: string } & Record<string, string | null>
+
+/**
+ * A curated place as the public sees it: the same hides as a contribution's (a hidden name reads as its kind and
+ * community, a hidden text is blank), and a hidden photo takes every photo of the place with it, files and credits.
+ * Only photos that reached public/ are named, as for a contribution's. A hidden name leaves nothing that could repeat
+ * it (P7-PROJECTION-1), as a contribution's link and photo description: the links and the revival's sources are left
+ * out, and each photo keeps its author and licence (what attribution needs) under the place's neutral words, without
+ * its subject or its source page, which is often named after the place.
+ */
+function toPublicCurated(r: Record<string, string | number | null>, hidden: Set<string>): PublicCuratedPlace {
+  const stored = CuratedFields.parse(JSON.parse(r.curated as string))
+  const nameHidden = hidden.has("name_he")
+  const neutral = hiddenName(r.kind as string, r.place_he as string | null)
+  const fields = nameHidden ? { ...stored, links: [], ...(stored.revival ? { revival: { ...stored.revival, sources: [] } } : {}) } : stored
+  const photos = hidden.has("photo")
+    ? []
+    : (JSON.parse((r.curated_photos as string | null) ?? "[]") as CuratedPhotoRow[])
+        .filter((ph) => ph.key.startsWith("public/") && ph.thumb_key.startsWith("public/"))
+        .map(({ key, thumb_key, ...meta }) => ({
+          url: `/media/${key}`,
+          thumb_url: `/media/${thumb_key}`,
+          title: nameHidden ? neutral : meta.title,
+          author: meta.author,
+          license: meta.license,
+          ...(meta.license_url ? { license_url: meta.license_url } : {}),
+          ...(meta.commons_url && !nameHidden ? { commons_url: meta.commons_url } : {}),
+          ...(meta.subject_he && !nameHidden ? { subject_he: meta.subject_he } : {}),
+        }))
+  return {
+    id: r.id as string,
+    kind: r.kind as PublicCuratedPlace["kind"],
+    name_he: nameHidden ? neutral : (r.name_he as string),
+    lat: r.lat as number,
+    lng: r.lng as number,
+    precision: r.location_precision === "approximate" ? "approx" : "exact",
+    place_he: (r.place_he as string | null) ?? "",
+    summary_he: hidden.has("story_he") ? "" : ((r.story_he as string | null) ?? ""),
+    curated: { ...fields, photos },
+  }
+}
+
 function toPublic(r: Record<string, string | number | null>): PublicPlace {
   const hidden = new Set(String(r.hidden_fields ?? "").split(","))
+  if (r.origin === "curated" && r.curated) return toPublicCurated(r, hidden)
+  return toPublicContribution(r, hidden)
+}
+
+function toPublicContribution(r: Record<string, string | number | null>, hidden: Set<string>): PublicContribution {
   const personal = hidden.has("name_he") || hidden.has("in_memory_of")
   return {
     id: r.id as string,
-    kind: r.kind as PublicPlace["kind"],
+    kind: r.kind as PublicContribution["kind"],
     name_he: hidden.has("name_he") ? hiddenName(r.kind as string, r.place_he as string | null) : (r.name_he as string),
     lat: r.lat as number,
     lng: r.lng as number,

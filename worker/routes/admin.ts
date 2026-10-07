@@ -1,10 +1,13 @@
 import { zValidator } from "@hono/zod-validator"
-import { Hono } from "hono"
+import { Hono, type Context } from "hono"
 import { z } from "zod"
 import { ELEMENTS, text } from "@/shared/contract"
 import { attention, BASIS_CODES, lift, listReports, parseCursor, placeView, readContact, setReportStatus, suppress } from "../db/moderation"
 import { runOp } from "../db/ops"
 import { photosBefore, preparePhoto } from "../db/photos"
+import { curatedKeyStatements, prepareCuratedPhotos, revisionKeys, storeCurated } from "../db/curated"
+import { CURATED_ID, CuratedInput, curatedSourceProblems } from "@/shared/curated"
+import { ulid } from "../lib/ids"
 import { listQueue, transitionStatements, verifiedContact } from "../db/places"
 import { decisionMail } from "../lib/messages"
 import type { AppEnv } from "../index"
@@ -13,7 +16,9 @@ import { clock } from "../lib/clock"
 import { PRIVATE, problem } from "../lib/http"
 import { opEnv } from "../lib/purge"
 
-export const admin = new Hono<{ Bindings: Env; Variables: AppEnv["Variables"] & { actor: string } }>()
+type AdminEnv = { Bindings: Env; Variables: AppEnv["Variables"] & { actor: string } }
+type AdminContext = Context<AdminEnv>
+export const admin = new Hono<AdminEnv>()
 
 admin.use("*", async (c, next) => {
   // Every admin answer, errors included, stays out of shared caches.
@@ -42,63 +47,150 @@ const Transition = z
 admin.post(
   "/places/:id/transitions",
   zValidator("json", Transition, (r, c) => (r.success ? undefined : problem(c, 400, "invalid_input"))),
-  async (c) => {
-    const body = c.req.valid("json")
-    const placeId = c.req.param("id")
-    // Whether this decides a correction of a place already published: the mail says so.
-    const status = await c.env.DB.prepare("SELECT status FROM places WHERE id = ?").bind(placeId).first<string>("status")
-    const correction = status === "published" || status === "hidden"
-    // The files this decision may make obsolete, as they are before it.
-    const before = await photosBefore(c.env.DB, placeId, body.revisionId)
-    const now = clock(c.req.raw, c.env)
-    let photo: { key: string | null; fresh: boolean; source: string | null } | undefined
-    // Recorded before it happens: no decision is made that the ledger can't hold (spec 8.2). An approval publishes the
-    // photo in the same step as the place, so its copy is made first; one that never lands is removed again.
-    const { outcome } = await runOp(
-      opEnv(c),
-      {
-        placeId,
-        kind: body.action,
-        actor: "moderator",
-        detail: { revision: body.revisionId },
-        expectedRev: body.expectedRev,
-        removal: false,
-        public: body.action === "approve",
-        onIntentFailure: "refuse",
-        prepare: async () => {
-          if (body.action === "reject") return { retire: [before.source].filter((k): k is string => !!k) }
-          if (body.action !== "approve") return
-          photo = await preparePhoto(c.env.DB, c.env.MEDIA, placeId, body.revisionId)
-          // A correction approved while the photo is hidden keeps it hidden: the hide applies to whatever is published.
-          const photoHidden = await c.env.DB.prepare(
-            "SELECT 1 FROM field_suppressions WHERE place_id = ? AND lifted_at IS NULL AND field IN ('photo', 'whole')",
-          )
-            .bind(placeId)
-            .first()
-          return {
-            prepared: photo.fresh && photo.key ? [photo.key] : [],
-            toHeld: photoHidden && photo.fresh && photo.key ? [photo.key] : [],
-            media: photo.key ? [photo.key] : [],
-            source: photo.source,
-            retire: [before.source, before.published !== photo.key ? before.published : null].filter((k): k is string => !!k),
-          }
-        },
-        statements: (tid) => transitionStatements(c.env.DB, { placeId, ...body, actor: c.get("actor"), photoKey: photo?.key }, tid, now),
+  async (c) => decide(c, c.req.param("id"), c.req.valid("json")),
+)
+
+/**
+ * A moderator's decision on a revision, recorded before it happens (no decision the ledger can't hold, spec 8.2). An
+ * approval publishes the photos in the same step as the place, so their copies are made first; one that never lands is
+ * removed again. A curated revision's photos and thumbnails go the same way as a contribution's one photo.
+ */
+async function decide(c: AdminContext, placeId: string, body: z.infer<typeof Transition>) {
+  // Whether this decides a correction of a place already published: the mail says so.
+  const status = await c.env.DB.prepare("SELECT status FROM places WHERE id = ?").bind(placeId).first<string>("status")
+  const correction = status === "published" || status === "hidden"
+  // The files this decision may make obsolete, as they are before it.
+  const before = await photosBefore(c.env.DB, placeId, body.revisionId)
+  const publishedBefore = await revisionKeys(
+    c.env.DB,
+    await c.env.DB.prepare("SELECT published_revision_id FROM places WHERE id = ?")
+      .bind(placeId)
+      .first<string | null>("published_revision_id"),
+  )
+  const now = clock(c.req.raw, c.env)
+  let photo: { key: string | null; fresh: boolean; source: string | null } | undefined
+  let curated: Awaited<ReturnType<typeof prepareCuratedPhotos>> | undefined
+  const { outcome } = await runOp(
+    opEnv(c),
+    {
+      placeId,
+      kind: body.action,
+      actor: "moderator",
+      detail: { revision: body.revisionId },
+      expectedRev: body.expectedRev,
+      removal: false,
+      public: body.action === "approve",
+      onIntentFailure: "refuse",
+      prepare: async () => {
+        if (body.action === "reject") return { retire: [before.source, ...before.quarantined].filter((k): k is string => !!k) }
+        if (body.action !== "approve") return
+        photo = await preparePhoto(c.env.DB, c.env.MEDIA, placeId, body.revisionId)
+        curated = await prepareCuratedPhotos(c.env.DB, c.env.MEDIA, placeId, body.revisionId)
+        // A correction approved while the photo is hidden keeps it hidden: the hide applies to whatever is published.
+        const photoHidden = await c.env.DB.prepare(
+          "SELECT 1 FROM field_suppressions WHERE place_id = ? AND lifted_at IS NULL AND field IN ('photo', 'whole')",
+        )
+          .bind(placeId)
+          .first()
+        const fresh = [...(photo.fresh && photo.key ? [photo.key] : []), ...curated.prepared]
+        const kept = new Set([photo.key, ...curated.keys.flatMap((k) => [k.key, k.thumb_key])])
+        return {
+          // Which file each photo index was published from, and as: a replay onto a copy taken while the record
+          // waited publishes exactly these, or hides the place (P7-REC-1). Keys only, like the rest of the ledger.
+          ...(curated.keys.length ? { photos: curated.keys } : {}),
+          prepared: fresh,
+          toHeld: photoHidden ? fresh : [],
+          media: [...(photo.key ? [photo.key] : []), ...curated.keys.flatMap((k) => [k.key, k.thumb_key])],
+          source: photo.source,
+          retire: [
+            before.source,
+            before.published !== photo.key ? before.published : null,
+            ...curated.originals,
+            ...publishedBefore.filter((k) => !kept.has(k)),
+          ].filter((k): k is string => !!k),
+        }
       },
-      now,
-    )
-    if (outcome === "ledger_unwritten") return problem(c, 503, "ledger_unavailable", {}, { "Retry-After": "30" })
-    if (outcome === "prepare_failed") return problem(c, 503, "media_unavailable", {}, { "Retry-After": "30" })
-    if (outcome !== "ok") return problem(c, 409, "changed_meanwhile")
-    // A verified address hears about the decision; a mail that can't go now never undoes the decision.
-    const contact = await verifiedContact(c.env.DB, c.req.param("id"))
-    if (contact)
-      await c
-        .get("sendMail")(c.env, decisionMail(contact.email, body.action, contact.name_he ?? "", body.note, correction, status === "hidden"))
-        .catch(() => false)
-    return c.json({ ok: true })
+      statements: (tid) => [
+        ...transitionStatements(c.env.DB, { placeId, ...body, actor: c.get("actor"), photoKey: photo?.key }, tid, now),
+        ...(curated ? curatedKeyStatements(c.env.DB, placeId, body.revisionId, curated.keys, tid) : []),
+      ],
+    },
+    now,
+  )
+  if (outcome === "ledger_unwritten") return problem(c, 503, "ledger_unavailable", {}, { "Retry-After": "30" })
+  if (outcome === "prepare_failed") return problem(c, 503, "media_unavailable", {}, { "Retry-After": "30" })
+  if (outcome !== "ok") return problem(c, 409, "changed_meanwhile")
+  // A verified address hears about the decision; a mail that can't go now never undoes the decision.
+  const contact = await verifiedContact(c.env.DB, placeId)
+  if (contact)
+    await c
+      .get("sendMail")(c.env, decisionMail(contact.email, body.action, contact.name_he ?? "", body.note, correction, status === "hidden"))
+      .catch(() => false)
+  return c.json({ ok: true })
+}
+
+/**
+ * One of the operator's own places, created or edited by a moderator (spec 3, the API table; phase 7): the whole
+ * record with a source for each field, stored as a revision and published by the same decision as an approval. A
+ * contribution is never edited here. Each write carries an Idempotency-Key: a retry after a lost answer gets the same
+ * answer, and the key with another body is refused.
+ */
+admin.post(
+  "/places",
+  zValidator("json", CuratedInput, (r, c) => (r.success ? undefined : problem(c, 400, "invalid_input"))),
+  async (c) => {
+    const key = c.req.header("Idempotency-Key") ?? ""
+    if (!/^[A-Za-z0-9_-]{22,64}$/.test(key)) return problem(c, 400, "idempotency_key_required")
+    const input = c.req.valid("json")
+    const missing = curatedSourceProblems(input.curated, input.photos, input.sources)
+    if (missing.length) return problem(c, 422, "sources_missing", { missing })
+    const stored = await storeCurated(c.env.DB, c.env.MEDIA, input, key, clock(c.req.raw, c.env))
+    if (stored.kind !== "stored" && stored.kind !== "replay") {
+      if (stored.kind === "contribution") return problem(c, 403, "not_curated")
+      if (stored.kind === "mismatch") return problem(c, 409, "idempotency_key_reused")
+      if (stored.kind === "photo_unknown") return problem(c, 422, "photo_unknown")
+      return problem(c, 409, "changed_meanwhile")
+    }
+    const place = await c.env.DB.prepare("SELECT rev, published_revision_id FROM places WHERE id = ?")
+      .bind(input.id)
+      .first<{ rev: number; published_revision_id: string | null }>()
+    // A retry of a write already published answers as it did; one whose publication didn't land publishes it now.
+    if (place?.published_revision_id !== stored.revisionId) {
+      const decided = await decide(c, input.id, { action: "approve", revisionId: stored.revisionId, expectedRev: place!.rev })
+      if (!decided.ok) return decided
+    }
+    const rev = await c.env.DB.prepare("SELECT rev FROM places WHERE id = ?").bind(input.id).first<number>("rev")
+    return c.json({ id: input.id, rev }, stored.created ? 201 : 200)
   },
 )
+
+const PHOTO_MAX = 4 * 1024 * 1024
+/** A curated photo's file and thumbnail, waiting in quarantine/ until the record naming them is published. */
+admin.post("/curated-photos", async (c) => {
+  const form = await c.req.formData().catch(() => null)
+  const placeId = form?.get("place_id")
+  const file = form?.get("file")
+  const thumb = form?.get("thumb")
+  if (typeof placeId !== "string" || !CURATED_ID.test(placeId) || !(file instanceof File) || !(thumb instanceof File))
+    return problem(c, 400, "invalid_input")
+  const kinds = await Promise.all(
+    [file, thumb].map(async (f) => (f.size > PHOTO_MAX ? null : imageType(new Uint8Array(await f.arrayBuffer())))),
+  )
+  if (kinds.some((k) => !k)) return problem(c, 415, "not_a_picture")
+  const name = `quarantine/${placeId}/${ulid()}`
+  const [main, small] = [`${name}.${kinds[0]!.ext}`, `${name}.thumb.${kinds[1]!.ext}`]
+  await c.env.MEDIA.put(main, await file.arrayBuffer(), { httpMetadata: { contentType: kinds[0]!.type } })
+  await c.env.MEDIA.put(small, await thumb.arrayBuffer(), { httpMetadata: { contentType: kinds[1]!.type } })
+  return c.json({ key: main, thumb_key: small }, 201)
+})
+
+/** WebP or JPEG by its first bytes; nothing else is stored as a picture. */
+function imageType(b: Uint8Array): { type: string; ext: string } | null {
+  const ascii = (from: number, to: number) => String.fromCharCode(...b.slice(from, to))
+  if (b.length > 12 && ascii(0, 4) === "RIFF" && ascii(8, 12) === "WEBP") return { type: "image/webp", ext: "webp" }
+  if (b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return { type: "image/jpeg", ext: "jpg" }
+  return null
+}
 
 /** A photo as the moderator must see it before deciding: in quarantine, or already public. */
 admin.get("/media/*", async (c) => {

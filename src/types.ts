@@ -8,7 +8,9 @@ export interface Link {
 }
 
 export interface Photo {
-  file: string
+  /** The photo and its thumbnail: the media route for places in the database, the bundled files until phase 7 ends. */
+  url: string
+  thumb_url: string
   title: string
   commons_url: string
   author: string

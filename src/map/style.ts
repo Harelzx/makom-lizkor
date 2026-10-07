@@ -1,9 +1,12 @@
 import type { Map as MLMap, StyleSpecification } from "maplibre-gl"
 import { MAP_FONT_FILES } from "@/lib/fonts"
-import places from "@/data/places.json"
 
-// Communities are drawn as our own markers; the basemap's label for the same place would double them.
-const OWN_LABELS = places.filter((p) => p.kind === "community").map((p) => p.name_he.replace(/^(קיבוץ|מושב|העיר) /, ""))
+/**
+ * Communities are drawn as our own markers; the basemap's label for the same place would double them. Their names
+ * come with the feed, so the layers start with none and the controller sets them (setOwnLabels) as they arrive.
+ */
+export const ownLabelsFilter = (names: string[]) => ["!", ["in", ["get", "name:he"], ["literal", names]]]
+export const OWN_LABEL_LAYERS = ["place-small", "place-town"]
 import { type Palette } from "./palette"
 
 /** Map labels are drawn with the site's own typeface through MapLibre's `font-faces`. */
@@ -229,7 +232,7 @@ export function buildStyle(p: Palette, labels = true): StyleSpecification {
           "all",
           pt,
           ["match", ["get", "class"], ["village", "hamlet", "suburb", "neighbourhood"], true, false],
-          ["!", ["in", ["get", "name:he"], ["literal", OWN_LABELS]]],
+          ownLabelsFilter([]) as never,
         ],
         minzoom: 11,
         layout: {
@@ -246,12 +249,7 @@ export function buildStyle(p: Palette, labels = true): StyleSpecification {
         type: "symbol",
         source: "openmaptiles",
         "source-layer": "place",
-        filter: [
-          "all",
-          pt,
-          ["match", ["get", "class"], ["town", "city"], true, false],
-          ["!", ["in", ["get", "name:he"], ["literal", OWN_LABELS]]],
-        ],
+        filter: ["all", pt, ["match", ["get", "class"], ["town", "city"], true, false], ownLabelsFilter([]) as never],
         minzoom: 6.5,
         layout: {
           visibility,

@@ -1,4 +1,4 @@
-import { Feed, isNewer, PublicPlace } from "@/shared/contract"
+import { Feed, isCurated, isNewer, PublicPlace } from "@/shared/contract"
 import { retryWaiting } from "@/lib/outbox"
 import { loadSnapshot, loadUnlisted, relistPublished, saveSnapshot, unlistedGeneration } from "@/lib/storage"
 import { useStore } from "@/store"
@@ -7,6 +7,30 @@ import type { Place } from "@/types"
 const EVERY_MS = 30_000
 
 function toPlace(p: PublicPlace): Place {
+  if (isCurated(p)) {
+    const { photos, ...fields } = p.curated
+    return {
+      id: p.id,
+      name_he: p.name_he,
+      kind: p.kind,
+      lat: p.lat,
+      lng: p.lng,
+      precision: p.precision,
+      place_he: p.place_he,
+      summary_he: p.summary_he,
+      ...fields,
+      ...(photos.length
+        ? {
+            photos: photos.map((ph) => ({
+              ...ph,
+              commons_url: ph.commons_url ?? "",
+              license_url: ph.license_url ?? "",
+              subject_he: ph.subject_he ?? "",
+            })),
+          }
+        : {}),
+    }
+  }
   return {
     id: p.id,
     name_he: p.name_he,
@@ -80,10 +104,11 @@ export function startFeedSync(): () => void {
       busy = false
     }
   }
-  // The same wakes send again any place of the visitor's that couldn't reach the server.
+  // The same wakes send again any place of the visitor's that couldn't reach the server, from the day on: nothing of
+  // theirs goes out while the opening plays (the feed comes early only because the opening shows its places).
   const onWake = () => {
     void check()
-    void retryWaiting()
+    if (useStore.getState().phase === "day") void retryWaiting()
   }
   const timer = setInterval(onWake, EVERY_MS)
   document.addEventListener("visibilitychange", onWake)
