@@ -163,6 +163,7 @@ export async function edgeChecks(
       failures.push(`${path}: ${res.headers.get("Content-Type")}, not text/html`)
     for (const [name, value] of Object.entries(SECURITY_HEADERS))
       if (res.headers.get(name) !== value) headerFailures.push(`${path}: ${name} is ${res.headers.get(name)}`)
+    if (res.headers.get("Content-Security-Policy-Report-Only") !== CSP) headerFailures.push(`${path}: the page policy differs`)
     record("place_page", failures, `${path} answered`)
   }
 

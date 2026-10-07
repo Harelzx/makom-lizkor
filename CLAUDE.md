@@ -62,7 +62,7 @@ Several Claude Code sessions may work on this repo at once, each in its own work
 
 Harel delegated routine decisions for the backend work (branch `claude/system-architecture-design-9a660f`) to a Codex adviser. Other sessions: this section is not yours.
 
-Backend adviser: `/Users/harel/Documents/Codex/2026-10-05/b/outputs/codex-supervisor/CLAUDE-HANDOFF.md` (active workflow 5.2; read after compaction/restart). Project state: `docs/agent-handoff.md`; reconcile its HEAD and open findings with actual Git and the latest completed `runtime/decisions.jsonl` entry before continuing. Implementation reports use `--review-access snapshot` (now the default); no source-packet shrinking. Follow `policy-v5.md` for authority, review and failure handling. Do not edit the adviser bundle. Historical workflow instructions are superseded.
+Backend adviser: `/Users/harel/Documents/Codex/2026-10-05/b/outputs/codex-supervisor/CLAUDE-HANDOFF.md` (bridge 5.3; read it and any `RESUME-*.txt` there after compaction/restart). Project state: `docs/agent-handoff.md`; reconcile its HEAD and open findings with actual Git and the latest completed `runtime/decisions.jsonl` entry before continuing. Implementation reports use `--review-access snapshot` (now the default); no source-packet shrinking. Follow `policy-v5.md` for authority, review and failure handling. Do not edit the adviser bundle. Historical workflow instructions are superseded.
 
 ## Architecture
 

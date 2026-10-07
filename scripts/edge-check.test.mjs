@@ -110,6 +110,18 @@ test("a named place's share page must answer 200; one never named leaves the che
   assert.equal(status(wrongType).place_page, "fail")
 })
 
+test("a named place's share page without the page policy, or with another, fails the headers (P7-EDGE-HEADERS-1)", async () => {
+  for (const bend of [
+    (u, _i, res) => u.pathname === "/place/car-wall-tkuma" && res.headers.delete("Content-Security-Policy-Report-Only"),
+    (u, _i, res) => u.pathname === "/place/car-wall-tkuma" && res.headers.set("Content-Security-Policy-Report-Only", "default-src *"),
+  ]) {
+    const results = await edgeChecks("https://site.example", { fetch: deployment(bend), place: "car-wall-tkuma" })
+    assert.equal(status(results).headers, "fail", String(bend))
+    assert.match(results.find((r) => r.check === "headers").detail.join(" "), /\/place\/car-wall-tkuma: the page policy differs/)
+    assert.equal(outcome(results), "fail")
+  }
+})
+
 test("locally the seeded place is checked by default, and a missing seed fails (a60)", async () => {
   const asked = []
   const results = await edgeChecks("https://site.example", { fetch: deployment((u) => asked.push(u.pathname)), local: true })
