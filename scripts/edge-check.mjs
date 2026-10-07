@@ -65,8 +65,14 @@ const TAG = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
  * the exercise's own hide cleanupMs.
  */
 const PURGE_TIMING = { freshMs: 15_000, deadlineMs: 75_000, everyMs: 1_000, edgeTtlMs: 60_000, requestMs: 10_000, cleanupMs: 60_000 }
-/** How long a deploy's version gets to answer, how often health is asked, and how long one request may take. */
-const READINESS = { deadlineMs: 90_000, everyMs: 3_000, fetchMs: 10_000 }
+/**
+ * How long a deploy's version gets to answer, how often health is asked, how long one request may take, and how long
+ * health must keep naming it, every answer in a row, before anything is held to it. A rollout isn't everywhere at once:
+ * on staging (run 37687653687, 7 October) health named the new version 0.1 s after the deploy, and the previous one
+ * still answered six other addresses over the next 10 s; minutes later every answer named the new one. 30 s is a
+ * margin over that one observation, not a provider guarantee.
+ */
+const READINESS = { deadlineMs: 120_000, everyMs: 3_000, fetchMs: 10_000, settleMs: 30_000 }
 
 export async function edgeChecks(
   base,
@@ -142,8 +148,14 @@ export async function edgeChecks(
   // retried: the checks below run once.
   if (expectTag !== null) {
     const end = Date.now() + readiness.deadlineMs
+    const settle = readiness.settleMs ?? 0
     let last = "no answer"
+    // When the unbroken run of health answers naming the expected version began (by when each was asked); and whether
+    // it was ever named at all.
+    let since = null
+    let named = false
     for (let n = 1; Date.now() < end; n++) {
+      const asked = Date.now()
       try {
         const res = await fetch(url(`/api/v1/health?ready=${n}`), {
           cache: "no-store",
@@ -152,11 +164,19 @@ export async function edgeChecks(
         await res.text()
         const tag = res.headers.get("X-Worker-Version")
         if (res.status === 200 && tag === expectTag) {
-          version.holding = true
-          break
+          named = true
+          since ??= asked
+          if (asked - since >= settle) {
+            version.holding = true
+            break
+          }
+          last = `${expectTag}, for ${asked - since} ms running`
+        } else {
+          since = null
+          last = `${res.status} from ${tag ?? "a version naming none"}`
         }
-        last = `${res.status} from ${tag ?? "a version naming none"}`
       } catch {
+        since = null
         last = "no answer in time"
       }
       await new Promise((resolve) => setTimeout(resolve, Math.max(0, Math.min(readiness.everyMs, end - Date.now()))))
@@ -166,7 +186,11 @@ export async function edgeChecks(
         {
           check: "deployed_version",
           status: "fail",
-          detail: [`${expectTag} didn't answer /api/v1/health within ${readiness.deadlineMs / 1000} s (last: ${last})`],
+          detail: [
+            named
+              ? `${expectTag} didn't settle: /api/v1/health didn't name it for ${settle / 1000} s running within ${readiness.deadlineMs / 1000} s (last: ${last})`
+              : `${expectTag} didn't answer /api/v1/health within ${readiness.deadlineMs / 1000} s (last: ${last})`,
+          ],
         },
       ]
   }
@@ -658,6 +682,17 @@ export async function edgeChecks(
     const photo = Feed.safeParse(parse(first[1].body)).data?.places.find((p) => p.id === id)?.photo?.url
     const photoPath = photo ? pathOf(photo) : null
     if (photoPath?.startsWith("/media/")) media.push(["photo", `${photoPath}?edge-purge=${run}`])
+    // With no Worker cache this exercise is the removal's whole evidence (PENDING_PROMISES has nothing left for it), so
+    // the place must have both, each served before the hide; one missing leaves it incomplete, with nothing hidden
+    // (C-CACHE-MEDIA-1).
+    if (cacheless) {
+      const lacking = ["share image", "photo"].filter((what) => !media.some(([w]) => w === what))
+      if (lacking.length)
+        return unseen(
+          "purge_freshness",
+          `the exercise's place has no ${lacking.join(" and ")} of its own: its media's removal can't be watched`,
+        )
+    }
     for (const [what, path] of media) {
       const r = await read(path)
       if (r.status !== 200) return unseen("purge_freshness", `the place's ${what} answered ${r.status} before the hide: nothing to watch`)
@@ -733,11 +768,7 @@ export async function edgeChecks(
     } finally {
       if (sent !== null) failures.push(...(await cleanup(hide)))
     }
-    const others = media.length
-      ? media.map(([what]) => `, ${what} after ${fresh[what]} ms`).join("")
-      : cacheless
-        ? ", no share image or photo of its own to watch"
-        : ""
+    const others = media.map(([what]) => `, ${what} after ${fresh[what]} ms`).join("")
     record(
       "purge_freshness",
       failures,

@@ -8,6 +8,31 @@ const page = (id: string, e: Env = withSite) => call(`http://local/place/${encod
 const meta = (html: string, key: string) => new RegExp(`<meta (?:property|name)="${key}" content="([^"]*)"`).exec(html)?.[1]
 
 describe("a place's share page", () => {
+  it("never passes on the static page's cache status as its own: the page is the Worker's answer, built each time (C-CACHE)", async () => {
+    // Staging, 7 October: the site's page came from the static assets with CF-Cache-Status HIT, and the share page
+    // copied it, so a fresh answer named a cache it never came from.
+    const fromCache: Env = {
+      ...withSite,
+      ASSETS: {
+        fetch: async () =>
+          new Response("<!doctype html><html><head><title>x</title></head><body></body></html>", {
+            headers: { "Content-Type": "text/html", "CF-Cache-Status": "HIT", Age: "42" },
+          }),
+      } as unknown as Fetcher,
+    }
+    const { id } = await send("ספסל דמו בלי מטמון")
+    await decide(id, await queued(id), "approve")
+    for (const [place, status] of [
+      [id, 200],
+      ["p_00000000000000000000000000", 404],
+    ] as const) {
+      const res = await page(place, fromCache)
+      expect(res.status).toBe(status)
+      expect(res.headers.get("CF-Cache-Status")).toBeNull()
+      expect(res.headers.get("Age")).toBeNull()
+    }
+  })
+
   it("names a published contribution in its preview, and carries its public fields for an instant open", async () => {
     const { id } = await send("ספסל דמו לשיתוף", { story_he: "סיפור קצר על הספסל", email: `s${Date.now()}@example.test` })
     await decide(id, await queued(id), "approve")
