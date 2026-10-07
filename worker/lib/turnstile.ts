@@ -49,8 +49,12 @@ export async function checkTurnstile(
       .map((h) => h.trim())
       .filter(Boolean),
   )
-  const testing = (env.ENVIRONMENT === "development" || env.ENVIRONMENT === "staging") && r.metadata?.result_with_testing_key === true
+  // A test-key result is refused outright where test keys aren't allowed, whatever its action (L-TURNSTILE-PROD-1);
+  // where they are, it is excused only from the action match, since the test keys give none.
+  const marked = r.metadata?.result_with_testing_key === true
+  const testKeysAllowed = env.ENVIRONMENT === "development" || env.ENVIRONMENT === "staging"
+  if (marked && !testKeysAllowed) return "failed"
   if (!r.success || !r.hostname || !hostnames.has(r.hostname)) return "failed"
-  if (r.action !== action && !testing) return "failed"
+  if (r.action !== action && !marked) return "failed"
   return "ok"
 }
