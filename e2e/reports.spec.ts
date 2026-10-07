@@ -160,8 +160,16 @@ async function visitor(browser: Browser, more: Record<string, string> = {}) {
 }
 const from = (route: Route, ctx: BrowserContext) => ({ ...route.request().headers(), ...visitorHeaders.get(ctx) })
 
-async function requestForm(browser: Browser, id: string, heading: string | RegExp, more: Record<string, string> = {}) {
+async function requestForm(
+  browser: Browser,
+  id: string,
+  heading: string | RegExp,
+  more: Record<string, string> = {},
+  /** Runs in the page before the site's own code, in this context only. */
+  init?: () => void,
+) {
   const ctx = await visitor(browser, more)
+  if (init) await ctx.addInitScript(init)
   const page = await ctx.newPage()
   await page.goto(`/#/place/${id}`)
   await expect(page.getByRole("heading", { name: heading })).toBeVisible(DAY)
@@ -495,7 +503,21 @@ test("a card closed and opened while its request is out finds that same request,
 }) => {
   const name = `גן דמו לבקשה בדרך ${Date.now()}`
   const { id } = await published(browser, name)
-  const { ctx, page, form } = await requestForm(browser, id, name)
+  // This test watches the request while it is out, not the client's own 10 s report timeout (src/lib/api.ts, the only
+  // 10 s deadline there): on a slow runner closing and reopening the card alone outlasted it (CI 37630978452, 11.7 s),
+  // and the form then showed the recoverable failure instead. So in this test's context that one deadline is 60 s,
+  // which keeps the pending state apart from the navigation's speed; every other deadline is the native one. The
+  // normal 10 s timeout isn't what this test checks.
+  const { ctx, page, form } = await requestForm(browser, id, name, {}, () => {
+    const native = AbortSignal.timeout
+    const extended: number[] = []
+    Object.assign(window, { __extendedDeadlines: extended })
+    AbortSignal.timeout = function (this: typeof AbortSignal, ms: number) {
+      if (ms !== 10_000) return native.call(this, ms)
+      extended.push(60_000)
+      return native.call(this, 60_000)
+    }
+  })
   let release!: () => void
   const held = new Promise<void>((r) => (release = r))
   // The first reaches the server, and its answer waits until the card has been closed and opened again; then it is lost.
@@ -510,6 +532,8 @@ test("a card closed and opened while its request is out finds that same request,
   await form.getByLabel("מה לבדוק, ולמה").fill(why)
   await form.getByRole("button", { name: "שליחת הבקשה" }).click()
   await expect.poll(() => sent.length).toBe(1)
+  // The report request, and only it, took the extended deadline.
+  expect(await page.evaluate(() => (window as unknown as { __extendedDeadlines: number[] }).__extendedDeadlines)).toEqual([60_000])
 
   await page.evaluate(() => (location.hash = "#/"))
   await expect(page.getByRole("heading", { name })).toHaveCount(0)
