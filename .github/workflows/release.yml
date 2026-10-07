@@ -135,6 +135,8 @@ jobs:
       # task 6): a check that fails here leaves a record, so a later rollback still knows this attempt changed nothing.
       - run: npm run build
       - run: node scripts/bundle-check.mjs
+      # Workers Caching stays off in production (L-CACHE-STG): checked in the configuration the deploy below uses.
+      - run: node scripts/release-cache.mjs dist/makom_lizkor/wrangler.json
       # Without pipefail (GitHub's default `bash -e`), a failed command before tee would pass and the migrations would
       # run with no recovery point (a51, P6-BOOKMARK-1).
       - name: Time Travel bookmark before the migrations

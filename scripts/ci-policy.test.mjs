@@ -317,3 +317,12 @@ test("staging alone is given the retention time scale, from its own variable; pr
     "RETENTION_DAY_SECONDS",
   )
 })
+
+test("the release checks its built configuration for Workers Caching after the build and before the deploy (L-CACHE-STG, a95)", () => {
+  const step = "      - run: node scripts/release-cache.mjs dist/makom_lizkor/wrangler.json\n"
+  fails(withChange("release.yml", step, ""), "release.yml must check its built configuration for Workers Caching")
+  fails(
+    withChange("release.yml", step, "      - run: node scripts/release-cache.mjs wrangler.jsonc\n"),
+    "release.yml must check its built configuration for Workers Caching",
+  )
+})
