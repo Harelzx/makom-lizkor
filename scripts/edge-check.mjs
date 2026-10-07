@@ -8,7 +8,9 @@
 // owners, the edge cache, the purge timing, a conclusive workers.dev answer) is "incomplete": the run exits 3, and an
 // incomplete run never qualifies a release (a51, P6-EDGE-1). Only the explicit --local mode, for a preview with no edge,
 // may "skip" them.
-//   node scripts/edge-check.mjs <base-url> [--local [--dev]] [--workers-dev <url>] [--expect-tag <tag>] [--report <file>]
+//   node scripts/edge-check.mjs <base-url> [--local [--dev]] [--workers-dev <url>] [--expect-tag <tag>] [--probe-freshness] [--report <file>]
+//   --probe-freshness: production only (release.yml): the content-free purge probe (EDGE_PROBE) answers purge_freshness,
+//   since production has no synthetic place to hide; anywhere else the probe is checked as purge_probe (L-PURGE).
 //   --local: a local preview; what needs the edge is skipped, and labelled so.
 //   --dev:   with --local, sign in through the development stand-in (/__dev/login), as a moderator and as a stranger.
 //   --expect-tag: the tag the deploy just gave its version. The previous version may answer for a while after a deploy,
