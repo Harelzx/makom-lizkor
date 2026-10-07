@@ -1,3 +1,4 @@
+import { durations } from "../lib/durations"
 import { zValidator } from "@hono/zod-validator"
 import { Hono, type Context } from "hono"
 import { z } from "zod"
@@ -82,6 +83,7 @@ submissions.post(
       clock(c.req.raw, c.env),
       queueLimit(c),
       c.env.TRACKING_SECRET,
+      durations(c.env),
     )
     if (r.kind === "mismatch") return problem(c, 409, "idempotency_key_reused")
     if (r.kind === "queue_full") return queueFull(c)

@@ -9,6 +9,7 @@ import { resumeOps } from "../db/ops"
 import { readFeed } from "../db/places"
 import { readLedger, replayLedger, restorePhotos } from "../db/replay"
 import { runRetention } from "../db/retention"
+import { REAL } from "../lib/durations"
 import { sendMail } from "../lib/mail"
 import { unseal, type Manifest } from "../lib/sealed"
 import { call } from "./app"
@@ -187,7 +188,7 @@ describe("a restore reconciled with the ledger", () => {
     const payload = await exportNow()
     expect((await decide(approved.id, await queued(approved.id), "approve")).status).toBe(200)
     expect((await decide(refused.id, await queued(refused.id), "reject")).status).toBe(200)
-    expect(await setReportStatus(env.DB, ticket, "closed", "dev@example.test", "טופל", new Date())).toBe(true)
+    expect(await setReportStatus(env.DB, ticket, "closed", "dev@example.test", "טופל", new Date(), REAL)).toBe(true)
 
     const deadlines = async (db: D1Database) => ({
       approved: await row(db, "SELECT purge_after FROM contacts WHERE place_id = ?", approved.id),

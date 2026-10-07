@@ -34,6 +34,9 @@
     "MODERATOR_SERVICE_TOKENS": "",
     // The purge probe's own service token (L-PURGE): set for a deployment that runs the probe, empty refuses it.
     "PROBE_SERVICE_TOKENS": "",
+    // A shorter retention day, staging only (worker/lib/durations.ts); empty everywhere a deploy ships, and refused
+    // outside staging by the Worker and by release:check.
+    "RETENTION_DAY_SECONDS": "",
     "ACCESS_TEAM_DOMAIN": "",
     "ACCESS_AUD": "",
     // The hostnames Turnstile may vouch for; set per deploy. The secret is a secret, never a var.
@@ -102,6 +105,8 @@
         // Staging's synthetic machine moderator (H1): filled from STAGING_MODERATOR_SERVICE_TOKENS at deploy time.
         "MODERATOR_SERVICE_TOKENS": "",
         "PROBE_SERVICE_TOKENS": "",
+        // Set from vars.STAGING_RETENTION_DAY_SECONDS at deploy time; unset, staging keeps real days.
+        "RETENTION_DAY_SECONDS": "",
         "ACCESS_TEAM_DOMAIN": "",
         "ACCESS_AUD": "",
         "TURNSTILE_HOSTNAMES": "",

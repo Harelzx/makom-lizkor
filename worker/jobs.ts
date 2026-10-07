@@ -1,3 +1,4 @@
+import { durations } from "./lib/durations"
 import { RETENTION } from "@/config"
 import { runDrill } from "./db/drill"
 import { alertDeletion, checkDeletion, pruneExports, runExport } from "./db/exports"
@@ -35,7 +36,10 @@ const BACKSTOP_CLAIM_MS = 10 * 60_000
  * A part that fails is logged by name and never stops the others.
  */
 export async function runJobs(env: Env, deps: { sendMail: SendMail; purge: Purge }, ctx: unknown, now: Date) {
-  const opEnv = { db: env.DB, media: env.MEDIA, ledger: env.LEDGER, purge: (tags: string[]) => deps.purge(env, ctx, tags) }
+  // This deployment's retention day and hour, read first: a value refused here (worker/lib/durations.ts) stops the
+  // whole pass before any part writes anything.
+  const d = durations(env)
+  const opEnv = { db: env.DB, media: env.MEDIA, ledger: env.LEDGER, purge: (tags: string[]) => deps.purge(env, ctx, tags), durations: d }
   const at = now.toISOString()
   const part = async (name: string, run: () => Promise<unknown>) => {
     try {
@@ -59,9 +63,9 @@ export async function runJobs(env: Env, deps: { sendMail: SendMail; purge: Purge
   // Only after this pass's deletion run finished: what it was due to delete never goes into a 35-day backup.
   await part("export", async () => {
     if (retention?.ok)
-      await runExport({ db: env.DB, media: env.MEDIA, exports: env.EXPORTS, keys: env.EXPORT_PUBLIC_KEYS }, retention.id, now)
+      await runExport({ db: env.DB, media: env.MEDIA, exports: env.EXPORTS, keys: env.EXPORT_PUBLIC_KEYS, durations: d }, retention.id, now)
   })
-  await part("export_prune", () => pruneExports({ db: env.DB, exports: env.EXPORTS }, now))
+  await part("export_prune", () => pruneExports({ db: env.DB, exports: env.EXPORTS, durations: d }, now))
   // Only where a drill database and its key are configured (production; never the development server).
   const drill = env as Env & { DRILL_DB?: D1Database; DRILL_PRIVATE_KEY?: string }
   await part("drill", () =>
@@ -83,7 +87,7 @@ export async function runJobs(env: Env, deps: { sendMail: SendMail; purge: Purge
       env.DB,
       env,
       deps.sendMail,
-      await checkDeletion({ db: env.DB, exports: env.EXPORTS, keys: env.EXPORT_PUBLIC_KEYS }, now),
+      await checkDeletion({ db: env.DB, exports: env.EXPORTS, keys: env.EXPORT_PUBLIC_KEYS, durations: d }, now),
       now,
     ),
   )
@@ -119,9 +123,10 @@ export async function runJobs(env: Env, deps: { sendMail: SendMail; purge: Purge
          AND ((received_at <= ?1 AND backstop_at IS NULL) OR received_at <= ?2)`,
     )
       .bind(
-        new Date(now.getTime() - RETENTION.reportAbuseCodeHours * HOUR_MS).toISOString(),
-        // The ceiling, whatever the backstop got through: the notice's hours, less half an hour for a late run.
-        new Date(now.getTime() - (RETENTION.reportAbuseCodeMaxHours - 0.5) * HOUR_MS).toISOString(),
+        new Date(now.getTime() - RETENTION.reportAbuseCodeHours * d.hour).toISOString(),
+        // The ceiling, whatever the backstop got through: the notice's hours, less half an hour for a late run (in
+        // this deployment's hours, as the backstop's own deadline and the precaution's windows are).
+        new Date(now.getTime() - (RETENTION.reportAbuseCodeMaxHours - 0.5) * d.hour).toISOString(),
       )
       .run(),
   )

@@ -4,6 +4,7 @@ import { beforeAll, beforeEach, describe, expect, it } from "vitest"
 import type { PublicCuratedPlace } from "@/shared/contract"
 import { EXPORT_TABLES, runExport } from "../db/exports"
 import { filterForImport, importExport, type ExportPayload } from "../db/import"
+import { REAL } from "../lib/durations"
 import { readFeed } from "../db/places"
 import { readLedger, replayLedger, restorePhotos } from "../db/replay"
 import { runRetention } from "../db/retention"
@@ -118,7 +119,7 @@ describe("an erased curated record", () => {
     await env.DB.prepare("UPDATE places SET status_changed_at = ? WHERE id = ?").bind(due, id).run()
 
     const payload = await exportNow()
-    const filtered = filterForImport(payload.tables, new Date())
+    const filtered = filterForImport(payload.tables, new Date(), REAL)
     const revs = filtered.revisions.filter((r) => r.place_id === id)
     expect(revs.length).toBeGreaterThan(0)
     expect(revs.every((r) => r.curated === null && r.name_he === null)).toBe(true)

@@ -1,11 +1,11 @@
 import { RETENTION } from "@/config"
+import { durations, MONTH_DAYS, REAL, type Durations } from "../lib/durations"
 import { ulid, ulidTime } from "../lib/ids"
 import type { SendMail } from "../lib/mail"
 import { runOp, WATCH_FIRST_LOOK_MS, type OpEnv } from "./ops"
 import { erasePhotos, retirePhotos } from "./photos"
 import { log } from "../lib/log"
 
-const DAY_MS = 86_400_000
 /** Places erased in one run; the job runs every 15 minutes, so a backlog clears long before the day's bound. */
 const ERASE_BATCH = 100
 
@@ -37,21 +37,24 @@ const BLANK_REVISION = Object.entries(BLANK_COLUMNS)
 
 /**
  * The dates each rule compares against, at a moment: the retention job binds these, and the filtered import applies
- * the same ones, so a restore can never keep what the job would have deleted by then.
+ * the same ones, so a restore can never keep what the job would have deleted by then. A month is 30 days (never a
+ * calendar month), and a day is `d.day` (real everywhere but a scaled staging, worker/lib/durations.ts).
  */
-export function retentionCutoffs(now: Date) {
-  const ago = (days: number) => new Date(now.getTime() - days * DAY_MS).toISOString()
+export function retentionCutoffs(now: Date, d: Durations) {
+  const ago = (days: number) => new Date(now.getTime() - days * d.day).toISOString()
   return {
     now: now.toISOString(),
     returned: ago(RETENTION.returnedDays),
     rejected: ago(RETENTION.rejectedTextDays),
     noteClosed: ago(RETENTION.contactAfterCloseDays),
-    noteCeiling: ago(RETENTION.contactMaxMonths * 30),
-    photo: now.getTime() - RETENTION.unapprovedPhotoJobDays * DAY_MS,
+    noteCeiling: ago(RETENTION.contactMaxMonths * MONTH_DAYS),
+    photo: now.getTime() - RETENTION.unapprovedPhotoJobDays * d.day,
     tribute: ago(RETENTION.tributeDays),
-    audit: ago(RETENTION.auditMonths * 30),
+    audit: ago(RETENTION.auditMonths * MONTH_DAYS),
   }
 }
+/** This deployment's retention day and hour: the env's, or real where none was given. */
+const days = (env: { durations?: Durations }) => env.durations ?? REAL
 const hasContent = (t: string) =>
   `(${["name_he", "story_he", "place_he", "in_memory_of", "lat", "access_note_he", "link_url", "decision_note", "photo_key", "curated"]
     .map((c) => `${t}.${c} IS NOT NULL`)
@@ -130,7 +133,7 @@ export async function runRetention(env: OpEnv, now: Date): Promise<{ id: string;
              WHERE decision_note IS NOT NULL
                AND (decided_at <= ?1 OR (state IN ('approved', 'rejected', 'superseded') AND decided_at <= ?2))`,
           )
-          .bind(retentionCutoffs(now).noteCeiling, retentionCutoffs(now).noteClosed)
+          .bind(retentionCutoffs(now, days(env)).noteCeiling, retentionCutoffs(now, days(env)).noteClosed)
           .run()
       ).meta.changes,
   )
@@ -184,11 +187,22 @@ export async function runRetention(env: OpEnv, now: Date): Promise<{ id: string;
   await part(
     "tributes",
     async () =>
-      (await db.prepare("DELETE FROM tribute_events WHERE received_at <= ?").bind(retentionCutoffs(now).tribute).run()).meta.changes,
+      (
+        await db
+          .prepare("DELETE FROM tribute_events WHERE received_at <= ?")
+          .bind(retentionCutoffs(now, days(env)).tribute)
+          .run()
+      ).meta.changes,
   )
   await part(
     "audit",
-    async () => (await db.prepare("DELETE FROM audit_log WHERE at <= ?").bind(retentionCutoffs(now).audit).run()).meta.changes,
+    async () =>
+      (
+        await db
+          .prepare("DELETE FROM audit_log WHERE at <= ?")
+          .bind(retentionCutoffs(now, days(env)).audit)
+          .run()
+      ).meta.changes,
   )
   await env.db
     .prepare("UPDATE retention_runs SET finished_at = ?, ok = ?, counts = ? WHERE id = ?")
@@ -206,7 +220,7 @@ async function eraseAbandoned(env: OpEnv, now: Date) {
        WHERE (status = 'returned' AND status_changed_at <= ?1) OR (status = 'rejected' AND status_changed_at <= ?2)
        ORDER BY status_changed_at LIMIT ?3`,
     )
-    .bind(retentionCutoffs(now).returned, retentionCutoffs(now).rejected, ERASE_BATCH)
+    .bind(retentionCutoffs(now, days(env)).returned, retentionCutoffs(now, days(env)).rejected, ERASE_BATCH)
     .all<{ id: string; rev: number; status: "returned" | "rejected" }>()
   let erased = 0
   for (const row of results) if (await eraseOne(env, row, now)) erased++
@@ -278,7 +292,7 @@ async function blankClosedCorrections(env: OpEnv, now: Date) {
          AND ((r.state = 'returned' AND r.decided_at <= ?1) OR (r.state = 'rejected' AND r.decided_at <= ?2))
        LIMIT ?3`,
     )
-    .bind(retentionCutoffs(now).returned, retentionCutoffs(now).rejected, ERASE_BATCH)
+    .bind(retentionCutoffs(now, days(env)).returned, retentionCutoffs(now, days(env)).rejected, ERASE_BATCH)
     .all<{ id: string; photo_key: string | null }>()
   for (const r of results) {
     // A returned correction left uncorrected is closed with its text: an upload or a correction can't land in an empty row.
@@ -326,7 +340,7 @@ async function expireUnapprovedPhotos(env: OpEnv, now: Date) {
     .all<{ id: string; place_id: string; photo_key: string }>()
   let n = 0
   for (const r of results) {
-    if (!(uploadedAt(r.photo_key) <= retentionCutoffs(now).photo)) continue
+    if (!(uploadedAt(r.photo_key) <= retentionCutoffs(now, days(env)).photo)) continue
     // One step (a batch is one transaction), both under the same condition: a decision that lands first leaves the
     // photo where it is, and one made on the view that showed the photo conflicts once this has landed.
     const still = "EXISTS (SELECT 1 FROM revisions WHERE id = ?2 AND photo_key = ?3 AND state IN ('pending', 'returned'))"
@@ -364,7 +378,7 @@ async function expireCuratedPhotos(env: OpEnv, now: Date) {
     .all<{ revision_id: string; idx: number; key: string; thumb_key: string; place_id: string }>()
   let n = 0
   for (const r of results) {
-    if (!(waitingSince(r.key, r.thumb_key) <= retentionCutoffs(now).photo)) continue
+    if (!(waitingSince(r.key, r.thumb_key) <= retentionCutoffs(now, days(env)).photo)) continue
     const still = `EXISTS (SELECT 1 FROM revision_photos rp JOIN revisions r ON r.id = rp.revision_id
       WHERE rp.revision_id = ?2 AND rp.idx = ?3 AND rp.key = ?4 AND rp.thumb_key = ?5 AND r.state IN ('pending', 'returned'))`
     const [moved] = await db.batch([
@@ -395,13 +409,14 @@ async function expireCuratedPhotos(env: OpEnv, now: Date) {
  * else, once a day while any wait.
  */
 export async function remindOverdueReview(db: D1Database, env: Env, sendMail: SendMail, now: Date) {
+  const d = durations(env)
   const waiting = await db
     .prepare("SELECT COUNT(*) AS n FROM revisions WHERE state = 'pending' AND created_at <= ?")
-    .bind(new Date(now.getTime() - RETENTION.reviewReminderDays * DAY_MS).toISOString())
+    .bind(new Date(now.getTime() - RETENTION.reviewReminderDays * d.day).toISOString())
     .first<number>("n")
   if (!waiting) return false
   const sent = await db.prepare("SELECT sent_at FROM job_alerts WHERE job = 'review_overdue'").first<{ sent_at: string }>()
-  if (sent && sent.sent_at > new Date(now.getTime() - DAY_MS).toISOString()) return false
+  if (sent && sent.sent_at > new Date(now.getTime() - d.day).toISOString()) return false
   const text = [
     `${waiting} הצעות או תיקונים ב"מקום לזכור" ממתינות לבדיקה יותר מ־${RETENTION.reviewReminderDays} יום.`,
     `תמונה שלא אושרה נמחקת ${RETENTION.rejectedPhotoDays} יום אחרי שהועלתה.`,
@@ -418,7 +433,8 @@ export const RETENTION_ALERT_HOURS = 6
  * RETENTION_ALERT_HOURS while it lasts. A mail that couldn't go now is tried at the next run.
  */
 export async function alertStalledRetention(db: D1Database, env: Env, sendMail: SendMail, now: Date) {
-  const since = new Date(now.getTime() - RETENTION_ALERT_HOURS * 3600_000).toISOString()
+  const d = durations(env)
+  const since = new Date(now.getTime() - RETENTION_ALERT_HOURS * d.hour).toISOString()
   const last = await db
     .prepare("SELECT MAX(finished_at) AS at, (SELECT MIN(started_at) FROM retention_runs) AS first FROM retention_runs WHERE ok = 1")
     .first<{ at: string | null; first: string | null }>()

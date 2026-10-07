@@ -1,3 +1,4 @@
+import { REAL, type Durations } from "../lib/durations"
 import { replayDecision, type LedgerEntry } from "../lib/ledger"
 import { sha256, type Manifest } from "../lib/sealed"
 import { boundOpenReports, reconcilePlace, type ReconcileSummary } from "./reconcile"
@@ -59,7 +60,14 @@ function changes(db: D1Database, table: string, before: Row[], after: Row[], key
  * are bounded by `since`, the point itself (boundOpenReports). Content received after the point is not in the ledger,
  * and stays lost. Safe to run twice: a second run changes nothing.
  */
-export async function replayLedger(db: D1Database, ledger: R2Bucket | Map<string, LedgerEntry[]>, now: Date, since: string) {
+export async function replayLedger(
+  db: D1Database,
+  ledger: R2Bucket | Map<string, LedgerEntry[]>,
+  now: Date,
+  since: string,
+  /** This deployment's retention day (worker/lib/durations.ts); the drill passes its own, the tests leave it real. */
+  d: Durations = REAL,
+) {
   const result: ReconcileSummary = { places: 0, applied: 0, quarantined: [], erased: [], lost: [] }
   const entriesByPlace = ledger instanceof Map ? ledger : await readLedger(ledger)
   let changed = false
@@ -92,7 +100,7 @@ export async function replayLedger(db: D1Database, ledger: R2Bucket | Map<string
       photos: photos.results as Row[],
       sources: sources.results as Row[],
     }
-    const r = reconcilePlace(before, entries, now)
+    const r = reconcilePlace(before, entries, now, d)
     const statements = [
       ...changes(db, "places", [before.place], [r.rows.place]),
       ...changes(db, "revisions", before.revisions, r.rows.revisions),
@@ -112,7 +120,7 @@ export async function replayLedger(db: D1Database, ledger: R2Bucket | Map<string
     db.prepare("SELECT id, status, purge_after FROM reports WHERE status != 'closed'"),
     db.prepare("SELECT id, report_id, notes_purge_after FROM field_suppressions WHERE report_id IS NOT NULL"),
   ])
-  const bounded = boundOpenReports(reports.results as Row[], held.results as Row[], since)
+  const bounded = boundOpenReports(reports.results as Row[], held.results as Row[], since, d)
   const statements = [
     ...changes(db, "reports", reports.results as Row[], bounded.reports),
     ...changes(db, "field_suppressions", held.results as Row[], bounded.suppressions),

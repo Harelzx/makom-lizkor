@@ -2,7 +2,8 @@ import { applyD1Migrations } from "cloudflare:test"
 import { env } from "cloudflare:workers"
 import { beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { EXPORT_TABLES, runExport } from "../db/exports"
-import { importExport, type ExportPayload } from "../db/import"
+import { filterForImport, importExport, type ExportPayload } from "../db/import"
+import { REAL } from "../lib/durations"
 import { readFeed } from "../db/places"
 import { runRetention } from "../db/retention"
 import { ulid } from "../lib/ids"
@@ -210,5 +211,39 @@ describe("a restore through the filtered import (spec 7, Route B)", () => {
     payload.tables.places[0] = { ...payload.tables.places[0], "status = 'published' --": 1 }
     expect(await importExport(env.IMPORT_TEST, payload, R, new Map())).toEqual({ ok: false, reason: "columns" })
     expect(await env.IMPORT_TEST.prepare("SELECT COUNT(*) AS n FROM places").first<number>("n")).toBe(0)
+  })
+})
+
+// L-RET-EVIDENCE-1 (a89): on staging's two-hour day, a restore keeps out what fell due by staged days before anything
+// is written, and the deletion job on the same scale then finds nothing to delete.
+describe("on staging's scale (L-RET A2)", () => {
+  const S = { day: 7_200_000, hour: 300_000 }
+  const at = (hours: number) => new Date(R.getTime() + hours * 3_600_000).toISOString()
+  async function returnedAt(name: string, note: string, hours: number) {
+    const { id } = await send(name)
+    expect((await decide(id, await queued(id), "return", note)).status).toBe(200)
+    await env.DB.prepare("UPDATE places SET status_changed_at = ? WHERE id = ?").bind(at(hours), id).run()
+    await env.DB.prepare("UPDATE revisions SET decided_at = ? WHERE place_id = ?").bind(at(hours), id).run()
+    return id
+  }
+
+  it("keeps out a place returned 31 staged days back (62 hours) and keeps one returned 29 (58 hours)", async () => {
+    const due = await returnedAt("ספסל דמו שהוחזר ונמחק ביום המקוצר", "הערה שעבר מועדה ביום המקוצר", -62)
+    const kept = await returnedAt("ספסל דמו שהוחזר ונשמר ביום המקוצר", "הערה שנשמרת ביום המקוצר", -58)
+    const payload = await exported()
+    const status = (tables: ReturnType<typeof filterForImport>, id: string) => tables.places.find((p) => p.id === id)?.status
+    // On a real day both are still kept: only the staged day makes the first due.
+    expect(status(filterForImport(payload.tables, R, REAL), due)).toBe("returned")
+    expect(status(filterForImport(payload.tables, R, S), due)).toBe("erased")
+    expect(status(filterForImport(payload.tables, R, S), kept)).toBe("returned")
+
+    const target = recording(env.IMPORT_TEST)
+    expect(await importExport(target.db, payload, R, new Map(), S)).toMatchObject({ ok: true })
+    const written = JSON.stringify(target.bound)
+    for (const text of ["ספסל דמו שהוחזר ונמחק ביום המקוצר", "הערה שעבר מועדה ביום המקוצר"]) expect(written).not.toContain(text)
+    for (const text of ["ספסל דמו שהוחזר ונשמר ביום המקוצר", "הערה שנשמרת ביום המקוצר"]) expect(written).toContain(text)
+    const run = await runRetention({ db: env.IMPORT_TEST, media: env.MEDIA, ledger: env.LEDGER, purge: async () => true, durations: S }, R)
+    expect(run.ok).toBe(true)
+    expect(Object.entries(run.counts).filter(([, n]) => n !== 0)).toEqual([])
   })
 })

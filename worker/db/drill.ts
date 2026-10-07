@@ -1,3 +1,4 @@
+import { durations, REAL, type Durations } from "../lib/durations"
 import { ulid } from "../lib/ids"
 import type { SendMail } from "../lib/mail"
 import { sha256, unseal, type Manifest } from "../lib/sealed"
@@ -9,9 +10,11 @@ import { readLedger, replayLedger } from "./replay"
 import { BLANK_COLUMNS, tellModerators } from "./retention"
 import { log } from "../lib/log"
 
-const DAY_MS = 86_400_000
-/** A drill loads only an export this fresh (spec 7): an older one would keep its rows in the drill database's history. */
-const DRILL_MAX_EXPORT_AGE_MS = 26 * 3600_000
+/**
+ * A drill loads only an export this many hours old at most (spec 7): an older one would keep its rows in the drill
+ * database's history. In this deployment's hours (worker/lib/durations.ts), as the export's own cadence is.
+ */
+const DRILL_MAX_EXPORT_AGE_HOURS = 26
 
 export type DrillEnv = {
   db: D1Database
@@ -62,9 +65,10 @@ const filled = (v: unknown) => v !== null && v !== undefined && v !== ""
  * to any database: an older export never reaches the drill's.
  */
 export async function auditExports(
-  d: { exports: R2Bucket; drillKey: string; ledger: R2Bucket | Map<string, LedgerEntry[]> },
+  d: { exports: R2Bucket; drillKey: string; ledger: R2Bucket | Map<string, LedgerEntry[]>; durations?: Durations },
   now: Date,
 ): Promise<Record<string, number>> {
+  const days = d.durations ?? REAL
   const found: Record<string, number> = {}
   const count = (k: string, n = 1) => (found[k] = (found[k] ?? 0) + n)
   const ledger = d.ledger instanceof Map ? d.ledger : await readLedger(d.ledger)
@@ -80,11 +84,11 @@ export async function auditExports(
       const manifest = (await (await d.exports.get(key))!.json()) as Manifest
       const data = new Uint8Array(await (await d.exports.get(manifest.data.key))!.arrayBuffer())
       const payload = await openExport(data, manifest, d.drillKey)
-      const moment = new Date(Math.max(Date.parse(payload.created_at) - DAY_MS, now.getTime() - EXPORT_KEEP_DAYS * DAY_MS))
+      const moment = new Date(Math.max(Date.parse(payload.created_at) - days.day, now.getTime() - EXPORT_KEEP_DAYS * days.day))
       const decided = new Map(
         [...ledger].map(([place, entries]) => [place, entries.filter((e) => Date.parse(decidedAt(e)) <= moment.getTime())]),
       )
-      const due = filterForImport(reconcileTables(payload.tables, decided, moment, payload.created_at).tables, moment)
+      const due = filterForImport(reconcileTables(payload.tables, decided, moment, payload.created_at, days).tables, moment, days)
       for (const t of EXPORT_TABLES) {
         const personal = PERSONAL[t]
         if (!personal) continue
@@ -114,10 +118,11 @@ export async function auditExports(
  */
 export async function runDrill(d: DrillEnv, now: Date): Promise<string | null> {
   if (!d.drillDb || !d.drillKey) return null
+  const days = durations(d.env)
   const db = d.db
   const recent = await db
     .prepare("SELECT 1 FROM drill_runs WHERE (ok = 1 AND started_at > ?1) OR started_at > ?2")
-    .bind(new Date(now.getTime() - 7 * DAY_MS).toISOString(), new Date(now.getTime() - DAY_MS).toISOString())
+    .bind(new Date(now.getTime() - 7 * days.day).toISOString(), new Date(now.getTime() - days.day).toISOString())
     .first()
   if (recent) return null
   const id = `dr_${ulid(now.getTime())}`
@@ -130,7 +135,7 @@ export async function runDrill(d: DrillEnv, now: Date): Promise<string | null> {
       .first<{ id: string; created_at: string }>()
     if (!latest) fail("no_export")
     exportId = latest!.id
-    if (Date.parse(latest!.created_at) < now.getTime() - DRILL_MAX_EXPORT_AGE_MS) fail("stale_export")
+    if (Date.parse(latest!.created_at) < now.getTime() - DRILL_MAX_EXPORT_AGE_HOURS * days.hour) fail("stale_export")
     const manifest = (await (await d.exports.get(`exports/${exportId}/manifest.json`))?.json()) as Manifest | undefined
     if (!manifest) fail("manifest_missing")
     const sealed = await d.exports.get(manifest!.data.key)
@@ -148,13 +153,13 @@ export async function runDrill(d: DrillEnv, now: Date): Promise<string | null> {
     // The ledger is applied to the export before anything is written, as a restore does.
     const ledger = await readLedger(d.ledger).catch(() => fail("ledger"))
     await empty(d.drillDb)
-    const imported = await importExport(d.drillDb, payload, now, ledger!)
+    const imported = await importExport(d.drillDb, payload, now, ledger!, days)
     if (!imported.ok) fail(`import_${imported.reason}`)
     const counted = await d.drillDb.batch(EXPORT_TABLES.map((t) => d.drillDb!.prepare(`SELECT COUNT(*) AS n FROM ${t}`)))
     for (const [i, t] of EXPORT_TABLES.entries())
       if ((counted[i].results[0] as { n: number }).n !== (imported as { counts: Record<string, number> }).counts[t]) fail("row_counts")
     // Then the decisions since the export, as a restore replays them.
-    await replayLedger(d.drillDb, ledger!, now, payload.created_at).catch(() => fail("replay"))
+    await replayLedger(d.drillDb, ledger!, now, payload.created_at, days).catch(() => fail("replay"))
     for (const f of manifest!.files) {
       const copy = await d.exports.get(`photos/${f.sha256}`)
       if (!copy) fail("file_missing")
@@ -166,7 +171,9 @@ export async function runDrill(d: DrillEnv, now: Date): Promise<string | null> {
     await empty(d.drillDb).catch(() => (failure ??= "cleanup"))
   }
   // Then every export still kept, in memory (spec 8.4): what one holds past its date is told by table and count.
-  const stale = await auditExports({ exports: d.exports, drillKey: d.drillKey, ledger: d.ledger }, now).catch(() => ({ unreadable: 1 }))
+  const stale = await auditExports({ exports: d.exports, drillKey: d.drillKey, ledger: d.ledger, durations: days }, now).catch(() => ({
+    unreadable: 1,
+  }))
   if (Object.keys(stale).length) {
     log("error", "export_audit", { found: stale })
     await tellModerators(
@@ -190,7 +197,7 @@ export async function runDrill(d: DrillEnv, now: Date): Promise<string | null> {
   if (failure) {
     log("error", "drill_failed", { failure: failure ?? undefined })
     const sent = await db.prepare("SELECT sent_at FROM job_alerts WHERE job = 'drill'").first<{ sent_at: string }>()
-    if (!sent || sent.sent_at <= new Date(now.getTime() - DAY_MS).toISOString())
+    if (!sent || sent.sent_at <= new Date(now.getTime() - days.day).toISOString())
       await tellModerators(
         db,
         d.env,

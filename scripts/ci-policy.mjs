@@ -47,6 +47,8 @@ export function policyProblems(workflows) {
       if (secrets.length && env !== "production" && !staging)
         say(`job ${id} reads ${secrets.join(", ")} outside the production environment`)
       if (production && secrets.some((s) => s.startsWith("STAGING_"))) say(`job ${id} reads staging secrets in a production workflow`)
+      // The retention time scale is staging's alone (L-RET A2, a87): no other workflow may name it.
+      if (name !== STAGING && /RETENTION_DAY_SECONDS/.test(body)) say(`job ${id} sets RETENTION_DAY_SECONDS, which only staging.yml may`)
       // GitHub runs a step with no shell named as `bash -e {0}`, without pipefail: a failure before a pipe would pass.
       for (const step of job.steps ?? [])
         if (typeof step.run === "string" && hidesFailure(step.run) && !pipefail(step, job, w))
@@ -209,6 +211,13 @@ function stagingProblems(w, triggers) {
       !steps.some((r) => /edge-check\.mjs[^\n]*--expect-tag "staging-\$\{SHA:0:12\}"/.test(r))
     )
       problems.push(`job ${id}'s edge checks must expect the version it deployed (--expect-tag "staging-\${SHA:0:12}")`)
+    // Staging's retention scale comes from its own repository variable alone, given to the deploy (L-RET A2, a87); the
+    // Worker accepts only 7200 there, so a wrong value fails the deploy's own checks rather than shortening anything.
+    if (
+      job.env?.STAGING_RETENTION_DAY_SECONDS !== "${{ vars.STAGING_RETENTION_DAY_SECONDS }}" ||
+      !steps.some((r) => /wrangler deploy --tag "staging-[\s\S]*--var "RETENTION_DAY_SECONDS:\$STAGING_RETENTION_DAY_SECONDS"/.test(r))
+    )
+      problems.push(`job ${id} must give the deploy RETENTION_DAY_SECONDS from vars.STAGING_RETENTION_DAY_SECONDS`)
     // The receipt release.yml reads (P6-STAGING-1): the last step, so it exists only if every step before it passed,
     // named for the commit deployed, from the edge check's own report, kept a modest while.
     const all = job.steps ?? []

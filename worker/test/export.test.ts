@@ -215,3 +215,50 @@ describe("an export's 35 days (spec 7, 8.4)", () => {
     expect(found).toMatchObject({ tributes: 1, audit: 1, unapproved_photos: 1, unverified_emails: 1 })
   })
 })
+
+// L-RET-EVIDENCE-1 (a89): on staging's two-hour day the export runs every 23 staged hours (115 minutes) and an export
+// lives 35 staged days (70 hours), its photo copies with it unless a later export lists them.
+describe("on staging's scale (L-RET A2)", () => {
+  const MIN = 60_000
+  const HOUR = 3_600_000
+  const staged = () => ({ ...withKeys, ENVIRONMENT: "staging", RETENTION_DAY_SECONDS: "7200" }) as Env
+
+  it("writes the next export once 115 minutes have passed, not before", async () => {
+    const at = new Date(Date.now() + 1900 * DAY)
+    await runJobs(staged(), deps, undefined, at)
+    expect(await exportsAfter(at.toISOString())).toHaveLength(1)
+    await runJobs(staged(), deps, undefined, new Date(at.getTime() + 110 * MIN))
+    expect(await exportsAfter(at.toISOString())).toHaveLength(1)
+    await runJobs(staged(), deps, undefined, new Date(at.getTime() + 116 * MIN))
+    expect(await exportsAfter(at.toISOString())).toHaveLength(2)
+  })
+
+  it("prunes an export after 70 hours, and the photo copies no later export lists, keeping the ones still listed", async () => {
+    const kept = await publishedWithPhoto("גן דמו שנשאר בגיבוי המקוצר", 0x61)
+    const gone = await publishedWithPhoto("גן דמו שנמשך מהגיבוי המקוצר", 0x62)
+    const photoOf = async (id: string) =>
+      (await env.DB.prepare("SELECT r.photo_key AS key FROM places p JOIN revisions r ON r.id = p.published_revision_id WHERE p.id = ?")
+        .bind(id)
+        .first<{ key: string }>())!.key
+    const keptHash = await sha(await (await env.MEDIA.get(await photoOf(kept)))!.arrayBuffer())
+    const goneHash = await sha(await (await env.MEDIA.get(await photoOf(gone)))!.arrayBuffer())
+    const t0 = new Date(Date.now() + 2000 * DAY)
+    await runJobs(staged(), deps, undefined, t0)
+    const [first] = await exportsAfter(t0.toISOString())
+    await env.DB.prepare("UPDATE places SET status = 'withdrawn' WHERE id = ?").bind(gone).run()
+    for (const prefix of ["public/", "held/", "quarantine/"])
+      for (const o of (await env.MEDIA.list({ prefix: `${prefix}${gone}/` })).objects) await env.MEDIA.delete(o.key)
+    await runJobs(staged(), deps, undefined, new Date(t0.getTime() + 2 * HOUR))
+    expect(await exportsAfter(t0.toISOString())).toHaveLength(2)
+
+    // At 69 hours the first export and its photo copies are still there; at 71 they are gone.
+    await runJobs(staged(), deps, undefined, new Date(t0.getTime() + 69 * HOUR))
+    expect((await env.EXPORTS.list({ prefix: `exports/${first.id}/` })).objects.length).toBeGreaterThan(0)
+    expect(await env.EXPORTS.head(`photos/${goneHash}`)).not.toBeNull()
+    await runJobs(staged(), deps, undefined, new Date(t0.getTime() + 71 * HOUR))
+    expect((await env.EXPORTS.list({ prefix: `exports/${first.id}/` })).objects).toHaveLength(0)
+    expect(await env.DB.prepare("SELECT deleted_at FROM exports WHERE id = ?").bind(first.id).first<string>("deleted_at")).not.toBeNull()
+    expect(await env.EXPORTS.head(`photos/${goneHash}`)).toBeNull()
+    expect(await env.EXPORTS.head(`photos/${keptHash}`)).not.toBeNull()
+  })
+})

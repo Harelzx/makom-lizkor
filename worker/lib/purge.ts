@@ -1,3 +1,4 @@
+import { durations } from "../lib/durations"
 import type { OpEnv } from "../db/ops"
 
 /** Clears the edge's copies tagged with any of `tags`; true when the edge accepted it. */
@@ -29,5 +30,11 @@ export function opEnv(c: { env: Env; get(key: "purge"): Purge; readonly executio
   } catch {
     ctx = undefined
   }
-  return { db: c.env.DB, media: c.env.MEDIA, ledger: c.env.LEDGER, purge: (tags) => c.get("purge")(c.env, ctx, tags) }
+  return {
+    db: c.env.DB,
+    media: c.env.MEDIA,
+    ledger: c.env.LEDGER,
+    purge: (tags) => c.get("purge")(c.env, ctx, tags),
+    durations: durations(c.env),
+  }
 }

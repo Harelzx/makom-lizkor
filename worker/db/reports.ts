@@ -5,15 +5,18 @@ import { sha256Hex, ulid } from "../lib/ids"
 import type { Mail } from "../lib/mail"
 import { reportAlertMail } from "../lib/messages"
 import { runOp, type OpEnv } from "./ops"
+import { MONTH_DAYS, REAL, type Durations } from "../lib/durations"
 import { revisionKeys } from "./curated"
 import { hmacHex } from "./places"
 
-// An approximation of a month, as for contacts; phase 5 reads calendar months from RETENTION (src/config.ts).
-const MONTH_MS = 30 * 24 * 3600 * 1000
 const HOUR_MS = 3600 * 1000
 
-/** The latest a hide's notes may be kept: 12 months from now (the same month as the requests', until phase 5). */
-export const notesCeiling = (now: Date) => new Date(now.getTime() + 12 * MONTH_MS).toISOString()
+/**
+ * The latest a hide's notes may be kept: RETENTION.contactMaxMonths from now, each month 30 days (the same ceiling as
+ * the requests'), in this deployment's days (worker/lib/durations.ts).
+ */
+export const notesCeiling = (now: Date, d: Durations) =>
+  new Date(now.getTime() + RETENTION.contactMaxMonths * MONTH_DAYS * d.day).toISOString()
 
 export type Target = { origin: "contribution" | "curated"; published: boolean }
 
@@ -61,6 +64,7 @@ export async function insertReport(
   secret: string,
   reporterKey: string | null,
   now: Date,
+  d: Durations,
 ): Promise<
   { kind: "created"; ticket: string; complete: boolean } | { kind: "replayed"; ticket: string; outcome: string } | { kind: "mismatch" }
 > {
@@ -68,7 +72,7 @@ export async function insertReport(
   const bodyHash = await hmacHex(secret, `report:${JSON.stringify(input)}`)
   const ticket = `r_${ulid(now.getTime())}`
   const at = now.toISOString()
-  const ceiling = new Date(now.getTime() + 12 * MONTH_MS).toISOString()
+  const ceiling = new Date(now.getTime() + RETENTION.contactMaxMonths * MONTH_DAYS * d.day).toISOString()
   const isComplete = complete(input, target)
   const inserted = await db
     .prepare(
@@ -93,7 +97,7 @@ export async function insertReport(
       reporterKey,
       isComplete ? 1 : 0,
       // A complete request the automatic path may not act on now is looked at again in 24 hours; set until it acts.
-      isComplete ? new Date(now.getTime() + REPORT_GUARDS.backstopHours * HOUR_MS).toISOString() : null,
+      isComplete ? new Date(now.getTime() + REPORT_GUARDS.backstopHours * d.hour).toISOString() : null,
       at,
       ceiling,
     )
@@ -120,7 +124,8 @@ export async function insertReport(
  * its reporter under the day's count. Numbered parameters: ?1 place, ?6 an hour ago, ?7 a day ago, ?8 per hour, ?9 per
  * day, ?10 breaker, ?11 the request, ?12 reporter's day, ?13 the oldest request whose abuse codes still count (they
  * expire with RETENTION.reportAbuseCodeMaxHours, less the half hour the job keeps in hand), ?14 the backstop run's
- * claim (null at intake). The request must still be awaiting its evaluation (backstop_at set, and claimed by this run
+ * claim (null at intake), ?15 the abuse codes' own day ago (their day: this deployment's, worker/lib/durations.ts; the
+ * quotas' ?6 and ?7 stay on real hours). The request must still be awaiting its evaluation (backstop_at set, and claimed by this run
  * when a run is evaluating it), so a run whose claim went stale can't hide after another finished. Read once before
  * anything is written, and again as conditions of the place's own update, so nothing that changes in between (the
  * clock included, while the ledger is written) can let a hide through.
@@ -131,9 +136,9 @@ const SAFE = `(SELECT COUNT(DISTINCT report_id) FROM field_suppressions WHERE ki
   AND (SELECT COUNT(*) FROM reports WHERE complete = 1 AND received_at > ?6) < ?10
   AND EXISTS (SELECT 1 FROM reports WHERE id = ?11 AND status != 'closed' AND outcome = 'received' AND explanation_hash IS NOT NULL)
   AND NOT EXISTS (SELECT 1 FROM reports o JOIN reports me ON me.id = ?11
-                  WHERE o.explanation_hash = me.explanation_hash AND o.id != me.id AND o.received_at > ?7)
+                  WHERE o.explanation_hash = me.explanation_hash AND o.id != me.id AND o.received_at > ?15)
   AND (SELECT COUNT(*) FROM reports o JOIN reports me ON me.id = ?11
-       WHERE me.reporter_key IS NOT NULL AND o.reporter_key = me.reporter_key AND o.received_at > ?7) <= ?12
+       WHERE me.reporter_key IS NOT NULL AND o.reporter_key = me.reporter_key AND o.received_at > ?15) <= ?12
   AND (SELECT received_at FROM reports WHERE id = ?11) > ?13
   AND EXISTS (SELECT 1 FROM reports WHERE id = ?11 AND backstop_at IS NOT NULL AND (?14 IS NULL OR backstop_claim = ?14))`
 
@@ -152,7 +157,10 @@ export async function precaution(
   opts: { claim?: string; clock?: () => Date } = {},
 ): Promise<Precaution> {
   const clockNow = opts.clock ?? (() => new Date(Math.max(now.getTime(), Date.now())))
-  const evidenceSince = (t: Date) => new Date(t.getTime() - (RETENTION.reportAbuseCodeMaxHours - 0.5) * HOUR_MS).toISOString()
+  // The abuse codes' life and the day's counts run on this deployment's hours, as the job that clears the codes does
+  // (worker/jobs.ts); the automatic hides' own quotas below are rate limits, on real hours.
+  const d = env.durations ?? REAL
+  const evidenceSince = (t: Date) => new Date(t.getTime() - (RETENTION.reportAbuseCodeMaxHours - 0.5) * d.hour).toISOString()
   const db = env.db
   const report = await db.prepare("SELECT * FROM reports WHERE id = ?").bind(ticket).first<ReportRow>()
   if (!report || !report.complete || report.origin !== "contribution" || report.outcome !== "received" || report.status === "closed")
@@ -160,7 +168,7 @@ export async function precaution(
   // Without its abuse codes (cleared by their ceiling before a late backstop got to it) a request can't be checked
   // for spam, so the automatic path doesn't act on it: a person reviews it, as every request.
   if (!report.explanation_hash) return "refused"
-  const dayAgo = new Date(now.getTime() - 24 * HOUR_MS).toISOString()
+  const dayAgo = new Date(now.getTime() - 24 * d.hour).toISOString()
   const [duplicate, reporter] = await Promise.all([
     db
       .prepare("SELECT 1 FROM reports WHERE explanation_hash = ? AND id != ? AND received_at > ?")
@@ -203,6 +211,8 @@ export async function precaution(
     REPORT_GUARDS.reporterPerDay,
     evidenceSince(t),
     opts.claim ?? null,
+    // The spam checks' day, from the same clock reading as the rest, on the abuse codes' own hours (L-RET-ABUSE-1).
+    new Date(t.getTime() - 24 * d.hour).toISOString(),
   ]
   const safeNow = async () =>
     !!(await db
@@ -248,7 +258,7 @@ export async function precaution(
                SELECT ?3, ?1, ?4, ?5, 'precautionary', ?6, ?7, 'automatic', ?8, MIN(?8, (SELECT purge_after FROM reports WHERE id = ?5))
                WHERE ${happened}`,
               )
-              .bind(report.place_id, tid, targets[k], field, ticket, place.n, landed, notesCeiling(t)),
+              .bind(report.place_id, tid, targets[k], field, ticket, place.n, landed, notesCeiling(t, d)),
           ),
           db.prepare(`UPDATE feed_state SET n = n + 1, changed_at = ?3 WHERE id = 1 AND ${happened}`).bind(report.place_id, tid, landed),
           db

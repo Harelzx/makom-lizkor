@@ -1,3 +1,4 @@
+import { REAL, type Durations } from "../lib/durations"
 import type { LedgerEntry } from "../lib/ledger"
 import { EXPORT_TABLES, type ExportTable } from "./exports"
 import { reconcileTables, type ReconcileSummary } from "./reconcile"
@@ -17,8 +18,8 @@ const due = (value: unknown, cutoff: string) => typeof value === "string" && val
  * notes, a moderator's note, a waiting photo's name and audit rows past their dates are never written (anemones'
  * records aren't exported at all). So the new database's own history never holds them.
  */
-export function filterForImport(tables: Record<string, Row[]>, now: Date): Record<ExportTable, Row[]> {
-  const c = retentionCutoffs(now)
+export function filterForImport(tables: Record<string, Row[]>, now: Date, d: Durations): Record<ExportTable, Row[]> {
+  const c = retentionCutoffs(now, d)
   const erased = new Set<unknown>()
   const places = (tables.places ?? []).map((p0) => {
     const p = { ...p0 }
@@ -109,6 +110,8 @@ export async function importExport(
   payload: ExportPayload,
   now: Date,
   ledger: Map<string, LedgerEntry[]>,
+  /** This deployment's retention day (worker/lib/durations.ts); the drill passes its own, the tests leave it real. */
+  d: Durations = REAL,
 ): Promise<
   | { ok: true; counts: Record<string, number>; reconciled: ReconcileSummary }
   | { ok: false; reason: "format" | "schema" | "not_empty" | "columns" }
@@ -121,8 +124,8 @@ export async function importExport(
   ])
   if ((schema.results[0] as { name: string } | undefined)?.name !== payload.schema) return { ok: false, reason: "schema" }
   if ((places.results[0] as { n: number }).n !== 0) return { ok: false, reason: "not_empty" }
-  const reconciled = reconcileTables(payload.tables, ledger, now, payload.created_at)
-  const rows = filterForImport(reconciled.tables, now)
+  const reconciled = reconcileTables(payload.tables, ledger, now, payload.created_at, d)
+  const rows = filterForImport(reconciled.tables, now, d)
   const statements: D1PreparedStatement[] = [db.prepare("DELETE FROM feed_state")]
   for (const [i, t] of EXPORT_TABLES.entries()) {
     const known = new Set((columns[i].results as { name: string }[]).map((c) => c.name))

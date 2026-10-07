@@ -1,3 +1,4 @@
+import { durations } from "./durations"
 import { checkDeletion } from "../db/exports"
 import { ATTENTION, OpsSummary, OVERDUE_DAYS, PLACE_STATUSES, REPORT_STATUSES } from "./ops-schema"
 
@@ -85,7 +86,7 @@ export async function opsSummary(env: Env, errorRates: ErrorRates | undefined, n
     },
     export: e ? { created_at: e.created_at, ok: e.ok === 1 } : null,
     drill: d ? { started_at: d.started_at, ok: d.ok === null ? null : d.ok === 1, failure: d.failure } : null,
-    deletion_check: await checkDeletion({ db, exports: env.EXPORTS, keys: env.EXPORT_PUBLIC_KEYS ?? "" }, now),
+    deletion_check: await checkDeletion({ db, exports: env.EXPORTS, keys: env.EXPORT_PUBLIC_KEYS ?? "", durations: durations(env) }, now),
     alerts: alerts.results as { job: string; sent_at: string }[],
     errors,
   })

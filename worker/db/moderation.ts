@@ -1,11 +1,16 @@
+import { RETENTION } from "@/config"
 import type { Element } from "@/shared/contract"
 import { ulid } from "../lib/ids"
 import { runOp, type OpEnv, type OpOutcome } from "./ops"
 import { revisionKeys } from "./curated"
+import { REAL, type Durations } from "../lib/durations"
 import { notesCeiling } from "./reports"
 
-const DAY_MS = 24 * 3600 * 1000
-const plus90 = (now: Date) => new Date(now.getTime() + 90 * DAY_MS).toISOString()
+/**
+ * When a closed case's notes and text go: RETENTION.contactAfterCloseDays after now (spec 7, the same rule as the
+ * sender's contact), in this deployment's days (worker/lib/durations.ts).
+ */
+const afterClose = (now: Date, d: Durations) => new Date(now.getTime() + RETENTION.contactAfterCloseDays * d.day).toISOString()
 const heldKey = (key: string) => key.replace(/^public\//, "held/")
 
 /** The restoration codes of spec 6. There is no code for "no answer" or for a family disagreement: neither is a basis. */
@@ -100,7 +105,18 @@ export async function suppress(
                SELECT ?3, ?1, ?4, ?5, 'manual', ?6, ?7, ?8, ?9, ?10, MIN(?10, COALESCE((SELECT purge_after FROM reports WHERE id = ?5), ?10))
                WHERE ${happened}`,
             )
-            .bind(i.placeId, tid, targets[k], field, i.reportId ?? null, place.revision_n, at, i.actor, i.reason, notesCeiling(now)),
+            .bind(
+              i.placeId,
+              tid,
+              targets[k],
+              field,
+              i.reportId ?? null,
+              place.revision_n,
+              at,
+              i.actor,
+              i.reason,
+              notesCeiling(now, env.durations ?? REAL),
+            ),
         ),
         db.prepare(`UPDATE feed_state SET n = n + 1, changed_at = ?3 WHERE id = 1 AND ${happened}`).bind(i.placeId, tid, at),
         db
@@ -228,7 +244,17 @@ export async function lift(
              WHERE id = ?3 AND ${happened}`,
           )
           // Lifting ends the hide's case: what was written about it goes 90 days later at most.
-          .bind(sup.place_id, tid, suppressionId, at, actor, basisCode, basisNote, JSON.stringify(detail), plus90(now)),
+          .bind(
+            sup.place_id,
+            tid,
+            suppressionId,
+            at,
+            actor,
+            basisCode,
+            basisNote,
+            JSON.stringify(detail),
+            afterClose(now, env.durations ?? REAL),
+          ),
         db.prepare(`UPDATE feed_state SET n = n + 1, changed_at = ?3 WHERE id = 1 AND ${happened}`).bind(sup.place_id, tid, at),
         db
           .prepare(`INSERT INTO audit_log (id, at, actor, action, entity_id, fields) SELECT ?3, ?4, ?5, 'lift', ?1, ?6 WHERE ${happened}`)
@@ -299,6 +325,7 @@ export async function setReportStatus(
   actor: string,
   note: string | null,
   now: Date,
+  d: Durations,
 ) {
   const at = now.toISOString()
   const stmt =
@@ -312,7 +339,7 @@ export async function setReportStatus(
               `UPDATE reports SET status = 'closed', closed_at = ?4, handled_by = ?2, handling_note = COALESCE(?3, handling_note), backstop_at = NULL,
                  purge_after = MIN(purge_after, ?5) WHERE id = ?1 AND status != 'closed'`,
             )
-            .bind(ticket, actor, note, at, plus90(now))
+            .bind(ticket, actor, note, at, afterClose(now, d))
         : db.prepare("UPDATE reports SET status = 'open', closed_at = NULL WHERE id = ?1 AND status = 'closed'").bind(ticket)
   const [changed] = await db.batch([
     stmt,
@@ -327,7 +354,7 @@ export async function setReportStatus(
             .prepare(
               "UPDATE field_suppressions SET notes_purge_after = MIN(notes_purge_after, ?2) WHERE report_id = ?1 AND EXISTS (SELECT 1 FROM reports WHERE id = ?1 AND status = 'closed')",
             )
-            .bind(ticket, plus90(now)),
+            .bind(ticket, afterClose(now, d)),
         ]
       : []),
   ])

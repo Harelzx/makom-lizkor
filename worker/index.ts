@@ -1,4 +1,5 @@
 import { Hono } from "hono"
+import { durations } from "./lib/durations"
 import { problem } from "./lib/http"
 import { sendMail, type SendMail } from "./lib/mail"
 import { runJobs } from "./jobs"
@@ -53,6 +54,14 @@ export function createApp(deps: Deps) {
       c.res = new Response(c.res.body, c.res)
       mark(c.res.headers)
     }
+  })
+
+  // The retention scale is checked before any route runs: a value refused here (worker/lib/durations.ts) answers every
+  // request with an error before anything is written, a curated draft included (L-RET-GUARD-1), and a staging deploy
+  // with a wrong value fails its own checks at once.
+  app.use("*", async (c, next) => {
+    durations(c.env)
+    await next()
   })
 
   app.get("/api/v1/health", (c) => c.json({ ok: true }))

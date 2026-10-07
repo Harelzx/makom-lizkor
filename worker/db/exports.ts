@@ -1,4 +1,5 @@
 import { RETENTION } from "@/config"
+import { durations, MONTH_DAYS, REAL, type Durations } from "../lib/durations"
 import { ulid, ulidTime } from "../lib/ids"
 import type { SendMail } from "../lib/mail"
 import { tellModerators, uploadedAt } from "./retention"
@@ -28,9 +29,11 @@ export type ExportTable = (typeof EXPORT_TABLES)[number]
 // Columns left out (as null): the abuse codes exist only for the day's counts.
 const LEFT_OUT: Partial<Record<ExportTable, string[]>> = { reports: ["reporter_key", "explanation_hash"] }
 /** One export a day: the job runs every 15 minutes, and the next export is due a little under a day after the last. */
-const EXPORT_EVERY_MS = 23 * 3600_000
+/** A new export once the last good one is this many hours old: nightly, in this deployment's hours. */
+const EXPORT_EVERY_HOURS = 23
 
-export type ExportEnv = { db: D1Database; media: R2Bucket; exports: R2Bucket; keys: string }
+/** `durations`: this deployment's retention day and hour (worker/lib/durations.ts); left out (the tests), real. */
+export type ExportEnv = { db: D1Database; media: R2Bucket; exports: R2Bucket; keys: string; durations?: Durations }
 
 /**
  * The nightly export, called only after the deletion run of the same pass finished (spec 7: deletion before export).
@@ -45,7 +48,7 @@ export async function runExport(env: ExportEnv, retentionRun: string, now: Date)
   const at = now.toISOString()
   const recent = await db
     .prepare("SELECT 1 FROM exports WHERE ok = 1 AND created_at > ?")
-    .bind(new Date(now.getTime() - EXPORT_EVERY_MS).toISOString())
+    .bind(new Date(now.getTime() - EXPORT_EVERY_HOURS * (env.durations ?? REAL).hour).toISOString())
     .first()
   if (recent) return null
   const id = `ex_${ulid(now.getTime())}`
@@ -130,7 +133,6 @@ async function backUpPhotos(media: R2Bucket, exports: R2Bucket, tables: Record<s
   return files
 }
 
-const DAY_MS = 86_400_000
 /** How long an export and the photo copies only it lists are kept (spec 7): the job deletes them at this age. */
 export const EXPORT_KEEP_DAYS = 35
 
@@ -174,8 +176,9 @@ async function listedPhotos(exports: R2Bucket, objects: { key: string; at: numbe
  * every photo copy that no younger manifest lists, once it is a day old (an export under way may not have written its
  * manifest yet). A deletion that fails is tried again at the next pass, and the nightly check reports it.
  */
-export async function pruneExports(env: { db: D1Database; exports: R2Bucket }, now: Date) {
-  const cutoff = now.getTime() - EXPORT_KEEP_DAYS * DAY_MS
+export async function pruneExports(env: { db: D1Database; exports: R2Bucket; durations?: Durations }, now: Date) {
+  const { day } = env.durations ?? REAL
+  const cutoff = now.getTime() - EXPORT_KEEP_DAYS * day
   const objects = await listExports(env.exports)
   const old = objects.filter((o) => !(o.at > cutoff))
   for (const o of old) await env.exports.delete(o.key)
@@ -183,7 +186,7 @@ export async function pruneExports(env: { db: D1Database; exports: R2Bucket }, n
     await env.db.prepare("UPDATE exports SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL").bind(now.toISOString(), id).run()
   const listed = await listedPhotos(env.exports, objects, cutoff)
   for (const p of await listPhotos(env.exports))
-    if (!listed.has(p.hash) && p.uploaded <= now.getTime() - DAY_MS) await env.exports.delete(p.key)
+    if (!listed.has(p.hash) && p.uploaded <= now.getTime() - day) await env.exports.delete(p.key)
 }
 
 /**
@@ -195,10 +198,14 @@ export async function pruneExports(env: { db: D1Database; exports: R2Bucket }, n
  * - export files older than 35 days, and photo copies no current manifest lists;
  * - no export in the last 26 hours, or no key to make one with.
  */
-export async function checkDeletion(env: { db: D1Database; exports: R2Bucket; keys: string }, now: Date): Promise<Record<string, number>> {
+export async function checkDeletion(
+  env: { db: D1Database; exports: R2Bucket; keys: string; durations?: Durations },
+  now: Date,
+): Promise<Record<string, number>> {
+  const { day, hour } = env.durations ?? REAL
   const db = env.db
-  const late = new Date(now.getTime() - DAY_MS).toISOString()
-  const before = (days: number) => new Date(now.getTime() - days * DAY_MS - DAY_MS).toISOString()
+  const late = new Date(now.getTime() - day).toISOString()
+  const before = (days: number) => new Date(now.getTime() - days * day - day).toISOString()
   const counts = await db.batch([
     db.prepare("SELECT COUNT(*) AS n FROM contacts WHERE purge_after <= ?").bind(late),
     db
@@ -218,19 +225,17 @@ export async function checkDeletion(env: { db: D1Database; exports: R2Bucket; ke
         `SELECT COUNT(*) AS n FROM revisions WHERE decision_note IS NOT NULL
            AND (decided_at <= ?1 OR (state IN ('approved', 'rejected', 'superseded') AND decided_at <= ?2))`,
       )
-      .bind(before(RETENTION.contactMaxMonths * 30), before(RETENTION.contactAfterCloseDays)),
+      .bind(before(RETENTION.contactMaxMonths * MONTH_DAYS), before(RETENTION.contactAfterCloseDays)),
     db
       .prepare(
         `SELECT COUNT(*) AS n FROM places
          WHERE (status = 'returned' AND status_changed_at <= ?1) OR (status = 'rejected' AND status_changed_at <= ?2)`,
       )
       .bind(before(RETENTION.returnedDays), before(RETENTION.rejectedTextDays)),
-    db
-      .prepare("SELECT COUNT(*) AS n FROM exports WHERE ok = 1 AND created_at > ?")
-      .bind(new Date(now.getTime() - 26 * 3600_000).toISOString()),
+    db.prepare("SELECT COUNT(*) AS n FROM exports WHERE ok = 1 AND created_at > ?").bind(new Date(now.getTime() - 26 * hour).toISOString()),
     db.prepare("SELECT MIN(started_at) AS at FROM retention_runs"),
     db.prepare("SELECT COUNT(*) AS n FROM tribute_events WHERE received_at <= ?").bind(before(RETENTION.tributeDays)),
-    db.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE at <= ?").bind(before(RETENTION.auditMonths * 30)),
+    db.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE at <= ?").bind(before(RETENTION.auditMonths * MONTH_DAYS)),
     db.prepare("SELECT photo_key AS k FROM revisions WHERE photo_key LIKE 'quarantine/%' AND state IN ('pending', 'returned')"),
     db
       .prepare("SELECT COUNT(*) AS n FROM contacts WHERE email IS NOT NULL AND email_verified_at IS NULL AND email_verify_expires <= ?")
@@ -255,25 +260,26 @@ export async function checkDeletion(env: { db: D1Database; exports: R2Bucket; ke
     audit: n(8),
     unverified_emails: n(10),
     unapproved_photos: [...(counts[9].results as { k: string }[]), ...(counts[11].results as { k: string }[])].filter(
-      (r) => uploadedAt(r.k) <= now.getTime() - RETENTION.rejectedPhotoDays * DAY_MS,
+      (r) => uploadedAt(r.k) <= now.getTime() - RETENTION.rejectedPhotoDays * day,
     ).length,
   }
-  const cutoff = now.getTime() - EXPORT_KEEP_DAYS * DAY_MS
+  const cutoff = now.getTime() - EXPORT_KEEP_DAYS * day
   const objects = await listExports(env.exports)
-  found.export_files = objects.filter((o) => !(o.at > cutoff - DAY_MS)).length
+  found.export_files = objects.filter((o) => !(o.at > cutoff - day)).length
   const listed = await listedPhotos(env.exports, objects, cutoff)
-  found.photo_copies = (await listPhotos(env.exports)).filter((p) => !listed.has(p.hash) && p.uploaded <= now.getTime() - 2 * DAY_MS).length
+  found.photo_copies = (await listPhotos(env.exports)).filter((p) => !listed.has(p.hash) && p.uploaded <= now.getTime() - 2 * day).length
   const running = (counts[6].results[0] as { at: string | null }).at
   if (!publicKeys(env.keys).length) found.no_export_key = 1
-  else if (running && running <= new Date(now.getTime() - 26 * 3600_000).toISOString() && n(5) === 0) found.no_recent_export = 1
+  else if (running && running <= new Date(now.getTime() - 26 * hour).toISOString() && n(5) === 0) found.no_recent_export = 1
   return Object.fromEntries(Object.entries(found).filter(([, v]) => v > 0))
 }
 
 /** A breach found by the nightly check, told to the moderators once a day while it lasts: kinds and counts only. */
 export async function alertDeletion(db: D1Database, env: Env, sendMail: SendMail, found: Record<string, number>, now: Date) {
   if (!Object.keys(found).length) return false
+  const { day } = durations(env)
   const sent = await db.prepare("SELECT sent_at FROM job_alerts WHERE job = 'deletion_check'").first<{ sent_at: string }>()
-  if (sent && sent.sent_at > new Date(now.getTime() - DAY_MS).toISOString()) return false
+  if (sent && sent.sent_at > new Date(now.getTime() - day).toISOString()) return false
   const text = [
     'בדיקת המחיקה הלילית של "מקום לזכור" מצאה מידע שמועד המחיקה שלו עבר, או גיבוי שלא נוצר:',
     ...Object.entries(found).map(([k, v]) => `${k}: ${v}`),

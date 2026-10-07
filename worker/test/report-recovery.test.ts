@@ -24,7 +24,7 @@ async function published() {
   await approve(id)
   return { id, trackingToken }
 }
-type Opts = { key?: string; at?: Date; e?: Env }
+type Opts = { key?: string; at?: Date; e?: Env; ip?: string }
 async function report(body: Partial<ReportInput> & { placeId: string }, o: Opts = {}) {
   return call(
     "http://local/api/v1/reports",
@@ -35,6 +35,7 @@ async function report(body: Partial<ReportInput> & { placeId: string }, o: Opts 
         "Idempotency-Key": o.key ?? crypto.randomUUID().replaceAll("-", ""),
         "Turnstile-Token": "pass-report",
         "X-Test-Now": (o.at ?? start()).toISOString(),
+        ...(o.ip ? { "CF-Connecting-IP": o.ip } : {}),
       },
       body: JSON.stringify({
         elements: ["name_he"],
@@ -457,5 +458,65 @@ describe("follow-up bb965446", () => {
     await runJobs(env, { sendMail, purge: async () => true }, undefined, after(24.5))
     expect(await ops()).toBe(before)
     expect(await byReport()).toBe(1)
+  })
+})
+
+describe("L-RET-ABUSE-1 (a89): on staging's scale, the spam checks read the abuse codes' own staged day, first and at the hide", () => {
+  // Staging's two-hour day (worker/lib/durations.ts): the abuse codes live a staged day, so a copy or a reporter's
+  // earlier requests count only within it; the automatic hides' own quotas stay on real hours.
+  const staged = { day: 7_200_000, hour: 300_000 }
+  const opEnv = (e: Env = env) => ({ db: e.DB, media: e.MEDIA, ledger: e.LEDGER, purge: async () => true, durations: staged })
+  /** A complete request made due by hand, so the test sets when its evaluation runs. */
+  async function due(body: Partial<ReportInput> & { placeId: string }, o: Opts = {}) {
+    const { ticket } = await (await report({ requesterType: "other", ...body }, o)).json<{ ticket: string }>()
+    await env.DB.prepare("UPDATE reports SET complete = 1, backstop_at = ? WHERE id = ?").bind(after(1).toISOString(), ticket).run()
+    return ticket
+  }
+  const explanation = () => `השם של אחי מופיע כאן בלי רשות, נבקש להסיר אותו. ${crypto.randomUUID()}`
+  const ip = () => `198.51.100.${Math.floor(Math.random() * 200) + 20}`
+
+  it("a copy older than the staged day but within a real day doesn't stop the hide; one within the staged day does", async () => {
+    const { precaution } = await import("../db/reports")
+    const old = explanation()
+    await report({ placeId: (await published()).id, explanation: old, requesterType: "other" }, { at: after(-3) })
+    const a = await due({ placeId: (await published()).id, explanation: old })
+    expect((await row(a))!.explanation_hash).not.toBeNull()
+    expect(await precaution(opEnv(), a, after(0), { clock: () => after(0) })).toBe("hidden")
+
+    const recent = explanation()
+    await report({ placeId: (await published()).id, explanation: recent, requesterType: "other" }, { at: after(-1) })
+    const b = await due({ placeId: (await published()).id, explanation: recent })
+    expect(await precaution(opEnv(), b, after(0), { clock: () => after(0) })).toBe("refused")
+  })
+
+  it("a reporter's requests older than the staged day don't count toward the day's limit; within it they do", async () => {
+    const { precaution } = await import("../db/reports")
+    const earlier = ip()
+    for (let i = 0; i < REPORT_GUARDS.reporterPerDay; i++)
+      await report({ placeId: (await published()).id, requesterType: "other" }, { at: after(-3), ip: earlier })
+    const a = await due({ placeId: (await published()).id }, { ip: earlier })
+    expect(await precaution(opEnv(), a, after(0), { clock: () => after(0) })).toBe("hidden")
+
+    const recent = ip()
+    for (let i = 0; i < REPORT_GUARDS.reporterPerDay; i++)
+      await report({ placeId: (await published()).id, requesterType: "other" }, { at: after(-1), ip: recent })
+    const b = await due({ placeId: (await published()).id }, { ip: recent })
+    expect(await precaution(opEnv(), b, after(0), { clock: () => after(0) })).toBe("refused")
+  })
+
+  it("at the hide, a copy that arrived meanwhile within the staged day stops it; the same copy beyond it doesn't", async () => {
+    const { precaution } = await import("../db/reports")
+    const meanwhile = (text: string, at: Date) =>
+      interleaving(async () => {
+        await report({ placeId: (await published()).id, explanation: text, requesterType: "other" }, { at })
+      })
+    const near = explanation()
+    const a = await due({ placeId: (await published()).id, explanation: near })
+    expect(await precaution(opEnv(meanwhile(near, after(-1))), a, after(0), { clock: () => after(0) })).toBe("refused")
+    expect(await hidden((await row(a))!.place_id as string)).toBe(false)
+
+    const far = explanation()
+    const b = await due({ placeId: (await published()).id, explanation: far })
+    expect(await precaution(opEnv(meanwhile(far, after(-3))), b, after(0), { clock: () => after(0) })).toBe("hidden")
   })
 })
