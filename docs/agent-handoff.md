@@ -2,7 +2,7 @@
 
 The backend session's current handoff. Read it after any restart, compaction or recovery, together with the CLAUDE.md section "Delegated adviser while Harel is away" and the bundle's `WORKFLOW-V5.md` and `policy-v5.md` (workflow 5: reports go with `--review-access snapshot`; launch target 7 October 2026). Earlier history is in this file's git history and the bundle's `runtime/`.
 
-## State (2026-10-07, 02:40 Israel time)
+## State (2026-10-07, 04:10 Israel time)
 
 - Worktree: `/Users/harel/Desktop/remember_07102026/web/.claude/worktrees/system-architecture-design-9a660f`, branch `claude/system-architecture-design-9a660f`.
 - **Phase 6: merged and pushed.** a54 (`20261006T212949Z-15aa6ac7`) accepted `b0e4cc8` and closed P6-ROLLBACK-1/-2; merged into `main` as `cd61769` (`--no-ff`, a clean merge whose only other change was `docs/go-live-checklist.md`) and pushed to `origin`. The privacy session then added `937c2a0` on local `main` (About names logs and security reports; not pushed by it). Accepted Phase 6 coverage (a51–a54) carries forward.
@@ -136,7 +136,8 @@ Red checks where a test's sensitivity was in doubt (logs in `runs/*-c1*-mutation
 ## Next action
 
 1. **Done (a58, `20261007T001006Z-80358acf`: proceed):** CI-EVIDENCE-1 closed (the original call log names the final offline-search wait; four diagnostic invocations, eight tests each, all exit 0, at `1f0d288`+marks and `15c5064`+marks; the measured interval includes opening the dialog, filling it and waiting for the result, so no isolated CPU bottleneck is claimed). `claude/staging-ready` at `215f85e` merged into `main` as **`fd6b5ff`** (tree identical to the reviewed one) and pushed; CI run `37550790542` on GitHub. Tested heads carried: `d097826` (full dev: exit 0, 89 passed, 3 skipped), `1f0d288` (Worker 407/407). `main` merged into the working branch (`dd7d19b` also points Phase 7's own specs at `./fixtures`).
-2. **Now:** watch CI `37550790542` (staging.yml will stop at `staging-check --deploy`: `STAGING_MODERATORS` unset, as intended). Phase 7 checkpoint at `dd7d19b` (client, scripts, static, worker, dev, prod) running: `backend-phase4/logs/p7-checkpoint-dd7d19b.log`. Then the fresh whole-phase Phase 7 review, keeping its open findings (the tributes and reports:636 timeouts not separately diagnosed). Then tell the privacy session (notice 10-2/10-3 and the takedown text for curated places from D1).
+2. **CI run `37550790542` on `fd6b5ff`:** static, worker, client passed; e2e 88 passed, 3 skipped, 1 failed (three-years: the page still in the sunrise 15 s after its line). Fixed on `claude/ci-waits` (`9f889a5`: the panel line waits 30 s, tracking's correction answer DAY); full dev at `9f889a5` exit 0, 89 passed, 3 skipped. **a59 (`20261007T010132Z-b26c0c3f`): proceed**; merged into `main` as **`201f873`** (tree identical), pushed after confirming `STAGING_MODERATORS` unset and `staging-check --deploy` (line 52) before the migrations (55) and deploy (66); CI run `37555283914`. `main` merged into the working branch at `6d147a2`.
+   **Now:** Phase 7 checkpoint at `6d147a2` (client, scripts, static, worker, dev, prod): `backend-phase4/logs/p7-checkpoint-6d147a2.log`. Then the fresh whole-phase Phase 7 review (its open findings kept: the tributes and reports:636 timeouts not separately diagnosed), then tell the privacy session (notice 10-2/10-3 and the takedown text for curated places from D1).
 3. Staging deploy: only after Harel adds his 7 October approval to the adviser's register and `STAGING_MODERATORS` is decided within it.
 
 Every staging and release gate stays, including `RETENTION.verified=false`.
