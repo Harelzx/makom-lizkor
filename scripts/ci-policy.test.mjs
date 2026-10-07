@@ -237,6 +237,24 @@ test("the edge checks expect the very tag the deploy gave its version", () => {
   fails(withChange("release.yml", release, release.replace('"$RELEASE"', '"latest"')), "expect the version it deployed")
 })
 
+// Each edge check gets what its checks need from the repository's secrets and variables (staging harness): staging the
+// synthetic owners, its named place and the purge exercise, and its receipt from the tested script; the release the
+// owners and the workers.dev address that must be refused. Unset, each stays incomplete.
+test("the edge checks are given their synthetic owners, place, purge exercise and workers.dev address", () => {
+  for (const [line, why] of [
+    ["          EDGE_IDENTITIES: ${{ secrets.STAGING_EDGE_IDENTITIES }}\n", "EDGE_IDENTITIES"],
+    ["          EDGE_PLACE: ${{ vars.STAGING_EDGE_PLACE }}\n", "EDGE_PLACE"],
+    ["          EDGE_PURGE: ${{ secrets.STAGING_EDGE_PURGE }}\n", "EDGE_PURGE"],
+  ])
+    fails(withChange("staging.yml", line, ""), `staging.yml's edge checks must be given ${why}`)
+  fails(withChange("staging.yml", 'node scripts/staging-receipt.mjs "$RUNNER_TEMP/edge.json"', "echo {}"), "upload its receipt")
+  fails(
+    withChange("release.yml", "          EDGE_IDENTITIES: ${{ secrets.EDGE_IDENTITIES }}\n", ""),
+    "release.yml's production checks must be given EDGE_IDENTITIES",
+  )
+  fails(withChange("release.yml", ' --workers-dev "$WORKERS_DEV_URL"', ""), "release.yml's production checks must be given --workers-dev")
+})
+
 test("a failed command inside a pipe fails its step, so no migration runs without the bookmark (P6-BOOKMARK-1)", () => {
   // GitHub runs an unspecified shell as `bash -e {0}`, without pipefail (workflow syntax, jobs.<id>.steps[*].shell).
   fails(withChange("ci.yml", "      - run: npm test\n", "      - run: npm test | tee test.log\n"), "a pipe that hides a failure")

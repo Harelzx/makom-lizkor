@@ -152,10 +152,14 @@ jobs:
         run: npx wrangler deploy --tag "$RELEASE" --message "release $RELEASE $SHA"
       # EDGE_PLACE names a published place whose share page must answer (a60). Until the curated population Harel
       # approves is published and named here, that check is incomplete, the run exits 3 and the release stops.
+      # The synthetic owners and the workers.dev address that must be refused come from the repository; unset, their
+      # checks stay incomplete and the release stops.
       - name: Production checks
         env:
           EDGE_PLACE: ${{ vars.EDGE_PLACE }}
+          EDGE_IDENTITIES: ${{ secrets.EDGE_IDENTITIES }}
+          WORKERS_DEV_URL: ${{ vars.WORKERS_DEV_URL }}
         # Waits, bounded, for the version just deployed and holds every Worker answer to its tag (a61).
-        run: node scripts/edge-check.mjs "$PUBLIC_ORIGIN" --expect-tag "$RELEASE"
+        run: node scripts/edge-check.mjs "$PUBLIC_ORIGIN" --expect-tag "$RELEASE" --workers-dev "$WORKERS_DEV_URL"
       - name: Publish the release, which notifies the owner
         run: gh release edit "$RELEASE" --draft=false

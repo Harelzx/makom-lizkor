@@ -139,6 +139,14 @@ function releaseProblems(w) {
       problems.push(
         `job ${id} must run, in order: release:check, the Time Travel bookmark, the migrations, the deploy (tagged with the release and its commit), the production checks`,
       )
+    // The production checks get the synthetic owners and the workers.dev address to probe (staging harness).
+    const checks = Object.values(w.jobs ?? {})
+      .flatMap((j) => j.steps ?? [])
+      .find((st) => /edge-check\.mjs/.test(st.run ?? ""))
+    if (checks?.env?.EDGE_IDENTITIES !== "${{ secrets.EDGE_IDENTITIES }}")
+      problems.push("release.yml's production checks must be given EDGE_IDENTITIES (secrets.EDGE_IDENTITIES)")
+    if (checks?.env?.WORKERS_DEV_URL !== "${{ vars.WORKERS_DEV_URL }}" || !/--workers-dev "\$WORKERS_DEV_URL"/.test(checks?.run ?? ""))
+      problems.push('release.yml\'s production checks must be given --workers-dev "$WORKERS_DEV_URL" (vars.WORKERS_DEV_URL)')
     // The checks wait for the version this deploy tagged, and hold the Worker's answers to it (a61).
     if (!steps.some((r) => /edge-check\.mjs[^\n]*--expect-tag "\$RELEASE"/.test(r)))
       problems.push(`job ${id}'s production checks must expect the version it deployed (--expect-tag "$RELEASE")`)
@@ -185,13 +193,22 @@ function stagingProblems(w, triggers) {
     const all = job.steps ?? []
     const last = all[all.length - 1] ?? {}
     const edge = all.findIndex((st) => /edge-check\.mjs[^\n]*--report/.test(st.run ?? ""))
+    // What the edge checks need, from the repository (staging harness); unset, each stays incomplete.
+    for (const [name, value] of [
+      ["EDGE_IDENTITIES", "${{ secrets.STAGING_EDGE_IDENTITIES }}"],
+      ["EDGE_PLACE", "${{ vars.STAGING_EDGE_PLACE }}"],
+      ["EDGE_PURGE", "${{ secrets.STAGING_EDGE_PURGE }}"],
+    ])
+      if (all[edge]?.env?.[name] !== value) problems.push(`staging.yml's edge checks must be given ${name} (${value.slice(4, -3)})`)
     if (
       !String(last.uses ?? "").startsWith("actions/upload-artifact") ||
       "if" in last ||
       last.with?.name !== "staging-receipt-${{ github.event.workflow_run.head_sha }}" ||
       !(Number(last.with?.["retention-days"]) > 0 && Number(last.with?.["retention-days"]) <= 90) ||
       edge < 0 ||
-      !all.slice(edge + 1).some((st) => /receipt\.json/.test(st.run ?? ""))
+      !all
+        .slice(edge + 1)
+        .some((st) => /node scripts\/staging-receipt\.mjs "\$RUNNER_TEMP\/edge\.json"[^\n]*receipt\.json/.test(st.run ?? ""))
     )
       problems.push(`job ${id} must upload its receipt last, named for the commit, from the edge check's report, kept at most 90 days`)
   }

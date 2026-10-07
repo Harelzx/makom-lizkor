@@ -424,6 +424,9 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const result = outcome(results)
   // The report names checks and statuses only; never a credential or an answer's body.
   if (option("--report"))
-    writeFileSync(option("--report"), JSON.stringify({ mode: local ? "local" : "deployment", outcome: result, results }, null, 2))
+    writeFileSync(
+      option("--report"),
+      JSON.stringify({ mode: local ? "local" : "deployment", outcome: result, expect_tag: expectTag, results }, null, 2),
+    )
   process.exit({ pass: 0, fail: 1, incomplete: 3 }[result])
 }
