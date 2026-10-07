@@ -19,7 +19,15 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   reporter: [["list"]],
-  use: { baseURL: `http://localhost:${port}`, ...devices["Desktop Chrome"], viewport: { width: 1280, height: 900 } },
+  use: {
+    baseURL: `http://localhost:${port}`,
+    ...devices["Desktop Chrome"],
+    viewport: { width: 1280, height: 900 },
+    // On CI a failed test keeps its trace (DOM, network, console and timing, step by step) in test-results/, which the
+    // workflow uploads: a timing failure there is read from its timeline, not guessed from the last snapshot (a72).
+    // Not locally, where it would only slow the UX motion checks.
+    trace: process.env.CI ? "retain-on-failure" : "off",
+  },
   // The site's own places come from the database (phase 7): the "seed" project imports them into the fresh state
   // first, and every spec depends on it (a test filter still runs it: dependencies always run).
   projects: [
