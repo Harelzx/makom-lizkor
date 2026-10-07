@@ -12,6 +12,52 @@ const DAY_COMES = { timeout: 30_000 }
 /** A typed line: whole for screen readers and letter by letter on screen, so it is found by the paragraph that holds it. */
 const typedLine = (page: Page, text: string) => page.locator("p", { hasText: text })
 
+/**
+ * The opening's first scene, read in one evaluation so every value is from the same moment: the clock's text, how many
+ * frozen atmospheres there are, and whether the date and the line are visible. The date and the line are found as
+ * getByText finds them (the smallest elements whose text, whitespace collapsed, contains it, ignoring case; more than one
+ * is a strict-mode error) and judged as toBeVisible judges (Playwright 1.63, read from playwright-core: display: contents
+ * by its children; checkVisibility(); visibility: visible; a non-empty box). Opacity is not looked at, so this checks
+ * that they are there together, not that their fades have finished.
+ */
+const firstScene = (page: Page) =>
+  page.evaluate(
+    ([dateText, lineText]) => {
+      const norm = (s: string) => s.replace(/\s+/g, " ").trim()
+      const textOf = (e: Element) => norm(e.textContent ?? "").toLowerCase()
+      const visible = (e: Element): boolean => {
+        const style = getComputedStyle(e)
+        if (style.display === "contents")
+          return [...e.childNodes].some((c) => {
+            if (c instanceof Element) return visible(c)
+            if (c.nodeType !== Node.TEXT_NODE) return false
+            const range = document.createRange()
+            range.selectNode(c)
+            const r = range.getBoundingClientRect()
+            return r.width > 0 && r.height > 0
+          })
+        if (!e.checkVisibility() || style.visibility !== "visible") return false
+        const r = e.getBoundingClientRect()
+        return r.width > 0 && r.height > 0
+      }
+      const shown = (text: string) => {
+        const t = norm(text).toLowerCase()
+        const skip = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE"])
+        const all = [...document.body.querySelectorAll("*")].filter((e) => !skip.has(e.tagName) && textOf(e).includes(t))
+        const own = all.filter((e) => ![...e.children].some((c) => textOf(c).includes(t)))
+        return own.length > 1 ? `${own.length} elements` : own.length === 1 && visible(own[0])
+      }
+      const clocks = document.querySelectorAll("time")
+      return {
+        clock: clocks.length === 1 ? norm(clocks[0].textContent ?? "") : `${clocks.length} time elements`,
+        frozen: document.querySelectorAll(".atmo-frozen").length,
+        date: shown(dateText),
+        line: shown(lineText),
+      }
+    },
+    ["07.10.2023", "בבוקר שמחת תורה נשבר השקט בדרום."] as const,
+  )
+
 test("the opening stops at 06:29, counts the days to today, and says how long it has been", async ({ page }) => {
   // plays the whole opening and the sunrise
   test.slow()
@@ -19,12 +65,12 @@ test("the opening stops at 06:29, counts the days to today, and says how long it
   await page.goto("/")
   await page.getByRole("button", { name: "בלי צליל" }).click()
 
-  // the clock runs out its last seconds and stops, and the world stops with it
-  // (by design that takes a few seconds after the page loads, more on a busy machine)
-  await expect(page.locator("time")).toHaveText("06:29:00", { timeout: 10_000 })
-  await expect(page.locator(".atmo-frozen")).toHaveCount(1)
-  await expect(page.getByText("07.10.2023")).toBeVisible()
-  await expect(page.getByText("בבוקר שמחת תורה נשבר השקט בדרום.")).toBeVisible()
+  // the clock runs out its last seconds and stops, and the world stops with it, with the date and what happened under it
+  // (by design that takes a few seconds after the page loads, more on a busy machine). All four in every sample, read in
+  // one evaluation: the clock's last tick and the date's scene run on timers of their own, and on a loaded runner the
+  // clock stopped late while the scene's timer was already moving on; four waits one after another reached the date
+  // after it had left (CI 37646691672). Same deadline as before, from the click.
+  await expect.poll(() => firstScene(page), { timeout: 10_000 }).toEqual({ clock: "06:29:00", frozen: 1, date: true, line: true })
 
   // The film plays on its own from here: a scene that moves on by itself just before an Enter lands would be skipped
   // whole (main's first CI run, 2026-10-07: on a slow runner the count was gone before it was looked for). Each scene
