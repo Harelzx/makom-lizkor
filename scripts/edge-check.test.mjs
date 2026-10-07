@@ -6,6 +6,8 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 import { CSP, SECURITY_HEADERS } from "../worker/lib/security-headers.ts"
 import { edgeChecks, outcome } from "./edge-check.mjs"
+import { REQUIRED_CHECKS, stagingEvidenceProblems } from "./staging-evidence.mjs"
+import { receiptFor } from "./staging-receipt.mjs"
 
 /** The stand-in sign-in names a session by the length of what was sent: the moderator's. */
 const MODERATOR = JSON.stringify({ email: "dev@example.test" }).length
@@ -948,8 +950,14 @@ function probeSite({
   tokenOk = true,
   movedByOther = false,
   invalidAfterMove = false,
+  // Which edge location answers the nth read of the probe's address (each keeps its own cache), whether the purge
+  // reaches a location, whether the answer names its location at all, and another exercise moving right after ours.
+  coloOf = () => "TLV",
+  purgeReaches = () => true,
+  noRay = false,
+  movedByOtherAfter = false,
 } = {}) {
-  const state = { generation: 4, exercise: null, moves: 0, purges: 0, posts: [] }
+  const state = { generation: 4, exercise: null, moves: 0, purges: 0, posts: [], reads: 0 }
   const cache = new Map()
   const json = { "Content-Type": "application/json" }
   const respond = (status, body, headers = {}) => new Response(body, { status, headers: { ...json, ...headers } })
@@ -958,7 +966,8 @@ function probeSite({
     invalidAfterMove && state.moves
       ? { status: 200, body: "<html>not the probe</html>" }
       : { status: 200, body: JSON.stringify({ generation: state.generation }) }
-  if (preAgedMs) cache.set(keyOf(new URL("/api/v1/purge-probe?run=x", "https://site.example")), { ...origin(), at: Date.now() - preAgedMs })
+  if (preAgedMs)
+    cache.set(`TLV ${keyOf(new URL("/api/v1/purge-probe?run=x", "https://site.example"))}`, { ...origin(), at: Date.now() - preAgedMs })
   let answersLost = 0
   const fetch = async (input, init = {}) => {
     const u = new URL(input)
@@ -983,14 +992,20 @@ function probeSite({
         return respond(503, JSON.stringify({ code: "purge_failed", generation: expected + 1 }))
       }
       state.purges++
-      if (purgeWorks) cache.clear()
+      if (purgeWorks) for (const k of [...cache.keys()]) if (purgeReaches(k.split(" ")[0])) cache.delete(k)
+      if (movedByOtherAfter && !replay) {
+        state.generation++
+        state.moves++
+        cache.clear()
+      }
       if (loseFirstAnswer && !answersLost++) throw new TypeError("fetch failed")
       return respond(200, JSON.stringify({ generation: expected + 1, purged: true }))
     }
     if (u.pathname !== "/api/v1/purge-probe") return deployment()(input, init)
-    const key = keyOf(u)
+    const colo = coloOf(state.reads++)
+    const key = `${colo} ${keyOf(u)}`
     const hit = cached && cache.get(key)
-    const ray = { "CF-Ray": "8c0ffee000000000-TLV" }
+    const ray = noRay ? {} : { "CF-Ray": `8c0ffee000000000-${colo}` }
     if (hit && Date.now() - hit.at < ttlMs) return respond(hit.status, hit.body, { ...ray, "CF-Cache-Status": "HIT" })
     const o = origin()
     if (cached) cache.set(key, { ...o, at: Date.now() })
@@ -999,9 +1014,9 @@ function probeSite({
   return { fetch, state }
 }
 const probeOf = async (site, extra = {}) =>
-  (await edgeChecks("https://site.example", { fetch: site.fetch, probe: PROBE, purgeTiming: PURGE_TIMING, ...extra })).find(
-    (x) => x.check === "purge_freshness",
-  )
+  (
+    await edgeChecks("https://site.example", { fetch: site.fetch, probe: PROBE, probeFreshness: true, purgeTiming: PURGE_TIMING, ...extra })
+  ).find((x) => x.check === "purge_freshness")
 
 test("production's purge_freshness: the probe's own address turns to the new generation within the bound (L-PURGE)", async () => {
   const site = probeSite()
@@ -1076,4 +1091,76 @@ test("with both the staging exercise and the probe, the probe is checked on its 
   const r = results.find((x) => x.check === "purge_probe")
   assert.equal(r?.status, "pass", JSON.stringify(r))
   assert.doesNotMatch(String(results.find((x) => x.check === "purge_freshness").detail), /content-free probe/)
+})
+
+// L-PURGE-OBSERVATION-1 (a82): the purge is shown only where the copy was warmed, and only by the generation this
+// exercise moved to. A fresh answer from elsewhere, a location the answers don't name, or a generation another exercise
+// moved to never passes.
+test("a copy left uncleared at the warmed location, with fresh answers only from elsewhere, never passes", async () => {
+  // TLV warms (MISS, HIT); the purge doesn't reach TLV; every later read comes from FRA, which misses and answers 5.
+  const elsewhere = probeSite({ coloOf: (n) => (n < 2 ? "TLV" : "FRA"), purgeReaches: (c) => c !== "TLV" })
+  const r = await probeOf(elsewhere)
+  assert.equal(r.status, "incomplete", JSON.stringify(r))
+  assert.match(r.detail, /warmed location TLV/)
+  // And when TLV answers again, still with 4, past the bound: that stale copy fails.
+  const stale = probeSite({ coloOf: (n) => (n < 2 || n % 2 ? "TLV" : "FRA"), purgeReaches: (c) => c !== "TLV" })
+  const s = await probeOf(stale)
+  assert.equal(s.status, "fail", JSON.stringify(s))
+  assert.match(s.detail.join(" "), /TLV still served generation 4/)
+})
+
+test("answers that don't name their edge location, or warm at two, leave the probe incomplete with nothing moved", async () => {
+  for (const site of [probeSite({ noRay: true }), probeSite({ coloOf: (n) => (n === 0 ? "TLV" : "FRA") })]) {
+    const r = await probeOf(site)
+    assert.equal(r.status, "incomplete", JSON.stringify(r))
+    assert.match(r.detail, /edge location/)
+    assert.equal(site.state.moves, 0)
+  }
+})
+
+test("a generation past the one this exercise moved to is another exercise's: incomplete, never this one's pass", async () => {
+  const site = probeSite({ movedByOtherAfter: true })
+  const r = await probeOf(site)
+  assert.equal(r.status, "incomplete", JSON.stringify(r))
+  assert.match(r.detail, /generation 6/)
+})
+
+// L-PURGE-STAGING-1 (a82): the probe answers purge_freshness only through production's explicit path
+// (--probe-freshness, release.yml). Staging's purge_freshness needs its synthetic exercise; without it, the probe is
+// purge_probe and purge_freshness stays incomplete, so the receipt can't qualify a release.
+test("without the explicit production path, the probe is purge_probe and purge_freshness stays incomplete", async () => {
+  const results = await edgeChecks("https://site.example", { fetch: probeSite().fetch, probe: PROBE, purgeTiming: PURGE_TIMING })
+  assert.equal(status(results).purge_probe, "pass")
+  assert.equal(status(results).purge_freshness, "incomplete")
+  const production = await edgeChecks("https://site.example", {
+    fetch: probeSite().fetch,
+    probe: PROBE,
+    probeFreshness: true,
+    purgeTiming: PURGE_TIMING,
+  })
+  assert.equal(status(production).purge_freshness, "pass")
+  assert.equal(status(production).purge_probe, undefined)
+})
+
+test("a staging run with the probe and no synthetic exercise can't qualify a release: its receipt fails the evidence check", async () => {
+  const purges = (await edgeChecks("https://site.example", { fetch: probeSite().fetch, probe: PROBE, purgeTiming: PURGE_TIMING })).filter(
+    (r) => r.check.startsWith("purge_"),
+  )
+  // Every other check passing, as on a staging run where only the exercise is missing.
+  const results = [
+    ...REQUIRED_CHECKS.filter((c) => c !== "purge_freshness").map((check) => ({ check, status: "pass", detail: "" })),
+    ...purges,
+  ]
+  const SHA = "b".repeat(40)
+  const report = { mode: "deployment", outcome: outcome(results), expect_tag: `staging-${SHA.slice(0, 12)}`, results }
+  const receipt = receiptFor(report, { SHA, GITHUB_RUN_ID: "9" })
+  assert.equal(receipt.checks.purge_probe, "pass")
+  assert.equal(receipt.checks.purge_freshness, "incomplete")
+  const artifacts = { artifacts: [{ name: `staging-receipt-${SHA}`, expired: false, created_at: "x", workflow_run: { id: 9 } }] }
+  const run = { id: 9, path: ".github/workflows/staging.yml", status: "completed", conclusion: "success" }
+  const problems = stagingEvidenceProblems({ sha: SHA, artifacts, run, receipt })
+  assert.ok(
+    problems.some((p) => p.includes("purge_freshness was incomplete")),
+    problems.join("; "),
+  )
 })
