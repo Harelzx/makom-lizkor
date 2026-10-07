@@ -1,4 +1,4 @@
-import { z } from "zod"
+import { z } from "./zod"
 
 /**
  * Curated records (spec 3, 9; phase 7): the operator's own places, kept in D1 beside contributions. What only they
