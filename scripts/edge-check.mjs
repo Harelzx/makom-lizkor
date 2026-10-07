@@ -337,7 +337,9 @@ export async function edgeChecks(
     const run = globalThis.crypto.randomUUID().replaceAll("-", "").slice(0, 12)
     const marker = `edge-purge:${run}`
     const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)))
-    const bounded = (path, init = {}) => fetch(url(path), { redirect: "manual", ...init, signal: AbortSignal.timeout(t.requestMs) })
+    // Each request bounded by requestMs, or by less where a budget (the cleanup's) has less left.
+    const bounded = (path, init = {}, ms = t.requestMs) =>
+      fetch(url(path), { redirect: "manual", ...init, signal: AbortSignal.timeout(Math.max(1, Math.min(t.requestMs, ms))) })
     const parse = (s) => {
       try {
         return JSON.parse(s)
@@ -357,8 +359,8 @@ export async function edgeChecks(
     }
     const asModerator = { ...moderator.headers, "Sec-Fetch-Site": "same-origin", "Content-Type": "application/json" }
     // A moderator's view of the place, or an error: an answer that isn't one is never read as "nothing hidden".
-    const view = async () => {
-      const res = await bounded(`/api/admin/places/${id}`, { headers: asModerator })
+    const view = async (ms) => {
+      const res = await bounded(`/api/admin/places/${id}`, { headers: asModerator }, ms)
       const body = parse(await res.text())
       const valid =
         res.status === 200 &&
@@ -368,20 +370,39 @@ export async function edgeChecks(
       if (!valid) throw new Error(`the moderator's view of ${id} answered ${res.status} without a valid place`)
       return body
     }
-    const version = parse((await read("/api/v1/version")).body)?.v
-    if (typeof version !== "string" || !version) return record("purge_freshness", ["the feed's version didn't answer with a version"], "")
+    // The feed's version is epoch.n (worker/routes/feed.ts); a place row carries what every public place has
+    // (src/shared/contract.ts PublicPlace). A feed the site couldn't read is never evidence.
+    const VERSION = /^\d{1,15}\.\d{1,15}$/
+    const placeRow = (p) =>
+      !!p &&
+      typeof p === "object" &&
+      ["id", "kind", "name_he", "place_he", "summary_he"].every((k) => typeof p[k] === "string") &&
+      Number.isFinite(p.lat) &&
+      Number.isFinite(p.lng) &&
+      (p.precision === "exact" || p.precision === "approx")
+    const answered = await read("/api/v1/version")
+    const version = answered.status === 200 ? parse(answered.body)?.v : null
+    if (typeof version !== "string" || !VERSION.test(version))
+      return record("purge_freshness", [`the feed's version answered ${answered.status} without an epoch.n version`], "")
     const page = `/place/${id}?edge-purge=${run}`
     const feed = `/api/v1/feed?v=${encodeURIComponent(version)}&edge-purge=${run}`
     const pageServed = (r) => r.status === 200 && r.html
     const feedNames = (r, present) => {
       const body = r.status === 200 ? parse(r.body) : null
-      return body?.v === version && Array.isArray(body.places) && body.places.some((p) => p?.id === id) === present
+      return (
+        body?.v === version && Array.isArray(body.places) && body.places.every(placeRow) && body.places.some((p) => p.id === id) === present
+      )
     }
     const feedFresh = (r) => {
       if (feedNames(r, false)) return true
       const body = r.status === 409 ? parse(r.body) : null
       return (
-        body?.code === "stale_version" && typeof body.v === "string" && !!body.v && body.v !== version && r.noStore && r.cache !== "HIT"
+        body?.code === "stale_version" &&
+        typeof body.v === "string" &&
+        VERSION.test(body.v) &&
+        body.v !== version &&
+        r.noStore &&
+        r.cache !== "HIT"
       )
     }
     // Warm: stored by this run (MISS), then served from the edge (HIT). Its earliest expiry is counted from before the
@@ -401,11 +422,14 @@ export async function edgeChecks(
         "purge_freshness",
         `the edge cache didn't store this run's own addresses afresh (MISS, then HIT; saw ${[...first, ...second].map((r) => r.cache ?? "none").join(", ")}): nothing to tell a purge from`,
       )
+    // The window is checked against the entries' life at the moment the hide would go, after the moderator's view
+    // (which may be slow): with too little left, nothing is hidden.
     const expires = born + t.edgeTtlMs
+    const { rev } = await view()
     if (Date.now() + t.freshMs >= expires)
       return unseen(
         "purge_freshness",
-        `this run's entries would expire within the bound (${t.freshMs} ms): nothing to tell a purge from expiry`,
+        `this run's entries would expire within the bound (${t.freshMs} ms) of the hide: nothing to tell a purge from expiry`,
       )
 
     const failures = []
@@ -415,7 +439,6 @@ export async function edgeChecks(
     let hide = "unsent"
     let sent = null
     try {
-      const { rev } = await view()
       sent = Date.now()
       hide = "unknown"
       try {
@@ -469,41 +492,43 @@ export async function edgeChecks(
       `page fresh after ${fresh.page} ms, feed after ${fresh.feed} ms, from the hide's dispatch (bound ${t.freshMs} ms); ${marker} lifted`,
     )
 
-    // Finds this run's hide by its marker, lifts it and sees it gone, within cleanupMs. A hide with no clear answer may
-    // still land, so it is looked for until the end; one that was refused, or seen lifted, is done.
+    // Finds this run's hide by its marker, lifts it and sees it gone, within cleanupMs: every pass is checked against
+    // the end, and every request is bounded by what is left of it. A hide with no clear answer may still land, so it is
+    // looked for until the end; one that was refused, or seen lifted, is done. A lift that says 200 but leaves the hide
+    // active is tried again until the end, then reported.
     async function cleanup(state) {
       const end = Date.now() + t.cleanupMs
       let note = "not tried"
-      for (;;) {
+      while (Date.now() < end) {
         try {
-          const v = await view()
+          const v = await view(end - Date.now())
           const own = v.suppressions.find((s) => s.reason?.includes(marker))
           if (!own && state !== "unknown") return []
-          if (own && state === "lifted") state = "committed"
+          if (own && state === "lifted") note = `lifting ${own.id} answered 200, and it is still active`
           if (!own) note = `${marker} not seen yet`
           else {
-            const res = await bounded(`/api/admin/suppressions/${encodeURIComponent(own.id)}/lift`, {
-              method: "POST",
-              headers: asModerator,
-              body: JSON.stringify({
-                expectedRev: v.rev,
-                basisCode: "hidden_in_error",
-                basisNote: `תרגיל purge ב־staging: ההסתרה נעשתה לבדיקה בלבד (${marker}).`,
-                confirm: { affirmativeBasis: true, notNonresponseOrDispute: true },
-              }),
-            })
+            const res = await bounded(
+              `/api/admin/suppressions/${encodeURIComponent(own.id)}/lift`,
+              {
+                method: "POST",
+                headers: asModerator,
+                body: JSON.stringify({
+                  expectedRev: v.rev,
+                  basisCode: "hidden_in_error",
+                  basisNote: `תרגיל purge ב־staging: ההסתרה נעשתה לבדיקה בלבד (${marker}).`,
+                  confirm: { affirmativeBasis: true, notNonresponseOrDispute: true },
+                }),
+              },
+              end - Date.now(),
+            )
             await res.text()
+            // A lift that took is seen only by a following view, after the usual pause.
+            if (res.status === 200) state = "lifted"
             note = `lifting ${own.id} answered ${res.status}`
-            // Seen lifted only by the next view, which a lift that took always gets, once, even at the end.
-            if (res.status === 200 && state !== "lifted") {
-              state = "lifted"
-              continue
-            }
           }
         } catch (err) {
           note = err.message
         }
-        if (Date.now() >= end) break
         await sleep(Math.min(t.everyMs, end - Date.now()))
       }
       return [
