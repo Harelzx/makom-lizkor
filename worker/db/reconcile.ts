@@ -4,8 +4,11 @@ import { notesCeiling } from "./reports"
 import { BLANK_COLUMNS } from "./retention"
 
 type Row = Record<string, unknown>
-/** One place as a restore holds it: its row and the rows that belong to it. */
-export type PlaceRows = { place: Row; revisions: Row[]; contacts: Row[]; suppressions: Row[] }
+/**
+ * One place as a restore holds it: its row and the rows that belong to it, a curated revision's photos (by revision
+ * and index) and every revision's sources included (P7-REC-1).
+ */
+export type PlaceRows = { place: Row; revisions: Row[]; contacts: Row[]; suppressions: Row[]; photos?: Row[]; sources?: Row[] }
 export type Reconciled = { rows: PlaceRows; applied: number; quarantined: boolean; erased: boolean }
 
 const DAY_MS = 86_400_000
@@ -24,6 +27,9 @@ const TOMBSTONE = ["withdrawn", "erased"]
  *   never moved later. An approval publishes exactly the photo it published, or none.
  * - A gap in the chain, an approval of a revision the restored copy doesn't have, or of a photo other than the one the
  *   restored copy names, hides the whole place until a moderator looks.
+ * - A curated revision's approval publishes, at each photo index, exactly the files it recorded publishing, when the
+ *   restored copy names at that index the file the approval copied (or already the copy); any other difference, or an
+ *   approval with no such record, hides the place instead (P7-REC-1). A tombstone holds no photo row or source.
  */
 export function reconcilePlace(original: PlaceRows, entries: LedgerEntry[], now: Date): Reconciled {
   const rows: PlaceRows = {
@@ -31,6 +37,8 @@ export function reconcilePlace(original: PlaceRows, entries: LedgerEntry[], now:
     revisions: original.revisions.map((r) => ({ ...r })),
     contacts: original.contacts.map((c) => ({ ...c })),
     suppressions: original.suppressions.map((s) => ({ ...s })),
+    photos: (original.photos ?? []).map((p) => ({ ...p })),
+    sources: (original.sources ?? []).map((s) => ({ ...s })),
   }
   const { place } = rows
   const placeId = place.id as string
@@ -49,6 +57,9 @@ export function reconcilePlace(original: PlaceRows, entries: LedgerEntry[], now:
     })
     for (const rev of rows.revisions) Object.assign(rev, BLANK_COLUMNS, status === "withdrawn" ? { state: "withdrawn" } : {})
     rows.contacts = []
+    // With the content, as the retention job's erasure deletes them.
+    rows.photos = []
+    rows.sources = []
     return { rows, applied: r.apply.length, quarantined: false, erased: true }
   }
   if (TOMBSTONE.includes(place.status as string)) return { rows, applied: 0, quarantined: false, erased: false }
@@ -73,6 +84,7 @@ export function reconcilePlace(original: PlaceRows, entries: LedgerEntry[], now:
       const unknown = published !== null && e.source !== undefined && revision.photo_key !== e.source && revision.photo_key !== published
       if (unknown) quarantine = true
       const photo = unknown ? null : published
+      if (!curatedPhotosPublished(rows.photos!, revision.id as string, e.photos)) quarantine = true
       for (const other of rows.revisions) if (other.state === "approved" && other.id !== revision.id) other.state = "superseded"
       Object.assign(
         revision,
@@ -143,6 +155,28 @@ export function reconcilePlace(original: PlaceRows, entries: LedgerEntry[], now:
 }
 
 /**
+ * A curated approval's photos onto the restored copy's rows of that revision: at each index the file the approval
+ * published, when the row names the file it was copied from or the copy itself. True when every row and every recorded
+ * index match one to one (nothing to do for a revision with no photos and no record); false, changing nothing, when
+ * the copy can't say which file and credit go together, or the approval recorded none (an older entry).
+ */
+function curatedPhotosPublished(photos: Row[], revisionId: string, recorded: LedgerEntry["photos"]) {
+  const rows = photos.filter((p) => p.revision_id === revisionId)
+  const byIdx = new Map((recorded ?? []).map((p) => [p.idx, p]))
+  if (!rows.length && !byIdx.size) return true
+  const match = (row: Row) => {
+    const m = byIdx.get(row.idx as number)
+    return !!m && (row.key === m.from || row.key === m.key) && (row.thumb_key === m.thumb_from || row.thumb_key === m.thumb_key)
+  }
+  if (!recorded || rows.length !== byIdx.size || !rows.every(match)) return false
+  for (const row of rows) {
+    const m = byIdx.get(row.idx as number)!
+    Object.assign(row, { key: m.key, thumb_key: m.thumb_key })
+  }
+  return true
+}
+
+/**
  * A request's closure is not in the ledger (it changes no place), so one closed after the restore point is open in the
  * restored copy. Its contact and text go RETENTION 90 days after closing, and closing came at that point or later: every
  * request open at that point goes at most 90 days after it, and its hides' notes with it. Earlier, never later, than the
@@ -186,12 +220,15 @@ export function reconcileTables(
       if (!r.erased && r.apply.length) summary.lost.push(placeId)
       continue
     }
+    const revisionIds = new Set(byPlace("revisions", placeId).map((r) => r.id))
     const result = reconcilePlace(
       {
         place,
         revisions: byPlace("revisions", placeId),
         contacts: byPlace("contacts", placeId),
         suppressions: byPlace("field_suppressions", placeId),
+        photos: (out.revision_photos ?? []).filter((x) => revisionIds.has(x.revision_id)),
+        sources: byPlace("place_sources", placeId),
       },
       entries,
       now,
@@ -201,6 +238,8 @@ export function reconcileTables(
     out.revisions = swap("revisions", result.rows.revisions)
     out.contacts = swap("contacts", result.rows.contacts)
     out.field_suppressions = swap("field_suppressions", result.rows.suppressions)
+    out.place_sources = swap("place_sources", result.rows.sources!)
+    out.revision_photos = [...(out.revision_photos ?? []).filter((x) => !revisionIds.has(x.revision_id)), ...result.rows.photos!]
     summary.applied += result.applied
     if (result.quarantined) summary.quarantined.push(placeId)
     if (result.erased) summary.erased.push(placeId)

@@ -46,7 +46,19 @@ export async function photosBefore(db: D1Database, placeId: string, revisionId: 
     )
     .bind(revisionId, placeId)
     .first<{ source: string | null; published: string | null }>()
-  return { source: row?.source?.startsWith("quarantine/") ? row.source : null, published: row?.published ?? null }
+  // A curated revision's photos and thumbnails still waiting in quarantine: a refusal retires them with it (P7-RET-1).
+  const { results } = await db
+    .prepare(
+      `SELECT key AS k FROM revision_photos WHERE revision_id = ?1 AND key LIKE 'quarantine/%'
+       UNION SELECT thumb_key FROM revision_photos WHERE revision_id = ?1 AND thumb_key LIKE 'quarantine/%'`,
+    )
+    .bind(revisionId)
+    .all<{ k: string }>()
+  return {
+    source: row?.source?.startsWith("quarantine/") ? row.source : null,
+    published: row?.published ?? null,
+    quarantined: results.map((r) => r.k),
+  }
 }
 
 /**

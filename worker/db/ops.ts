@@ -18,6 +18,8 @@ export type OpDetail = {
   report?: string
   /** On an approval: the photo key the revision named when it was approved, or null (the ledger's `source`). */
   source?: string | null
+  /** On a curated approval: each photo index's stored and published keys (the ledger's `photos`). */
+  photos?: { idx: number; from: string; key: string; thumb_from: string; thumb_key: string }[]
   /** The revision a decision on a submission or a correction decided: a restore replays it onto that revision. */
   revision?: string
   /** After the database step: public files to take out of view (their held/ copy stays, so nothing is lost). */
@@ -123,6 +125,7 @@ function entry(op: OpRow, phase: LedgerEntry["phase"], at: string, late = false)
     ...(detail.basis ? { basis: detail.basis } : {}),
     ...(detail.revision ? { revision: detail.revision } : {}),
     ...(detail.source !== undefined ? { source: detail.source } : {}),
+    ...(detail.photos?.length ? { photos: detail.photos } : {}),
     at,
     // The database step ran with the moment the operation was stored (runOp uses one clock for both).
     decided_at: op.created_at,

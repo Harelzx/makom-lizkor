@@ -70,8 +70,22 @@ export function filterForImport(tables: Record<string, Row[]>, now: Date): Recor
     due(x.notes_purge_after, c.now) ? { ...x, reason: null, basis_detail: null, basis_note: x.basis_note === null ? null : "" } : x,
   )
   const audit_log = (tables.audit_log ?? []).filter((x) => !due(x.at, c.audit))
-  const revision_photos = (tables.revision_photos ?? []).filter((x) => !blanked.has(x.revision_id))
-  const place_sources = (tables.place_sources ?? []).filter((x) => !blanked.has(x.revision_id))
+  // A curated photo still waiting past its days, as the job takes it: its row and its source (P7-RET-1).
+  const waiting = new Set(revisions.filter((r) => r.state === "pending" || r.state === "returned").map((r) => r.id))
+  const expired = new Set(
+    (tables.revision_photos ?? [])
+      .filter((x) => {
+        const queued = [x.key, x.thumb_key].filter((k): k is string => typeof k === "string" && k.startsWith("quarantine/"))
+        return waiting.has(x.revision_id) && queued.length > 0 && Math.min(...queued.map(uploadedAt)) <= c.photo
+      })
+      .map((x) => `${x.revision_id}/${x.idx}`),
+  )
+  const revision_photos = (tables.revision_photos ?? []).filter(
+    (x) => !blanked.has(x.revision_id) && !expired.has(`${x.revision_id}/${x.idx}`),
+  )
+  const place_sources = (tables.place_sources ?? []).filter(
+    (x) => !blanked.has(x.revision_id) && !(x.field === "photo" && expired.has(`${x.revision_id}/${x.photo_idx}`)),
+  )
   const out = { places, revisions, revision_photos, place_sources, contacts, reports, field_suppressions, audit_log } as Record<
     string,
     Row[]

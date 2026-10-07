@@ -235,6 +235,14 @@ export async function checkDeletion(env: { db: D1Database; exports: R2Bucket; ke
     db
       .prepare("SELECT COUNT(*) AS n FROM contacts WHERE email IS NOT NULL AND email_verified_at IS NULL AND email_verify_expires <= ?")
       .bind(late),
+    // A curated revision's waiting photos and thumbnails count too (P7-RET-1).
+    db.prepare(
+      `SELECT rp.key AS k FROM revision_photos rp JOIN revisions r ON r.id = rp.revision_id
+       WHERE rp.key LIKE 'quarantine/%' AND r.state IN ('pending', 'returned')
+       UNION ALL
+       SELECT rp.thumb_key FROM revision_photos rp JOIN revisions r ON r.id = rp.revision_id
+       WHERE rp.thumb_key LIKE 'quarantine/%' AND r.state IN ('pending', 'returned')`,
+    ),
   ])
   const n = (i: number) => (counts[i].results[0] as { n: number }).n
   const found: Record<string, number> = {
@@ -246,7 +254,7 @@ export async function checkDeletion(env: { db: D1Database; exports: R2Bucket; ke
     tributes: n(7),
     audit: n(8),
     unverified_emails: n(10),
-    unapproved_photos: (counts[9].results as { k: string }[]).filter(
+    unapproved_photos: [...(counts[9].results as { k: string }[]), ...(counts[11].results as { k: string }[])].filter(
       (r) => uploadedAt(r.k) <= now.getTime() - RETENTION.rejectedPhotoDays * DAY_MS,
     ).length,
   }

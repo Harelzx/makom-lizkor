@@ -82,7 +82,7 @@ async function decide(c: AdminContext, placeId: string, body: z.infer<typeof Tra
       public: body.action === "approve",
       onIntentFailure: "refuse",
       prepare: async () => {
-        if (body.action === "reject") return { retire: [before.source].filter((k): k is string => !!k) }
+        if (body.action === "reject") return { retire: [before.source, ...before.quarantined].filter((k): k is string => !!k) }
         if (body.action !== "approve") return
         photo = await preparePhoto(c.env.DB, c.env.MEDIA, placeId, body.revisionId)
         curated = await prepareCuratedPhotos(c.env.DB, c.env.MEDIA, placeId, body.revisionId)
@@ -95,6 +95,9 @@ async function decide(c: AdminContext, placeId: string, body: z.infer<typeof Tra
         const fresh = [...(photo.fresh && photo.key ? [photo.key] : []), ...curated.prepared]
         const kept = new Set([photo.key, ...curated.keys.flatMap((k) => [k.key, k.thumb_key])])
         return {
+          // Which file each photo index was published from, and as: a replay onto a copy taken while the record
+          // waited publishes exactly these, or hides the place (P7-REC-1). Keys only, like the rest of the ledger.
+          ...(curated.keys.length ? { photos: curated.keys } : {}),
           prepared: fresh,
           toHeld: photoHidden ? fresh : [],
           media: [...(photo.key ? [photo.key] : []), ...curated.keys.flatMap((k) => [k.key, k.thumb_key])],

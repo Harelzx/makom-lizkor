@@ -144,6 +144,9 @@ export async function storeCurated(db: D1Database, media: R2Bucket, input: Curat
   return stored ? { kind: "stored", revisionId, created } : { kind: "conflict" }
 }
 
+/** One photo of an approved curated revision: the keys it was stored under and the keys the approval published. */
+export type CuratedPhotoKeys = { idx: number; from: string; key: string; thumb_from: string; thumb_key: string }
+
 /**
  * Before the approval of a curated revision: each photo and thumbnail still in quarantine/ copied to public/ under a
  * key of its own, so the decision publishes the place and its photos in one step. A kept photo (already public/)
@@ -155,7 +158,7 @@ export async function prepareCuratedPhotos(db: D1Database, media: R2Bucket, plac
     .prepare("SELECT idx, key, thumb_key FROM revision_photos WHERE revision_id = ? ORDER BY idx")
     .bind(revisionId)
     .all<{ idx: number; key: string; thumb_key: string }>()
-  const keys: { idx: number; key: string; thumb_key: string }[] = []
+  const keys: CuratedPhotoKeys[] = []
   const prepared: string[] = []
   const originals: string[] = []
   const publish = async (from: string) => {
@@ -169,7 +172,8 @@ export async function prepareCuratedPhotos(db: D1Database, media: R2Bucket, plac
     originals.push(from)
     return to
   }
-  for (const r of results) keys.push({ idx: r.idx, key: await publish(r.key), thumb_key: await publish(r.thumb_key) })
+  for (const r of results)
+    keys.push({ idx: r.idx, from: r.key, key: await publish(r.key), thumb_from: r.thumb_key, thumb_key: await publish(r.thumb_key) })
   return { keys, prepared, originals }
 }
 
