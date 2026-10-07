@@ -62,3 +62,30 @@ test("a deploy needs the real database id and every account value", () => {
   const env = Object.fromEntries(DEPLOY_VARS.map((k) => [`STAGING_${k}`, "set"]))
   assert.deepEqual(stagingBlockers(r, { deploy: true, env }), [])
 })
+
+test("staging's export keys are public keys of its own, and optional (L-RET A2, a104)", async () => {
+  const { generateKeyPairSync } = await import("node:crypto")
+  const jwk = (part = "publicKey") => generateKeyPairSync("rsa", { modulusLength: 2048 })[part].export({ format: "jwk" })
+  const r = real()
+  r.env.staging.d1_databases[0].database_id = "6b8f0a1e-1111-4222-8333-944455556666"
+  const vars = Object.fromEntries(DEPLOY_VARS.map((k) => [`STAGING_${k}`, "set"]))
+  const deploy = (keys, raw = r) =>
+    stagingBlockers(raw, { deploy: true, env: { ...vars, ...(keys === undefined ? {} : { STAGING_EXPORT_PUBLIC_KEYS: keys }) } })
+  const owner = jwk()
+  const drill = jwk()
+  // Unset: no export is written and the nightly check says so; that is the truthful state, not a blocker.
+  assert.deepEqual(deploy(undefined), [])
+  assert.deepEqual(deploy(JSON.stringify([owner, drill])), [])
+  assert.ok(deploy("not json").some((x) => x.includes("STAGING_EXPORT_PUBLIC_KEYS is not a JSON list of RSA public keys")))
+  assert.ok(deploy(JSON.stringify(owner)).some((x) => x.includes("not a JSON list")))
+  assert.ok(deploy(JSON.stringify([owner, jwk("privateKey")])).some((x) => x.includes("holds a private key")))
+  assert.ok(
+    deploy(JSON.stringify([{ kty: "EC", crv: "P-256", x: "a", y: "b" }])).some((x) => x.includes("not a JSON list of RSA public keys")),
+  )
+  assert.ok(deploy("[]").some((x) => x.includes("not a JSON list of RSA public keys")))
+  // Never production's: a key production's exports are sealed to doesn't open staging's, and the reverse.
+  const shared = real()
+  shared.env.staging.d1_databases[0].database_id = "6b8f0a1e-1111-4222-8333-944455556666"
+  shared.vars.EXPORT_PUBLIC_KEYS = JSON.stringify([owner])
+  assert.ok(deploy(JSON.stringify([owner, drill]), shared).some((x) => x.includes("production's")))
+})

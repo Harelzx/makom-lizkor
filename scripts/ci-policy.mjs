@@ -49,6 +49,9 @@ export function policyProblems(workflows) {
       if (production && secrets.some((s) => s.startsWith("STAGING_"))) say(`job ${id} reads staging secrets in a production workflow`)
       // The retention time scale is staging's alone (L-RET A2, a87): no other workflow may name it.
       if (name !== STAGING && /RETENTION_DAY_SECONDS/.test(body)) say(`job ${id} sets RETENTION_DAY_SECONDS, which only staging.yml may`)
+      // So are its export keys (L-RET A2, a104): no other workflow may give them to a deploy.
+      if (name !== STAGING && /STAGING_EXPORT_PUBLIC_KEYS/.test(body))
+        say(`job ${id} names STAGING_EXPORT_PUBLIC_KEYS, which only staging.yml may`)
       // GitHub runs a step with no shell named as `bash -e {0}`, without pipefail: a failure before a pipe would pass.
       for (const step of job.steps ?? [])
         if (typeof step.run === "string" && hidesFailure(step.run) && !pipefail(step, job, w))
@@ -239,6 +242,13 @@ function stagingProblems(w, triggers) {
       !steps.some((r) => /wrangler deploy --tag "staging-[\s\S]*--var "RETENTION_DAY_SECONDS:\$STAGING_RETENTION_DAY_SECONDS"/.test(r))
     )
       problems.push(`job ${id} must give the deploy RETENTION_DAY_SECONDS from vars.STAGING_RETENTION_DAY_SECONDS`)
+    // Staging's export keys (L-RET A2, a104) come from a repository variable, never a secret, where a private key could
+    // sit unseen; staging-check refuses anything but public RSA keys of staging's own.
+    if (
+      job.env?.STAGING_EXPORT_PUBLIC_KEYS !== "${{ vars.STAGING_EXPORT_PUBLIC_KEYS }}" ||
+      !steps.some((r) => /wrangler deploy --tag "staging-[\s\S]*--var "EXPORT_PUBLIC_KEYS:\$STAGING_EXPORT_PUBLIC_KEYS"/.test(r))
+    )
+      problems.push(`job ${id} must give the deploy EXPORT_PUBLIC_KEYS from vars.STAGING_EXPORT_PUBLIC_KEYS`)
     // The receipt release.yml reads (P6-STAGING-1): the last step, so it exists only if every step before it passed,
     // named for the commit deployed, from the edge check's own report, kept a modest while.
     const all = job.steps ?? []

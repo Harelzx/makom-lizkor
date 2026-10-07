@@ -8,6 +8,38 @@ import { fileURLToPath, pathToFileURL } from "node:url"
 /** The vars staging.yml fills from the repository's variables at deploy time (none of them secret). */
 export const DEPLOY_VARS = ["ACCESS_TEAM_DOMAIN", "ACCESS_AUD", "PUBLIC_ORIGIN", "TURNSTILE_HOSTNAMES", "MODERATORS"]
 const PLACEHOLDER_ID = /^0{8}-0{4}-0{4}-0{4}-0{12}$/
+const PRIVATE_MEMBERS = ["d", "p", "q", "dp", "dq", "qi", "oth"]
+
+/**
+ * Staging's export keys (L-RET A2, a104), from the repository variable STAGING_EXPORT_PUBLIC_KEYS. Optional: unset, no
+ * export is written and the nightly check says so, which is the truthful state. Set, it is a JSON list of RSA public
+ * keys (the offline recipient's and the drill's), none holding a private member, and none of production's, so a key
+ * that opens one environment's exports never opens the other's.
+ */
+export function exportKeyBlockers(value, production = "") {
+  if (value === undefined || value === "") return []
+  let keys = null
+  try {
+    keys = JSON.parse(value)
+  } catch {}
+  const object = (k) => !!k && typeof k === "object"
+  if (Array.isArray(keys) && keys.some((k) => object(k) && PRIVATE_MEMBERS.some((m) => m in k)))
+    return ["STAGING_EXPORT_PUBLIC_KEYS holds a private key: only public keys belong in a repository variable"]
+  if (
+    !Array.isArray(keys) ||
+    !keys.length ||
+    !keys.every((k) => object(k) && k.kty === "RSA" && typeof k.n === "string" && typeof k.e === "string")
+  )
+    return ["STAGING_EXPORT_PUBLIC_KEYS is not a JSON list of RSA public keys"]
+  let prod = []
+  try {
+    prod = JSON.parse(production || "[]")
+  } catch {}
+  const prodKeys = new Set((Array.isArray(prod) ? prod : []).filter(object).map((k) => k.n))
+  if (keys.some((k) => prodKeys.has(k.n)))
+    return ["STAGING_EXPORT_PUBLIC_KEYS shares a key with production's: staging's export keys are its own"]
+  return []
+}
 
 export function stagingBlockers(raw, { deploy = false, env = {} } = {}) {
   const s = raw.env?.staging
@@ -42,6 +74,7 @@ export function stagingBlockers(raw, { deploy = false, env = {} } = {}) {
     for (const d of s.d1_databases ?? [])
       if (PLACEHOLDER_ID.test(d.database_id ?? "")) blockers.push(`D1 ${d.binding}: set the staging database's id in wrangler.jsonc`)
     for (const key of DEPLOY_VARS) if (!env[`STAGING_${key}`]) blockers.push(`STAGING_${key} is not set (a repository variable)`)
+    blockers.push(...exportKeyBlockers(env.STAGING_EXPORT_PUBLIC_KEYS, raw.vars?.EXPORT_PUBLIC_KEYS))
   }
   return blockers
 }

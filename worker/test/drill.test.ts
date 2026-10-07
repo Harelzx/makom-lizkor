@@ -53,6 +53,20 @@ const drillEmpty = async () => {
 const told = () => env.DB.prepare("SELECT COUNT(*) AS n FROM dev_outbox WHERE subject LIKE '%תרגיל השחזור%'").first<number>("n")
 
 describe("the weekly restore drill (spec 8.4)", () => {
+  it("doesn't run, and writes nothing, without its database or its key (staging until H-DRILL-DB, a104)", async () => {
+    const at = new Date(Date.now() + 3900 * DAY)
+    await exportAt(at)
+    const state = async () => {
+      const counts = [await env.DB.prepare("SELECT COUNT(*) AS n FROM drill_runs").first<number>("n")]
+      for (const t of EXPORT_TABLES) counts.push(await env.IMPORT_TEST.prepare(`SELECT COUNT(*) AS n FROM ${t}`).first<number>("n"))
+      return counts
+    }
+    const before = await state()
+    expect(await runDrill({ ...drillEnv(), drillDb: undefined }, new Date(at.getTime() + 3600_000))).toBeNull()
+    expect(await runDrill({ ...drillEnv(), drillKey: undefined }, new Date(at.getTime() + 3600_000))).toBeNull()
+    expect(await state()).toEqual(before)
+  })
+
   it("restores the newest export into the drill database, checks it against its manifest and its photo copies, and empties it", async () => {
     const at = new Date(Date.now() + 4000 * DAY)
     const exportId = await exportAt(at)

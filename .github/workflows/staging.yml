@@ -43,6 +43,10 @@ jobs:
       STAGING_PROBE_SERVICE_TOKENS: ${{ vars.STAGING_PROBE_SERVICE_TOKENS }}
       # The retention time scale (L-RET A2, a87): 7200 makes staging's retention day two hours; unset, a real day.
       STAGING_RETENTION_DAY_SECONDS: ${{ vars.STAGING_RETENTION_DAY_SECONDS }}
+      # Staging's own export keys (L-RET A2, a104): public RSA keys only, from a repository variable, checked by
+      # staging-check before the build; unset, no export is written and the nightly check says so. The private halves
+      # stay off GitHub and out of the Worker.
+      STAGING_EXPORT_PUBLIC_KEYS: ${{ vars.STAGING_EXPORT_PUBLIC_KEYS }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -75,7 +79,8 @@ jobs:
             --var "PUBLIC_ORIGIN:$STAGING_PUBLIC_ORIGIN" --var "TURNSTILE_HOSTNAMES:$STAGING_TURNSTILE_HOSTNAMES" \
             --var "MODERATORS:$STAGING_MODERATORS" --var "MODERATOR_SERVICE_TOKENS:$STAGING_MODERATOR_SERVICE_TOKENS" \
             --var "PROBE_SERVICE_TOKENS:$STAGING_PROBE_SERVICE_TOKENS" \
-            --var "RETENTION_DAY_SECONDS:$STAGING_RETENTION_DAY_SECONDS"
+            --var "RETENTION_DAY_SECONDS:$STAGING_RETENTION_DAY_SECONDS" \
+            --var "EXPORT_PUBLIC_KEYS:$STAGING_EXPORT_PUBLIC_KEYS"
       # It first waits, bounded, for the version just deployed (its tag) and holds every Worker answer to it (a61).
       # Through Access with the service token; the same address probed without it must be refused (Access closes this
       # workers.dev address). The synthetic owners, the named place and the purge exercise come from the repository;
