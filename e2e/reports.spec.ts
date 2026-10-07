@@ -45,7 +45,7 @@ test("a family's request hides the name as a precaution; a restoration is refuse
   // Only one of the two statements: refused, and nothing comes back.
   await card.getByLabel("יש בסיס חיובי ומתועד להחזרה").check()
   await card.getByRole("button", { name: /^החזרת השם/ }).click()
-  await expect(mod.getByRole("alert")).toHaveText(/שתי ההצהרות/)
+  await expect(mod.getByRole("alert")).toHaveText(/שתי ההצהרות/, DAY)
   expect((await inFeed(request, id))?.name_he).toBe("גן זיכרון")
 
   await card.getByLabel("הבסיס אינו היעדר תגובה, ואינו מחלוקת בין בני משפחה").check()
@@ -127,7 +127,7 @@ test("operations needing attention that fail to load say so, and come with a ret
       : route.fulfill({ json: { ops: [operation("op_back", "p_op_back", "2029-01-03T00:00:00.000Z")], next: null } }),
   )
   await mod.goto("/admin/")
-  await expect(mod.getByRole("alert")).toHaveText(/הפעולות שדורשות תשומת לב לא נטענו/)
+  await expect(mod.getByRole("alert")).toHaveText(/הפעולות שדורשות תשומת לב לא נטענו/, DAY)
   await expect(mod.getByRole("list", { name: "דורש תשומת לב" })).toHaveCount(0)
   fail = false
   await mod.getByRole("button", { name: "לנסות שוב לטעון את הפעולות" }).click()
@@ -141,8 +141,9 @@ test("operations needing attention that fail to load say so, and come with a ret
 const HIDDEN = "מה שציינתם הוסתר באופן זמני, כאמצעי זהירות, עד שאדם יבדוק את הבקשה. ההסתרה אינה הכרעה בבקשה."
 const RECEIVED = "הבקשה התקבלה. אדם יבדוק אותה בדחיפות."
 const RECEIVED_CURATED = "הבקשה התקבלה. אדם יבדוק אותה בדחיפות. במקומות שהאתר הוסיף בעצמו, שום דבר לא מוסתר לפני הבדיקה."
-// A wait for the server: the page's own day, and every answer to a request sent again (CI's runner has left one
-// still out after the default 5 s, both buttons disabled: reports:444 on main's first run, reports:563 on bcf95fd's).
+// A wait for the server: the page's own day, and every answer to a request, sent first or again (CI's runner has left
+// one still out after the default 5 s: reports:444 on main's first run, reports:563 on bcf95fd's, reports:260 and
+// reports:353 on 7e1dba7's, each answer arriving just after).
 const DAY = { timeout: 20_000 }
 
 /** The place's card, opened from a link, with the request form open. */
@@ -225,7 +226,7 @@ test("a family member asks from the place card: the name is hidden for now, and 
   await form.getByText("הודעת הפרטיות", { exact: true }).click()
   await expect(form.getByText("אין בטופס שדה לשם", { exact: false })).toBeVisible()
   await form.getByRole("button", { name: "שליחת הבקשה" }).click()
-  await expect(form.getByRole("status")).toHaveText(HIDDEN)
+  await expect(form.getByRole("status")).toHaveText(HIDDEN, DAY)
   await expect.poll(async () => (await inFeed(request, id))?.name_he).toBe("גן זיכרון")
   await ctx.close()
 })
@@ -238,7 +239,7 @@ test("a request about one of the site's own places: received, and the answer say
   await form.getByRole("radio", { name: /^אחר/ }).check()
   await form.getByLabel("מה לבדוק, ולמה").fill("יש טעות בתאריך שמופיע בתיאור של המקום הזה.")
   await form.getByRole("button", { name: "שליחת הבקשה" }).click()
-  await expect(form.getByRole("status")).toHaveText(RECEIVED_CURATED)
+  await expect(form.getByRole("status")).toHaveText(RECEIVED_CURATED, DAY)
   await ctx.close()
 })
 
@@ -257,7 +258,7 @@ test("a request whose answer was lost says so without claiming it arrived, and s
   await form.getByRole("radio", { name: /^אחר/ }).check()
   await form.getByLabel("מה לבדוק, ולמה").fill("השם כאן כתוב בשגיאה, כדאי לבדוק מול אתר המועצה.")
   await form.getByRole("button", { name: "שליחת הבקשה" }).click()
-  await expect(form.getByRole("alert")).toHaveText(/לא ברור אם הבקשה הגיעה אלינו/)
+  await expect(form.getByRole("alert")).toHaveText(/לא ברור אם הבקשה הגיעה אלינו/, DAY)
   // Sent again as it was: the form can't be changed in between.
   await expect(form.getByLabel("מה לבדוק, ולמה")).toBeDisabled()
   await form.getByRole("button", { name: "שליחה שוב" }).click()
@@ -307,7 +308,7 @@ test("a request the server stored but answered with an error comes back after a 
   await form.getByRole("radio", { name: /^אחר/ }).check()
   await form.getByLabel("מה לבדוק, ולמה").fill(why)
   await form.getByRole("button", { name: "שליחת הבקשה" }).click()
-  await expect(form.getByRole("alert")).toHaveText(/לא ברור אם הבקשה הגיעה אלינו/)
+  await expect(form.getByRole("alert")).toHaveText(/לא ברור אם הבקשה הגיעה אלינו/, DAY)
   await expect(form.getByLabel("מה לבדוק, ולמה")).toBeDisabled()
   // Free for another try, not stuck mid-send.
   await expect(form.getByRole("button", { name: "שליחה שוב" })).toBeEnabled()
@@ -315,7 +316,7 @@ test("a request the server stored but answered with an error comes back after a 
   await page.reload()
   await expect(page.getByRole("heading", { name })).toBeVisible(DAY)
   const back = page.getByRole("region", { name: "בקשת הסרה או תיקון" })
-  await expect(back.getByRole("alert")).toHaveText(/עוד לא אושרה כמתקבלת/)
+  await expect(back.getByRole("alert")).toHaveText(/עוד לא אושרה כמתקבלת/, DAY)
   await expect(back.getByLabel("מה לבדוק, ולמה")).toHaveValue(why)
   await expect(back.getByLabel("מה לבדוק, ולמה")).toBeDisabled()
   await expect(back.getByRole("checkbox", { name: "השם" })).toBeChecked()
@@ -350,7 +351,7 @@ test("a request whose fate is unknown stays with its own place: another place's 
   await form.getByRole("radio", { name: /^אחר/ }).check()
   await form.getByLabel("מה לבדוק, ולמה").fill(why)
   await form.getByRole("button", { name: "שליחת הבקשה" }).click()
-  await expect(form.getByRole("alert")).toHaveText(/לא ברור אם הבקשה הגיעה אלינו/)
+  await expect(form.getByRole("alert")).toHaveText(/לא ברור אם הבקשה הגיעה אלינו/, DAY)
 
   await page.evaluate((p) => (location.hash = `#/place/${p}`), other)
   await expect(page.getByRole("heading", { name: two })).toBeVisible()
@@ -422,7 +423,7 @@ test("a browser that keeps nothing still holds the request in the open page: ano
   await form.getByRole("radio", { name: /^אחר/ }).check()
   await form.getByLabel("מה לבדוק, ולמה").fill(why)
   await form.getByRole("button", { name: "שליחת הבקשה" }).click()
-  await expect(form.getByRole("alert")).toHaveText(/לא ברור אם הבקשה הגיעה אלינו.*נשמרת רק בדף הפתוח/)
+  await expect(form.getByRole("alert")).toHaveText(/לא ברור אם הבקשה הגיעה אלינו.*נשמרת רק בדף הפתוח/, DAY)
 
   // Another place's card, then no card at all, so the first card is gone from the page before it opens again.
   await page.evaluate((p) => (location.hash = `#/place/${p}`), other)
@@ -462,7 +463,7 @@ test("a family's request that hides the whole place and loses its answer stays r
   await form.getByLabel(/^הקשר שלכם/).fill("אח")
   await form.getByLabel("מה לבדוק, ולמה").fill("המקום כולו מנציח את אחי בלי שהמשפחה נשאלה. נבקש להסתיר אותו עד שנדבר.")
   await form.getByRole("button", { name: "שליחת הבקשה" }).click()
-  await expect(form.getByRole("alert")).toHaveText(/לא ברור אם הבקשה הגיעה אלינו/)
+  await expect(form.getByRole("alert")).toHaveText(/לא ברור אם הבקשה הגיעה אלינו/, DAY)
 
   // The request hid the place; the next feed closes its card.
   const fed = page.waitForResponse((r) => r.url().includes("/api/v1/feed?") && r.status() === 200)
@@ -476,7 +477,7 @@ test("a family's request that hides the whole place and loses its answer stays r
   await page.goto(`/?again=1#/place/${id}`)
   const pending = page.getByRole("region", { name: "בקשה ששלחתם" })
   await expect(pending).toBeVisible(DAY)
-  await expect(pending.getByRole("alert")).toHaveText(/על מקום שאינו מוצג כרגע/)
+  await expect(pending.getByRole("alert")).toHaveText(/על מקום שאינו מוצג כרגע/, DAY)
   await expect(page.getByText(name)).toHaveCount(0)
   await pending.getByRole("button", { name: "שליחה שוב" }).click()
   // The server's answer to the second try: on main's first CI run it was still out after 5 s (both buttons disabled).
@@ -521,7 +522,7 @@ test("a card closed and opened while its request is out finds that same request,
   await expect(again.getByRole("button", { name: "הסרה מהמכשיר הזה" })).toBeDisabled()
 
   release()
-  await expect(again.getByRole("alert")).toHaveText(/לא ברור אם הבקשה הגיעה אלינו/)
+  await expect(again.getByRole("alert")).toHaveText(/לא ברור אם הבקשה הגיעה אלינו/, DAY)
   await again.getByRole("button", { name: "שליחה שוב" }).click()
   await expect(again.getByRole("status")).toHaveText(RECEIVED, DAY)
   expect(sent).toHaveLength(2)
@@ -548,7 +549,7 @@ test("a request about a hidden place, in a browser whose store can't be read aft
   await form.getByLabel(/^הקשר שלכם/).fill("אחות")
   await form.getByLabel("מה לבדוק, ולמה").fill("המקום מנציח את אמא שלנו, והמשפחה לא נשאלה. נבקש להסתיר אותו עד שנדבר.")
   await form.getByRole("button", { name: "שליחת הבקשה" }).click()
-  await expect(form.getByRole("alert")).toHaveText(/לא ברור אם הבקשה הגיעה אלינו/)
+  await expect(form.getByRole("alert")).toHaveText(/לא ברור אם הבקשה הגיעה אלינו/, DAY)
 
   await refuse(page, true)
   await page.goto(`/?unread=1#/place/${id}`)
@@ -558,7 +559,7 @@ test("a request about a hidden place, in a browser whose store can't be read aft
 
   await refuse(page, false)
   await box.getByRole("button", { name: "לבדוק שוב" }).click()
-  await expect(box.getByRole("alert")).toHaveText(/על מקום שאינו מוצג כרגע/)
+  await expect(box.getByRole("alert")).toHaveText(/על מקום שאינו מוצג כרגע/, DAY)
   await expect(page.getByText(/לא הצלחנו לבדוק/)).toHaveCount(0)
   await expect(page.getByText(name)).toHaveCount(0)
   await box.getByRole("button", { name: "שליחה שוב" }).click()
@@ -615,13 +616,13 @@ test("a card open over a store that couldn't be read takes up its request once t
   await form.getByRole("radio", { name: /^אחר/ }).check()
   await form.getByLabel("מה לבדוק, ולמה").fill(why)
   await form.getByRole("button", { name: "שליחת הבקשה" }).click()
-  await expect(form.getByRole("alert")).toHaveText(/לא ברור אם הבקשה הגיעה אלינו/)
+  await expect(form.getByRole("alert")).toHaveText(/לא ברור אם הבקשה הגיעה אלינו/, DAY)
 
   await refuse(page, true)
   await page.goto(`/?again=1#/place/${id}`)
   await expect(page.getByRole("heading", { name })).toBeVisible(DAY)
   const box = page.getByRole("region", { name: "בקשה ששלחתם" })
-  await expect(box.getByRole("alert")).toHaveText(/לא הצלחנו לבדוק/)
+  await expect(box.getByRole("alert")).toHaveText(/לא הצלחנו לבדוק/, DAY)
   await refuse(page, false)
   await box.getByRole("button", { name: "לבדוק שוב" }).click()
   // The card, open all along, now shows the request it couldn't read: not a new form.
@@ -657,7 +658,7 @@ test("a first try refused before anything was stored, whose copy the browser won
   await form.getByRole("radio", { name: /^אחר/ }).check()
   await form.getByLabel("מה לבדוק, ולמה").fill(why)
   await form.getByRole("button", { name: "שליחת הבקשה" }).click()
-  await expect(form.getByRole("alert")).toHaveText(/בדיקת הדפדפן לא עברה.*עוד אי אפשר לכתוב במקומה בקשה חדשה/)
+  await expect(form.getByRole("alert")).toHaveText(/בדיקת הדפדפן לא עברה.*עוד אי אפשר לכתוב במקומה בקשה חדשה/, DAY)
   await expect(form.getByLabel("מה לבדוק, ולמה")).toHaveValue(why)
   await expect(form.getByLabel("מה לבדוק, ולמה")).toBeDisabled()
   await expect(form.getByRole("button", { name: "שליחת הבקשה" })).toHaveCount(0)
