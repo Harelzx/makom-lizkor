@@ -124,7 +124,8 @@ export async function insertReport(
  * its reporter under the day's count. Numbered parameters: ?1 place, ?6 an hour ago, ?7 a day ago, ?8 per hour, ?9 per
  * day, ?10 breaker, ?11 the request, ?12 reporter's day, ?13 the oldest request whose abuse codes still count (they
  * expire with RETENTION.reportAbuseCodeMaxHours, less the half hour the job keeps in hand), ?14 the backstop run's
- * claim (null at intake). The request must still be awaiting its evaluation (backstop_at set, and claimed by this run
+ * claim (null at intake), ?15 the abuse codes' own day ago (their day: this deployment's, worker/lib/durations.ts; the
+ * quotas' ?6 and ?7 stay on real hours). The request must still be awaiting its evaluation (backstop_at set, and claimed by this run
  * when a run is evaluating it), so a run whose claim went stale can't hide after another finished. Read once before
  * anything is written, and again as conditions of the place's own update, so nothing that changes in between (the
  * clock included, while the ledger is written) can let a hide through.
@@ -135,9 +136,9 @@ const SAFE = `(SELECT COUNT(DISTINCT report_id) FROM field_suppressions WHERE ki
   AND (SELECT COUNT(*) FROM reports WHERE complete = 1 AND received_at > ?6) < ?10
   AND EXISTS (SELECT 1 FROM reports WHERE id = ?11 AND status != 'closed' AND outcome = 'received' AND explanation_hash IS NOT NULL)
   AND NOT EXISTS (SELECT 1 FROM reports o JOIN reports me ON me.id = ?11
-                  WHERE o.explanation_hash = me.explanation_hash AND o.id != me.id AND o.received_at > ?7)
+                  WHERE o.explanation_hash = me.explanation_hash AND o.id != me.id AND o.received_at > ?15)
   AND (SELECT COUNT(*) FROM reports o JOIN reports me ON me.id = ?11
-       WHERE me.reporter_key IS NOT NULL AND o.reporter_key = me.reporter_key AND o.received_at > ?7) <= ?12
+       WHERE me.reporter_key IS NOT NULL AND o.reporter_key = me.reporter_key AND o.received_at > ?15) <= ?12
   AND (SELECT received_at FROM reports WHERE id = ?11) > ?13
   AND EXISTS (SELECT 1 FROM reports WHERE id = ?11 AND backstop_at IS NOT NULL AND (?14 IS NULL OR backstop_claim = ?14))`
 
@@ -210,6 +211,8 @@ export async function precaution(
     REPORT_GUARDS.reporterPerDay,
     evidenceSince(t),
     opts.claim ?? null,
+    // The spam checks' day, from the same clock reading as the rest, on the abuse codes' own hours (L-RET-ABUSE-1).
+    new Date(t.getTime() - 24 * d.hour).toISOString(),
   ]
   const safeNow = async () =>
     !!(await db
