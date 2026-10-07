@@ -158,3 +158,130 @@ describe("what the machine moderator may do", () => {
     expect(await syntheticPlace(env.DB, "car-wall-tkuma")).toBe(false)
   })
 })
+
+// H1-SYNTHETIC-RACE-1: a correction without the mark landing between the machine's check and its use. The database
+// is the test's own, wrapped so that `between` runs once, right after the check's statement is read.
+const interleaved = (between: () => Promise<void>): Env => {
+  let ran = false
+  const pass = <T extends object>(o: T, p: string | symbol) => {
+    const v = Reflect.get(o, p)
+    return typeof v === "function" ? v.bind(o) : v
+  }
+  const db = new Proxy(env.DB, {
+    get(target, prop) {
+      if (prop !== "prepare") return pass(target, prop)
+      return (sql: string) => {
+        const stmt = target.prepare(sql)
+        if (!sql.includes("AS marked")) return stmt
+        return new Proxy(stmt, {
+          get(s, p) {
+            if (p !== "bind") return pass(s, p)
+            return (...args: unknown[]) =>
+              new Proxy(s.bind(...args), {
+                get(b, q) {
+                  if (q !== "first") return pass(b, q)
+                  return async (...a: [string?]) => {
+                    const row = await b.first(...(a as []))
+                    if (!ran) {
+                      ran = true
+                      await between()
+                    }
+                    return row
+                  }
+                },
+              })
+          },
+        })
+      }
+    },
+  })
+  return { ...env, DB: db as D1Database }
+}
+/** A correction as the submitter's route makes one: a new revision, here without the mark, and the place's rev on. */
+const unmarkedCorrection = (id: string) => async () => {
+  const last = await env.DB.prepare("SELECT * FROM revisions WHERE place_id = ? ORDER BY n DESC LIMIT 1")
+    .bind(id)
+    .first<Record<string, unknown>>()
+  const cols = Object.keys(last!)
+  const copy = { ...last, id: `${last!.id}c`, n: Number(last!.n) + 1, state: "pending", name_he: "ספסל דמו שתוקן בלי סימון" }
+  await env.DB.batch([
+    env.DB.prepare(`INSERT INTO revisions (${cols.join(",")}) VALUES (${cols.map(() => "?").join(",")})`).bind(
+      ...cols.map((c) => (copy as Record<string, unknown>)[c] ?? null),
+    ),
+    env.DB.prepare("UPDATE places SET rev = rev + 1 WHERE id = ?").bind(id),
+  ])
+}
+const published = async () => {
+  const s = await synthetic()
+  const item = (await queue()).find((i) => i.id === s.id)!
+  await machine(`/api/admin/places/${s.id}/transitions`, {
+    method: "POST",
+    body: JSON.stringify({ action: "approve", revisionId: item.revisionId, expectedRev: item.rev }),
+  })
+  return s.id
+}
+const suppressions = async (id: string) =>
+  (await env.DB.prepare("SELECT COUNT(*) AS n FROM field_suppressions WHERE place_id = ? AND lifted_at IS NULL")
+    .bind(id)
+    .first<number>("n"))!
+
+describe("a correction between the machine's check and its use (H1-SYNTHETIC-RACE-1)", () => {
+  it("can't let it hide the place, whether it names the rev it saw or the one after", async () => {
+    for (const ahead of [0, 1]) {
+      const id = await published()
+      const seen = await rev(id)
+      const res = await machine(
+        "/api/admin/suppressions",
+        { method: "POST", body: JSON.stringify({ placeId: id, fields: ["whole"], expectedRev: seen + ahead, reason: "בדיקת מרוץ" }) },
+        interleaved(unmarkedCorrection(id)),
+      )
+      expect([403, 409], `ahead ${ahead}`).toContain(res.status)
+      expect(await suppressions(id), `ahead ${ahead}`).toBe(0)
+    }
+  })
+
+  it("can't let it approve, whether it names the rev it saw or the one after", async () => {
+    for (const ahead of [0, 1]) {
+      const s = await synthetic()
+      const item = (await queue()).find((i) => i.id === s.id)!
+      const res = await machine(
+        `/api/admin/places/${s.id}/transitions`,
+        { method: "POST", body: JSON.stringify({ action: "approve", revisionId: item.revisionId, expectedRev: item.rev + ahead }) },
+        interleaved(unmarkedCorrection(s.id)),
+      )
+      expect([403, 409], `ahead ${ahead}`).toContain(res.status)
+      expect(await env.DB.prepare("SELECT status FROM places WHERE id = ?").bind(s.id).first<string>("status")).not.toBe("published")
+    }
+  })
+
+  it("can't let it lift a hide, whether it names the rev it saw or the one after", async () => {
+    for (const ahead of [0, 1]) {
+      const id = await published()
+      expect((await hide(id, await rev(id))).status).toBe(200)
+      const sid = await env.DB.prepare("SELECT id FROM field_suppressions WHERE place_id = ? AND lifted_at IS NULL")
+        .bind(id)
+        .first<string>("id")
+      const seen = await rev(id)
+      const res = await machine(
+        `/api/admin/suppressions/${sid}/lift`,
+        { method: "POST", body: JSON.stringify({ ...LIFT, expectedRev: seen + ahead }) },
+        interleaved(unmarkedCorrection(id)),
+      )
+      expect([403, 409], `ahead ${ahead}`).toContain(res.status)
+      expect(await suppressions(id), `ahead ${ahead}`).toBe(1)
+    }
+  })
+
+  it("can't let it read the changed place: the view is refused, and says nothing of it", async () => {
+    const id = await published()
+    const res = await machine(`/api/admin/places/${id}`, {}, interleaved(unmarkedCorrection(id)))
+    expect(res.status).toBe(409)
+    expect(await res.text()).not.toContain("בלי סימון")
+  })
+
+  it("leaves a place out of the queue once a correction without the mark is in", async () => {
+    const s = await synthetic()
+    await unmarkedCorrection(s.id)()
+    expect((await queue()).some((i) => i.id === s.id)).toBe(false)
+  })
+})
