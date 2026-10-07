@@ -462,14 +462,16 @@ export async function edgeChecks(
       }
     }
     if (failures.length) return record(check, failures, "")
-    if (jumped !== null)
-      return unseen(check, `${at} answered generation ${jumped}, past the ${to} this exercise moved to: another exercise intervened`)
+    // A stale copy already seen past the bound is a failure, whatever came after it: another exercise's later
+    // generation doesn't undo what was observed (a84).
     if (fresh === null && staleAfter !== null && staleAfter > t.freshMs)
       return record(
         check,
         [`${at} still served generation ${from} ${staleAfter} ms after the move was sent (bound ${t.freshMs} ms; last: ${seen})`],
         "",
       )
+    if (jumped !== null)
+      return unseen(check, `${at} answered generation ${jumped}, past the ${to} this exercise moved to: another exercise intervened`)
     if (fresh === null)
       return unseen(
         check,
