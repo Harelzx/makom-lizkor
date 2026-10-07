@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 import { call } from "./app"
 import { admin, withSite } from "./helpers"
 import { seedCurated, viewRev } from "./curated-helpers"
+import { pixels } from "./png"
 
 // The site's own places read from D1 (phase 7, task 3; adviser a50, P7-OG-1): their share pages carry their public
 // fields like a contribution's, name their own share image, go 410 when hidden, and a request about one is stored
@@ -34,7 +35,11 @@ describe("one of the site's own places, from the database", () => {
     const png = await call(image)
     expect(png.status).toBe(200)
     expect(png.headers.get("Content-Type")).toBe("image/png")
-    expect(String.fromCharCode(...new Uint8Array(await png.arrayBuffer()).slice(1, 4))).toBe("PNG")
+    const bytes = new Uint8Array(await png.arrayBuffer())
+    expect(String.fromCharCode(...bytes.slice(1, 4))).toBe("PNG")
+    // Its photo (the importer's stand-in, a red WebP) fills the panel, not the background it showed without it (P7-OG-1).
+    const at = await pixels(bytes)
+    for (const y of [40, 315, 590]) expect(at(220, y).map((v, i) => Math.abs(v - [230, 20, 30][i]) <= 24)).toEqual([true, true, true])
   })
 
   it("is gone (410, not indexed) once hidden whole, and its old share image is refused", async () => {

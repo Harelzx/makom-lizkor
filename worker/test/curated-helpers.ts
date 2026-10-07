@@ -61,8 +61,8 @@ export const viewRev = async (id: string) => (await (await admin(`/api/admin/pla
 let n = 0
 export const newId = () => `demo-curated-${Date.now().toString(36)}-${n++}`
 
-/** A real 1×1 WebP, so the share image's renderer has a picture it can decode. */
-export const TINY_WEBP = Uint8Array.from(atob("UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA=="), (c) => c.charCodeAt(0))
+/** A real WebP, 16×16 and red, so a share image that draws it shows it (the 1×1 used before was transparent). */
+export const TINY_WEBP = Uint8Array.from(atob("UklGRh4AAABXRUJQVlA4TBEAAAAvD8ADAAdQiprXo/+BiOh/AAA="), (c) => c.charCodeAt(0))
 
 /**
  * Some of the site's own places, put into this test's database the way the dev server and the e2e state get them: the
