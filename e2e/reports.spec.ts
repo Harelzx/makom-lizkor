@@ -141,6 +141,8 @@ test("operations needing attention that fail to load say so, and come with a ret
 const HIDDEN = "מה שציינתם הוסתר באופן זמני, כאמצעי זהירות, עד שאדם יבדוק את הבקשה. ההסתרה אינה הכרעה בבקשה."
 const RECEIVED = "הבקשה התקבלה. אדם יבדוק אותה בדחיפות."
 const RECEIVED_CURATED = "הבקשה התקבלה. אדם יבדוק אותה בדחיפות. במקומות שהאתר הוסיף בעצמו, שום דבר לא מוסתר לפני הבדיקה."
+// A wait for the server: the page's own day, and every answer to a request sent again (CI's runner has left one
+// still out after the default 5 s, both buttons disabled: reports:444 on main's first run, reports:563 on bcf95fd's).
 const DAY = { timeout: 20_000 }
 
 /** The place's card, opened from a link, with the request form open. */
@@ -259,7 +261,7 @@ test("a request whose answer was lost says so without claiming it arrived, and s
   // Sent again as it was: the form can't be changed in between.
   await expect(form.getByLabel("מה לבדוק, ולמה")).toBeDisabled()
   await form.getByRole("button", { name: "שליחה שוב" }).click()
-  await expect(form.getByRole("status")).toHaveText(RECEIVED)
+  await expect(form.getByRole("status")).toHaveText(RECEIVED, DAY)
   expect(sent).toHaveLength(2)
   expect(sent[1]).toEqual(sent[0])
   expect(await casesAbout(browser, id)).toBe(1)
@@ -318,7 +320,7 @@ test("a request the server stored but answered with an error comes back after a 
   await expect(back.getByLabel("מה לבדוק, ולמה")).toBeDisabled()
   await expect(back.getByRole("checkbox", { name: "השם" })).toBeChecked()
   await back.getByRole("button", { name: "שליחה שוב" }).click()
-  await expect(back.getByRole("status")).toHaveText(RECEIVED)
+  await expect(back.getByRole("status")).toHaveText(RECEIVED, DAY)
   expect(sent).toHaveLength(2)
   expect(sent[1]).toEqual(sent[0])
   expect(await casesAbout(browser, id)).toBe(1)
@@ -367,7 +369,7 @@ test("a request whose fate is unknown stays with its own place: another place's 
   await expect(first.getByLabel("מה לבדוק, ולמה")).toHaveValue(why)
   await expect(first.getByLabel("מה לבדוק, ולמה")).toBeDisabled()
   await first.getByRole("button", { name: "שליחה שוב" }).click()
-  await expect(first.getByRole("status")).toHaveText(RECEIVED)
+  await expect(first.getByRole("status")).toHaveText(RECEIVED, DAY)
   expect(sent).toHaveLength(2)
   expect(sent[1]).toEqual(sent[0])
   expect(await casesAbout(browser, id)).toBe(1)
@@ -434,7 +436,7 @@ test("a browser that keeps nothing still holds the request in the open page: ano
   await expect(back.getByLabel("מה לבדוק, ולמה")).toHaveValue(why)
   await expect(back.getByLabel("מה לבדוק, ולמה")).toBeDisabled()
   await back.getByRole("button", { name: "שליחה שוב" }).click()
-  await expect(back.getByRole("status")).toHaveText(RECEIVED)
+  await expect(back.getByRole("status")).toHaveText(RECEIVED, DAY)
   expect(sent).toHaveLength(2)
   expect(sent[1]).toEqual(sent[0])
   expect(await casesAbout(browser, id)).toBe(1)
@@ -521,7 +523,7 @@ test("a card closed and opened while its request is out finds that same request,
   release()
   await expect(again.getByRole("alert")).toHaveText(/לא ברור אם הבקשה הגיעה אלינו/)
   await again.getByRole("button", { name: "שליחה שוב" }).click()
-  await expect(again.getByRole("status")).toHaveText(RECEIVED)
+  await expect(again.getByRole("status")).toHaveText(RECEIVED, DAY)
   expect(sent).toHaveLength(2)
   expect(sent[1]).toEqual(sent[0])
   expect(await casesAbout(browser, id)).toBe(1)
@@ -560,7 +562,7 @@ test("a request about a hidden place, in a browser whose store can't be read aft
   await expect(page.getByText(/לא הצלחנו לבדוק/)).toHaveCount(0)
   await expect(page.getByText(name)).toHaveCount(0)
   await box.getByRole("button", { name: "שליחה שוב" }).click()
-  await expect(box.getByRole("status")).toHaveText(HIDDEN)
+  await expect(box.getByRole("status")).toHaveText(HIDDEN, DAY)
   expect(sent).toHaveLength(2)
   expect(sent[1]).toEqual(sent[0])
   expect(await casesAbout(browser, id)).toBe(1)
@@ -627,7 +629,7 @@ test("a card open over a store that couldn't be read takes up its request once t
   await expect(card.getByLabel("מה לבדוק, ולמה")).toHaveValue(why)
   await expect(card.getByLabel("מה לבדוק, ולמה")).toBeDisabled()
   await card.getByRole("button", { name: "שליחה שוב" }).click()
-  await expect(card.getByRole("status")).toHaveText(RECEIVED)
+  await expect(card.getByRole("status")).toHaveText(RECEIVED, DAY)
   expect(sent).toHaveLength(2)
   expect(sent[1]).toEqual(sent[0])
   expect(await casesAbout(browser, id)).toBe(1)
@@ -666,7 +668,7 @@ test("a first try refused before anything was stored, whose copy the browser won
   const back = page.getByRole("region", { name: "בקשת הסרה או תיקון" })
   await expect(back.getByLabel("מה לבדוק, ולמה")).toHaveValue(why)
   await back.getByRole("button", { name: "שליחה שוב" }).click()
-  await expect(back.getByRole("status")).toHaveText(RECEIVED)
+  await expect(back.getByRole("status")).toHaveText(RECEIVED, DAY)
   expect(sent).toHaveLength(2)
   expect(sent[1]).toEqual(sent[0])
   expect(await casesAbout(browser, id)).toBe(1)
