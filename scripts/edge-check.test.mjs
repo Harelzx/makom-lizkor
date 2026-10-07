@@ -82,6 +82,7 @@ test("against a real deployment, what it can't show is incomplete, never passed 
     no_shared_hit: "incomplete",
     purge_freshness: "incomplete",
     workers_dev_closed: "incomplete",
+    deployed_version: "incomplete",
   })
   assert.equal(outcome(results), "incomplete")
 })
@@ -140,6 +141,89 @@ test("a place that was never public is the share route's 404, whatever is named 
 test("a place named in a shape no place has is refused before anything is asked (a60)", async () => {
   for (const place of ["local-1", "../admin", "Car Wall", "", "p_" + "x".repeat(40)])
     await assert.rejects(edgeChecks("https://site.example", { fetch: deployment(), place }), /EDGE_PLACE/, place)
+})
+
+// After a deploy the previous version may still answer for a while: the run waits for the expected tag on health,
+// bounded, then holds every Worker answer it measures to that tag (a61, DEPLOY-VERSION-1).
+const FAST = { deadlineMs: 300, everyMs: 10, fetchMs: 100 }
+const WORKER = /^\/(api|place|media|__dev)\//
+/** A deployment whose Worker answers name `tagOf(path, n)`, n counting the health probes so far. */
+const versioned = (tagOf, bend = () => {}) => {
+  let n = 0
+  return deployment((u, i, res) => {
+    if (u.pathname === "/api/v1/health") n++
+    const tag = WORKER.test(u.pathname) ? tagOf(u.pathname, n) : null
+    if (tag) res.headers.set("X-Worker-Version", tag)
+    bend(u, i, res, n)
+  })
+}
+
+test("a deployment's version is waited for on health, then named on every Worker answer measured (a61)", async () => {
+  const healthAsked = []
+  const fetch = versioned(
+    (_p, n) => (n <= 2 ? "staging-old" : "staging-new"),
+    (u) => u.pathname === "/api/v1/health" && healthAsked.push(u.search),
+  )
+  const results = await edgeChecks("https://site.example", { fetch, expectTag: "staging-new", readiness: FAST })
+  assert.equal(status(results).deployed_version, "pass")
+  assert.ok(healthAsked.length >= 3)
+  // Each readiness probe is its own address, so no cache answers one for another.
+  assert.equal(new Set(healthAsked.slice(0, 3)).size, 3)
+  // Static files carry no version: not counted against it.
+  assert.match(results.find((r) => r.check === "deployed_version").detail, /Worker answers named staging-new/)
+})
+
+test("a version that never answers within the deadline fails the run before anything else is checked (a61)", async () => {
+  for (const [why, fetch] of [
+    ["the old version", versioned(() => "staging-old")],
+    ["no version named", versioned(() => null)],
+    [
+      "the right tag on a failing answer",
+      versioned(
+        () => "staging-new",
+        (u, _i, res) => u.pathname === "/api/v1/health" && (res.status = 503),
+      ),
+    ],
+  ]) {
+    const results = await edgeChecks("https://site.example", { fetch, expectTag: "staging-new", readiness: FAST })
+    assert.deepEqual(status(results), { deployed_version: "fail" }, why)
+    assert.equal(outcome(results), "fail", why)
+  }
+})
+
+test("a stalled request can't outlast the readiness deadline (a61)", async () => {
+  const stalled = (input, init = {}) =>
+    new URL(input).pathname === "/api/v1/health"
+      ? new Promise((_resolve, reject) => init.signal?.addEventListener("abort", () => reject(init.signal.reason)))
+      : deployment()(input, init)
+  const started = Date.now()
+  const results = await edgeChecks("https://site.example", { fetch: stalled, expectTag: "staging-new", readiness: FAST })
+  assert.deepEqual(status(results), { deployed_version: "fail" })
+  assert.ok(Date.now() - started < FAST.deadlineMs + 200, `took ${Date.now() - started} ms`)
+})
+
+test("an old version answering a later probe fails, even after health named the new one (a61)", async () => {
+  const fetch = versioned((path) => (path === "/api/admin/queue" ? "staging-old" : "staging-new"))
+  const results = await edgeChecks("https://site.example", { fetch, expectTag: "staging-new", readiness: FAST })
+  assert.equal(status(results).deployed_version, "fail")
+  assert.match(results.find((r) => r.check === "deployed_version").detail.join(" "), /\/api\/admin\/queue[^;]*staging-old/)
+  assert.equal(outcome(results), "fail")
+  const unnamed = await edgeChecks("https://site.example", {
+    fetch: versioned((path) => (path === "/api/v1/no-such-route" ? null : "staging-new")),
+    expectTag: "staging-new",
+    readiness: FAST,
+  })
+  assert.equal(status(unnamed).deployed_version, "fail")
+})
+
+test("locally, with no version expected, nothing about versions is asked or reported (a61)", async () => {
+  const results = await edgeChecks("https://site.example", { fetch: deployment(), local: true })
+  assert.equal(status(results).deployed_version, undefined)
+})
+
+test("an expected tag in a shape no deploy gives is refused (a61)", async () => {
+  for (const expectTag of ["", "--report", "staging new", "a".repeat(80)])
+    await assert.rejects(edgeChecks("https://site.example", { fetch: deployment(), expectTag }), /--expect-tag/, expectTag)
 })
 
 test("an unhealthy deployment fails, however right its headers (P6-EDGE-1)", async () => {
@@ -300,4 +384,12 @@ test("only a refusal or a redirect to Access proves workers.dev closed (a52)", a
     "incomplete",
   )
   assert.equal(await probe(() => new Response(null, { status: 404 })), "incomplete")
+})
+
+test("a named place's share page is held to the deployed version too (a60 with a61)", async () => {
+  const fetch = versioned((path) => (path === "/place/car-wall-tkuma" ? "staging-old" : "staging-new"))
+  const results = await edgeChecks("https://site.example", { fetch, place: "car-wall-tkuma", expectTag: "staging-new", readiness: FAST })
+  assert.equal(status(results).place_page, "pass")
+  assert.equal(status(results).deployed_version, "fail")
+  assert.match(results.find((r) => r.check === "deployed_version").detail.join(" "), /\/place\/car-wall-tkuma/)
 })

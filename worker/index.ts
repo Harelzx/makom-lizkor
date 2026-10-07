@@ -39,11 +39,18 @@ export function createApp(deps: Deps) {
     await next()
     // The site's security headers on everything the Worker answers, errors included (spec 11); the static files get
     // the same ones from public/_headers. A response made by fetch has fixed headers, so it is copied first.
+    // And the serving version's tag, on every answer: a check after a deploy reads it to know which version answered
+    // (a61). An untagged version names nothing.
+    const tag = c.env.CF_VERSION_METADATA?.tag
+    const mark = (h: Headers) => {
+      secure(h)
+      if (tag) h.set("X-Worker-Version", tag)
+    }
     try {
-      secure(c.res.headers)
+      mark(c.res.headers)
     } catch {
       c.res = new Response(c.res.body, c.res)
-      secure(c.res.headers)
+      mark(c.res.headers)
     }
   })
 

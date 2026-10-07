@@ -66,6 +66,9 @@
   "triggers": { "crons": ["*/15 * * * *"] },
   // Our own JSON log lines only; no automatic per-request records (they carry URLs and headers).
   "observability": { "logs": { "enabled": true, "invocation_logs": false } },
+  // The serving version's id and tag (the deploy tags it with its commit or release): every answer names the tag, so a
+  // check right after a deploy can tell the new version's answers from the previous one's (a61).
+  "version_metadata": { "binding": "CF_VERSION_METADATA" },
   "env": {
     // Staging (spec 14.1): synthetic data only, in the staging account, on its workers.dev address behind Cloudflare
     // Access. Built with CLOUDFLARE_ENV=staging and deployed only by .github/workflows/staging.yml, which fills the
@@ -76,6 +79,7 @@
       "name": "makom-lizkor-staging",
       "workers_dev": true,
       "preview_urls": false,
+      "version_metadata": { "binding": "CF_VERSION_METADATA" },
       "d1_databases": [
         {
           "binding": "DB",

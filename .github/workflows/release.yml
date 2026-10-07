@@ -155,6 +155,7 @@ jobs:
       - name: Production checks
         env:
           EDGE_PLACE: ${{ vars.EDGE_PLACE }}
-        run: node scripts/edge-check.mjs "$PUBLIC_ORIGIN"
+        # Waits, bounded, for the version just deployed and holds every Worker answer to its tag (a61).
+        run: node scripts/edge-check.mjs "$PUBLIC_ORIGIN" --expect-tag "$RELEASE"
       - name: Publish the release, which notifies the owner
         run: gh release edit "$RELEASE" --draft=false

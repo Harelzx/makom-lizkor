@@ -68,6 +68,7 @@ jobs:
             --var "ACCESS_TEAM_DOMAIN:$STAGING_ACCESS_TEAM_DOMAIN" --var "ACCESS_AUD:$STAGING_ACCESS_AUD" \
             --var "PUBLIC_ORIGIN:$STAGING_PUBLIC_ORIGIN" --var "TURNSTILE_HOSTNAMES:$STAGING_TURNSTILE_HOSTNAMES" \
             --var "MODERATORS:$STAGING_MODERATORS"
+      # It first waits, bounded, for the version just deployed (its tag) and holds every Worker answer to it (a61).
       # Through Access with the service token; the same address probed without it must be refused (Access closes this
       # workers.dev address). Exit 3, incomplete (no purge exercise or synthetic owners yet), keeps the deploy and says
       # so in the receipt; a release accepts only a receipt whose edge check passed (a51, P6-EDGE-1).
@@ -78,7 +79,7 @@ jobs:
         run: |
           set -uo pipefail
           status=0
-          node scripts/edge-check.mjs "$STAGING_PUBLIC_ORIGIN" --workers-dev "$STAGING_PUBLIC_ORIGIN" --report "$RUNNER_TEMP/edge.json" || status=$?
+          node scripts/edge-check.mjs "$STAGING_PUBLIC_ORIGIN" --expect-tag "staging-${SHA:0:12}" --workers-dev "$STAGING_PUBLIC_ORIGIN" --report "$RUNNER_TEMP/edge.json" || status=$?
           test "$status" -eq 0 -o "$status" -eq 3
       - name: The receipt for this commit's deploy and checks
         run: |
