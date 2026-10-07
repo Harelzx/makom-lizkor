@@ -128,8 +128,10 @@ export default function App() {
     prevPhase.current = phase
   }, [phase])
 
+  // The visitor's own places, read from the device once; the day waits for them before sending any still waiting.
+  const ready = useRef<Promise<void> | null>(null)
   useEffect(() => {
-    void init()
+    ready.current = init()
   }, [init])
 
   // While the opening plays, fetch the panel's code in the background so it's ready at sunrise.
@@ -152,11 +154,15 @@ export default function App() {
       stop?.()
     }
   }, [])
-  // The anemone totals once the day has begun.
+  // The anemone totals once the day has begun, and the visitor's places that a closed tab or a lost connection left
+  // waiting: sent as the day begins, once the device's list is read (the feed's first wake comes before it).
   useEffect(() => {
     if (phase !== "day") return
     let stopTributes: (() => void) | undefined
     let cancelled = false
+    void ready.current?.then(async () => {
+      if (!cancelled) await (await import("@/lib/outbox")).retryWaiting()
+    })
     void import("@/lib/tributes").then((m) => {
       if (!cancelled) stopTributes = m.startTributeSync()
     })

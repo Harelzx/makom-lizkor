@@ -104,10 +104,11 @@ export function startFeedSync(): () => void {
       busy = false
     }
   }
-  // The same wakes send again any place of the visitor's that couldn't reach the server.
+  // The same wakes send again any place of the visitor's that couldn't reach the server, from the day on: nothing of
+  // theirs goes out while the opening plays (the feed comes early only because the opening shows its places).
   const onWake = () => {
     void check()
-    void retryWaiting()
+    if (useStore.getState().phase === "day") void retryWaiting()
   }
   const timer = setInterval(onWake, EVERY_MS)
   document.addEventListener("visibilitychange", onWake)
