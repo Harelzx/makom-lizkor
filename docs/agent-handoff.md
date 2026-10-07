@@ -24,7 +24,16 @@ The one current block; everything below "History" is superseded record.
 - **Code head `6749d72`** (later commits: this handoff only).
 - **Checkpoint at `6749d72`** (`backend-phase4/runs/20261007T083740-6749d72`): client 99/99, scripts 134/134, static clean, Worker 439/439, dev 94 passed 3 skipped. **prod: pending** (running).
 - **Next machine action:** when prod finishes, submit ONE corrective report (`reports/phase7-corrective.json`, built by `scratchpad/p7-corrective-report.py`): range `1bac235..head`, full base `79761ac`, linking `20261007T044919Z-b055dc34`. On proceed: merge into `main`, push, CI, staging. Then tell the privacy session (notice 10-2/10-3, the takedown text for curated places from D1).
-- **Independent track (separate branch, not part of this review):** the staging purge and edge-verification harness (`purge_freshness` is always incomplete; staging passes neither EDGE_IDENTITIES nor EDGE_PLACE; release passes EDGE_PLACE but neither identities nor `--workers-dev`).
+- **Independent track: the staging harness**, on branch `claude/staging-harness` (worktree: session scratchpad `p6/`), from `7a70821`. Kept apart from the Phase 7 corrective review.
+  - `d6f6b06`: `purge_freshness` runs the purge exercise from EDGE_PURGE (a synthetic place and a moderator's headers). It needs a cache HIT on the place page and the feed, hides the place whole, needs the page at 410 and the feed without it within 15 s, then lifts the hide in a `finally`. With no EDGE_PURGE, or no cache HIT, it stays incomplete and nothing is hidden.
+  - `7999949`: the receipt now carries `expect_tag` and every check's result (`scripts/staging-receipt.mjs`). `staging-evidence` refuses a receipt whose checks weren't held to `staging-<sha12>`, or that lacks a required check or has one not passed.
+  - Wiring: `staging.yml` gets STAGING_EDGE_IDENTITIES, STAGING_EDGE_PLACE and STAGING_EDGE_PURGE. `release.yml` gets EDGE_IDENTITIES and `--workers-dev` from vars.WORKERS_DEV_URL. `ci-policy` requires them.
+  - Tests: edge-check 33/33, staging-evidence 6/6, staging-receipt 3/3, ci-policy 14/14, test:scripts 146/146.
+  - Not reviewed yet. Its own report goes in after the Phase 7 corrective decision; the branch rebases on the merged result.
+  - Open prerequisites:
+    - L1: Workers Caching is off (`cache.enabled` unset), so there is no edge cache. Enabling it on staging needs the Cache-Control audit and a decision.
+    - EDGE_PURGE and EDGE_IDENTITIES need a synthetic moderator and synthetic owners able to pass Access. That is an Access/identity change, Harel's choice.
+    - Production's `purge_freshness` would stay incomplete: there is no synthetic place in production, so a release stops at its production checks. A design question for the adviser (for example, staging's receipt as the purge evidence).
 - **main `79761ac`** (Phase 6, staging readiness, CI waits, version-aware edge checks, resend waits). CI green.
 - **Staging receipt:** run `37569976129` deployed `79761ac` (version `093c1249`) under `HAREL-STAGING-DEPLOY-20261007` (register sha256 `887022cb…f788`).
   - Edge check exit 3. Passed: responses, headers, private_no_store, workers_dev_closed, deployed_version (15 Worker answers named `staging-79761acb2c6c`).
