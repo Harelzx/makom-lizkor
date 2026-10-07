@@ -1,3 +1,4 @@
+import type { Durations } from "../lib/durations"
 import { ulid } from "../lib/ids"
 import { writeLedger, type Actor, type LedgerEntry, type OpKind } from "../lib/ledger"
 import { erasePhotos, photosRemain, retirePhotos } from "./photos"
@@ -5,7 +6,18 @@ import { revisionKeys } from "./curated"
 import { log } from "../lib/log"
 
 /** What an operation reaches: the database, the files, the ledger and the edge cache. */
-export type OpEnv = { db: D1Database; media: R2Bucket; ledger: R2Bucket; purge: (tags: string[]) => Promise<boolean> }
+/**
+ * What a recorded decision reaches. `durations` is how long a retention day and hour last for this deployment
+ * (worker/lib/durations.ts): the request's and the job's own builders always set it from the Worker's env; left out
+ * (the tests' own envs), they are real.
+ */
+export type OpEnv = {
+  db: D1Database
+  media: R2Bucket
+  ledger: R2Bucket
+  purge: (tags: string[]) => Promise<boolean>
+  durations?: Durations
+}
 
 /** Ids and codes only, like the ledger they feed: field names, file keys, a basis code, a report's id. */
 export type OpDetail = {

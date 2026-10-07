@@ -1,3 +1,4 @@
+import { durations } from "../lib/durations"
 import { zValidator } from "@hono/zod-validator"
 import { Hono, type Context } from "hono"
 import { ReportInput, type ReportResult } from "@/shared/contract"
@@ -65,7 +66,7 @@ reports.post(
     const target = await targetOf(c.env.DB, input.placeId)
     if (!target) return problem(c, 404, "not_found")
     const now = clock(c.req.raw, c.env)
-    const stored = await insertReport(c.env.DB, input, target, key, c.env.TRACKING_SECRET, visitor, now)
+    const stored = await insertReport(c.env.DB, input, target, key, c.env.TRACKING_SECRET, visitor, now, durations(c.env))
     if (stored.kind === "mismatch") return problem(c, 409, "idempotency_key_reused")
     if (stored.kind === "replayed")
       return c.json<ReportResult>({ ticket: stored.ticket, outcome: stored.outcome as ReportResult["outcome"] }, 202, PRIVATE)

@@ -6,6 +6,7 @@ import { CuratedInput } from "@/shared/curated"
 import { storeCurated } from "../db/curated"
 import { checkDeletion, EXPORT_TABLES, runExport } from "../db/exports"
 import { filterForImport, importExport, type ExportPayload } from "../db/import"
+import { REAL } from "../lib/durations"
 import { readFeed } from "../db/places"
 import { readLedger, replayLedger } from "../db/replay"
 import { runRetention } from "../db/retention"
@@ -118,10 +119,10 @@ describe("a curated draft's unapproved photos (P7-RET-1)", () => {
     const id = newId()
     await draft(id, 1)
     const payload = await exportNow()
-    const now = filterForImport(payload.tables, new Date())
+    const now = filterForImport(payload.tables, new Date(), REAL)
     const revIds = new Set(payload.tables.revisions.filter((r) => r.place_id === id).map((r) => r.id))
     expect(now.revision_photos.filter((p) => revIds.has(p.revision_id))).toHaveLength(1)
-    const late = filterForImport(payload.tables, new Date(Date.now() + 30 * DAY_MS))
+    const late = filterForImport(payload.tables, new Date(Date.now() + 30 * DAY_MS), REAL)
     expect(late.revision_photos.filter((p) => revIds.has(p.revision_id))).toEqual([])
     expect(late.place_sources.filter((s) => s.place_id === id && s.field === "photo")).toEqual([])
     expect(late.place_sources.filter((s) => s.place_id === id && s.field !== "photo")).toHaveLength(2)

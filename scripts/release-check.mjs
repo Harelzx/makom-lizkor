@@ -48,6 +48,8 @@ blockers.push(
       .filter(Boolean),
   ),
 )
+const { retentionScaleBlockers } = await import("./release-retention-scale.mjs")
+blockers.push(...retentionScaleBlockers(raw))
 const { backupBlockers } = await import("./release-backup.mjs")
 blockers.push(...backupBlockers(raw))
 const { platformBlockers } = await import("./release-platform.mjs")

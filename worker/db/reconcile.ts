@@ -1,5 +1,6 @@
 import { RETENTION } from "@/config"
 import { decidedAt, replayDecision, type LedgerEntry } from "../lib/ledger"
+import type { Durations } from "../lib/durations"
 import { notesCeiling } from "./reports"
 import { BLANK_COLUMNS } from "./retention"
 
@@ -11,8 +12,7 @@ type Row = Record<string, unknown>
 export type PlaceRows = { place: Row; revisions: Row[]; contacts: Row[]; suppressions: Row[]; photos?: Row[]; sources?: Row[] }
 export type Reconciled = { rows: PlaceRows; applied: number; quarantined: boolean; erased: boolean }
 
-const DAY_MS = 86_400_000
-const plusDays = (at: string, days: number) => new Date(Date.parse(at) + days * DAY_MS).toISOString()
+const plusDays = (at: string, days: number, d: Durations) => new Date(Date.parse(at) + days * d.day).toISOString()
 const earlier = (a: unknown, b: string) => (typeof a === "string" && a <= b ? a : b)
 const TOMBSTONE = ["withdrawn", "erased"]
 
@@ -31,7 +31,7 @@ const TOMBSTONE = ["withdrawn", "erased"]
  *   restored copy names at that index the file the approval copied (or already the copy); any other difference, or an
  *   approval with no such record, hides the place instead (P7-REC-1). A tombstone holds no photo row or source.
  */
-export function reconcilePlace(original: PlaceRows, entries: LedgerEntry[], now: Date): Reconciled {
+export function reconcilePlace(original: PlaceRows, entries: LedgerEntry[], now: Date, d: Durations): Reconciled {
   const rows: PlaceRows = {
     place: { ...original.place },
     revisions: original.revisions.map((r) => ({ ...r })),
@@ -65,7 +65,7 @@ export function reconcilePlace(original: PlaceRows, entries: LedgerEntry[], now:
   if (TOMBSTONE.includes(place.status as string)) return { rows, applied: 0, quarantined: false, erased: false }
 
   const closeContacts = (at: string) => {
-    for (const c of rows.contacts) c.purge_after = earlier(c.purge_after, plusDays(at, RETENTION.contactAfterCloseDays))
+    for (const c of rows.contacts) c.purge_after = earlier(c.purge_after, plusDays(at, RETENTION.contactAfterCloseDays, d))
   }
   let quarantine = r.quarantine
   for (const e of r.apply) {
@@ -113,8 +113,8 @@ export function reconcilePlace(original: PlaceRows, entries: LedgerEntry[], now:
             kind: e.actor === "automatic" ? "precautionary" : "manual",
             created_at: at,
             created_by: "ledger",
-            notes_ceiling_at: notesCeiling(new Date(at)),
-            notes_purge_after: notesCeiling(new Date(at)),
+            notes_ceiling_at: notesCeiling(new Date(at), d),
+            notes_purge_after: notesCeiling(new Date(at), d),
           })
       const status = e.status ?? (e.fields?.includes("whole") ? "hidden" : null)
       if (status && (place.status === "published" || place.status === "hidden")) place.status = status
@@ -127,7 +127,7 @@ export function reconcilePlace(original: PlaceRows, entries: LedgerEntry[], now:
             lifted_by: "ledger",
             basis_code: e.basis ?? "restored",
             basis_note: "",
-            notes_purge_after: earlier(s.notes_purge_after, plusDays(at, 90)),
+            notes_purge_after: earlier(s.notes_purge_after, plusDays(at, RETENTION.contactAfterCloseDays, d)),
           })
       }
       if (e.status) place.status = e.status
@@ -146,8 +146,8 @@ export function reconcilePlace(original: PlaceRows, entries: LedgerEntry[], now:
         kind: "precautionary",
         created_at: now.toISOString(),
         created_by: "ledger",
-        notes_ceiling_at: notesCeiling(now),
-        notes_purge_after: notesCeiling(now),
+        notes_ceiling_at: notesCeiling(now, d),
+        notes_purge_after: notesCeiling(now, d),
       })
     if (place.status === "published") place.status = "hidden"
   }
@@ -182,8 +182,8 @@ function curatedPhotosPublished(photos: Row[], revisionId: string, recorded: Led
  * request open at that point goes at most 90 days after it, and its hides' notes with it. Earlier, never later, than the
  * live date. Moderators go through the open requests first after a restore (docs/retention-timeline.md).
  */
-export function boundOpenReports(reports: Row[], suppressions: Row[], since: string) {
-  const bound = plusDays(since, 90)
+export function boundOpenReports(reports: Row[], suppressions: Row[], since: string, d: Durations) {
+  const bound = plusDays(since, RETENTION.contactAfterCloseDays, d)
   const open = new Set<unknown>()
   const outReports = reports.map((r) => {
     if (r.status === "closed") return r
@@ -207,6 +207,7 @@ export function reconcileTables(
   ledger: Map<string, LedgerEntry[]>,
   now: Date,
   since: string,
+  d: Durations,
 ): { tables: Record<string, Row[]>; summary: ReconcileSummary } {
   const summary: ReconcileSummary = { places: 0, applied: 0, quarantined: [], erased: [], lost: [] }
   const out: Record<string, Row[]> = { ...tables }
@@ -232,6 +233,7 @@ export function reconcileTables(
       },
       entries,
       now,
+      d,
     )
     const swap = (t: string, rows: Row[]) => [...(out[t] ?? []).filter((x) => x.place_id !== placeId), ...rows]
     out.places = (out.places ?? []).map((p) => (p.id === placeId ? result.rows.place : p))
@@ -244,7 +246,7 @@ export function reconcileTables(
     if (result.quarantined) summary.quarantined.push(placeId)
     if (result.erased) summary.erased.push(placeId)
   }
-  const bounded = boundOpenReports(out.reports ?? [], out.field_suppressions ?? [], since)
+  const bounded = boundOpenReports(out.reports ?? [], out.field_suppressions ?? [], since, d)
   out.reports = bounded.reports
   out.field_suppressions = bounded.suppressions
   // The feed's version moves on, so every browser fetches the restored places again.

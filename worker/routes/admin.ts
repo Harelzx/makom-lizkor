@@ -1,3 +1,4 @@
+import { durations } from "../lib/durations"
 import { zValidator } from "@hono/zod-validator"
 import { Hono, type Context } from "hono"
 import { z } from "zod"
@@ -126,7 +127,7 @@ async function decide(c: AdminContext, placeId: string, body: z.infer<typeof Tra
         }
       },
       statements: (tid) => [
-        ...transitionStatements(c.env.DB, { placeId, ...body, actor: c.get("actor"), photoKey: photo?.key }, tid, now),
+        ...transitionStatements(c.env.DB, { placeId, ...body, actor: c.get("actor"), photoKey: photo?.key }, tid, now, durations(c.env)),
         ...(curated ? curatedKeyStatements(c.env.DB, placeId, body.revisionId, curated.keys, tid) : []),
       ],
     },
@@ -313,7 +314,15 @@ for (const [path, to, needsNote] of [
     const { note } = c.req.valid("json")
     // Handling is recorded in words: a reminder stops only when someone wrote what they did.
     if (needsNote && !note) return problem(c, 400, "note_required")
-    const changed = await setReportStatus(c.env.DB, c.req.param("id"), to, c.get("actor"), note ?? null, clock(c.req.raw, c.env))
+    const changed = await setReportStatus(
+      c.env.DB,
+      c.req.param("id"),
+      to,
+      c.get("actor"),
+      note ?? null,
+      clock(c.req.raw, c.env),
+      durations(c.env),
+    )
     return changed ? c.json({ ok: true }) : problem(c, 409, "changed_meanwhile")
   })
 }

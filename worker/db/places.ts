@@ -3,12 +3,10 @@ import { RETENTION } from "@/config"
 import type { Kind } from "@/types"
 import type { Feed, PublicContribution, PublicCuratedPlace, PublicPlace, RevisionInput, SubmissionInput } from "@/shared/contract"
 import { CuratedFields } from "@/shared/curated"
+import { MONTH_DAYS, type Durations } from "../lib/durations"
 import { newToken, placeId, sameHash, sha256Hex, ulid } from "../lib/ids"
 import { stripJpeg } from "../lib/jpeg"
 import { runOp, WATCH_FIRST_LOOK_MS, type OpEnv } from "./ops"
-
-// An approximation of a month; phase 5 replaces it with calendar months read from RETENTION (src/config.ts).
-const MONTH_MS = 30 * 24 * 3600 * 1000
 
 export type Inserted =
   /** `verifyToken`: the email verification link's secret, when an address was given; only its hash is stored. */
@@ -49,6 +47,8 @@ export async function insertSubmission(
   queueLimit: number,
   /** Keys the body's fingerprint: without it, a stored fingerprint can't be tested against a guessed name or email. */
   secret: string,
+  /** This deployment's retention day (worker/lib/durations.ts): the contact's ceiling and the link's expiry. */
+  d: Durations,
 ): Promise<Inserted> {
   const keyHash = await sha256Hex(key)
   // The input after Zod, so the same request always gives the same fingerprint; keyed, and erased with a withdrawal.
@@ -101,8 +101,8 @@ export async function insertSubmission(
   // The submitter's name and email are personal data: they live with the contacts, under a fixed deletion ceiling.
   const verifyToken = input.email ? newToken() : undefined
   if (input.submitter_name || input.email) {
-    const ceiling = new Date(now.getTime() + 12 * MONTH_MS).toISOString()
-    const expires = new Date(now.getTime() + VERIFY_DAYS * 24 * 3600 * 1000).toISOString()
+    const ceiling = new Date(now.getTime() + RETENTION.contactMaxMonths * MONTH_DAYS * d.day).toISOString()
+    const expires = new Date(now.getTime() + VERIFY_DAYS * d.day).toISOString()
     stmts.push(
       db
         .prepare(
@@ -414,6 +414,8 @@ export function transitionStatements(
   },
   tid: string,
   now: Date,
+  /** This deployment's retention day (worker/lib/durations.ts): the contact's close date. */
+  d: Durations,
 ): D1PreparedStatement[] {
   const at = now.toISOString()
   const happened = "EXISTS (SELECT 1 FROM places WHERE id = ?1 AND last_transition_id = ?2)"
@@ -450,7 +452,7 @@ export function transitionStatements(
     // or sooner if their ceiling comes first. A date once set is never pushed back.
     db
       .prepare(`UPDATE contacts SET purge_after = MIN(purge_after, ?3) WHERE place_id = ?1 AND ?4 IN ('approve', 'reject') AND ${happened}`)
-      .bind(t.placeId, tid, new Date(now.getTime() + RETENTION.contactAfterCloseDays * 86_400_000).toISOString(), t.action),
+      .bind(t.placeId, tid, new Date(now.getTime() + RETENTION.contactAfterCloseDays * d.day).toISOString(), t.action),
     db
       .prepare(`UPDATE feed_state SET n = n + 1, changed_at = ?3 WHERE id = 1 AND ?4 = 'approve' AND ${happened}`)
       .bind(t.placeId, tid, at, t.action),
