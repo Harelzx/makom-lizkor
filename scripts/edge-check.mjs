@@ -325,7 +325,10 @@ export async function edgeChecks(
   async function purgeExercise() {
     const { place: id, moderator } = purge
     const page = `/place/${id}`
-    const feedPath = async () => `/api/v1/feed?v=${encodeURIComponent((await (await fetch(url("/api/v1/version"))).json()).v)}`
+    // The feed address the edge holds is watched, not the current one: the version answer turns over on its own short
+    // TTL (10 s), and a new version's address is a miss either way, so only the held address shows the purge. It is
+    // fresh once it stops naming the place (the Worker answers an old version's address 409, uncached).
+    const feed = `/api/v1/feed?v=${encodeURIComponent((await (await fetch(url("/api/v1/version"))).json()).v)}`
     const read = async (path, headers = {}) => {
       const res = await fetch(url(path), { redirect: "manual", headers })
       return { status: res.status, cache: res.headers.get("CF-Cache-Status"), body: await res.text() }
@@ -334,7 +337,7 @@ export async function edgeChecks(
     const view = async () => (await fetch(url(`/api/admin/places/${id}`), { headers: asModerator })).json()
     // Warm: the second read of each must come from the edge cache, or nothing here can show a purge.
     const warm = []
-    for (const path of [page, await feedPath()]) {
+    for (const path of [page, feed]) {
       await read(path)
       warm.push(await read(path))
     }
@@ -360,7 +363,7 @@ export async function edgeChecks(
     try {
       while (Date.now() - started < purgeTiming.deadlineMs && (fresh.page === null || fresh.feed === null)) {
         if (fresh.page === null && (await read(page)).status === 410) fresh.page = Date.now() - started
-        if (fresh.feed === null && !(await read(await feedPath())).body.includes(`"${id}"`)) fresh.feed = Date.now() - started
+        if (fresh.feed === null && !(await read(feed)).body.includes(`"${id}"`)) fresh.feed = Date.now() - started
         if (fresh.page === null || fresh.feed === null) await new Promise((r) => setTimeout(r, purgeTiming.everyMs))
       }
       for (const [what, ms] of Object.entries(fresh))

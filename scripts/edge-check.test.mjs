@@ -412,16 +412,22 @@ test("a named place's share page is held to the deployed version too (a60 with a
 // either it stays incomplete, never passed.
 const PURGE_TIMING = { freshMs: 300, deadlineMs: 1200, everyMs: 20 }
 const MOD = { "Cf-Access-Jwt-Assertion": "synthetic-moderator" }
-/** A deployment behind an edge cache: answers kept per address until purged (by tag) or until `ttlMs` passes. */
-function edgeSite({ purgeWorks = true, cached = true, ttlMs = 5000, hideStatus = 200, liftStatus = 200 } = {}) {
+/**
+ * A deployment behind an edge cache: answers kept per address until purged (by tag) or until their TTL passes (the
+ * version's own, shorter in the Worker: 10 s against 60 s). As the Worker's feed, an address naming an old version
+ * answers 409, uncached.
+ */
+function edgeSite({ purgeWorks = true, cached = true, ttlMs = 5000, versionTtlMs = ttlMs, hideStatus = 200, liftStatus = 200 } = {}) {
   const state = { hidden: false, rev: 3, v: 7, suppressions: [], lifted: [], calls: [] }
   const cache = new Map()
-  const origin = (path) => {
+  const origin = (path, v) => {
     if (path === "/place/syn-place")
       return state.hidden ? { status: 410, body: "gone", tag: "place:syn-place" } : { status: 200, body: "page", tag: "place:syn-place" }
     if (path === "/api/v1/version") return { status: 200, body: JSON.stringify({ v: `0.${state.v}` }), tag: "feed" }
-    if (path.startsWith("/api/v1/feed"))
-      return { status: 200, body: JSON.stringify({ places: state.hidden ? [] : [{ id: "syn-place" }] }), tag: "feed" }
+    if (path === "/api/v1/feed")
+      return v === `0.${state.v}`
+        ? { status: 200, body: JSON.stringify({ places: state.hidden ? [] : [{ id: "syn-place" }] }), tag: "feed" }
+        : { status: 409, body: JSON.stringify({ code: "stale_version", v: `0.${state.v}` }), uncached: true }
     return null
   }
   const respond = (status, body, extra = {}) => new Response(body, { status, headers: { "Content-Type": "application/json", ...extra } })
@@ -460,12 +466,13 @@ function edgeSite({ purgeWorks = true, cached = true, ttlMs = 5000, hideStatus =
         return respond(200, JSON.stringify({ ok: true }))
       }
     }
-    const o = origin(u.pathname)
+    const o = origin(u.pathname, u.searchParams.get("v"))
     if (!o) return deployment()(input, init)
     const hit = cached && cache.get(key)
-    if (hit && Date.now() - hit.at < ttlMs) return respond(hit.status, hit.body, { "CF-Cache-Status": "HIT" })
-    if (cached) cache.set(key, { ...o, at: Date.now() })
-    return respond(o.status, o.body, cached ? { "CF-Cache-Status": "MISS" } : {})
+    const ttl = u.pathname === "/api/v1/version" ? versionTtlMs : ttlMs
+    if (hit && Date.now() - hit.at < ttl) return respond(hit.status, hit.body, { "CF-Cache-Status": "HIT" })
+    if (cached && !o.uncached) cache.set(key, { ...o, at: Date.now() })
+    return respond(o.status, o.body, cached && !o.uncached ? { "CF-Cache-Status": "MISS" } : {})
   }
   return { fetch, state }
 }
@@ -489,6 +496,17 @@ test("a purge that doesn't take fails once the bound passes, and the hide is sti
   assert.match(r.detail.join(" "), /still served|not fresh/)
   assert.deepEqual(site.state.lifted, ["s_0"])
   assert.equal(outcome(results), "fail")
+})
+
+test("an unpurged feed fails even once the version's own short TTL has turned it over: the warmed address is watched", async () => {
+  // The version answer expires well inside the bound, so a fresh read of the version names a new, uncached feed: that
+  // is the TTL at work, not a purge. Only the address the edge was holding shows whether the purge reached it.
+  const site = edgeSite({ purgeWorks: false, versionTtlMs: 50 })
+  const results = await edgeChecks("https://site.example", { fetch: site.fetch, purge: PURGE, purgeTiming: PURGE_TIMING })
+  const r = results.find((x) => x.check === "purge_freshness")
+  assert.equal(r.status, "fail", JSON.stringify(r))
+  assert.match(r.detail.join(" "), /the feed (still served|was not fresh)/)
+  assert.deepEqual(site.state.lifted, ["s_0"])
 })
 
 test("the purge exercise is incomplete without a moderator and a synthetic place, or without an edge cache to see (spec 13)", async () => {
