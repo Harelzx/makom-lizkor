@@ -103,3 +103,40 @@ describe("the weekly restore drill (spec 8.4)", () => {
     expect(run).toEqual({ ok: 1, failure: null })
   })
 })
+
+// L-RET-EVIDENCE-1 (a89): on staging's two-hour day, the drill takes an export up to 26 staged hours old (130 minutes)
+// and refuses an older one before anything reaches the drill database.
+describe("on staging's scale (L-RET A2)", () => {
+  const MIN = 60_000
+  const STAGED = { ...env, ENVIRONMENT: "staging", RETENTION_DAY_SECONDS: "7200" } as Env
+  /** The drill database, with every statement prepared on it counted. */
+  const watched = () => {
+    const prepared: string[] = []
+    const db = new Proxy(env.IMPORT_TEST, {
+      get(target, prop) {
+        if (prop === "prepare") return (sql: string) => (prepared.push(sql), target.prepare(sql))
+        const v = Reflect.get(target, prop)
+        return typeof v === "function" ? v.bind(target) : v
+      },
+    })
+    return { db, prepared }
+  }
+
+  it("restores an export 129 minutes old", async () => {
+    const at = new Date(Date.now() + 4600 * DAY)
+    const exportId = await exportAt(at)
+    const run = await runDrill({ ...drillEnv(), env: STAGED }, new Date(at.getTime() + 129 * MIN))
+    expect(await runOf(run!)).toEqual({ ok: 1, failure: null, export_id: exportId })
+    expect(await drillEmpty()).toBe(true)
+  })
+
+  it("refuses one 131 minutes old before anything is imported", async () => {
+    const at = new Date(Date.now() + 4700 * DAY)
+    await exportAt(at)
+    const target = watched()
+    const run = await runDrill({ ...drillEnv(), env: STAGED, drillDb: target.db }, new Date(at.getTime() + 131 * MIN))
+    expect(await runOf(run!)).toMatchObject({ ok: 0, failure: "stale_export" })
+    // Nothing was imported: the only writes are the drill's own emptying, which runs whatever the outcome.
+    expect(target.prepared.filter((sql) => /^\s*(INSERT|UPDATE)/i.test(sql))).toEqual([])
+  })
+})

@@ -2,12 +2,14 @@ import { env } from "cloudflare:workers"
 import { beforeAll, describe, expect, it } from "vitest"
 import { RETENTION } from "@/config"
 import { setReportStatus } from "../db/moderation"
+import { boundOpenReports } from "../db/reconcile"
 import { runJobs } from "../jobs"
 import { durations } from "../lib/durations"
 import { REPORT_GUARDS } from "../lib/guards"
 import { sendMail } from "../lib/mail"
 import { call } from "./app"
-import { approve, submit } from "./helpers"
+import { body, newId } from "./curated-helpers"
+import { admin, approve, submit } from "./helpers"
 
 // The staging scale end to end (L-RET A2, a87): with RETENTION_DAY_SECONDS=7200 on staging, every deadline the routes
 // write and every cutoff the jobs read is in two-hour days and five-minute hours, so spec 7's staging test can watch
@@ -162,5 +164,65 @@ describe("the staging retention scale, end to end", () => {
     expect((await submitIn(REFUSED, "ספסל דמו שנדחה")).status).toBeGreaterThanOrEqual(500)
     await expect(runJobs(REFUSED, deps, undefined, new Date())).rejects.toThrow(/RETENTION_DAY_SECONDS/)
     expect({ places: await count("places"), runs: await count("retention_runs"), exports: await count("exports") }).toEqual(before)
+  })
+
+  it("a curated write under a refused setting stores nothing; unset, the same write is stored (L-RET-GUARD-1, a89)", async () => {
+    // Development signs a moderator in with the tests' dev token, and refuses the scale as every non-staging env does.
+    const refusing = { ...env, RETENTION_DAY_SECONDS: "7200" } as Env
+    const write = (e: Env, id: string) =>
+      admin("/api/admin/places", { method: "POST", body: JSON.stringify(body(id)) }, "dev@example.test", e)
+    const tables = ["places", "revisions", "place_sources", "audit_log"]
+    const state = async () => Object.fromEntries(await Promise.all(tables.map(async (t) => [t, await count(t)])))
+    const before = await state()
+    const refused = newId()
+    expect((await write(refusing, refused)).status).toBe(500)
+    expect(await state()).toEqual(before)
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM places WHERE id = ?").bind(refused).first<number>("n")).toBe(0)
+
+    const stored = newId()
+    expect((await write(env, stored)).ok).toBe(true)
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM places WHERE id = ?").bind(stored).first<number>("n")).toBe(1)
+  })
+
+  it("a close sets the earlier of the ceiling and 90 staged days; a reopening never extends it, a second close keeps the first", async () => {
+    const id = (await (await submitIn(env, "גינת דמו לסגירה ופתיחה")).json<{ id: string }>()).id
+    await approve(id)
+    const { ticket } = await (await reportIn(STAGED, id)).json<{ ticket: string }>()
+    const ceiling = (await reportRow(ticket))!.ceiling_at
+    const close = (t: Date) => setReportStatus(env.DB, ticket, "closed", "dev@example.test", "טופל", t, durations(STAGED))
+    const t1 = new Date()
+    expect(await close(t1)).toBe(true)
+    const first = t1.getTime() + RETENTION.contactAfterCloseDays * DAY
+    expect(ms((await reportRow(ticket))!.purge_after)).toBe(first)
+    expect(await setReportStatus(env.DB, ticket, "open", "dev@example.test", null, new Date(t1.getTime() + HOUR), durations(STAGED))).toBe(
+      true,
+    )
+    expect(ms((await reportRow(ticket))!.purge_after)).toBe(first)
+    expect(await close(new Date(t1.getTime() + 10 * DAY))).toBe(true)
+    const after = (await reportRow(ticket))!
+    expect(ms(after.purge_after)).toBe(first)
+    expect(after.ceiling_at).toBe(ceiling)
+  })
+
+  it("a restore bounds open requests to 90 staged days from the export, keeping an earlier date (the replay's earlier-of)", () => {
+    const since = "2030-01-01T00:00:00.000Z"
+    const bound = new Date(Date.parse(since) + RETENTION.contactAfterCloseDays * DAY).toISOString()
+    const later = new Date(Date.parse(since) + 400 * DAY).toISOString()
+    const sooner = new Date(Date.parse(since) + 10 * DAY).toISOString()
+    const out = boundOpenReports(
+      [
+        { id: "r_late", status: "open", purge_after: later },
+        { id: "r_soon", status: "in_review", purge_after: sooner },
+        { id: "r_closed", status: "closed", purge_after: later },
+      ],
+      [
+        { id: "s_open", report_id: "r_late", notes_purge_after: later },
+        { id: "s_closed", report_id: "r_closed", notes_purge_after: later },
+      ],
+      since,
+      durations(STAGED),
+    )
+    expect(out.reports.map((r) => r.purge_after)).toEqual([bound, sooner, later])
+    expect(out.suppressions.map((x) => x.notes_purge_after)).toEqual([bound, later])
   })
 })
