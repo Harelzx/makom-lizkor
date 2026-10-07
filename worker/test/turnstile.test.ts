@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers"
 import { describe, expect, it } from "vitest"
 import { CURRENT_SUBMISSION_NOTICE } from "@/shared/contract"
+import { checkTurnstile } from "../lib/turnstile"
 import { call } from "./app"
 
 const body = (name: string) =>
@@ -79,4 +80,22 @@ describe("limits", () => {
     // No column for a visitor's IP in any form (an email's to_address is not one).
     expect(tables).not.toMatch(/\b(remote_?|client_?)?ip(_?address|_?hash)?\b/i)
   })
+})
+
+// L-TURNSTILE-PROD-1 (a81): an answer marked as a test-key result is refused outside development and staging even when
+// its hostname and action both match, for every action the check guards. The marker, not a missing action, decides.
+describe("a test-key result whose host and action match", () => {
+  const marked = (action: string) => async () => ({
+    success: true,
+    hostname: "example.com",
+    action,
+    metadata: { result_with_testing_key: true },
+  })
+  const at = (ENVIRONMENT: string) => ({ ...env, ENVIRONMENT, TURNSTILE_SECRET: "a-secret", TURNSTILE_HOSTNAMES: "example.com" })
+  for (const action of ["submit", "revise", "report"])
+    it(`is refused in production and accepted in development and on staging (${action})`, async () => {
+      expect(await checkTurnstile(at("production"), marked(action), "token", action)).toBe("failed")
+      expect(await checkTurnstile(at("staging"), marked(action), "token", action)).toBe("ok")
+      expect(await checkTurnstile(at("development"), marked(action), "token", action)).toBe("ok")
+    })
 })
