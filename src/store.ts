@@ -30,8 +30,6 @@ const sharedPath = typeof location !== "undefined" ? /^\/place\/([^/]+)\/?$/.exe
 const shareStatus = sharedPath && document.querySelector('meta[name="place-status"]')?.getAttribute("content")
 if (sharedPath) history.replaceState(null, "", shareStatus ? "/#/" : `/#/place/${sharedPath[1]}`)
 const offMap = shareStatus ? decoded(sharedPath![1]) : null
-// …and after a reload too, when the address no longer says so: the browser keeps a note of it.
-if (offMap?.startsWith("p_")) void markUnlisted(offMap)
 /** The place a shared link names, chosen before the first render so the address is never rewritten under it. */
 const linkedPlaceId = () => {
   if (!linkedToPlace() || !location.hash.startsWith("#/place/")) return null
@@ -47,6 +45,9 @@ const linkedPlaceId = () => {
  * carries no schema code.
  */
 export const placeIdShape = (id: string) => id.startsWith("local-") || id.startsWith("p_") || /^[a-z0-9][a-z0-9-]{0,63}$/.test(id)
+// …and after a reload too, when the address no longer says so: the browser keeps a note of it. A contribution or one
+// of the site's own places alike (phase 7: both come from the feed); a visitor's own place is never on a share page.
+if (offMap && placeIdShape(offMap) && !offMap.startsWith("local-")) void markUnlisted(offMap)
 
 interface State {
   phase: Phase
