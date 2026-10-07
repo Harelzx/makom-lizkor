@@ -188,15 +188,20 @@ function Clock({ running, stepBack, onStop }: { running: boolean; stepBack: bool
       transition={stepBack ? { duration: 1.1, ease } : { delay: 0.2, duration: 1.1, ease }}
     >
       <time
-        dateTime="2023-10-07T06:29:00+03:00"
+        dateTime={`2023-10-07T${text}+03:00`}
         dir="ltr"
         className={cn("text-display tabular-nums transition-colors duration-[1400ms]", stopped ? "text-dawn" : "text-white")}
       >
-        {text
-          .split("")
-          .map((ch, i) =>
-            i >= 4 && ch !== ":" ? <RollingDigit key={i} value={ch} delay={{ 4: 0.12, 6: 0.06 }[i] ?? 0} /> : <span key={i}>{ch}</span>,
-          )}
+        {/* The time is read once, as it is: a rolling digit keeps its leaving value in place until the roll ends, so the
+            digits are hidden from screen readers, which read this instead. Not a live region: the ticks aren't announced. */}
+        <span className="sr-only">{text}</span>
+        <span aria-hidden="true">
+          {text
+            .split("")
+            .map((ch, i) =>
+              i >= 4 && ch !== ":" ? <RollingDigit key={i} value={ch} delay={{ 4: 0.12, 6: 0.06 }[i] ?? 0} /> : <span key={i}>{ch}</span>,
+            )}
+        </span>
       </time>
     </motion.div>
   )

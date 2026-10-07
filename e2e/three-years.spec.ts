@@ -12,17 +12,31 @@ const DAY_COMES = { timeout: 30_000 }
 /** A typed line: whole for screen readers and letter by letter on screen, so it is found by the paragraph that holds it. */
 const typedLine = (page: Page, text: string) => page.locator("p", { hasText: text })
 
+/** The opening's clock as a screen reader reads it: its one readable time, not the rolling digits beside it. */
+const CLOCK = "time > :not([aria-hidden='true'])"
+/** The opening's first scene: the clock stopped at 06:29, the world stopped with it, the date and what happened under it. */
+const FIRST_SCENE = { clock: "06:29:00", frozen: 1, date: true, line: true }
+/** What the page saw of the first scene: the first sample equal to it in time, or else the last one, when, and if in time. */
+type Seen = { seen: Record<string, unknown>; at: number; inTime: boolean }
+
 /**
- * The opening's first scene, read in one evaluation so every value is from the same moment: the clock's text, how many
- * frozen atmospheres there are, and whether the date and the line are visible. The date and the line are found as
- * getByText finds them (the smallest elements whose text, whitespace collapsed, contains it, ignoring case; more than one
- * is a strict-mode error) and judged as toBeVisible judges (Playwright 1.63, read from playwright-core: display: contents
- * by its children; checkVisibility(); visibility: visible; a non-empty box). Opacity is not looked at, so this checks
- * that they are there together, not that their fades have finished.
+ * Watches the opening's first scene from inside the page, from the click that starts the film until `within` ms after it.
+ * Every 100 ms it reads in one go, so every value is from the same moment, the clock's readable time, how many frozen
+ * atmospheres there are, and whether the date and the line are visible, and it stops at the first sample equal to `want`
+ * or at the first one taken after the deadline. The date and the line are found as getByText finds them (the smallest
+ * elements whose text, whitespace collapsed, contains it, ignoring case; more than one is a strict-mode error) and judged
+ * as toBeVisible judges (Playwright 1.63, read from playwright-core: display: contents by its children; checkVisibility();
+ * visibility: visible; a non-empty box). Opacity is not looked at, so this checks that they are there together, not that
+ * their fades have finished.
+ *
+ * Time is the page's own, from the click as the page received it (the film's timeline starts there): performance.now
+ * runs in real time under page.clock.setFixedTime, which fixes only the date. So neither the click's return to the test
+ * nor a sample's way back counts against the deadline: on a loaded runner a sample that matched in time reached the test
+ * 0.9 s later, after its deadline, and a page evaluation took up to 3.9 s there and back (CI 37694842681).
  */
-const firstScene = (page: Page) =>
+const watchFirstScene = (page: Page, want: Record<string, unknown>, within: number) =>
   page.evaluate(
-    ([dateText, lineText]) => {
+    ([want, within, clock, dateText, lineText]) => {
       const norm = (s: string) => s.replace(/\s+/g, " ").trim()
       const textOf = (e: Element) => norm(e.textContent ?? "").toLowerCase()
       const visible = (e: Element): boolean => {
@@ -47,30 +61,61 @@ const firstScene = (page: Page) =>
         const own = all.filter((e) => ![...e.children].some((c) => textOf(c).includes(t)))
         return own.length > 1 ? `${own.length} elements` : own.length === 1 && visible(own[0])
       }
-      const clocks = document.querySelectorAll("time")
-      return {
-        clock: clocks.length === 1 ? norm(clocks[0].textContent ?? "") : `${clocks.length} time elements`,
-        frozen: document.querySelectorAll(".atmo-frozen").length,
-        date: shown(dateText),
-        line: shown(lineText),
+      const sample = (): Record<string, unknown> => {
+        const clocks = document.querySelectorAll(clock)
+        return {
+          clock: clocks.length === 1 ? norm(clocks[0].textContent ?? "") : `${clocks.length} readable clocks`,
+          frozen: document.querySelectorAll(".atmo-frozen").length,
+          date: shown(dateText),
+          line: shown(lineText),
+        }
       }
+      const same = (a: Record<string, unknown>) =>
+        Object.keys(a).length === Object.keys(want).length && Object.keys(want).every((k) => a[k] === want[k])
+      const out = window as unknown as { firstScene?: Seen; clickAt?: number }
+      addEventListener(
+        "click",
+        () => {
+          if (out.clickAt !== undefined) return
+          const clickAt = (out.clickAt = performance.now())
+          const look = () => {
+            const seen = sample()
+            const at = performance.now() - clickAt
+            const inTime = at <= within
+            if (!inTime || same(seen)) out.firstScene = { seen, at, inTime }
+            else setTimeout(look, 100)
+          }
+          look()
+        },
+        { capture: true },
+      )
     },
-    ["07.10.2023", "בבוקר שמחת תורה נשבר השקט בדרום."] as const,
+    [want, within, CLOCK, "07.10.2023", "בבוקר שמחת תורה נשבר השקט בדרום."] as const,
   )
+
+/** What the watcher saw, once it has seen it; the way back is bounded, the deadline itself is the page's. */
+const firstSceneSeen = async (page: Page) => {
+  const seen = await page.waitForFunction(() => (window as unknown as { firstScene?: Seen }).firstScene, undefined, {
+    polling: 100,
+    timeout: 30_000,
+  })
+  return (await seen.jsonValue()) as Seen
+}
 
 test("the opening stops at 06:29, counts the days to today, and says how long it has been", async ({ page }) => {
   // plays the whole opening and the sunrise
   test.slow()
   await page.clock.setFixedTime(new Date("2026-10-04T10:00:00+03:00"))
   await page.goto("/")
+  await watchFirstScene(page, FIRST_SCENE, 10_000)
   await page.getByRole("button", { name: "בלי צליל" }).click()
 
   // the clock runs out its last seconds and stops, and the world stops with it, with the date and what happened under it
-  // (by design that takes a few seconds after the page loads, more on a busy machine). All four in every sample, read in
-  // one evaluation: the clock's last tick and the date's scene run on timers of their own, and on a loaded runner the
-  // clock stopped late while the scene's timer was already moving on; four waits one after another reached the date
-  // after it had left (CI 37646691672). Same deadline as before, from the click.
-  await expect.poll(() => firstScene(page), { timeout: 10_000 }).toEqual({ clock: "06:29:00", frozen: 1, date: true, line: true })
+  // (by design that takes a few seconds after the click, more on a busy machine). All four in every sample, read in one
+  // go: the clock's last tick and the date's scene run on timers of their own, and on a loaded runner the clock stopped
+  // late while the scene's timer was already moving on; four waits one after another reached the date after it had left
+  // (CI 37646691672). Within 10 s of the click, as the page received it.
+  expect(await firstSceneSeen(page)).toMatchObject({ seen: FIRST_SCENE, inTime: true })
 
   // The film plays on its own from here: a scene that moves on by itself just before an Enter lands would be skipped
   // whole (main's first CI run, 2026-10-07: on a slow runner the count was gone before it was looked for). Each scene
