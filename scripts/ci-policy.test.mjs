@@ -1,7 +1,7 @@
 // node --test scripts/ci-policy.test.mjs
 import assert from "node:assert/strict"
 import { spawnSync } from "node:child_process"
-import { mkdtempSync, writeFileSync } from "node:fs"
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { test } from "node:test"
@@ -106,7 +106,7 @@ test("the release runs 14.2's steps in their order", () => {
   const source = real["release.yml"]
   const check = "      - name: Release check\n        run: npm run release:check\n"
   const migrate =
-    "      - name: Migrations (expand only; scripts/rollback-check.mjs refuses a rollback across anything else)\n        run: npx wrangler d1 migrations apply DB --remote\n"
+    "      - name: Migrations (expand only; scripts/rollback-check.mjs refuses a rollback across anything else)\n        id: migrate\n        run: npx wrangler d1 migrations apply DB --remote\n"
   assert.ok(source.includes(check) && source.includes(migrate))
   // The migrations moved ahead of the release check.
   fails(
@@ -264,4 +264,27 @@ test("a failed command inside a pipe fails its step, so no migration runs withou
   writeFileSync(join(dir, "npx"), "#!/bin/sh\necho 'no bookmark' >&2\nexit 1\n", { mode: 0o755 })
   const res = spawnSync("bash", ["-e", "-c", step.run], { env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, RUNNER_TEMP: dir } })
   assert.notEqual(res.status, 0, "the step passed although Wrangler failed")
+})
+
+// A release that fails or is cancelled says what it left in production, from its steps' outcomes: a failed final
+// check is not proof that nothing was deployed (L-RELEASE-FAIL).
+test("a failed release says what it left in production", () => {
+  const source = real["release.yml"]
+  const step = source.indexOf("      # A release that fails or is cancelled says")
+  assert.ok(step > 0)
+  fails({ ...real, "release.yml": source.slice(0, step) }, "must end by saying what a failed release left in production")
+  fails(withChange("release.yml", "        if: failure() || cancelled()\n", "        if: failure()\n"), "must end by saying")
+  for (const id of ["migrate", "deploy", "checks", "publish"])
+    fails(withChange("release.yml", `\${{ steps.${id}.outcome }}`, "success"), "must end by saying")
+  fails(withChange("release.yml", "        id: deploy\n", "        id: deployed\n"), "must end by saying")
+  // The step itself, run as GitHub runs it after the checks failed: the summary says the release is live, unverified.
+  const last = parse(real["release.yml"]).jobs.release.steps.at(-1)
+  const dir = mkdtempSync(join(tmpdir(), "outcome-"))
+  const summary = join(dir, "summary.md")
+  writeFileSync(summary, "")
+  const env = { RELEASE: "release-2026-11-02", MIGRATED: "success", DEPLOYED: "success", CHECKED: "failure", PUBLISHED: "skipped" }
+  const res = spawnSync("bash", ["-e", "-c", last.run], { env: { ...process.env, ...env, GITHUB_STEP_SUMMARY: summary } })
+  assert.equal(res.status, 0, String(res.stderr))
+  assert.match(readFileSync(summary, "utf8"), /release-2026-11-02 is live in production and not verified/)
+  assert.deepEqual(Object.keys(last.env).sort(), ["CHECKED", "DEPLOYED", "MIGRATED", "PUBLISHED"])
 })
