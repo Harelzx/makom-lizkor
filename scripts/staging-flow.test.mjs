@@ -31,7 +31,8 @@ function stagingSite({
   feedFollowsHide = true,
   pageAfterHide = 410,
   // Transport faults: the approval committed and its answer lost; a body that can't be read at one address; a
-  // moderator's view answering 200 without a rev; the version tag every Worker answer names.
+  // moderator's view answering 200 without a rev; the version tag every Worker answer names. `unreadableAt` is a path,
+  // or a function of the path and the site's state.
   loseApprovalAnswer = false,
   unreadableAt = null,
   viewWithoutRev = false,
@@ -46,7 +47,7 @@ function stagingSite({
     if (init.body) state.bodies.push(JSON.parse(init.body))
     if (!auth(init)) return json(403, { code: "forbidden" })
     const res = await answer(u, method, init)
-    if (unreadableAt === u.pathname) {
+    if (typeof unreadableAt === "function" ? unreadableAt(u.pathname, state) : unreadableAt === u.pathname) {
       const broken = new Response(null, { status: res.status, headers: res.headers })
       broken.text = async () => {
         throw new TypeError("terminated")
@@ -211,6 +212,20 @@ test("a body that can't be read fails its own step the same way", async () => {
   const failed = r.steps.find((s) => s.status === "fail")
   assert.equal(failed.step, "queued")
   assert.match(failed.detail, /no answer: the outcome on the server is unknown/)
+})
+
+// a88's note: a share page with no readable answer says so, at publication and at removal, never "not asked" or
+// "undefined".
+test("a share page with no readable answer is named unknown, at publication and at removal", async () => {
+  const published = await run(stagingSite({ unreadableAt: (path) => path.startsWith("/place/") }))
+  const atPublish = published.steps.find((s) => s.step === "published")
+  assert.equal(atPublish.status, "fail")
+  assert.match(atPublish.detail, /share page no answer: the outcome on the server is unknown/)
+
+  const hidden = (path, state) => path.startsWith("/place/") && [...state.places.values()].some((p) => p.hidden)
+  const removed = (await run(stagingSite({ unreadableAt: hidden }))).steps.find((s) => s.step === "removed")
+  assert.equal(removed.status, "fail")
+  assert.match(removed.detail, /share page no answer: the outcome on the server is unknown/)
 })
 
 // L-FLOW-HIDE-1 (a86): only the hide's own successful answer passes 'hidden'.
