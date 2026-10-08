@@ -3,8 +3,9 @@
 // node tools/l-ret/prune-fixture.mjs seed|check <receipt.json>
 import assert from "node:assert/strict"
 import { execFileSync } from "node:child_process"
-import { readFileSync, writeFileSync, existsSync, appendFileSync } from "node:fs"
+import { readFileSync, writeFileSync } from "node:fs"
 import sharp from "sharp"
+import { freshReceipt, observePrune } from "./prune-observation.mjs"
 import { sha256, seal, gzip } from "../../worker/lib/sealed.ts"
 import { ulid } from "../../worker/lib/ids.ts"
 import { STAGING_ACCOUNT, STAGING_DATABASE, STAGING_ORIGIN, stagingAccount, stagingDatabase, stagingRequester } from "./guards.mjs"
@@ -55,7 +56,7 @@ const latest = (await query("SELECT id,created_at FROM exports WHERE ok=1 AND de
 assert.ok(latest, "A good operational backup is required first")
 
 if (mode === "seed") {
-  assert.ok(!existsSync(out), "Refusing to overwrite receipt")
+  freshReceipt(out)
   const keys = JSON.parse(settings.find((b) => b.name === "EXPORT_PUBLIC_KEYS")?.text ?? "[]")
   assert.ok(keys.length > 0 && keys.every((k) => k.kty === "RSA" && !["d", "p", "q", "dp", "dq", "qi", "oth"].some((f) => f in k)))
   const baseManifest = await (await request(path(`exports/${latest.id}/manifest.json`))).json()
@@ -156,55 +157,7 @@ if (mode === "seed") {
   assert.equal(receipt.status, "awaiting_real_cron")
   assert.equal(receipt.expectTag, process.env.EXPECT_TAG)
   assert.match(receipt.marker, /^PRUNE-[a-f0-9-]{36}$/)
-  const observed = []
-  for (const e of receipt.exports) {
-    assert.match(e.id, /^ex_[0-9A-HJKMNP-TV-Z]{26}$/)
-    assert.match(e.photo, /^photos\/[a-f0-9]{64}$/)
-    const row = (await query("SELECT ok,deleted_at FROM exports WHERE id=? AND retention_run=?", [e.id, `synthetic:${receipt.marker}`]))
-      .results[0]
-    assert.ok(row)
-    assert.equal(row.ok, 0)
-    const data = await request(path(`exports/${e.id}/data.bin`)),
-      manifest = await request(path(`exports/${e.id}/manifest.json`)),
-      photo = await request(path(e.photo))
-    const want = e.role === "old" ? 404 : 200
-    assert.equal(data.status, want)
-    assert.equal(manifest.status, want)
-    assert.equal(!!row.deleted_at, e.role === "old")
-    if (e.role === "young") assert.equal(photo.status, 200)
-    observed.push({ role: e.role, data: data.status, manifest: manifest.status, photo: photo.status, deleted_at: row.deleted_at })
-  }
-  assert.equal(observed.length, 2)
-  const old = observed.find((o) => o.role === "old"),
-    young = observed.find((o) => o.role === "young")
-  assert.ok(old && young)
-  const oldFixture = receipt.exports.find((e) => e.role === "old")
-  const upload = receipt.objects.find((o) => o.key === oldFixture.photo)?.provider_uploaded_at
-  assert.ok(Number.isFinite(Date.parse(upload)))
-  const youngOrphan = Date.now() < Date.parse(upload) + 7_200_000
-  if (youngOrphan) assert.equal(old.photo, 200, "Orphan was removed before the real two-hour grace")
-  const historyFile = `${out}.observations.jsonl`
-  const history = existsSync(historyFile)
-    ? readFileSync(historyFile, "utf8")
-        .trim()
-        .split("\n")
-        .filter(Boolean)
-        .map((l) => JSON.parse(l))
-    : []
-  if (old.photo === 404)
-    assert.ok(
-      history.some((h) => h.youngOrphanSurvived === true),
-      "Missing observed too-young orphan control",
-    )
-  const result = {
-    at: new Date().toISOString(),
-    status: old.photo === 404 ? "pass" : "incomplete_photo_grace",
-    observed,
-    providerTimeWasNotChanged: true,
-    youngOrphanSurvived: youngOrphan && old.photo === 200,
-  }
-  appendFileSync(historyFile, `${JSON.stringify(result)}\n`)
-  writeFileSync(`${out}.checked.json`, JSON.stringify(result, null, 2))
+  const result = await observePrune(receipt, out, { query, objectStatus: async (key) => (await request(path(key))).status })
   console.log(JSON.stringify(result))
-  if (result.status !== "pass") process.exitCode = 3
+  if (result.status !== "pass") process.exitCode = result.status === "failed" ? 1 : 3
 }

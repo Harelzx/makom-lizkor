@@ -89,3 +89,30 @@ test("staging's export keys are public keys of its own, and optional (L-RET A2, 
   shared.vars.EXPORT_PUBLIC_KEYS = JSON.stringify([owner])
   assert.ok(deploy(JSON.stringify([owner, drill]), shared).some((x) => x.includes("production's")))
 })
+
+test("staging drill is isolated; optional commissioning doesn't create production resources", () => {
+  const r = real()
+  assert.ok(!r.d1_databases.some((d) => d.binding === "DRILL_DB"))
+  const drill = r.env.staging.d1_databases.find((d) => d.binding === "DRILL_DB")
+  assert.ok(drill)
+  for (const change of [
+    (d) => {
+      d.database_id = r.env.staging.d1_databases[0].database_id
+    },
+    (d) => {
+      d.database_id = r.d1_databases[0].database_id
+    },
+    (d) => {
+      d.database_name = "production-recovery"
+    },
+    (d) => {
+      d.database_id = ""
+    },
+  ]) {
+    const altered = structuredClone(r)
+    change(altered.env.staging.d1_databases.find((d) => d.binding === "DRILL_DB"))
+    assert.ok(stagingBlockers(altered).some((x) => x.includes("distinct, real staging recovery")))
+  }
+  r.env.staging.d1_databases.push(structuredClone(drill))
+  assert.ok(stagingBlockers(r).some((x) => x.includes("distinct, real staging recovery")))
+})

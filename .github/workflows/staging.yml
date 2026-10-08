@@ -45,7 +45,7 @@ jobs:
       STAGING_RETENTION_DAY_SECONDS: ${{ vars.STAGING_RETENTION_DAY_SECONDS }}
       # Staging's own export keys (L-RET A2, a104): public RSA keys only, from a repository variable, checked by
       # staging-check before the build; unset, no export is written and the nightly check says so. The private halves
-      # stay off GitHub and out of the Worker.
+      # owner key stays offline; only the synthetic staging drill key is a staging secret.
       STAGING_EXPORT_PUBLIC_KEYS: ${{ vars.STAGING_EXPORT_PUBLIC_KEYS }}
     steps:
       - uses: actions/checkout@v5
@@ -64,16 +64,20 @@ jobs:
       - run: node scripts/bundle-check.mjs
       - name: Migrations, on the staging database
         run: npx wrangler d1 migrations apply DB --remote
+      - name: Migrations, on the separate staging recovery database
+        run: npx wrangler d1 migrations apply DRILL_DB --remote
       - name: Deploy, tagged with its commit
         env:
           TURNSTILE_SECRET: ${{ secrets.STAGING_TURNSTILE_SECRET }}
           TRACKING_SECRET: ${{ secrets.STAGING_TRACKING_SECRET }}
           TRIBUTE_SECRET: ${{ secrets.STAGING_TRIBUTE_SECRET }}
+          DRILL_PRIVATE_KEY: ${{ secrets.STAGING_DRILL_PRIVATE_KEY }}
         run: |
           set -euo pipefail
+          test -n "$DRILL_PRIVATE_KEY"
           secrets="$RUNNER_TEMP/staging-secrets.json"
           trap 'rm -f "$secrets"' EXIT
-          node -e 'const e=process.env; require("fs").writeFileSync(process.argv[1], JSON.stringify({TURNSTILE_SECRET:e.TURNSTILE_SECRET, TRACKING_SECRET:e.TRACKING_SECRET, TRIBUTE_SECRET:e.TRIBUTE_SECRET}), {mode:0o600})' "$secrets"
+          node -e 'const e=process.env; require("fs").writeFileSync(process.argv[1], JSON.stringify({TURNSTILE_SECRET:e.TURNSTILE_SECRET, TRACKING_SECRET:e.TRACKING_SECRET, TRIBUTE_SECRET:e.TRIBUTE_SECRET, DRILL_PRIVATE_KEY:e.DRILL_PRIVATE_KEY}), {mode:0o600})' "$secrets"
           npx wrangler deploy --tag "staging-${SHA:0:12}" --message "staging $SHA" --secrets-file "$secrets" \
             --var "ACCESS_TEAM_DOMAIN:$STAGING_ACCESS_TEAM_DOMAIN" --var "ACCESS_AUD:$STAGING_ACCESS_AUD" \
             --var "PUBLIC_ORIGIN:$STAGING_PUBLIC_ORIGIN" --var "TURNSTILE_HOSTNAMES:$STAGING_TURNSTILE_HOSTNAMES" \

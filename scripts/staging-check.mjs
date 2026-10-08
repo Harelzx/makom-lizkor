@@ -66,7 +66,34 @@ export function stagingBlockers(raw, { deploy = false, env = {} } = {}) {
   }
   // The same bindings as production, so staging runs the same code paths.
   const same = (a, b) => JSON.stringify([...a].sort()) === JSON.stringify([...b].sort())
-  if (!same(names(s.d1_databases, "binding"), names(raw.d1_databases, "binding"))) blockers.push("staging needs production's D1 bindings")
+  // Recovery can be commissioned in staging before production exists. Only this optional extra binding is allowed.
+  const drill = (s.d1_databases ?? []).filter((d) => d.binding === "DRILL_DB")
+  const ordinary = (s.d1_databases ?? []).filter((d) => d.binding !== "DRILL_DB")
+  if (
+    !same(
+      names(ordinary, "binding"),
+      names(
+        (raw.d1_databases ?? []).filter((d) => d.binding !== "DRILL_DB"),
+        "binding",
+      ),
+    )
+  )
+    blockers.push("staging needs production's D1 bindings")
+  if (
+    drill.length > 1 ||
+    drill.some(
+      (d) =>
+        !d.database_name?.endsWith("-staging-drill") ||
+        !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(d.database_id ?? "") ||
+        PLACEHOLDER_ID.test(d.database_id) ||
+        [...ordinary, ...(raw.d1_databases ?? [])].some(
+          (other) => other.database_id === d.database_id || other.database_name === d.database_name,
+        ),
+    )
+  )
+    blockers.push("staging DRILL_DB must be a distinct, real staging recovery database")
+  if ((raw.d1_databases ?? []).some((d) => d.binding === "DRILL_DB") && !drill.length)
+    blockers.push("staging needs production's DRILL_DB binding")
   if (!same(names(s.r2_buckets, "binding"), names(raw.r2_buckets, "binding"))) blockers.push("staging needs production's R2 bindings")
   if (!same(names(s.ratelimits, "name"), names(raw.ratelimits, "name"))) blockers.push("staging needs production's rate limits")
   if (!same(Object.keys(s.vars ?? {}), Object.keys(raw.vars ?? {}))) blockers.push("staging needs production's vars, by name")

@@ -100,6 +100,13 @@
           "database_id": "6cebc14f-18b1-41fd-9d21-fd885e71ce25",
           "migrations_dir": "migrations",
         },
+        {
+          // HAREL-STAGING-DRILL-20261008: isolated EU recovery target, never the serving DB.
+          "binding": "DRILL_DB",
+          "database_name": "makom-staging-drill",
+          "database_id": "8e879921-1f75-4358-a62b-73f8fbcd083a",
+          "migrations_dir": "migrations",
+        },
       ],
       "vars": {
         "ENVIRONMENT": "staging",
