@@ -28,6 +28,14 @@ const receipt = cleanupOnly
 assert.equal(receipt.target, DRILL)
 const save = () => writeFileSync(out, JSON.stringify(receipt, null, 2), { mode: 0o600 })
 save()
+const budget = recoveryBudget({
+  saved: receipt.operations,
+  resumed: cleanupOnly,
+  persist: (operations) => {
+    receipt.operations = operations
+    save()
+  },
+})
 const keychain = (service, account) =>
   execFileSync("security", ["find-generic-password", "-s", service, ...(account ? ["-a", account] : []), "-w"], { encoding: "utf8" }).trim()
 const token = keychain("makom-staging-cloudflare")
@@ -39,10 +47,8 @@ const ask = stagingRequester(
   },
   process.env.EXPECT_TAG,
 )
+budget.request()
 assert.equal((await ask("/api/v1/health")).status, 200)
-
-const budget = recoveryBudget()
-budget.cleaning = cleanupOnly
 const request = async (path, init = {}) => {
   budget.request()
   const r = await fetch(`https://api.cloudflare.com/client/v4${path}`, {
@@ -266,6 +272,7 @@ try {
 } finally {
   budget.cleaning = true
   try {
+    budget.beginCleanup()
     const cleaned = await cleanupRecovery({
       db,
       tables: app?.EXPORT_TABLES ?? [],
@@ -293,7 +300,7 @@ try {
   }
   rmSync(temp, { recursive: true, force: true })
   receipt.finished = new Date().toISOString()
-  receipt.operations = { http: budget.http, sql: budget.sql }
+  receipt.operations = budget.snapshot()
   if (receipt.status === "verified_pending_cleanup" && receipt.cleaned) receipt.status = "pass"
   if (cleanupOnly) receipt.cleanupRetriedAt = receipt.finished
   save()

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import { DatabaseSync } from "node:sqlite"
+import { mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs"
 import { cloudD1, queryResults, recoveryBudget, cleanupRecovery, targetSizeUpperBound } from "./cloud-recovery-support.mjs"
 
 test("real adapter preserves bound null/numeric/text values and ordered batch results", async (t) => {
@@ -50,10 +51,10 @@ test("a batch consumes its statement count and leaves cleanup allowance", () => 
 test("photo cleanup budget is reserved before writes", () => {
   const b = recoveryBudget()
   b.reservePhotos(20)
-  for (let i = 0; i < 920; i++) b.request()
+  for (let i = 0; i < 908; i++) b.request()
   assert.throws(() => b.request())
   b.cleaning = true
-  for (let i = 0; i < 80; i++) b.request()
+  for (let i = 0; i < 92; i++) b.request()
   assert.throws(() => b.request())
 })
 test("D1 cleanup failure cannot suppress photo deletion or later verification", async () => {
@@ -111,4 +112,42 @@ test("nonempty preflight does not claim cleanup; retry of already-absent objects
 })
 test("space estimate includes data and worst-case row/index page overhead", () => {
   assert.ok(targetSizeUpperBound(278528, { places: [{ id: "one" }] }, { places: 3 }) > 278528 + 5 * 4096)
+})
+
+// Same saved receipt path as cloud-restore's ordinary run and CLEANUP_ONLY continuation.
+test("file-backed retry preserves attempted statements and cannot reset the exercise allowance", async (t) => {
+  const dir = mkdtempSync("/private/tmp/makom-budget-")
+  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  const file = `${dir}/receipt.json`
+  const persist = (operations) => writeFileSync(file, JSON.stringify({ operations }))
+  let b = recoveryBudget({ persist })
+  const tables = Array.from({ length: 11 }, (_, i) => `t${i}`)
+  b.statements({ batch: Array.from({ length: 956 }, () => ({ sql: "SELECT 1" })) })
+  b.beginCleanup()
+  const db = {
+    prepare: (sql) => ({ sql, params: [] }),
+    batch: async (entries) => {
+      b.statements({ batch: entries })
+      b.request()
+      throw Error("response lost")
+    },
+  }
+  const failed = await cleanupRecovery({ db, tables, allocated: [], mayContainExercise: true, wasEmpty: false })
+  assert.equal(failed.complete, false)
+  assert.equal(JSON.parse(readFileSync(file)).operations.sql, 978)
+  b = recoveryBudget({ saved: JSON.parse(readFileSync(file)).operations, resumed: true, persist })
+  for (let i = 0; i < 8; i++) b.request()
+  b.beginCleanup()
+  db.batch = async (entries) => {
+    b.statements({ batch: entries })
+    b.request()
+    return entries.map(() => ({ results: [{ n: 0 }] }))
+  }
+  assert.equal((await cleanupRecovery({ db, tables, allocated: [], mayContainExercise: true, wasEmpty: false })).complete, true)
+  assert.equal(JSON.parse(readFileSync(file)).operations.sql, 1000)
+  const retry = recoveryBudget({ saved: JSON.parse(readFileSync(file)).operations, resumed: true, persist })
+  assert.throws(() => retry.beginCleanup())
+  assert.throws(() => retry.statements({ sql: "SELECT 1" }))
+  assert.throws(() => recoveryBudget({ resumed: true, saved: {} }))
+  assert.equal(JSON.parse(readFileSync(file)).operations.sql, 1000)
 })
