@@ -2,6 +2,14 @@
 
 Updated 8 October 2026, after the 19:20 UTC final cloud readback. Read this after compaction, then the adviser pointer in `CLAUDE.md`. Confirm actual Git state before acting. Older narratives remain in Git history.
 
+## Current UI follow-up — normal CI/staging pipeline pending
+
+After the backend closeout, Harel reported three add-place layout issues on staging: step indicators too small and grouped away from the progress segments, the active ring crowding its label, and the pin-removal button overlapping the location description. The focused correction in `src/components/add-place.tsx` aligns both rows to the same three-column grid, enlarges the number circles to 28px with a 10px label gap, and places removal in normal flow below the description. Coordinate pairs stay together in LTR on narrow screens.
+
+Local verification: typecheck, targeted ESLint/Prettier and `git diff --check` pass. The existing accessibility test `adding a place, every step` passed (plus its seed dependency, 2/2). Final pixel/layout inspection covered all three steps across six desktop/mobile/light/dark layouts, including 320px width; alignment, ring spacing, no horizontal overflow and pin removal all pass. Actual screenshots and 18 observations are in `../agent-evidence/ui-add-place-20261008/`. This is a UI change, with no backend/authorization/retention changes and no form submitted during the layout inspection.
+
+Current deployment status and exact candidate/run IDs are in `../agent-evidence/ui-add-place-20261008/deployment-progress.json`. Follow the normal same-commit CI and staging receipt; until that succeeds the verified cloud version remains `8c5baf0` below. Do not repeat the completed backup/recovery exercises for this UI correction. The thread monitor may follow this one update and should pause after verifying deployment/receipt and the live layout, or a genuine owner blocker.
+
 ## Current outcome — approved staging technical closeout complete
 
 - All seven backend phases are implemented, reviewed and merged. **Protected synthetic staging is technically closed out. Production is not launched.**

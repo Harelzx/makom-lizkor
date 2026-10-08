@@ -9,7 +9,7 @@ import { Field, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet 
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "@/components/ui/input-group"
 import { Anemone } from "@/components/anemone"
 import { ADDABLE_KINDS, KINDS } from "@/data/taxonomy"
@@ -373,16 +373,16 @@ export function AddPlace() {
           </div>
           <DialogHeader className="gap-2 px-6 pt-2">
             <div className="flex flex-col gap-2.5">
-              <ol className="flex items-center gap-4" aria-label={`שלב ${step + 1} מתוך 3`}>
+              <ol className="grid grid-cols-3 items-center gap-1.5" aria-label={`שלב ${step + 1} מתוך 3`}>
                 {STEPS.map((label, i) => (
                   <li
                     key={label}
-                    className="flex items-center gap-1.5 text-caption font-semibold"
+                    className="flex min-w-0 items-center justify-center gap-2.5 text-label font-semibold"
                     aria-current={i === step ? "step" : undefined}
                   >
                     <span
                       className={cn(
-                        "relative grid size-5 place-items-center rounded-full transition-colors duration-300",
+                        "relative grid size-7 shrink-0 place-items-center rounded-full transition-colors duration-300",
                         i < step ? "bg-ink-1 text-surface" : i === step ? "bg-brand text-brand-ink" : "bg-surface-2 text-ink-3",
                       )}
                     >
@@ -416,10 +416,12 @@ export function AddPlace() {
                           />
                         </motion.svg>
                       ) : (
-                        <span className="text-micro tabular-nums">{i + 1}</span>
+                        <span className="text-caption tabular-nums">{i + 1}</span>
                       )}
                     </span>
-                    <span className={cn("transition-colors duration-300", i === step ? "text-ink-1" : "text-ink-3")}>{label}</span>
+                    <span className={cn("whitespace-nowrap transition-colors duration-300", i === step ? "text-ink-1" : "text-ink-3")}>
+                      {label}
+                    </span>
                   </li>
                 ))}
               </ol>
@@ -503,17 +505,21 @@ export function AddPlace() {
                           </Button>
                         </div>
                         {draft && (
-                          <Alert key={`${draft.lat},${draft.lng}`}>
+                          <Alert key={`${draft.lat},${draft.lng}`} className="has-[>svg]:grid-cols-[auto_minmax(0,1fr)]">
                             <MapPinIcon className="pin-drop text-brand" />
-                            <AlertDescription className="tabular-nums">
-                              סומן מיקום ({draft.lat.toFixed(5)}, {draft.lng.toFixed(5)}). אפשר לגרור את הסיכה במפה כדי לדייק.
-                            </AlertDescription>
-                            <AlertAction>
-                              <Button variant="ghost" size="sm" onClick={() => setDraft(null)}>
+                            <AlertDescription className="flex min-w-0 flex-col gap-2">
+                              <span className="tabular-nums">
+                                סומן מיקום{" "}
+                                <bdi dir="ltr" className="whitespace-nowrap">
+                                  ({draft.lat.toFixed(5)}, {draft.lng.toFixed(5)})
+                                </bdi>
+                                . אפשר לגרור את הסיכה במפה כדי לדייק.
+                              </span>
+                              <Button variant="ghost" size="sm" className="self-end" onClick={() => setDraft(null)}>
                                 <XIcon data-icon="inline-start" />
                                 הסרת הסיכה
                               </Button>
-                            </AlertAction>
+                            </AlertDescription>
                           </Alert>
                         )}
                         <Field orientation="horizontal">
