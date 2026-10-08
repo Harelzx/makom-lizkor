@@ -283,7 +283,10 @@ export function Shell() {
             tabIndex={-1}
             dir="rtl"
             aria-describedby={undefined}
-            className="fixed inset-x-0 bottom-0 z-30 flex h-[88dvh] flex-col rounded-t-[28px] bg-surface shadow-panel ring-1 ring-line outline-none"
+            // Vaul offsets numeric snap points against the whole viewport, not the drawer's CSS height.
+            // Keep that height, but reserve its offscreen part so every scroll position remains reachable.
+            style={{ paddingBottom: `${(1 - (typeof snap === "number" ? snap : SNAPS[0])) * 100}dvh` }}
+            className="fixed inset-x-0 bottom-0 z-30 flex h-dvh flex-col rounded-t-[28px] bg-surface shadow-panel ring-1 ring-line outline-none"
           >
             <Drawer.Title className="sr-only">מקומות וקהילות</Drawer.Title>
             <div className="mx-auto mt-2.5 mb-2 h-1.5 w-10 shrink-0 rounded-full bg-line-strong" aria-hidden="true" />
