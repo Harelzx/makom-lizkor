@@ -63,14 +63,25 @@ export function assertDrill(run, left, exportId, notifications) {
   assert.equal(notifications.length, 0, "The drill or export audit reported a failure")
 }
 
-export function assertCohort(item, restored, marked, at) {
-  assert.ok(Number.isFinite(at.getTime()), "Invalid restore time")
-  if (["returned", "rejected"].includes(item.role)) assert.ok(Number.isFinite(Date.parse(item.deadline)), "Missing cohort deadline")
-  const expired = ["returned", "rejected"].includes(item.role) && Date.parse(item.deadline) <= at.getTime()
-  const expected = expired ? "erased" : item.role
+// `source` is the exported place after the application's ledger reconciliation, before the import's expiry filter.
+// Receipt roles/dates describe how fixtures were made; they are not authoritative after a later ledger decision.
+export function assertCohort(item, source, restored, marked, cutoffs) {
+  assert.ok(source && source.id === item.id, "Missing reconciled cohort source")
+  assert.ok(Number.isFinite(Date.parse(cutoffs.now)), "Invalid restore time")
+  const expiryRole = ["returned", "rejected"].includes(source.status) ? source.status : null
+  if (expiryRole) {
+    assert.ok(Number.isFinite(Date.parse(source.status_changed_at)), "Missing cohort decision time")
+    assert.ok(Number.isFinite(Date.parse(cutoffs[expiryRole])), "Missing cohort expiry cutoff")
+  }
+  const expired = expiryRole !== null && Date.parse(source.status_changed_at) <= Date.parse(cutoffs[expiryRole])
+  const expected = expired ? "erased" : source.status
   assert.equal(restored?.status, expected, `Unexpected restored state for ${item.role}`)
-  if (expired) assert.equal(restored.erased_reason, `${item.role}_expired`, "Unexpected expiry reason")
-  if (expired || item.role === "withdrawn") assert.equal(marked, 0, "Removed cohort text returned")
+  if (expected === "erased") {
+    const reason = expired ? `${expiryRole}_expired` : source.erased_reason
+    assert.ok(["returned_expired", "rejected_expired", "restored"].includes(reason), "Unknown expected erasure reason")
+    assert.equal(restored.erased_reason, reason, "Unexpected erasure reason")
+  }
+  if (expected === "erased" || expected === "withdrawn") assert.equal(marked, 0, "Removed cohort text returned")
   else assert.ok(marked > 0, `The ${item.role} cohort text is missing`)
 }
 
@@ -99,15 +110,18 @@ export function cohortCoverage(receipt, payload, at) {
   return { checked, excluded, missing, complete: missing.length === 0 }
 }
 
-export function assertReport(source, restored, at) {
+// `bounded` comes from reconcileTables, which applies the export-time bound to reports open at that point.
+export function assertReport(source, restored, at, bounded) {
   assert.ok(restored, "Expected cohort report is absent after restore")
-  const deadline = Date.parse(source.purge_after)
+  assert.ok(bounded && bounded.id === source.id, "Missing reconciled report source")
+  const deadline = Date.parse(bounded.purge_after)
   assert.ok(Number.isFinite(deadline) && Number.isFinite(at.getTime()), "Invalid report retention deadline")
   // These two abuse identifiers are excluded from every export, even before their live-database deadline.
   for (const field of ["reporter_key", "explanation_hash"]) {
     assert.ok(source[field] === null, `Export retained report ${field}`)
     assert.ok(restored[field] === null, `Restore retained report ${field}`)
   }
+  assert.equal(restored.purge_after, bounded.purge_after, "Restored report retention deadline does not match recovery bound")
   const expected = deadline <= at.getTime() ? null : source.explanation
   // Compare without exposing the report text in an assertion's actual/expected output.
   assert.ok(restored.explanation === expected, "Restored report explanation does not match its retention deadline")

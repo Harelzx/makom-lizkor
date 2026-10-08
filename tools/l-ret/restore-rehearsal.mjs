@@ -47,6 +47,8 @@ try {
       contents: [
         'export { runDrill } from "./worker/db/drill"',
         'export { importExport } from "./worker/db/import"',
+        'export { reconcileTables } from "./worker/db/reconcile"',
+        'export { retentionCutoffs } from "./worker/db/retention"',
         'export { readLedger, replayLedger } from "./worker/db/replay"',
         'export { durations } from "./worker/lib/durations"',
         'export { unseal, sha256 } from "./worker/lib/sealed"',
@@ -225,6 +227,10 @@ try {
     assertTables(payload, manifest)
     const coverage = cohortCoverage(receipt, payload, at)
     const ledger = await app.readLedger(ledgerBucket)
+    // Use the same authoritative export/ledger contract as recovery. The guards independently check the persisted
+    // state, exact tombstone reason, expiry boundary and removed text, rather than trusting the fixture receipt.
+    const expected = app.reconcileTables(payload.tables, ledger, at, payload.created_at, days).tables
+    const cutoffs = app.retentionCutoffs(at, days)
     const imported = await app.importExport(target.db, payload, at, ledger, days)
     if (!imported.ok) throw new Error(`import refused: ${imported.reason}`)
     await app.replayLedger(target.db, ledger, at, payload.created_at, days)
@@ -239,17 +245,28 @@ try {
         .prepare("SELECT COUNT(*) AS n FROM revisions WHERE place_id = ?1 AND (name_he LIKE ?2 OR decision_note LIKE ?2)")
         .bind(item.id, `%${receipt.marker}%`)
         .first("n")
-      assertCohort(item, p, marked, at)
+      assertCohort(
+        item,
+        expected.places.find((row) => row.id === item.id),
+        p,
+        marked,
+        cutoffs,
+      )
       console.log(
         `  ${item.role} ${item.id}: ${p ? `${p.status}${p.erased_reason ? ` (${p.erased_reason})` : ""}` : "absent"}; revisions holding the marker: ${marked}`,
       )
     }
     for (const { item: report, source } of coverage.checked.filter(({ item }) => item.role === "report")) {
       const r = await target.db
-        .prepare("SELECT explanation, reporter_key, explanation_hash FROM reports WHERE id = ?")
+        .prepare("SELECT explanation, reporter_key, explanation_hash, purge_after FROM reports WHERE id = ?")
         .bind(report.id)
         .first()
-      assertReport(source, r, at)
+      assertReport(
+        source,
+        r,
+        at,
+        expected.reports.find((row) => row.id === report.id),
+      )
       console.log(`  report ${report.id}: explanation ${r.explanation === null ? "empty" : "kept"}; abuse codes absent`)
     }
     for (const item of coverage.excluded) console.log(`  excluded ${item.role} ${item.id}: event is newer than the selected export`)

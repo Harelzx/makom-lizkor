@@ -101,16 +101,23 @@ test("drill evidence fails on unsuccessful run, wrong export, incomplete cleanup
 })
 
 test("expired or withdrawn cohort content must be blank while live content must survive", () => {
-  const at = new Date("2026-10-08T12:00:00Z")
-  const expired = { role: "returned", deadline: at.toISOString() }
-  assertCohort(expired, { status: "erased", erased_reason: "returned_expired" }, 0, at)
-  assert.throws(() => assertCohort(expired, { status: "returned" }, 1, at), /Unexpected restored state/)
-  assert.throws(() => assertCohort(expired, { status: "erased", erased_reason: "returned_expired" }, 1, at), /text returned/)
-  assert.throws(() => assertCohort({ role: "returned" }, { status: "returned" }, 1, at), /Missing cohort deadline/)
-  assertCohort({ role: "withdrawn" }, { status: "withdrawn" }, 0, at)
-  assert.throws(() => assertCohort({ role: "withdrawn" }, { status: "withdrawn" }, 1, at), /text returned/)
-  assertCohort({ role: "published" }, { status: "published" }, 1, at)
-  assert.throws(() => assertCohort({ role: "published" }, { status: "published" }, 0, at), /text is missing/)
+  const cutoffs = { now: "2026-10-08T12:00:00Z", returned: "2026-10-07T12:00:00Z" }
+  const item = { id: "synthetic_place", role: "returned" }
+  const expired = { id: item.id, status: "returned", status_changed_at: cutoffs.returned }
+  const erased = { status: "erased", erased_reason: "returned_expired" }
+  assertCohort(item, expired, erased, 0, cutoffs)
+  assert.throws(() => assertCohort(item, expired, { status: "returned" }, 1, cutoffs), /Unexpected restored state/)
+  assert.throws(() => assertCohort(item, expired, erased, 1, cutoffs), /text returned/)
+  assert.throws(() => assertCohort(item, { ...expired, status_changed_at: null }, erased, 0, cutoffs), /Missing cohort decision time/)
+  const unknownReason = { id: item.id, status: "erased", erased_reason: "unknown" }
+  assert.throws(() => assertCohort(item, unknownReason, unknownReason, 0, cutoffs), /Unknown expected erasure reason/)
+  assert.throws(() => assertCohort(item, null, erased, 0, cutoffs), /Missing reconciled cohort source/)
+  const withdrawn = { id: item.id, status: "withdrawn" }
+  assertCohort(item, withdrawn, withdrawn, 0, cutoffs)
+  assert.throws(() => assertCohort(item, withdrawn, withdrawn, 1, cutoffs), /text returned/)
+  const published = { id: item.id, status: "published" }
+  assertCohort(item, published, published, 1, cutoffs)
+  assert.throws(() => assertCohort(item, published, published, 0, cutoffs), /text is missing/)
 })
 
 test("temporary directories are registered before setup, and can all be removed", () => {

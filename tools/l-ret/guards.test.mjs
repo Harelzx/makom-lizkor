@@ -14,7 +14,14 @@ const payload = () => ({
     reports: [{ id: "synthetic_report" }],
   },
 })
-const source = () => ({ purge_after: "2026-10-09T10:00:00Z", explanation: "synthetic text", reporter_key: null, explanation_hash: null })
+const source = () => ({
+  id: "synthetic_report",
+  status: "closed",
+  purge_after: "2026-10-09T10:00:00Z",
+  explanation: "synthetic text",
+  reporter_key: null,
+  explanation_hash: null,
+})
 
 test("all six cohort cases must actually be exercised for complete evidence", () => {
   const result = cohortCoverage(receipt(), payload(), at)
@@ -48,17 +55,17 @@ test("legitimate newer-than-export exclusions remain incomplete, not failed or p
 })
 
 test("a report must survive restoration, with text kept before and blanked at its own deadline", () => {
-  assertReport(source(), source(), at)
-  assert.throws(() => assertReport(source(), null, at), /report is absent/)
-  assert.throws(() => assertReport(source(), { ...source(), explanation: null }, at), /explanation does not match/)
+  assertReport(source(), source(), at, source())
+  assert.throws(() => assertReport(source(), null, at, source()), /report is absent/)
+  assert.throws(() => assertReport(source(), { ...source(), explanation: null }, at, source()), /explanation does not match/)
   const expired = new Date(source().purge_after)
-  assertReport(source(), { ...source(), explanation: null }, expired)
-  assert.throws(() => assertReport(source(), source(), expired), /explanation does not match/)
+  assertReport(source(), { ...source(), explanation: null }, expired, source())
+  assert.throws(() => assertReport(source(), source(), expired, source()), /explanation does not match/)
 })
 
 test("retained abuse identifiers fail in both exported and restored report rows", () => {
   for (const field of ["reporter_key", "explanation_hash"]) {
-    assert.throws(() => assertReport({ ...source(), [field]: "synthetic-secret" }, source(), at), /Export retained report/)
-    assert.throws(() => assertReport(source(), { ...source(), [field]: "synthetic-secret" }, at), /Restore retained report/)
+    assert.throws(() => assertReport({ ...source(), [field]: "synthetic-secret" }, source(), at, source()), /Export retained report/)
+    assert.throws(() => assertReport(source(), { ...source(), [field]: "synthetic-secret" }, at, source()), /Restore retained report/)
   }
 })
