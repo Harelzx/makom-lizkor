@@ -10,6 +10,123 @@ import { STAGING_ACCOUNT, STAGING_DATABASE, stagingAccount, stagingDatabase, sta
 
 const DAY = 7_200_000
 const ROLES = ["published", "returned", "rejected", "pending", "withdrawn", "report"]
+// Independent oracle for every field erased by the existing retention contract. Only presence/counts leave D1.
+export const ERASE_FIELDS = [
+  "kind",
+  "name_he",
+  "lat",
+  "lng",
+  "location_precision",
+  "location_permission_at",
+  "access_note_he",
+  "place_he",
+  "in_memory_of",
+  "story_he",
+  "link_url",
+  "decision_note",
+  "photo_key",
+  "photo_alt",
+  "photo_credit",
+  "curated",
+]
+export const REPORT_FIELDS = ["relationship", "explanation", "email", "explanation_hash", "reporter_key", "handling_note"]
+export async function cohortSnapshot(query, c) {
+  const ids = c.items.filter((i) => ROLES.includes(i.role) && i.role !== "report").map((i) => i.id)
+  const revisionContent = ERASE_FIELDS.map((f) => `r.${f} IS NOT NULL`)
+    .concat("r.on_private_property != 0")
+    .join(" OR ")
+  const p = await query(
+    `SELECT p.id,p.status,p.rev,p.erased_reason,p.created_at,p.status_changed_at,
+    (SELECT count(*) FROM revisions r WHERE r.place_id=p.id) AS revisions,
+    (SELECT count(*) FROM revisions r WHERE r.place_id=p.id AND (${revisionContent})) AS content,
+    (SELECT count(*) FROM revisions r WHERE r.place_id=p.id AND r.name_he IS NOT NULL AND r.lat IS NOT NULL AND r.lng IS NOT NULL) AS named_coordinates,
+    (SELECT count(*) FROM revisions r WHERE r.place_id=p.id AND r.decision_note IS NOT NULL) AS notes,
+    (SELECT count(*) FROM contacts c WHERE c.place_id=p.id) AS contacts,
+    (SELECT count(*) FROM contacts c WHERE c.place_id=p.id AND c.name IS NOT NULL) AS contact_names,
+    (SELECT min(purge_after) FROM contacts c WHERE c.place_id=p.id) AS contact_deadline,
+    (SELECT count(*) FROM tribute_events t WHERE t.place_id=p.id) AS events,
+    (SELECT min(received_at) FROM tribute_events t WHERE t.place_id=p.id) AS oldest_event,
+    (SELECT total FROM tribute_totals t WHERE t.place_id=p.id) AS total
+    FROM places p WHERE p.id IN (${ids.map(() => "?").join(",")}) ORDER BY p.id`,
+    ids,
+  )
+  const r = await query(
+    `SELECT id,purge_after,received_at,${REPORT_FIELDS.map((f) => `${f} IS NOT NULL AS ${f}`).join(",")}
+    FROM reports WHERE id=?`,
+    [c.items.find((i) => i.role === "report").id],
+  )
+  return { places: p.results, reports: r.results }
+}
+export function assertBaseline(c, s, now) {
+  assert.equal(s.places.length, 5, "Missing place controls")
+  for (const item of c.items.filter((i) => ROLES.includes(i.role) && i.role !== "report")) {
+    const p = s.places.find((p) => p.id === item.id)
+    assert.ok(p, `Missing ${item.role}`)
+    assert.equal(p.status, item.role)
+    assert.equal(p.revisions, 1)
+    assert.ok(Date.parse(p.created_at) >= Date.parse(c.started))
+    const live = item.role !== "withdrawn"
+    assert.equal(p.content, live ? 1 : 0)
+    assert.equal(p.named_coordinates, live ? 1 : 0)
+    assert.equal(p.contacts, live ? 1 : 0)
+    assert.equal(p.contact_names, live ? 1 : 0)
+    if (live) assert.ok(Date.parse(p.contact_deadline) > now, "Control contact is already due")
+    if (["returned", "rejected"].includes(item.role)) {
+      assert.equal(p.notes, 1, "Decision-note fixture missing")
+      assert.ok(Date.parse(p.status_changed_at) + 30 * DAY > now, "Control place is already due")
+    }
+    if (item.role === "published") {
+      assert.equal(p.events, 1)
+      assert.equal(p.total, 1)
+      assert.ok(Date.parse(p.oldest_event) + 8 * DAY > now, "Control tribute is already due")
+    }
+  }
+  assert.equal(s.reports.length, 1, "Missing report control")
+  const report = s.reports[0]
+  assert.equal(report.id, c.items.find((i) => i.role === "report").id)
+  for (const field of ["explanation", "explanation_hash", "reporter_key"]) assert.equal(report[field], 1, `Missing report ${field}`)
+  assert.ok(Date.parse(report.purge_after) > now, "Control report already due")
+  assert.ok(Date.parse(report.received_at) + DAY > now, "Control abuse codes already due")
+}
+export function assertOutcome(due, control, actual, seed, runs) {
+  assert.equal(seed.status, "awaiting_real_cron")
+  assert.equal(seed.due.marker, due.marker)
+  assert.equal(seed.control.marker, control.marker)
+  assertBaseline(due, seed.before.due, Date.parse(seed.at))
+  assertBaseline(control, seed.before.control, Date.parse(seed.at))
+  assert.ok(runs.length > 0, "No completed real retention run since seeding")
+  const totals = runs.reduce((sum, r) => {
+    assert.equal(r.ok, 1)
+    assert.ok(Date.parse(r.started_at) > Date.parse(seed.at) && Date.parse(r.finished_at) >= Date.parse(r.started_at))
+    const row = JSON.parse(r.counts)
+    for (const key of ["erased", "contacts", "reports", "tributes"]) sum[key] = (sum[key] ?? 0) + row[key]
+    return sum
+  }, {})
+  for (const [kind, minimum] of Object.entries({ erased: 2, contacts: 1, reports: 1, tributes: 1 }))
+    assert.ok(totals[kind] >= minimum, `No corresponding ${kind} job count`)
+  const by = (s, role) => s.places.find((p) => p.id === due.items.find((i) => i.role === role).id)
+  assert.equal(actual.due.places.length, 5)
+  for (const role of ["returned", "rejected"]) {
+    const p = by(actual.due, role)
+    assert.ok(p)
+    assert.equal(p.status, "erased")
+    assert.equal(p.content, 0)
+    assert.equal(p.contacts, 0)
+    assert.equal(p.erased_reason, `${role}_expired`)
+  }
+  const published = by(actual.due, "published")
+  assert.ok(published)
+  assert.equal(published.status, "published")
+  assert.equal(published.content, 1)
+  assert.equal(published.contacts, 0)
+  assert.equal(published.events, 0)
+  assert.equal(published.total, by(seed.before.due, "published").total)
+  assert.equal(actual.due.reports.length, 1)
+  assert.equal(actual.due.reports[0].id, due.items.find((i) => i.role === "report").id)
+  for (const field of REPORT_FIELDS) assert.equal(actual.due.reports[0][field], 0, `Retained report ${field}`)
+  for (const role of ["pending", "withdrawn"]) assert.deepEqual(by(actual.due, role), by(seed.before.due, role))
+  assert.deepEqual(actual.control, seed.before.control, "The not-due cohort changed")
+}
 export function validateCohorts(due, control, now, fresh = true) {
   const ids = new Set()
   assert.notEqual(due.marker, control.marker, "Cohorts must differ")
@@ -112,26 +229,12 @@ async function main() {
     assert.ok(r.result[0].success)
     return r.result[0]
   }
-  const snapshot = async (c) => {
-    const ids = c.items.filter((i) => ROLES.includes(i.role) && i.role !== "report").map((i) => i.id)
-    const p = await query(
-      `SELECT p.id,p.status,p.rev,p.erased_reason,
-      (SELECT count(*) FROM revisions r WHERE r.place_id=p.id AND r.name_he IS NOT NULL) AS content,
-      (SELECT count(*) FROM contacts c WHERE c.place_id=p.id) AS contacts,
-      (SELECT count(*) FROM tribute_events t WHERE t.place_id=p.id) AS events,
-      (SELECT total FROM tribute_totals t WHERE t.place_id=p.id) AS total
-      FROM places p WHERE p.id IN (${ids.map(() => "?").join(",")}) ORDER BY p.id`,
-      ids,
-    )
-    const r = await query(`SELECT id,explanation IS NOT NULL AS content FROM reports WHERE id=?`, [
-      c.items.find((i) => i.role === "report").id,
-    ])
-    return { places: p.results, reports: r.results }
-  }
-  const before = { due: await snapshot(due), control: await snapshot(control) }
+  const before = { due: await cohortSnapshot(query, due), control: await cohortSnapshot(query, control) }
   if (mode === "seed") {
     // Preflight all five updates without mutation, then each write retains its guards. Any partial seed is recorded.
     const at = Date.now()
+    assertBaseline(due, before.due, at)
+    assertBaseline(control, before.control, at)
     const updates = expiryUpdates(due, before.due.places, at)
     for (const u of updates) {
       const where = u.sql.slice(u.sql.indexOf(" WHERE "))
@@ -161,31 +264,7 @@ async function main() {
         seed.at,
       ])
     ).results
-    assert.ok(runs.length > 0, "No completed real retention run since seeding")
-    const totals = runs
-      .map((r) => JSON.parse(r.counts))
-      .reduce((sum, row) => {
-        for (const key of ["erased", "contacts", "reports", "tributes"]) sum[key] = (sum[key] ?? 0) + row[key]
-        return sum
-      }, {})
-    for (const [kind, minimum] of Object.entries({ erased: 2, contacts: 1, reports: 1, tributes: 1 }))
-      assert.ok(totals[kind] >= minimum, `No corresponding ${kind} job count`)
-    const by = (c, snap, role) => snap.places.find((p) => p.id === c.items.find((i) => i.role === role).id)
-    for (const role of ["returned", "rejected"]) {
-      const p = by(due, before.due, role)
-      assert.equal(p.status, "erased")
-      assert.equal(p.content, 0)
-      assert.equal(p.contacts, 0)
-      assert.equal(p.erased_reason, `${role}_expired`)
-    }
-    const published = by(due, before.due, "published")
-    assert.equal(published.status, "published")
-    assert.ok(published.content > 0)
-    assert.equal(published.contacts, 0)
-    assert.equal(published.events, 0)
-    assert.equal(published.total, by(due, seed.before.due, "published").total)
-    assert.equal(before.due.reports[0]?.content, 0)
-    assert.deepEqual(before.control, seed.before.control, "The not-due cohort changed")
+    assertOutcome(due, control, before, seed, runs)
     const result = { status: "pass", at: new Date().toISOString(), seed: out, actual: before, runs }
     writeFileSync(`${out}.checked.json`, JSON.stringify(result, null, 2))
     console.log(
