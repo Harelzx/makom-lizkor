@@ -232,6 +232,16 @@ function stagingProblems(w, triggers) {
       problems.push(
         `job ${id} must confirm the commit, check the staging config, migrate, deploy tagged with the commit, then run the edge checks`,
       )
+    const drillMigration = steps.findIndex((r) => /wrangler d1 migrations apply DRILL_DB --remote/.test(r))
+    const deployStep = (job.steps ?? []).find((st) => /wrangler deploy --tag/.test(st.run ?? ""))
+    if (
+      drillMigration < at[1] ||
+      drillMigration >= at[3] ||
+      deployStep?.env?.DRILL_PRIVATE_KEY !== "${{ secrets.STAGING_DRILL_PRIVATE_KEY }}" ||
+      !/test -n "\$DRILL_PRIVATE_KEY"/.test(deployStep?.run ?? "") ||
+      !/DRILL_PRIVATE_KEY:e\.DRILL_PRIVATE_KEY/.test(deployStep?.run ?? "")
+    )
+      problems.push(`job ${id} must migrate the separate drill database before deployment and provide the staging drill secret`)
     // The edge checks wait for the version this deploy tagged, and hold the Worker's answers to it (a61).
     if (
       !steps.some((r) => /wrangler deploy --tag "staging-\$\{SHA:0:12\}"/.test(r)) ||

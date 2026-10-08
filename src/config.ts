@@ -7,7 +7,7 @@
 
 // The privacy notices must name whoever controls the data (Privacy Protection Law s.11(2א)), and the email receives
 // corrections and takedown requests.
-export const OPERATOR = { name: "[שם המפעיל]", email: "contact@example.org" }
+export const OPERATOR = { name: "[שם המפעיל]", email: "makomlizkor@gmail.com" }
 
 // The project's own managed mailbox. Its provider holds the mail people send us, so the notices name it. The owner
 // chose a per-message rule (5.10): each message is kept at most `maxMonths` from receipt, or from sending for our own,
@@ -15,7 +15,7 @@ export const OPERATOR = { name: "[שם המפעיל]", email: "contact@example.o
 // deletion at case closure: the mailbox doesn't do that. `verified` waits for the policy to be configured on the real
 // tenant and its tail measured.
 export const MAILBOX = {
-  provider: "[ספק הדואר]",
+  provider: "Google (Gmail)",
   storedIn: "[מדינת האחסון]",
   maxMonths: 12,
   deletionTailDays: null as number | null,
@@ -34,7 +34,7 @@ export const RETENTION = {
   /** how long a deletion takes to leave our own backups and exports */
   backupTailDays: 37,
   /** the drill database's Time Travel window, the provider's and not shortenable: 30 days on Workers Paid, the design
-   * target for production; 7 on Workers Free, which staging runs on (Cloudflare's D1 docs, read 7 October 2026). No code
+   * target for production and the staging plan Harel activated on 8 October; 7 on Workers Free. No code
    * reads it. A window of recovery, not of erasure: on its own it bounds nothing; the backend spec's timeline (section 7)
    * derives drill copies gone by deletion + 32 days and exports by + 37, provided a drill loads only the newest export,
    * which the code enforces. Unproven until the end-to-end test sets `verified` */

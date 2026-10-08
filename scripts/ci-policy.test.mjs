@@ -364,3 +364,13 @@ test("both deployments' edge checks say the Worker cache is off", () => {
   fails(withChange("staging.yml", " --edge-cache off", ""), "edge checks must say the Worker cache is off")
   fails(withChange("staging.yml", "--edge-cache off", "--edge-cache on"), "edge checks must say the Worker cache is off")
 })
+
+test("staging recovery migrates its isolated target and requires its own private key", () => {
+  for (const [from, to] of [
+    ["npx wrangler d1 migrations apply DRILL_DB --remote", "true"],
+    ["${{ secrets.STAGING_DRILL_PRIVATE_KEY }}", ""],
+    ['test -n "$DRILL_PRIVATE_KEY"', "true"],
+    ["DRILL_PRIVATE_KEY:e.DRILL_PRIVATE_KEY", "DRILL_PRIVATE_KEY:undefined"],
+  ])
+    fails(withChange("staging.yml", from, to), "must migrate the separate drill database")
+})

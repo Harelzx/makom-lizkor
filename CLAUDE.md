@@ -224,4 +224,4 @@ The full rules are in `docs/design-system.md`. The ones code changes most often 
 
 ## Before going live
 
-`CONTACT_EMAIL` in `src/config.ts` is a placeholder. See `docs/go-live-checklist.md` and `docs/legal-brief.md` for the rest.
+`CONTACT_EMAIL` in `src/config.ts` is the project Gmail address; delivery and retention remain unverified. See `docs/go-live-checklist.md` and `docs/legal-brief.md` for the rest.
