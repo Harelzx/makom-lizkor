@@ -1,21 +1,66 @@
 # Backend continuation record
 
-Updated 8 October 2026. This is the current record; older narratives remain in Git history. Read this after compaction, then the adviser pointer in `CLAUDE.md`. Confirm actual Git state before acting. Do not turn historical plans or old unchecked recommendations into new launch requirements.
+Updated 8 October 2026, after the 19:20 UTC final cloud readback. Read this after compaction, then the adviser pointer in `CLAUDE.md`. Confirm actual Git state before acting. Older narratives remain in Git history.
 
-## State and evidence
+## Current outcome — approved staging technical closeout complete
 
-- All seven backend phases are implemented, reviewed and merged into `main`. **Production is not launched.**
-- Local/remote main and protected staging: `d998079a2ab3d0aa2aa7329bc89e9e9cc91dcbc5`. CI `37791998636` passed all four jobs; staging deploy `37796777090` passed all nine edge checks. Receipt: `../agent-evidence/backend-phase4/staging-d998079a2ab3/receipt.json`.
-- Launch mode remains no Worker cache. `EDGE_CACHE=off`; `RETENTION_DAY_SECONDS=7200` on synthetic staging only. Do not reopen cache-enablement design.
-- Harel confirmed Workers Paid in staging and logged in successfully as preview-only `makomlizkor@gmail.com`. No moderator role was granted. Domain is deferred; operator name, public content, production identity and real mail setup remain undecided. Contact/provider configured as Gmail; delivery/retention unverified.
-- Bounded application expiry **passed in real cloud** on d998079: scheduled run `rr_01M4E26P78J3A2R3AQ1APGS126`, 15:30:41–15:30:51 UTC on 8 October. Due returned/rejected content blanked, contact/report fields deleted, tribute identifiers deleted with total preserved; not-due controls unchanged. Evidence: `expiry-seed-20261008.json.checked.json` alongside due/control receipts in the evidence root. Earlier probes before cron completion were incomplete, not failures.
-- Harel separately approved one EU recovery D1 within existing Paid allowances. Approval is recorded as `HAREL-STAGING-DRILL-20261008`; no repeat approval needed. Created `makom-staging-drill`, UUID `8e879921-1f75-4358-a62b-73f8fbcd083a`, at 15:45:47 UTC. Serving DB remains `6cebc14f-18b1-41fd-9d21-fd885e71ce25`. Only synthetic recovery may write the new target, never overwrite serving data. All 18 existing migrations applied successfully; target places count is zero. Worker wiring is accepted in `20261008T155225Z-26b3e033` on `codex/staging-retention-closeout`, not deployed yet.
-- Actual EU R2 readback: no object-lock rules; only default multipart-abort lifecycle. These are configuration observations, not proof of provider physical erasure. Snapshot: `reports/provider-before-closeout-20261008.json`.
-- Prune tool accepted at `664c3cc` by `20261008T160544Z-b14fc27b`. Synthetic old/young exports seeded at 16:17 UTC; real 16:30 cron removed only the old export. At 16:31 its too-young photo survived, and the young referenced control remained intact. Receipt: `prune-cloud-20261008.json` and its observation journal. Final old-photo expiry requires the actual two-hour grace and a subsequent cron, expected 18:30 UTC. Keep deployment pinned until then. No provider timestamps were modified.
-- **Staging drill secret approved and provisioned:** Harel explicitly approved transferring the test key to private GitHub Secrets. `STAGING_DRILL_PRIVATE_KEY` was created and read back by name at 16:17:52 UTC; receipt `reports/drill-secret-20261008.json`. The owner key stayed local. Trusted grant `HAREL-STAGING-DRILL-20261008` includes this approval, register hash `f8163d0090e0c3cf1aae8abb81a9a8d3b74e453b0c523b669fb46fa1ba130872`. No repeated permission question is needed.
-- Synthetic photo `p_01M4E2DE949W0AHXA1N7AC41Z9` was published at 15:34:24 UTC for the next regular export. Receipt `recovery-photo-20261008.json`; its tracking token is in a private adjacent `.token` file. Do not withdraw until that export is observed. Then withdraw via existing API and prove restoration cannot revive it. Keep an existing surviving photo as the positive media-restore control.
+- All seven backend phases are implemented, reviewed and merged. **Protected synthetic staging is technically closed out. Production is not launched.**
+- Verified application commit: `8c5baf09c94284d1fafde67d105497491436759b`, merged and pushed to private GitHub main. CI `37824944595` passed all four jobs. Staging workflow `37829847824` succeeded and all nine edge checks passed for `staging-8c5baf09c942`.
+- This completion update changes documentation only. A subsequent documentation-only main commit is not a new tested/deployed application version. No repeated CI or deployment is warranted solely to record these results; any future application/release candidate still needs its own normal checks and same-commit staging receipt.
+- Actual deployed Worker version `2ec33872-320f-4311-b928-7ad5e5ec5cd3`, deployment `204ad69c-e733-4e37-892b-c5c602ff07e9`, created 19:10:44 UTC. Readback confirms staging, `EDGE_CACHE=off`, serving DB and separate `DRILL_DB`, and the drill secret binding by name only.
+- The one-shot runner PID 38793 has exited. **Do not restart it.** All mutations finished. It stopped only at its final read-only eleven-term UNION query, rejected by Cloudflare with HTTP 400. At 19:20 UTC, the already-established alternative (eleven independent COUNT statements in one batch) succeeded: every target table is empty. The original failed observer log is preserved; the separate final readback closes that observation defect without rerunning recovery or deploying again.
+- Harel confirmed Workers Paid on staging and successfully logged in as preview-only `makomlizkor@gmail.com`. No human moderator role was granted. Gmail is the chosen contact address; domain is explicitly deferred. These decisions do not authorize new subscriptions, a production account, production resources, public content or live mail.
+- `RETENTION.verified=false` and `MAILBOX.verified=false` remain correct. Staging evidence does not establish provider physical-erasure timing, a production configuration, or real mailbox behavior.
 
-## Local closeout (8 October)
+## Verified cloud evidence
+
+All relative evidence paths below are rooted at `../agent-evidence/backend-phase4/`.
+
+| Check | Result and actual evidence |
+| --- | --- |
+| GitHub CI | All four jobs successful on `8c5baf0`; run `37824944595`. Production panel scenario also passed. |
+| Staging and nine checks | Same application commit; run `37829847824`; `staging-8c5baf09c942/receipt.json`. |
+| Scheduled application expiry | Pass, real cron `rr_01M4E26P78J3A2R3AQ1APGS126`, 15:30:41–15:30:51 UTC: due content/contact/report/tribute identifiers removed or blanked, totals and not-due controls preserved. `expiry-seed-20261008.json.checked.json`. |
+| Actual isolated recovery with media | Pass 17:17:24 UTC; regular export `ex_01M4E86YJ8YDZJSPV4JFQRK5WX`. Import/replay filtered expiry and the post-export withdrawal; one photo restored and hash-checked (554146 bytes, zero missing/damaged). Target emptied and exercise media removed. `cloud-recovery-result-20261008.json` and `reports/cloud-recovery-independent-readback-20261008.json`. |
+| Real export/photo pruning | Pass 18:31:21 UTC: old data/manifest/photo absent, young referenced controls remain. Real upload timestamps and two-hour grace preserved. `prune-cloud-20261008.json.checked.json`. |
+| Scheduled drill after deployment | `dr_01M4EF2NT86CCNBJRS2HHCE5YJ`, 19:15:41–19:16:49 UTC, `ok=1`, no failure, using new export `ex_01M4EF2NT84B5T03PSN9H5GY03`. |
+| Independent final cleanup/settings | 19:20:19 UTC: all eleven export tables empty in the isolated target; serving and drill databases remain distinct. `reports/cloud-closeout-final-readback-20261008.json`. |
+
+Consolidated receipt: `reports/cloud-closeout-final-verification-20261008.json`. Live/current progress: `reports/technical-closeout-progress-20261008.json`. The one-shot's `reports/cloud-continuation-20261008.json` is preserved as its original execution record, including the resolved final observer error.
+
+Reviewed recovery code `62b49ee034f37c3e8af73b220fef72edf92c7805` was accepted by `20261008T164131Z-ea77a406`; `c684733` added documentation only. Recovery operation counters were not reset: 298 SQL, 100 HTTP, 2 photo operations, one cleanup attempt. Independent observation calls are recorded separately.
+
+## Resources and authority
+
+- Account `8f355daed33cf31c238047e6b455ec9a`; Worker `makom-lizkor-staging`; protected preview `https://makom-lizkor-staging.makom-staging.workers.dev`.
+- Serving DB `6cebc14f-18b1-41fd-9d21-fd885e71ce25`; EU drill DB `makom-staging-drill`, `8e879921-1f75-4358-a62b-73f8fbcd083a`. Only the drill target was restored/emptied, never the serving database.
+- Harel explicitly approved the isolated drill database within existing allowances and the encrypted GitHub test key `STAGING_DRILL_PRIVATE_KEY`; both are provisioned. The owner key stayed local. Do not request the same approvals again.
+- No object-lock rules and only the default multipart-abort lifecycle were observed in EU R2. These observations and successful application pruning do not prove provider physical erasure. `reports/provider-before-closeout-20261008.json`.
+- Synthetic staging still uses `RETENTION_DAY_SECONDS=7200`, official Turnstile test keys, Access protection and no Worker cache. None is a production setting to copy blindly.
+
+## Next action — owner launch choices, not another backend phase
+
+There is no active closeout test and no pending staging repair. Pause the closeout heartbeat after recording this outcome. Scheduled cloud maintenance continues normally; pausing the chat monitor does not disable it.
+
+`launch-decisions.md` holds the finite next steps:
+
+1. Harel supplies the operator name for publication and the email explicitly authorized for human administration. Gmail contact is already chosen; it is not automatically the administrator.
+2. Together select a small initial set of family-created memorial corners, check sources, location/access and photo permissions, then obtain content approval. The 90 development records are not approved launch content.
+3. When Harel is ready, choose a domain and approve a concrete production setup within a stated budget. Additional-account creation was blocked by Cloudflare's user-age rule; a one-account alternative has not been adopted. Do not silently repurpose staging or broaden its credentials.
+4. Configure and verify production sign-in, contact/mail handling, accurate notices and normal release checks, including real share previews. Staging proof is reused where appropriate; actual production configuration remains to be verified. Do not promise a fixed provider-wide deletion deadline without support.
+
+No purchase, extra resource, public deployment, production data access or live email is authorized by completing these tests. Do not change verification flags to bypass release checks. Do not restart the seven-phase plan, provider migration or synthetic exercises just because older documents list them unchecked.
+
+## Working rules
+
+- Conditional adviser approval is executed once its conditions pass; unchanged evidence/docs need no new approval round. The observer correction required only independent readback.
+- Focused checks for corrections; full suites on a materially changed integrated candidate. No new local browser marathon for documentation. Deployment still requires that application's successful CI and the normal release gates.
+- Use `scripts/heavy` for heavy commands, one at a time. Exit 75 means light independent work, not a retry loop. Never lower thresholds or bypass the lock.
+- Consult before a third distinct unsuccessful fix, or sooner if no evidence-based next step exists. Include expected/observed behavior, attempts, evidence and one question.
+- Adviser source failure is a bridge issue: preserve the pinned report, report the exact missing path once, and continue independent work. Never repeatedly compress sources or treat unread files as reviewed.
+- A failed post-deploy check means deployed but unverified, not nothing changed. Follow the existing rollback/fix-forward record.
+
+## Earlier local closeout (historical evidence)
 
 Reviewed code is merged into **main at `86efa9070bf532f94f0677473168a43b7e3b3a68`**, now published to GitHub with later documentation commits and CI-tested at `bea9927`. Staging was temporarily disabled for the initial sync, then re-enabled after Harel confirmed the staging Paid upgrade. Workflow definitions and production protections are unchanged. The merge includes a production-runtime mail adapter as well as evidence tools/tests and documents. It was conflict-free and preserved the reviewed candidate `a4a568e`.
 
@@ -28,52 +73,10 @@ Reviewed code is merged into **main at `86efa9070bf532f94f0677473168a43b7e3b3a68
 
 Adviser `20261008T044401Z-f0bc46ce` read every harness source and closed `L-RET-HARNESS-EVIDENCE-1`, `CI-INTRO-OBS-1` and `L1`. It accepted the bounded E2 replacement method. It also found `L-RET-HARNESS-ORACLE-1`: expectations must follow ledger erasure reasons and the shortened recovery deadline of open reports. This is an evidence-tool defect, not a demonstrated application recovery defect. Correction `4150c7e` derives expectations from the actual export/ledger and deployment cutoffs; 15 regressions through real D1 import/replay passed, including deliberately corrupting the restored result. Adviser `20261008T050606Z-6b37da3d` subsequently inspected the correction and mail adapter, closed `L-RET-HARNESS-ORACLE-1`, and approved local integration. Both source-availability and oracle findings are now closed. Do not claim the older a113 read the unavailable sources.
 
-## The remaining launch work — finite scope
-
-| Item                                         | Evidence already available                                                                    | Remaining step                                                                                                               |
-| -------------------------------------------- | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| Visitor, moderator and private-data behavior | Complete CI plus successful protected staging flow and all nine edge checks                   | Real production configuration and release checks; no new phase implementation                                                |
-| Deletion and export pruning                  | Controlled-clock Worker tests; real export decrypted/checksummed; abuse-code cleanup observed | One bounded scheduled-expiry/export/photo-prune exercise below, with adequate runtime allowance                              |
-| Recovery                                     | Existing import/replay/media tests; local rehearsal using a real encrypted export             | One isolated cloud recovery/drill commissioning exercise, including real media recovery and cleanup                          |
-| Retention wording                            | Actual code timeline and provider-document investigation                                      | Read back production configuration; approve truthful backup-recoverability wording if physical-erasure timing is unsupported |
-| Identity, mail, content and hosting          | Implemented config/release checks; initial content candidates prepared                        | Harel's one consolidated set of choices in `launch-decisions.md`, then configuration and verification                        |
-
-`RETENTION.verified=false` and `MAILBOX.verified=false` remain correct. Harel confirmed Workers Paid on staging, so the former Free-runtime hold is resolved for the existing authorized synthetic staging work. Only the separately approved named recovery database is added; no extra subscription or production change is implied. The measured cron CPU of 15–33 ms remains evidence against relying on Free for the unchanged implementation.
-
-## Bounded retention evidence proposal
-
-This corrects the old evidence plan's contradiction: it called natural expiry background but required the same 70-hour wait before closure. The procedure below was accepted as a replacement evidence method in `20261008T044401Z-f0bc46ce`; its application-expiry part has now passed as recorded above; export pruning and cloud recovery remain to execute. Existing source/clock tests are reused.
-
-1. Pin the candidate, exact staging resources, real time/scale and a unique synthetic cohort. Use existing submit/moderate APIs, then narrowly seed application-owned expiry fields on only those new synthetic IDs, with marker/status/revision preconditions. Keep due and not-due controls. Let the actual scheduled Worker run; correlate completed `retention_runs`, counts, tombstones/blanked fields, ledger/media effects and surviving controls. Do not manually erase the rows instead of exercising the job.
-2. Let the next regular encrypted export run. Under the current scale this is up to roughly two hours plus scheduling delay, parallel with other work. Verify its successful linked retention run, decrypt with the existing harness, and assert expired content absent and controls present. Do not alter successful export history to force a run.
-3. Exercise real R2 pruning with isolated synthetic old/young export IDs and valid objects/manifests. Application export age comes from the ULID, so seeded ages must be recorded as synthetic. These fixtures must not become the newest good operational backup or suppress export cadence. Observe removal of old objects and `deleted_at`, with young controls intact. Preserve actual R2 upload timestamps. Existing bucket locks remain effective: a synthetic old ULID does not make a newly uploaded locked object deletable. A refusal remains incomplete evidence. This does not prove provider lock expiration or physical erasure.
-4. Photo orphan grace uses actual R2 upload time. Use an exclusively synthetic already-aged object, with references accounted for, or wait the actual two-hour staging grace plus a cron interval while other work proceeds. Prove the old unreferenced copy is removed while referenced and too-young controls survive. Never forge provider timestamps.
-
-Before executing: the chosen account must have adequate authorized runtime allowance; exact synthetic fixture mutations must be reviewed and within the staging grant. No new database or general test-clock endpoint is implied. Keep the original natural-expiry cohort as supplementary evidence, separate from this replacement, once accepted. Each required outcome must pass; elapsed time, invocation-level success or absent coverage is not success.
-
-**Cloud recovery:** using the now-authorized isolated target, run application import/replay and actual media restoration, verify expiry/withdrawal filtering and media hashes, run the configured drill, then verify target cleanup. Never overwrite serving data. The local rehearsal and `runDrill`'s photo-byte checks alone do not prove this.
-
-**Provider promise:** read back actual locks, lifecycle and D1 recovery windows. Distinguish our ability to restore from our backups from provider physical erasure. The prepared wording decision is in `launch-decisions.md`; do not change published notice versions or set verification flags without the corresponding evidence and owner decision.
-
-## Next action and working rules
-
-- Latest owner message, 8 October: **`makomlizkor@gmail.com`**, **Workers Paid activated on staging**, **domain deferred**. Continue protected synthetic staging within the existing grant; do not request the same activation confirmation again. Billing readback is unavailable with current connector permissions. The mailbox is a chosen contact address, not evidence that incoming/outgoing mail or retention works. No new purchase, production account or administrator identity follows.
-- **Immediate next actions:** recovery code `62b49ee034f37c3e8af73b220fef72edf92c7805` accepted by `20261008T164131Z-ea77a406`; all three new harness findings are closed. Nine focused tests pass, including real app import/replay/media and cumulative budgets across a failed cleanup plus one retry. No further human approval or consultation is required for successful execution/integration. A bounded one-shot continuation is prepared at `../agent-evidence/backend-phase4/reports/finish-cloud-checks-20261008.mjs`; read its live status `cloud-continuation-20261008.json` before starting competing work. It verifies the next regular backup around 17:16 UTC, withdraws only the synthetic fixture, runs the accepted isolated recovery and at most one budget-preserving cleanup retry, and observes final pruning after 18:30 UTC. It keeps DRILL_DB unwired and the deployment pinned until both exercises pass. Only then may it merge the unchanged accepted branch, push private main, wait for same-commit CI/staging, and verify the scheduled drill plus target cleanup. It stops on failures or unexpected Git state. No public release or verification-flag change. No new full local browser suite is warranted; CI validates the integrated commit.
-
-- The user encountered Cloudflare's seven-day user-age limit for creating an additional account. A one-account/two-environment alternative was explained but not adopted. Existing staging remains synthetic and isolated from any future production resources; do not silently convert it or broaden repository credentials.
-- Keep costs minimal beyond the owner's staging plan and focus launch content on family-created memorial corners. No provider migration, new public notice promise or production deployment is implied. Historical free-tier research is not a task to restart.
-- Local correction, focused review and merge are complete (`20261008T050606Z-6b37da3d`, code merge `86efa907`). The adviser explicitly requires no separate consultation for recording unchanged checks or this documentation. Continue from the owner choices and finite cloud commissioning steps below; do not restart local acceptance. Do not push a change that automatically deploys until the applicable runtime/authorization conditions are satisfied.
-- Continue with the above finite cloud commissioning and production setup after the consolidated owner choices. Do not start another seven-phase plan or a provider migration.
-- Focused tests during corrections. Full suites once on the integrated application candidate; repeat only for material changes or a diagnosed failure. Tools/docs alone do not warrant another local browser marathon. Every main push still triggers CI, and deployment still requires that commit's CI.
-- Use `scripts/heavy` for heavy commands, one at a time; exit 75 means do independent light work, not a retry loop. In the Codex sandbox, denied macOS `sysctl` can make its fallback see only truly free pages: when the guard disagrees with `memory_pressure -Q`, use the normal approved outside-sandbox execution so the existing guard reads the correct metric. Do not lower thresholds or bypass the lock.
-- Consult before a third distinct unsuccessful fix, or sooner when no evidence-based next step exists. Include expected/observed behavior, attempts, evidence and one question. Conditional approval is executed once its conditions pass; do not ask again just to record success.
-- Adviser source failure is a bridge issue: preserve the pinned report, report the exact missing path once, and continue independent work. Never compress source excerpts repeatedly or treat unread files as reviewed.
-- A release's failed post-deploy check means deployed but unverified, not "nothing changed". Follow the existing rollback/fix-forward record.
-
 ## Remaining finding dispositions
 
 - `C-CACHE-TEST-1`: historical isolated failure remains undiagnosed under its accepted conditional-integration disposition; recurrence stops the dependent deployment. Later successful runs do not explain its cause.
-- `L2`: deletion/recovery/provider evidence and supported runtime remain outstanding as above.
+- `L2`: approved synthetic cloud expiry, pruning, media recovery and scheduled drill are now complete. Production configuration and truthful provider/retention wording remain open; do not restart the staging exercise.
 - `L3`: approved real launch content and production configuration/data transition.
 - `L4`: real external share-preview verification, after the real public domain is available; not silently waived.
 - `P1`: the production-build frame-rate check passed twice with the original 4x CPU throttle and assertions. The adviser accepted the reported pass but requested run-environment evidence, not another full suite or approval round. That evidence is now captured on merged `86efa907`: `scripts/heavy npm run e2e:prod -- --grep 'keeps the frame rate' --reporter=list,json`, 2/2 including seed, exit 0, 39 seconds including build. Nine samples during the 18.33-second montage test show load 5.12–6.39 on eight cores, mean total CPU busy 50.1% (peak 87.5%, including the test), and minimum macOS memory level 29%. The project heavy lock was held; no other project heavy test was run. These are measured conditions, not a claim of an idle computer or a phone benchmark. Summary, full samples and exact Playwright timings are in `../agent-evidence/backend-phase4/reports/codex-performance-{summary,environment,playwright}-20261008.json`. Include this evidence in the next normal completion report for register reconciliation; no separate approval consultation is required, and do not repeat the same benchmark merely to gather evidence already stored.
@@ -89,6 +92,6 @@ The locked dependencies were restored in the primary checkout. The audit reporte
 
 - Adviser: `/Users/harel/Documents/Codex/2026-10-05/b/outputs/codex-supervisor/CLAUDE-HANDOFF.md`; runtime decisions and trusted approvals live beside it.
 - Evidence: `/Users/harel/Desktop/remember_07102026/agent-evidence/backend-phase4/`.
-- The old detailed retention observations are in `l-ret-evidence-plan.md` and `a2-snapshots.md` there. The proposed bounded replacement is above; do not confuse it with executed results.
+- The old detailed retention observations are in `l-ret-evidence-plan.md` and `a2-snapshots.md` there. The accepted bounded replacement has now passed; current receipts are above. Historical unchecked plans are not new requirements.
 - Tool source is committed under `tools/l-ret/`, so it survives loss of Claude's temporary p21 checkout. Do not remove another session's worktree while it may still use it.
 - Historic approvals, reports, cohort receipts and raw logs remain preserved. Do not edit old evidence to fit the newer plan.
