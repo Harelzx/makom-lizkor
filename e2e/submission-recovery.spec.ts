@@ -31,7 +31,7 @@ async function fillAndSave(page: Page, name: string) {
   // the leaving step is collected and never comes back.
   await expect(dialog.getByRole("checkbox")).toHaveCount(2)
   for (const box of await dialog.getByRole("checkbox").all()) await box.check()
-  await dialog.getByRole("button", { name: "שמירה והנחת כלנית" }).click()
+  await dialog.getByRole("button", { name: "שליחה לבדיקה" }).click()
   await expect(dialog).toBeHidden({ timeout: 15_000 })
 }
 
@@ -113,7 +113,7 @@ test("a place whose sending was cut off by closing the tab is sent on the next v
   // the leaving step is collected and never comes back.
   await expect(dialog.getByRole("checkbox")).toHaveCount(2)
   for (const box of await dialog.getByRole("checkbox").all()) await box.check()
-  await dialog.getByRole("button", { name: "שמירה והנחת כלנית" }).click()
+  await dialog.getByRole("button", { name: "שליחה לבדיקה" }).click()
   await page.waitForTimeout(500)
   await page.close()
   // The next visit sends it once the day begins, as the feed does: nothing reaches the network during the opening.

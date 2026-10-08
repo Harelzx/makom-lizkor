@@ -43,7 +43,7 @@ test("a photo sent with a place reaches the moderator, and is published with it"
   await expect(dialog.getByRole("checkbox", { name: /צילמתי את התמונה בעצמי/ })).toHaveCount(0)
   for (const box of await dialog.getByRole("checkbox").all()) await box.check()
   const uploaded = page.waitForResponse((r) => /\/api\/v1\/submissions\/p_[^/]+\/photo$/.test(r.url()) && r.status() === 200)
-  await dialog.getByRole("button", { name: "שמירה והנחת כלנית" }).click()
+  await dialog.getByRole("button", { name: "שליחה לבדיקה" }).click()
   await uploaded
   expect(await page.evaluate(() => (window as unknown as { __violations: string[] }).__violations)).toEqual([])
 

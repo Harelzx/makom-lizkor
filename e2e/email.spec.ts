@@ -31,7 +31,7 @@ test("an optional email is verified from the site, then receives a tracking link
   // the leaving step is collected and never comes back.
   await expect(dialog.getByRole("checkbox")).toHaveCount(2)
   for (const box of await dialog.getByRole("checkbox").all()) await box.check()
-  await dialog.getByRole("button", { name: "שמירה והנחת כלנית" }).click()
+  await dialog.getByRole("button", { name: "שליחה לבדיקה" }).click()
   await expect(dialog).toBeHidden({ timeout: 15_000 })
 
   // What the development mail adapter would have sent: a verification link, nothing about the place.

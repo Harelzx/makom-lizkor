@@ -10,13 +10,15 @@ import { stagger, ease, spring } from "@/lib/motion"
 import { allPlaces, matches, sitesNear, useStore } from "@/store"
 import type { Place } from "@/types"
 import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
+import { useVisits, visitKey } from "@/lib/visit-list"
 
 function Row({ place, i, children }: { place: Place; i: number; children: React.ReactNode }) {
   const select = useStore((s) => s.select)
   const hover = useStore((s) => s.hover)
   const hovered = useStore((s) => s.hoveredId === place.id)
   return (
-    <motion.li initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ ...stagger(i), duration: 0.32, ease }}>
+    <motion.li initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ ...stagger(i), duration: 0.22, ease }}>
       <button
         onClick={() => select(place.id)}
         onMouseEnter={() => hover(place.id)}
@@ -38,9 +40,13 @@ export function PlacesList() {
   const local = useStore((s) => s.local)
   const remote = useStore((s) => s.remote)
   const query = useStore((s) => s.query)
+  const visits = useVisits()
   const places = useMemo(
-    () => allPlaces({ remote, local }).filter((p) => p.kind !== "community" && matches(p, query)),
-    [remote, local, query],
+    () =>
+      allPlaces({ remote, local }).filter(
+        (p) => p.kind !== "community" && matches(p, query) && (visits.filter === "all" || (!p.local && visits.ids.includes(visitKey(p)))),
+      ),
+    [remote, local, query, visits.filter, visits.ids],
   )
   const groups = [
     { id: "local", title: "הוספתם במכשיר הזה", items: places.filter((p) => p.local) },
@@ -60,8 +66,31 @@ export function PlacesList() {
             animate={{ y: 0, rotate: -4, opacity: 1 }}
             transition={spring.bouncy}
           />
-          <EmptyTitle>לא מצאנו מקום בשם הזה</EmptyTitle>
-          <EmptyDescription>נסו שם של יישוב, או חלק משם המקום.</EmptyDescription>
+          <EmptyTitle>{visits.filter === "saved" && !query ? "עוד אין כאן מקום שמור לביקור" : "לא מצאנו מקום בשם הזה"}</EmptyTitle>
+          <EmptyDescription>
+            {visits.filter === "saved" && !query
+              ? "פתחו מקום שמעניין אתכם ובחרו בשמירה לביקור."
+              : "נסו שם של יישוב, חלק משם המקום או שם האדם שהוא מנציח."}
+          </EmptyDescription>
+          <div className="mt-3 flex flex-wrap justify-center gap-2">
+            <Button
+              variant="outline"
+              className="h-11 rounded-full"
+              onClick={() => {
+                useStore.getState().setQuery("")
+                visits.setFilter("all")
+              }}
+            >
+              {query ? "ניקוי החיפוש" : "לכל המקומות"}
+            </Button>
+            <Button
+              variant="ghost"
+              className="min-h-11 rounded-full whitespace-normal"
+              onClick={() => useStore.getState().setAddOpen(true)}
+            >
+              מכירים מקום שחסר? הוסיפו אותו
+            </Button>
+          </div>
         </EmptyHeader>
       </Empty>
     )
@@ -76,7 +105,9 @@ export function PlacesList() {
           <ul className="flex flex-col">
             {g.items.map((p, i) => (
               <Row key={p.id} place={p} i={i}>
-                {p.photos?.[0] ? (
+                {p.local?.photo || p.contributedPhoto ? (
+                  <img src={p.local?.photo ?? p.contributedPhoto!.url} alt="" className="size-12 shrink-0 rounded-xl object-cover" />
+                ) : p.photos?.[0] ? (
                   <motion.span
                     layoutId={`ph-${p.id}`}
                     transition={spring.soft}

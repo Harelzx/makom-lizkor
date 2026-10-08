@@ -1,5 +1,14 @@
 # Backend continuation record
 
+## חלופת UX מקומית לאישור הראל — 9.10.2026
+
+הענף `codex/ux-experience-preview` נוצר מ־`main` ב־`0d1b7ba`. יושמו המלצות סקירת הממשק, כולל ניווט בנייד, פישוט הטופס, סיכום לפני שליחה, הודעות אמינות, אישור מחיקה, חיפוש אחיד, שמירה לביקור והצעה אחת נוספת. פירוט מלא: [ux-experience-preview.md](ux-experience-preview.md).
+
+הבדיקות הסופיות המקומיות: 24/24 בדיקות דפדפן על בילד המיועד לפריסה, 106/106 בדיקות לקוח; typecheck, lint ו־format:check עברו. סרטונים וראיות נשמרים בתיקיית `agent-evidence/ui-ux-implementation-20261009` שמעל `web`. הסרטונים משתמשים בתוכן דמה מסומן. בדיקת מקלדת בטלפון פיזי וצפייה של משתמשים אמיתיים עדיין לא בוצעו.
+
+**אין מיזוג, דחיפה או פריסה של החלופה בלי אישור הראל אחרי צפייה.** `main` המקומי, `main` ב־GitHub ואתר הבדיקות אינם חלק מענף החלופה. המעקב הקודם נשאר מושהה; אין להפעיל מחדש בדיקות שחזור, ליצור משאבים או לשנות הרשאות. `RETENTION.verified` ו־`MAILBOX.verified` נשארים false. יתר הרשומה מתארת את הבסיס שכבר הושלם, ואינה ראיה לפריסת החלופה.
+
+
 Updated 8 October 2026, after the 21:14 UTC UI deployment and live visual readback. Read this after compaction, then the adviser pointer in `CLAUDE.md`. Confirm actual Git state before acting. Older narratives remain in Git history.
 
 ## Current UI follow-up — deployed and visually verified

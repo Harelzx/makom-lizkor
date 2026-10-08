@@ -26,7 +26,7 @@ async function submit(b: Browser, name: string): Promise<Page> {
   // the leaving step is collected and never comes back.
   await expect(dialog.getByRole("checkbox")).toHaveCount(2)
   for (const box of await dialog.getByRole("checkbox").all()) await box.check()
-  await dialog.getByRole("button", { name: "שמירה והנחת כלנית" }).click()
+  await dialog.getByRole("button", { name: "שליחה לבדיקה" }).click()
   await expect(dialog).toBeHidden({ timeout: 15_000 })
   await expect(page.getByText("נשלח לבדיקה, ויופיע לכולם אחרי אישור.")).toBeVisible()
   return page

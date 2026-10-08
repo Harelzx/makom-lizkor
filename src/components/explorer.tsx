@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react"
 import { AnimatePresence, motion } from "motion/react"
-import { SearchIcon } from "lucide-react"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { BookmarkIcon, ChevronDownIcon, SearchIcon } from "lucide-react"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { PlaceDetail } from "@/components/place-detail"
 import { CommunityDetail } from "@/components/community-detail"
@@ -9,7 +8,9 @@ import { CommunitiesList, PlacesList } from "@/components/lists"
 import { Journey } from "@/components/journey"
 import { allPlaces, useStore, type Tab } from "@/store"
 import { flyToEnvelope } from "@/map/controller"
-import { ease, spring } from "@/lib/motion"
+import { ease } from "@/lib/motion"
+import { Button } from "@/components/ui/button"
+import { useVisits } from "@/lib/visit-list"
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "places", label: "מקומות" },
@@ -19,6 +20,11 @@ const TABS: { id: Tab; label: string }[] = [
 
 /** Everything the side panel (desktop) and the bottom sheet (phones) show. */
 export function Explorer() {
+  const visits = useVisits()
+  const initVisits = visits.init
+  useEffect(() => {
+    void initVisits()
+  }, [initVisits])
   const tab = useStore((s) => s.tab)
   const setTab = useStore((s) => s.setTab)
   const selectedId = useStore((s) => s.selectedId)
@@ -43,7 +49,15 @@ export function Explorer() {
     if (!showDetail) return
     const onKey = (e: KeyboardEvent) => {
       const s = useStore.getState()
-      if (e.key === "Escape" && !s.searchOpen && !s.addOpen && !s.aboutOpen) back()
+      if (
+        e.key === "Escape" &&
+        !e.defaultPrevented &&
+        !(e.target as HTMLElement)?.closest('[role="dialog"], [role="alertdialog"]') &&
+        !s.searchOpen &&
+        !s.addOpen &&
+        !s.aboutOpen
+      )
+        back()
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
@@ -63,38 +77,65 @@ export function Explorer() {
           initial={{ opacity: 0, x: 32 }}
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: 32, transition: { duration: 0.18 } }}
-          transition={{ duration: 0.32, ease }}
+          transition={{ duration: 0.22, ease }}
         >
-          {/* A tab opens when chosen (Enter, Space, a click), not when the focus merely passes over it: VoiceOver moves
-              the focus as it reads, and with tabs that open on focus a screen reader always landed on the last one. */}
-          <Tabs
-            activationMode="manual"
-            value={tab}
-            onValueChange={(v) => {
-              setDir(order(v as Tab) >= order(tab) ? 1 : -1)
-              setTab(v as Tab)
-            }}
-            className="gap-4"
-          >
-            <TabsList className="h-11 w-full bg-surface-2 p-1">
-              {TABS.map((t) => (
-                <TabsTrigger
-                  key={t.id}
-                  value={t.id}
-                  className="relative z-0 h-full text-label text-ink-2 data-active:bg-transparent data-active:text-ink-1 data-active:shadow-none dark:data-active:bg-transparent"
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-title-3 font-bold text-ink-1">
+                {tab === "places" ? "מקומות לזכור" : TABS.find((t) => t.id === tab)?.label}
+              </h2>
+              <details className="relative">
+                <summary className="pressable flex min-h-11 cursor-pointer list-none items-center gap-1 rounded-full px-2 text-caption text-ink-2">
+                  עוד על האזור <ChevronDownIcon className="size-4" />
+                </summary>
+                <div className="absolute end-0 top-full z-10 flex w-44 flex-col items-stretch gap-1 rounded-2xl bg-surface p-2 shadow-panel ring-1 ring-line">
+                  {TABS.map((t) => (
+                    <Button
+                      key={t.id}
+                      variant="ghost"
+                      aria-pressed={tab === t.id}
+                      onClick={(e) => {
+                        setDir(order(t.id) >= order(tab) ? 1 : -1)
+                        setTab(t.id)
+                        const menu = e.currentTarget.closest("details")
+                        if (menu) menu.open = false
+                      }}
+                      className="min-h-11 justify-start rounded-xl text-label"
+                    >
+                      {t.label}
+                    </Button>
+                  ))}
+                </div>
+              </details>
+            </div>
+            {tab === "places" ? (
+              <div className="flex items-center gap-2" aria-label="תצוגת המקומות">
+                <Button
+                  variant={visits.filter === "all" ? "secondary" : "ghost"}
+                  className="h-11 rounded-full"
+                  aria-pressed={visits.filter === "all"}
+                  onClick={() => visits.setFilter("all")}
                 >
-                  {/* the indicator slides between tabs instead of blinking */}
-                  {tab === t.id && (
-                    <motion.span
-                      layoutId="tab-pill"
-                      className="absolute inset-0 -z-10 rounded-full bg-surface shadow-chip"
-                      transition={spring.snappy}
-                    />
-                  )}
-                  {t.label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
+                  כל המפה
+                </Button>
+                <Button
+                  variant={visits.filter === "saved" ? "secondary" : "ghost"}
+                  className="h-11 rounded-full"
+                  aria-pressed={visits.filter === "saved"}
+                  onClick={() => visits.setFilter("saved")}
+                >
+                  <BookmarkIcon className="size-4" />
+                  שמורים לביקור
+                </Button>
+              </div>
+            ) : (
+              <Button variant="ghost" className="h-11 justify-start rounded-full" onClick={() => setTab("places")}>
+                חזרה למקומות
+              </Button>
+            )}
+            {tab === "places" && visits.filter === "saved" && (
+              <p className="px-2 text-caption text-ink-2">רשימה פרטית במכשיר הזה בלבד. נשמרים קישורים למקומות שעדיין מוצגים במפה.</p>
+            )}
 
             {tab !== "journey" && (
               <InputGroup className="h-11 rounded-2xl border-transparent bg-surface-2 text-body">
@@ -111,22 +152,28 @@ export function Explorer() {
               </InputGroup>
             )}
 
-            <TabsContent value="places">
-              <motion.div initial={{ opacity: 0, x: dir * -24 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.28, ease }}>
-                <PlacesList />
-              </motion.div>
-            </TabsContent>
-            <TabsContent value="communities">
-              <motion.div initial={{ opacity: 0, x: dir * -24 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.28, ease }}>
-                <CommunitiesList />
-              </motion.div>
-            </TabsContent>
-            <TabsContent value="journey">
-              <motion.div initial={{ opacity: 0, x: dir * -24 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.28, ease }}>
-                <Journey />
-              </motion.div>
-            </TabsContent>
-          </Tabs>
+            {tab === "places" && (
+              <div>
+                <motion.div initial={{ opacity: 0, x: dir * -24 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.22, ease }}>
+                  <PlacesList />
+                </motion.div>
+              </div>
+            )}
+            {tab === "communities" && (
+              <div>
+                <motion.div initial={{ opacity: 0, x: dir * -24 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.22, ease }}>
+                  <CommunitiesList />
+                </motion.div>
+              </div>
+            )}
+            {tab === "journey" && (
+              <div>
+                <motion.div initial={{ opacity: 0, x: dir * -24 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.22, ease }}>
+                  <Journey />
+                </motion.div>
+              </div>
+            )}
+          </div>
           <SiteLinks />
         </motion.div>
       )}

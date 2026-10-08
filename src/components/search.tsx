@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { AccessibilityIcon, MoonIcon, PlusIcon, RouteIcon, SunIcon } from "lucide-react"
 import { Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { useCommandState } from "cmdk"
 import { Anemone } from "@/components/anemone"
+import { Button } from "@/components/ui/button"
 import { KINDS } from "@/data/taxonomy"
-import { allPlaces, normalize, useStore } from "@/store"
+import { allPlaces, matches, normalize, useStore } from "@/store"
 
 /** A line between the groups, for the eye only: inside a list box ARIA allows options and groups, not separators. */
 function Rule() {
@@ -12,8 +13,24 @@ function Rule() {
   return searching ? null : <div aria-hidden="true" className="my-1.5 h-px bg-border/50" />
 }
 
+function EmptyActions({ clear, add }: { clear: () => void; add: () => void }) {
+  const empty = useCommandState((s) => !!s.search && s.filtered.count === 0)
+  if (!empty) return null
+  return (
+    <div className="flex flex-wrap justify-center gap-2 border-t border-line p-3">
+      <Button variant="outline" className="min-h-11 rounded-full" onClick={clear}>
+        ניקוי החיפוש
+      </Button>
+      <Button variant="ghost" className="min-h-11 rounded-full whitespace-normal" onClick={add}>
+        מכירים מקום שחסר? הוסיפו אותו
+      </Button>
+    </div>
+  )
+}
+
 /** ⌘K: every place and community, plus the few things you can do. */
 export function Search() {
+  const [query, setQuery] = useState("")
   const open = useStore((s) => s.searchOpen)
   const setOpen = useStore((s) => s.setSearchOpen)
   const local = useStore((s) => s.local)
@@ -63,22 +80,31 @@ export function Search() {
       }}
     >
       {/* Plain substring matching: cmdk's fuzzy score lets "בארי" match places in Ashdod and Ness Ziona. */}
-      <Command label="חיפוש מקום, יישוב או פעולה" filter={(value, search) => (value.includes(normalize(search)) ? 1 : 0)}>
-        <CommandInput placeholder="מקום, יישוב, שם…" />
+      <Command
+        label="חיפוש מקום, יישוב או פעולה"
+        filter={(value, search) => {
+          const place = places.find((p) => `place:${p.id}` === value)
+          return (
+            place
+              ? matches(place, search)
+              : normalize(search)
+                  .split(/\s+/)
+                  .every((t) => value.includes(t))
+          )
+            ? 1
+            : 0
+        }}
+      >
+        <CommandInput placeholder="מקום, יישוב, שם…" value={query} onValueChange={setQuery} />
         <CommandList label="תוצאות" className="max-h-[min(60vh,440px)]">
-          <CommandEmpty>לא נמצא. נסו שם של יישוב.</CommandEmpty>
-          <CommandGroup heading="קהילות">
-            {communities.map((c) => (
-              <CommandItem key={c.id} value={normalize(`${c.name_he} ${c.id}`)} onSelect={() => go(c.id)}>
-                <span className="size-2 rounded-full border-2 border-foreground" aria-hidden="true" />
-                {c.name_he}
-              </CommandItem>
-            ))}
-          </CommandGroup>
-          <Rule />
+          <CommandEmpty>
+            <p role="option" aria-disabled="true">
+              לא מצאנו מקום. נסו יישוב או שם האדם שהוא מנציח.
+            </p>
+          </CommandEmpty>
           <CommandGroup heading="מקומות">
             {sites.map((p) => (
-              <CommandItem key={p.id} className="py-2" value={normalize(`${p.name_he} ${p.place_he} ${p.id}`)} onSelect={() => go(p.id)}>
+              <CommandItem key={p.id} className="py-2" value={`place:${p.id}`} onSelect={() => go(p.id)}>
                 <Anemone size={18} variant={p.local ? "pale" : "crimson"} />
                 <span className="flex min-w-0 flex-col">
                   <span className="truncate">{p.name_he}</span>
@@ -86,6 +112,15 @@ export function Search() {
                     {KINDS[p.kind].label} · {p.place_he}
                   </span>
                 </span>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+          <Rule />
+          <CommandGroup heading="קהילות · מידע נוסף">
+            {communities.map((c) => (
+              <CommandItem key={c.id} value={`place:${c.id}`} onSelect={() => go(c.id)}>
+                <span className="size-2 rounded-full border-2 border-foreground" aria-hidden="true" />
+                {c.name_he}
               </CommandItem>
             ))}
           </CommandGroup>
@@ -130,6 +165,14 @@ export function Search() {
             </CommandItem>
           </CommandGroup>
         </CommandList>
+        <EmptyActions
+          clear={() => setQuery("")}
+          add={() => {
+            setOpen(false)
+            useStore.getState().setQuery("")
+            useStore.getState().setAddOpen(true)
+          }}
+        />
       </Command>
     </CommandDialog>
   )
