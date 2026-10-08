@@ -20,13 +20,13 @@ function setup(t) {
   return {
     out,
     receipt,
-    run: (minutes, gone = false, interrupted = false) =>
+    run: (minutes, gone = false, interrupted = false, pruned = true) =>
       observePrune(receipt, out, {
         clock: () => start + minutes * 60000,
-        query: async (_sql, [id]) => ({ results: [{ ok: 0, deleted_at: id === receipt.exports[0].id ? "removed" : null }] }),
+        query: async (_sql, [id]) => ({ results: [{ ok: 0, deleted_at: pruned && id === receipt.exports[0].id ? "removed" : null }] }),
         objectStatus: async (key) => {
           if (interrupted && key.endsWith("manifest.json")) throw new Error("private detail")
-          return key === receipt.exports[0].photo ? (gone ? 404 : 200) : key.includes(receipt.exports[0].id) ? 404 : 200
+          return key === receipt.exports[0].photo ? (gone ? 404 : 200) : pruned && key.includes(receipt.exports[0].id) ? 404 : 200
         },
       }),
   }
@@ -63,4 +63,10 @@ test("interrupted collection records sanitized partial facts and cannot pass", a
   assert.equal(record.observed[0].data, 404)
   assert.equal(record.error, "Error")
   assert.ok(!JSON.stringify(record).includes("private detail"))
+})
+
+test("photo present before pruning is not proof the cleaner honored its grace", async (t) => {
+  const x = setup(t)
+  assert.equal((await x.run(15, false, false, false)).status, "incomplete")
+  assert.equal((await x.run(130, true)).status, "incomplete")
 })

@@ -55,7 +55,12 @@ export async function observePrune(receipt, out, { query, objectStatus, clock = 
   )
   const old = record.observed.find((o) => o.role === "old")
   const young = record.observed.find((o) => o.role === "young")
-  const survived = current.some((h) => h.observed.some((o) => o.role === "old" && o.photo === 200 && tooYoung(o)))
+  const survived = current.some((h) =>
+    h.observed.some(
+      (o) =>
+        o.role === "old" && o.row?.ok === 0 && !!o.row.deleted_at && o.data === 404 && o.manifest === 404 && o.photo === 200 && tooYoung(o),
+    ),
+  )
   let status = "incomplete"
   let reason = "Awaiting a complete scheduled-prune observation"
   if (premature || youngDamaged) {
