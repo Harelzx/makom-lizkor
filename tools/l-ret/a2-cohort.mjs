@@ -25,7 +25,14 @@ const submit = async (role) => {
   const r = await ask("/api/v1/submissions", {
     method: "POST",
     headers: { "Content-Type": "application/json", "Idempotency-Key": key(), "Turnstile-Token": "XXXX.DUMMY.TOKEN.XXXX" },
-    body: JSON.stringify({ kind: "bench", name_he: `[סינתטי] ${role} ${marker}`, lat: 31.42, lng: 34.49, consent_version: NOTICE }),
+    body: JSON.stringify({
+      kind: "bench",
+      name_he: `[סינתטי] ${role} ${marker}`,
+      submitter_name: `[סינתטי] ${marker}`,
+      lat: 31.42,
+      lng: 34.49,
+      consent_version: NOTICE,
+    }),
   })
   if (r.status !== 201) throw new Error(`submission (${role}) answered ${r.status}`)
   submitted[r.body.id] = r.body.trackingToken
