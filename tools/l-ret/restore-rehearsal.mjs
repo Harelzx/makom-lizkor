@@ -14,7 +14,17 @@
 // Staging's scale is the only one used (RETENTION_DAY_SECONDS=7200, worker/lib/durations.ts). Prints statuses, counts
 // and ids only: never a row's content, never a key. Every local database is disposed of and deleted at the end.
 //   node tools/l-ret/restore-rehearsal.mjs <checkout> <export id> <cohort receipt.json> [NOW_AT=<iso>]
-import { stagingAccount, stagingDatabase, stagingOrigin, assertTables, assertDrill, assertCohort, temporaryDirectories } from "./guards.mjs"
+import {
+  stagingAccount,
+  stagingDatabase,
+  stagingOrigin,
+  assertTables,
+  assertDrill,
+  assertCohort,
+  cohortCoverage,
+  assertReport,
+  temporaryDirectories,
+} from "./guards.mjs"
 import { execFileSync } from "node:child_process"
 import { readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
@@ -213,6 +223,7 @@ try {
     const plain = await app.unseal(data, manifest.data, JSON.parse(drillKey))
     const payload = JSON.parse(await new Response(new Blob([plain]).stream().pipeThrough(new DecompressionStream("gzip"))).text())
     assertTables(payload, manifest)
+    const coverage = cohortCoverage(receipt, payload, at)
     const ledger = await app.readLedger(ledgerBucket)
     const imported = await app.importExport(target.db, payload, at, ledger, days)
     if (!imported.ok) throw new Error(`import refused: ${imported.reason}`)
@@ -222,9 +233,7 @@ try {
         .map(([t, n]) => `${t} ${n}`)
         .join(", ")}`,
     )
-    for (const item of receipt.items.filter((i) => i.id?.startsWith("p_") && i.role !== "tribute")) {
-      // Newer content is outside this export point, so it is not an expected recovered row.
-      if (!payload.tables.places.some((p) => p.id === item.id)) continue
+    for (const { item } of coverage.checked.filter(({ item }) => item.role !== "report")) {
       const p = await target.db.prepare("SELECT status, erased_reason FROM places WHERE id = ?").bind(item.id).first()
       const marked = await target.db
         .prepare("SELECT COUNT(*) AS n FROM revisions WHERE place_id = ?1 AND (name_he LIKE ?2 OR decision_note LIKE ?2)")
@@ -235,18 +244,19 @@ try {
         `  ${item.role} ${item.id}: ${p ? `${p.status}${p.erased_reason ? ` (${p.erased_reason})` : ""}` : "absent"}; revisions holding the marker: ${marked}`,
       )
     }
-    const report = receipt.items.find((i) => i.role === "report")
-    if (report) {
+    for (const { item: report, source } of coverage.checked.filter(({ item }) => item.role === "report")) {
       const r = await target.db
-        .prepare(
-          "SELECT explanation IS NOT NULL AS text, reporter_key IS NOT NULL AS abuse_key, explanation_hash IS NOT NULL AS abuse_hash FROM reports WHERE id = ?",
-        )
+        .prepare("SELECT explanation, reporter_key, explanation_hash FROM reports WHERE id = ?")
         .bind(report.id)
         .first()
-      console.log(
-        `  report ${report.id}: ${r ? `explanation ${r.text ? "kept" : "empty"}, abuse codes ${r.abuse_key || r.abuse_hash ? "present" : "absent"}` : "absent"}`,
-      )
+      assertReport(source, r, at)
+      console.log(`  report ${report.id}: explanation ${r.explanation === null ? "empty" : "kept"}; abuse codes absent`)
     }
+    for (const item of coverage.excluded) console.log(`  excluded ${item.role} ${item.id}: event is newer than the selected export`)
+    if (!coverage.complete) {
+      process.exitCode = 3
+      console.log(`  retention cohort INCOMPLETE: missing coverage for ${coverage.missing.join(", ")}`)
+    } else console.log("  retention cohort: all six required cases checked")
     const published = (await target.db.prepare("SELECT id FROM places WHERE status = 'published' ORDER BY id").all()).results.map(
       (r) => r.id,
     )

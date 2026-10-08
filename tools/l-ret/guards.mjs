@@ -74,6 +74,45 @@ export function assertCohort(item, restored, marked, at) {
   else assert.ok(marked > 0, `The ${item.role} cohort text is missing`)
 }
 
+// A point-in-time export cannot contain a place submitted later. Such an exclusion is explicit and never counts
+// as exercising that retention case. A row already due to exist in this export must not disappear silently.
+export function cohortCoverage(receipt, payload, at) {
+  const required = ["published", "returned", "rejected", "pending", "withdrawn", "report"]
+  const exportedAt = Date.parse(payload.created_at)
+  assert.ok(Number.isFinite(exportedAt) && Number.isFinite(at.getTime()), "Invalid cohort coverage time")
+  assert.ok(Array.isArray(receipt.items), "Cohort receipt has no items")
+  const checked = []
+  const excluded = []
+  for (const item of receipt.items.filter((i) => required.includes(i.role))) {
+    const eventAt = Date.parse(item.at)
+    assert.ok(Number.isFinite(eventAt) && eventAt <= at.getTime(), `Invalid ${item.role} cohort event time`)
+    const table = item.role === "report" ? "reports" : "places"
+    const source = payload.tables[table]?.find((row) => row.id === item.id)
+    if (!source && eventAt > exportedAt) {
+      excluded.push(item)
+      continue
+    }
+    assert.ok(source, `Expected ${item.role} cohort row is missing from the export`)
+    checked.push({ item, source })
+  }
+  const missing = required.filter((role) => !checked.some(({ item }) => item.role === role))
+  return { checked, excluded, missing, complete: missing.length === 0 }
+}
+
+export function assertReport(source, restored, at) {
+  assert.ok(restored, "Expected cohort report is absent after restore")
+  const deadline = Date.parse(source.purge_after)
+  assert.ok(Number.isFinite(deadline) && Number.isFinite(at.getTime()), "Invalid report retention deadline")
+  // These two abuse identifiers are excluded from every export, even before their live-database deadline.
+  for (const field of ["reporter_key", "explanation_hash"]) {
+    assert.ok(source[field] === null, `Export retained report ${field}`)
+    assert.ok(restored[field] === null, `Restore retained report ${field}`)
+  }
+  const expected = deadline <= at.getTime() ? null : source.explanation
+  // Compare without exposing the report text in an assertion's actual/expected output.
+  assert.ok(restored.explanation === expected, "Restored report explanation does not match its retention deadline")
+}
+
 // Register immediately, so setup/build/migration failures also remove their temporary directories.
 export function temporaryDirectories(root = process.env.TMPDIR ?? "/tmp") {
   const dirs = []
