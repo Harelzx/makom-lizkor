@@ -1,14 +1,16 @@
 # Backend continuation record
 
-Updated 8 October 2026, after the 19:20 UTC final cloud readback. Read this after compaction, then the adviser pointer in `CLAUDE.md`. Confirm actual Git state before acting. Older narratives remain in Git history.
+Updated 8 October 2026, after the 21:14 UTC UI deployment and live visual readback. Read this after compaction, then the adviser pointer in `CLAUDE.md`. Confirm actual Git state before acting. Older narratives remain in Git history.
 
-## Current UI follow-up — normal CI/staging pipeline pending
+## Current UI follow-up — deployed and visually verified
 
 After the backend closeout, Harel reported three add-place layout issues on staging: step indicators too small and grouped away from the progress segments, the active ring crowding its label, and the pin-removal button overlapping the location description. The focused correction in `src/components/add-place.tsx` aligns both rows to the same three-column grid, enlarges the number circles to 28px with a 10px label gap, and places removal in normal flow below the description. Coordinate pairs stay together in LTR on narrow screens.
 
 Local verification: typecheck, targeted ESLint/Prettier and `git diff --check` pass. The existing accessibility test `adding a place, every step` passed (plus its seed dependency, 2/2). Final pixel/layout inspection covered all three steps across six desktop/mobile/light/dark layouts, including 320px width; alignment, ring spacing, no horizontal overflow and pin removal all pass. Actual screenshots and 18 observations are in `../agent-evidence/ui-add-place-20261008/`. This is a UI change, with no backend/authorization/retention changes and no form submitted during the layout inspection.
 
-Current deployment status and exact candidate/run IDs are in `../agent-evidence/ui-add-place-20261008/deployment-progress.json`. Follow the normal same-commit CI and staging receipt; until that succeeds the verified cloud version remains `8c5baf0` below. Do not repeat the completed backup/recovery exercises for this UI correction. The thread monitor may follow this one update and should pause after verifying deployment/receipt and the live layout, or a genuine owner blocker.
+Application `ac3e99690b29ab9764a4fa45ccc62b82887f78fb` passed CI `37840605669` (all four jobs), then staging `37844652764`. The downloaded same-SHA receipt names `staging-ac3e99690b29` and all nine edge checks pass. The protected site was reloaded in a separate agent tab and inspected at 892×774 and 390×844 without submitting a form: steps sit above their matching segments, the 28px circles have 10px label spacing, and pin removal is below the description without overlap. Screenshots `live-desktop-892-pin.jpg`, `live-phone-390-step1.jpg`, `live-phone-390-pin.jpg`, readback `live-visual-readback.json` and the receipt are under `../agent-evidence/ui-add-place-20261008/`. The user's tab was preserved, the viewport override reset and the agent tab closed. Current status is in `deployment-progress.json`. This UI task is complete; pause its chat monitor. Do not repeat the completed backend backup/recovery exercises.
+
+Harel also requested a comprehensive UI/UX review while CI ran. The read-only review and screenshots are in `../agent-evidence/ui-ux-audit-20261008/ux-review-he.md`. It distinguishes live observations, source findings and product proposals. Recommended focused fixes concern mobile list/story access, the 320px header, truthful submission feedback, explaining local-copy deletion before losing tracking access, and consistent search fields. These recommendations are not implemented or authorization to redesign the site. Other additions are optional after launch. Keep the existing anonymous submission, optional email, consent and safety controls. No new resources, production actions or live messages were performed.
 
 ## Current outcome — approved staging technical closeout complete
 
