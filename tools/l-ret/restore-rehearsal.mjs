@@ -14,144 +14,154 @@
 // Staging's scale is the only one used (RETENTION_DAY_SECONDS=7200, worker/lib/durations.ts). Prints statuses, counts
 // and ids only: never a row's content, never a key. Every local database is disposed of and deleted at the end.
 //   node tools/l-ret/restore-rehearsal.mjs <checkout> <export id> <cohort receipt.json> [NOW_AT=<iso>]
+import { stagingAccount, stagingDatabase, stagingOrigin, assertTables, assertDrill, assertCohort, temporaryDirectories } from "./guards.mjs"
 import { execFileSync } from "node:child_process"
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
-import { dirname, join } from "node:path"
+import { readFileSync, writeFileSync } from "node:fs"
+import { join } from "node:path"
 import { createRequire } from "node:module"
 import { pathToFileURL } from "node:url"
 
 const [checkout, exportId, receiptPath, nowArg] = process.argv.slice(2)
 if (!checkout || !exportId || !receiptPath)
   throw new Error("usage: node restore-rehearsal.mjs <checkout> <export id> <receipt.json> [NOW_AT=<iso>]")
-const need = createRequire(join(checkout, "package.json"))
-// The application's own code, bundled from this checkout for this run.
-const bundled = join(mkdtempSync(join(process.env.TMPDIR ?? "/tmp", "rehearsal-app-")), "app.mjs")
-await (
-  await import(pathToFileURL(need.resolve("esbuild")).href)
-).build({
-  stdin: {
-    contents: [
-      'export { runDrill } from "./worker/db/drill"',
-      'export { importExport } from "./worker/db/import"',
-      'export { readLedger, replayLedger } from "./worker/db/replay"',
-      'export { durations } from "./worker/lib/durations"',
-      'export { unseal, sha256 } from "./worker/lib/sealed"',
-    ].join("\n"),
-    resolveDir: checkout,
-    loader: "ts",
-  },
-  bundle: true,
-  format: "esm",
-  platform: "node",
-  loader: { ".wasm": "binary" },
-  outfile: bundled,
-  logLevel: "error",
-})
-const app = await import(pathToFileURL(bundled).href)
-// wrangler's local bindings, as the checkout has it (getPlatformProxy: the same local D1 and R2 the dev server uses).
-const { getPlatformProxy } = await import(pathToFileURL(need.resolve("wrangler")).href)
-const receipt = JSON.parse(readFileSync(receiptPath, "utf8"))
-const STAGING_ENV = { ENVIRONMENT: "staging", RETENTION_DAY_SECONDS: "7200", MODERATORS: "", PUBLIC_ORIGIN: "" }
-const days = app.durations(STAGING_ENV)
-
-// 1. Staging, read-only.
-const tok = execFileSync("security", ["find-generic-password", "-s", "makom-staging-cloudflare", "-w"], { encoding: "utf8" }).trim()
-const H = { Authorization: `Bearer ${tok}`, "cf-r2-jurisdiction": "eu" }
-const cf = (p, init = {}) => fetch(`https://api.cloudflare.com/client/v4${p}`, { ...init, headers: { ...H, ...(init.headers ?? {}) } })
-const acct = (await (await cf("/accounts")).json()).result[0].id
-const objects = async (bucket, prefix) => {
-  const keys = []
-  let cursor = ""
-  do {
-    const page = await (
-      await cf(
-        `/accounts/${acct}/r2/buckets/${bucket}/objects?prefix=${encodeURIComponent(prefix)}&per_page=1000${cursor ? `&cursor=${cursor}` : ""}`,
-      )
-    ).json()
-    if (!page.success) throw new Error(`listing ${bucket} refused: ${JSON.stringify(page.errors)}`)
-    keys.push(...page.result.map((o) => o.key))
-    cursor = page.result_info?.is_truncated ? page.result_info.cursor : ""
-  } while (cursor)
-  return keys
-}
-const get = async (bucket, key) => {
-  const r = await cf(`/accounts/${acct}/r2/buckets/${bucket}/objects/${encodeURIComponent(key)}`)
-  if (!r.ok) throw new Error(`${bucket}/${key}: ${r.status}`)
-  return new Uint8Array(await r.arrayBuffer())
-}
-const d1 = async (sql) => {
-  const dbs = (await (await cf(`/accounts/${acct}/d1/database?name=makom-staging`)).json()).result
-  const r = await (
-    await cf(`/accounts/${acct}/d1/database/${dbs[0].uuid}/raw`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sql }),
-    })
-  ).json()
-  if (!r.success) throw new Error(JSON.stringify(r.errors))
-  const { columns, rows } = r.result[0].results
-  return rows.map((row) => Object.fromEntries(columns.map((c, i) => [c, row[i]])))
-}
-const exportRows = await d1(
-  "SELECT id, created_at, retention_run, ok, deleted_at FROM exports WHERE ok = 1 AND deleted_at IS NULL ORDER BY created_at",
-)
-if (!exportRows.some((e) => e.id === exportId)) throw new Error(`${exportId} isn't a kept export on staging`)
-const kept = exportRows.filter((e) => e.created_at <= exportRows.find((x) => x.id === exportId).created_at)
-const exportFiles = new Map()
-for (const e of kept) {
-  for (const key of await objects("makom-staging-exports", `exports/${e.id}/`))
-    exportFiles.set(key, await get("makom-staging-exports", key))
-}
-const manifest = JSON.parse(new TextDecoder().decode(exportFiles.get(`exports/${exportId}/manifest.json`)))
-for (const f of manifest.files) exportFiles.set(`photos/${f.sha256}`, await get("makom-staging-exports", `photos/${f.sha256}`))
-const ledgerFiles = new Map()
-for (const key of await objects("makom-staging-ledger", "ledger/")) ledgerFiles.set(key, await get("makom-staging-ledger", key))
-console.log(
-  `staging, read-only: export ${exportId} (created ${manifest.created_at}), ${kept.length} kept export(s) up to it, ${manifest.files.length} photo copies, ${ledgerFiles.size} ledger entries`,
-)
-
-// 2. Fresh local databases, migrated by wrangler from the repository's own migrations. One local-only configuration:
-// a database and the two buckets, nothing remote.
-const config = join(mkdtempSync(join(process.env.TMPDIR ?? "/tmp", "rehearsal-config-")), "wrangler.jsonc")
-writeFileSync(
-  config,
-  JSON.stringify({
-    name: "rehearsal",
-    compatibility_date: "2026-10-01",
-    d1_databases: [
-      {
-        binding: "DB",
-        database_name: "makom-dev",
-        database_id: "00000000-0000-0000-0000-000000000000",
-        migrations_dir: join(checkout, "migrations"),
-      },
-    ],
-    r2_buckets: [
-      { binding: "EXPORTS", bucket_name: "rehearsal-exports" },
-      { binding: "LEDGER", bucket_name: "rehearsal-ledger" },
-    ],
-  }),
-)
-const fresh = () => {
-  const dir = mkdtempSync(join(process.env.TMPDIR ?? "/tmp", "rehearsal-"))
-  execFileSync("npx", ["wrangler", "d1", "migrations", "apply", "makom-dev", "--local", "--persist-to", dir, "--config", config], {
-    cwd: checkout,
-    stdio: "ignore",
-    env: { ...process.env, CI: "1" },
-  })
-  return dir
-}
+const temporary = temporaryDirectories()
 const instances = []
-const local = async (dir) => {
-  const proxy = await getPlatformProxy({ configPath: config, persist: { path: join(dir, "v3") }, remoteBindings: false })
-  instances.push({ proxy, dir })
-  const db = proxy.env.DB
-  const migrated = await db.prepare("SELECT COUNT(*) AS n FROM d1_migrations").first("n")
-  if (!migrated) throw new Error("the local database isn't the migrated one")
-  return { db, env: proxy.env, migrated }
-}
-const nowAt = nowArg?.startsWith("NOW_AT=") ? new Date(nowArg.slice(7)) : null
 try {
+  const need = createRequire(join(checkout, "package.json"))
+  // The application's own code, bundled from this checkout for this run.
+  const bundled = join(temporary.create("rehearsal-app-"), "app.mjs")
+  await (
+    await import(pathToFileURL(need.resolve("esbuild")).href)
+  ).build({
+    stdin: {
+      contents: [
+        'export { runDrill } from "./worker/db/drill"',
+        'export { importExport } from "./worker/db/import"',
+        'export { readLedger, replayLedger } from "./worker/db/replay"',
+        'export { durations } from "./worker/lib/durations"',
+        'export { unseal, sha256 } from "./worker/lib/sealed"',
+        'export { EXPORT_TABLES } from "./worker/db/exports"',
+      ].join("\n"),
+      resolveDir: checkout,
+      loader: "ts",
+    },
+    bundle: true,
+    format: "esm",
+    platform: "node",
+    loader: { ".wasm": "binary" },
+    outfile: bundled,
+    logLevel: "error",
+  })
+  const app = await import(pathToFileURL(bundled).href)
+  // wrangler's local bindings, as the checkout has it (getPlatformProxy: the same local D1 and R2 the dev server uses).
+  const { getPlatformProxy } = await import(pathToFileURL(need.resolve("wrangler")).href)
+  const receipt = JSON.parse(readFileSync(receiptPath, "utf8"))
+  stagingOrigin(receipt.base)
+  // The mail sender below is a local stub. A synthetic recipient lets an export audit failure reach that stub.
+  const STAGING_ENV = { ENVIRONMENT: "staging", RETENTION_DAY_SECONDS: "7200", MODERATORS: "rehearsal@example.invalid", PUBLIC_ORIGIN: "" }
+  const days = app.durations(STAGING_ENV)
+
+  // 1. Staging, read-only.
+  const tok = execFileSync("security", ["find-generic-password", "-s", "makom-staging-cloudflare", "-w"], { encoding: "utf8" }).trim()
+  const H = { Authorization: `Bearer ${tok}`, "cf-r2-jurisdiction": "eu" }
+  const cf = (p, init = {}) => fetch(`https://api.cloudflare.com/client/v4${p}`, { ...init, headers: { ...H, ...(init.headers ?? {}) } })
+  const acct = stagingAccount(await (await cf("/accounts")).json())
+  const objects = async (bucket, prefix) => {
+    const keys = []
+    let cursor = ""
+    do {
+      const page = await (
+        await cf(
+          `/accounts/${acct}/r2/buckets/${bucket}/objects?prefix=${encodeURIComponent(prefix)}&per_page=1000${cursor ? `&cursor=${cursor}` : ""}`,
+        )
+      ).json()
+      if (!page.success) throw new Error(`listing ${bucket} refused: ${JSON.stringify(page.errors)}`)
+      keys.push(...page.result.map((o) => o.key))
+      cursor = page.result_info?.is_truncated ? page.result_info.cursor : ""
+    } while (cursor)
+    return keys
+  }
+  const get = async (bucket, key) => {
+    const r = await cf(`/accounts/${acct}/r2/buckets/${bucket}/objects/${encodeURIComponent(key)}`)
+    if (!r.ok) throw new Error(`${bucket}/${key}: ${r.status}`)
+    return new Uint8Array(await r.arrayBuffer())
+  }
+  const d1 = async (sql) => {
+    const db = stagingDatabase(await (await cf(`/accounts/${acct}/d1/database?name=makom-staging`)).json())
+    const r = await (
+      await cf(`/accounts/${acct}/d1/database/${db.uuid}/raw`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sql }),
+      })
+    ).json()
+    if (!r.success) throw new Error(JSON.stringify(r.errors))
+    const { columns, rows } = r.result[0].results
+    return rows.map((row) => Object.fromEntries(columns.map((c, i) => [c, row[i]])))
+  }
+  const exportRows = await d1(
+    "SELECT id, created_at, retention_run, ok, deleted_at FROM exports WHERE ok = 1 AND deleted_at IS NULL ORDER BY created_at",
+  )
+  if (!exportRows.some((e) => e.id === exportId)) throw new Error(`${exportId} isn't a kept export on staging`)
+  const kept = exportRows.filter((e) => e.created_at <= exportRows.find((x) => x.id === exportId).created_at)
+  const exportFiles = new Map()
+  for (const e of kept) {
+    for (const key of await objects("makom-staging-exports", `exports/${e.id}/`))
+      exportFiles.set(key, await get("makom-staging-exports", key))
+  }
+  const manifest = JSON.parse(new TextDecoder().decode(exportFiles.get(`exports/${exportId}/manifest.json`)))
+  for (const f of manifest.files) exportFiles.set(`photos/${f.sha256}`, await get("makom-staging-exports", `photos/${f.sha256}`))
+  const ledgerFiles = new Map()
+  for (const key of await objects("makom-staging-ledger", "ledger/")) ledgerFiles.set(key, await get("makom-staging-ledger", key))
+  console.log(
+    `staging, read-only: export ${exportId} (created ${manifest.created_at}), ${kept.length} kept export(s) up to it, ${manifest.files.length} photo copies, ${ledgerFiles.size} ledger entries`,
+  )
+
+  // 2. Fresh local databases, migrated by wrangler from the repository's own migrations. One local-only configuration:
+  // a database and the two buckets, nothing remote.
+  const config = join(temporary.create("rehearsal-config-"), "wrangler.jsonc")
+  writeFileSync(
+    config,
+    JSON.stringify({
+      name: "rehearsal",
+      compatibility_date: "2026-10-01",
+      d1_databases: [
+        {
+          binding: "DB",
+          database_name: "makom-dev",
+          database_id: "00000000-0000-0000-0000-000000000000",
+          migrations_dir: join(checkout, "migrations"),
+        },
+      ],
+      r2_buckets: [
+        { binding: "EXPORTS", bucket_name: "rehearsal-exports" },
+        { binding: "LEDGER", bucket_name: "rehearsal-ledger" },
+      ],
+    }),
+  )
+  const fresh = () => {
+    const dir = temporary.create("rehearsal-")
+    execFileSync(
+      join(checkout, "node_modules/.bin/wrangler"),
+      ["d1", "migrations", "apply", "makom-dev", "--local", "--persist-to", dir, "--config", config],
+      {
+        cwd: checkout,
+        stdio: "ignore",
+        env: { ...process.env, CI: "1" },
+      },
+    )
+    return dir
+  }
+  const local = async (dir) => {
+    const proxy = await getPlatformProxy({ configPath: config, persist: { path: join(dir, "v3") }, remoteBindings: false })
+    instances.push({ proxy, dir })
+    const db = proxy.env.DB
+    const migrated = await db.prepare("SELECT COUNT(*) AS n FROM d1_migrations").first("n")
+    if (!migrated) throw new Error("the local database isn't the migrated one")
+    return { db, env: proxy.env, migrated }
+  }
+  const nowAt = nowArg?.startsWith("NOW_AT=") ? new Date(nowArg.slice(7)) : null
+  if (nowArg && (!nowAt || !Number.isFinite(nowAt.getTime()))) throw new Error("Invalid NOW_AT")
   const main = await local(fresh())
   const drill = await local(fresh())
   console.log(`local databases: fresh, ${main.migrated} migrations each`)
@@ -187,10 +197,13 @@ try {
     now,
   )
   const run = await main.db.prepare("SELECT ok, failure, export_id FROM drill_runs ORDER BY started_at DESC LIMIT 1").first()
-  const left = await drill.db.prepare("SELECT COUNT(*) AS n FROM places").first("n")
-  console.log(
-    `drill: ${run.ok ? "passed" : `failed (${run.failure})`} on ${run.export_id}; the drill database emptied after (${left} places left); moderators told ${mails.length} time(s)${mails.length ? `: ${mails.join(", ")}` : ""}`,
+  const left = Object.fromEntries(
+    await Promise.all(
+      app.EXPORT_TABLES.map(async (table) => [table, await drill.db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).first("n")]),
+    ),
   )
+  assertDrill(run, left, exportId, mails)
+  console.log(`drill: passed on ${run.export_id}; all ${Object.keys(left).length} exported tables emptied; no failure notifications`)
 
   // 4. Route B: the filtered import, then the ledger since the export, into a fresh database kept to inspect.
   const restoreAt = async (at, label) => {
@@ -199,6 +212,7 @@ try {
     if ((await app.sha256(data)) !== manifest.data.sha256) throw new Error("the data's checksum differs from the manifest's")
     const plain = await app.unseal(data, manifest.data, JSON.parse(drillKey))
     const payload = JSON.parse(await new Response(new Blob([plain]).stream().pipeThrough(new DecompressionStream("gzip"))).text())
+    assertTables(payload, manifest)
     const ledger = await app.readLedger(ledgerBucket)
     const imported = await app.importExport(target.db, payload, at, ledger, days)
     if (!imported.ok) throw new Error(`import refused: ${imported.reason}`)
@@ -209,11 +223,14 @@ try {
         .join(", ")}`,
     )
     for (const item of receipt.items.filter((i) => i.id?.startsWith("p_") && i.role !== "tribute")) {
+      // Newer content is outside this export point, so it is not an expected recovered row.
+      if (!payload.tables.places.some((p) => p.id === item.id)) continue
       const p = await target.db.prepare("SELECT status, erased_reason FROM places WHERE id = ?").bind(item.id).first()
       const marked = await target.db
         .prepare("SELECT COUNT(*) AS n FROM revisions WHERE place_id = ?1 AND (name_he LIKE ?2 OR decision_note LIKE ?2)")
         .bind(item.id, `%${receipt.marker}%`)
         .first("n")
+      assertCohort(item, p, marked, at)
       console.log(
         `  ${item.role} ${item.id}: ${p ? `${p.status}${p.erased_reason ? ` (${p.erased_reason})` : ""}` : "absent"}; revisions holding the marker: ${marked}`,
       )
@@ -245,10 +262,18 @@ try {
   )
   if (nowAt) await restoreAt(nowAt, "simulated time: the import filter at that moment")
 } finally {
-  for (const { proxy, dir } of instances) {
-    await proxy.dispose().catch(() => undefined)
-    rmSync(dir, { recursive: true, force: true })
+  const errors = []
+  for (const { proxy } of instances) {
+    try {
+      await proxy.dispose()
+    } catch (error) {
+      errors.push(error)
+    }
   }
-  rmSync(dirname(config), { recursive: true, force: true })
-  rmSync(dirname(bundled), { recursive: true, force: true })
+  try {
+    temporary.cleanup()
+  } catch (error) {
+    errors.push(error)
+  }
+  if (errors.length) throw new AggregateError(errors, "Local rehearsal cleanup failed")
 }

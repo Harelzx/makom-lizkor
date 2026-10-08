@@ -3,6 +3,7 @@
 // and each table's row count compared with the manifest's. Prints only counts: per table, how many rows carry a marker.
 // Never a row's content, never a key.
 //   node tools/l-ret/read-export.mjs <checkout> <marker> [export id]
+import { stagingAccount, assertTables } from "./guards.mjs"
 import { execFileSync } from "node:child_process"
 import { gunzipSync } from "node:zlib"
 import { pathToFileURL } from "node:url"
@@ -12,7 +13,7 @@ if (!checkout || !marker) throw new Error("usage: node tools/l-ret/read-export.m
 const { sha256, unseal } = await import(pathToFileURL(`${checkout}/worker/lib/sealed.ts`).href)
 const tok = execFileSync("security", ["find-generic-password", "-s", "makom-staging-cloudflare", "-w"], { encoding: "utf8" }).trim()
 const H = { Authorization: `Bearer ${tok}`, "cf-r2-jurisdiction": "eu" }
-const acct = (await (await fetch("https://api.cloudflare.com/client/v4/accounts", { headers: H })).json()).result[0].id
+const acct = stagingAccount(await (await fetch("https://api.cloudflare.com/client/v4/accounts", { headers: H })).json())
 const R2 = `https://api.cloudflare.com/client/v4/accounts/${acct}/r2/buckets/makom-staging-exports/objects`
 
 const listing = await (await fetch(`${R2}?prefix=exports/&per_page=1000`, { headers: H })).json()
@@ -20,7 +21,7 @@ if (!listing.success) throw new Error(`listing refused: ${JSON.stringify(listing
 const ids = [...new Set(listing.result.map((o) => o.key.split("/")[1]))].sort()
 console.log(`exports listed: ${ids.length}${ids.length ? ` (oldest ${ids[0]}, newest ${ids.at(-1)})` : ""}`)
 const id = wanted ?? ids.at(-1)
-if (!id) process.exit(0)
+if (!id) throw new Error("No export is available to verify")
 const get = async (key) => {
   const r = await fetch(`${R2}/${encodeURIComponent(key)}`, { headers: H })
   if (!r.ok) throw new Error(`${key}: ${r.status}`)
@@ -49,3 +50,5 @@ for (const [t, rows] of Object.entries(plain.tables)) {
   console.log(`  ${t}: ${rows.length} rows (manifest ${want})${marked ? `, ${marked} with the marker` : ""}`)
 }
 console.log(`photo copies listed: ${manifest.files.length}; table counts ${mismatch ? `DIFFER in ${mismatch}` : "match the manifest"}`)
+
+assertTables(plain, manifest)

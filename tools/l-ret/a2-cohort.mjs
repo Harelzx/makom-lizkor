@@ -4,6 +4,8 @@
 //   MACHINE='{…}' NOTICE=… EXPECT_TAG=staging-<sha12> node tools/l-ret/a2-cohort.mjs <base-url> <receipt.json>
 import { writeFileSync } from "node:fs"
 
+import { stagingRequester } from "./guards.mjs"
+
 const [base, out] = process.argv.slice(2)
 const machine = JSON.parse(process.env.MACHINE ?? "null")
 const { NOTICE, EXPECT_TAG } = process.env
@@ -14,17 +16,9 @@ const marker = `A2-${run}`
 const DAY = 2 * 3600_000 // the staged day
 const key = () => crypto.randomUUID().replaceAll("-", "") + crypto.randomUUID().replaceAll("-", "").slice(0, 8)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
-const ask = async (path, init = {}) => {
-  const res = await fetch(new URL(path, base), { redirect: "manual", ...init, headers: { ...machine, ...(init.headers ?? {}) } })
-  const text = await res.text()
-  let body = null
-  try {
-    body = JSON.parse(text)
-  } catch {}
-  const tag = res.headers.get("X-Worker-Version")
-  if (tag !== EXPECT_TAG) throw new Error(`${path} answered from ${tag}`)
-  return { status: res.status, body }
-}
+const ask = stagingRequester(base, machine, EXPECT_TAG)
+// Check the read-only endpoint before the first state-changing request.
+if ((await ask("/api/v1/health")).status !== 200) throw new Error("Staging health check failed")
 const receipt = { marker, base, expectTag: EXPECT_TAG, started: new Date().toISOString(), items: [] }
 const submitted = {}
 const submit = async (role) => {

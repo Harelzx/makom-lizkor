@@ -1,6 +1,7 @@
 // Read-only: the scheduled (cron) invocations of staging's Worker since a moment, from Cloudflare's GraphQL analytics
 // (workersInvocationsScheduled): when, status, CPU. Nothing secret printed.
 //   node tools/l-ret/cron-runs.mjs <since ISO>
+import { stagingAccount } from "./guards.mjs"
 import { execFileSync } from "node:child_process"
 const since = process.argv[2]
 const tok = execFileSync("security", ["find-generic-password", "-s", "makom-staging-cloudflare", "-w"], { encoding: "utf8" }).trim()
@@ -9,7 +10,7 @@ const cf = (p, init = {}) =>
     ...init,
     headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" },
   }).then((r) => r.json())
-const acct = (await cf("/accounts")).result[0].id
+const acct = stagingAccount(await cf("/accounts"))
 const q = `query($a:String!,$f:Time!,$t:Time!){viewer{accounts(filter:{accountTag:$a}){workersInvocationsScheduled(limit:100,filter:{scriptName:"makom-lizkor-staging",datetime_geq:$f,datetime_lt:$t},orderBy:[datetime_ASC]){datetime cron status cpuTimeUs}}}}`
 const r = await cf("/graphql", {
   method: "POST",

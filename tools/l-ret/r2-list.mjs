@@ -1,11 +1,12 @@
 // Read-only: the staging exports bucket's listing (eu jurisdiction): every object's key, size and the provider's upload
 // time, for before/after comparisons of the prune. Nothing secret printed.
 //   node tools/l-ret/r2-list.mjs [prefix]
+import { stagingAccount } from "./guards.mjs"
 import { execFileSync } from "node:child_process"
 const prefix = process.argv[2] ?? ""
 const tok = execFileSync("security", ["find-generic-password", "-s", "makom-staging-cloudflare", "-w"], { encoding: "utf8" }).trim()
 const H = { Authorization: `Bearer ${tok}`, "cf-r2-jurisdiction": "eu" }
-const acct = (await (await fetch("https://api.cloudflare.com/client/v4/accounts", { headers: H })).json()).result[0].id
+const acct = stagingAccount(await (await fetch("https://api.cloudflare.com/client/v4/accounts", { headers: H })).json())
 let cursor = ""
 const rows = []
 do {

@@ -5,7 +5,9 @@
 // in a private file of this scratchpad, never printed and never in the receipt.
 //   MACHINE='{…}' NOTICE=… EXPECT_TAG=staging-<sha12> node tools/l-ret/a2-photo.mjs <base-url> create <receipt.json> <photo.jpg>
 //   MACHINE='{…}' EXPECT_TAG=staging-<sha12> node tools/l-ret/a2-photo.mjs <base-url> withdraw <receipt.json>
-import { readFileSync, writeFileSync, chmodSync } from "node:fs"
+import { readFileSync, writeFileSync } from "node:fs"
+
+import { stagingRequester, stagingOrigin } from "./guards.mjs"
 
 const [base, mode, out, photoPath] = process.argv.slice(2)
 const machine = JSON.parse(process.env.MACHINE ?? "null")
@@ -14,17 +16,9 @@ if (!base || !mode || !out || !machine?.["CF-Access-Client-Id"] || !EXPECT_TAG) 
 const tokenFile = `${out}.token`
 const key = () => crypto.randomUUID().replaceAll("-", "") + crypto.randomUUID().replaceAll("-", "").slice(0, 8)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
-const ask = async (path, init = {}) => {
-  const res = await fetch(new URL(path, base), { redirect: "manual", ...init, headers: { ...machine, ...(init.headers ?? {}) } })
-  const text = await res.text()
-  let body = null
-  try {
-    body = JSON.parse(text)
-  } catch {}
-  const tag = res.headers.get("X-Worker-Version")
-  if (tag !== EXPECT_TAG) throw new Error(`${path} answered from ${tag}`)
-  return { status: res.status, body }
-}
+const ask = stagingRequester(base, machine, EXPECT_TAG)
+// Check the read-only endpoint before the first state-changing request.
+if ((await ask("/api/v1/health")).status !== 200) throw new Error("Staging health check failed")
 
 if (mode === "create") {
   if (!NOTICE || !photoPath) throw new Error("create needs NOTICE and the photo")
@@ -36,8 +30,7 @@ if (mode === "create") {
   })
   if (s.status !== 201) throw new Error(`submission answered ${s.status}`)
   const id = s.body.id
-  writeFileSync(tokenFile, s.body.trackingToken)
-  chmodSync(tokenFile, 0o600)
+  writeFileSync(tokenFile, s.body.trackingToken, { mode: 0o600, flag: "wx" })
   const form = new FormData()
   form.set("photo", new File([readFileSync(photoPath)], "synthetic.jpg", { type: "image/jpeg" }))
   form.set("alt", `[סינתטי] תמונה מחוללת ${marker}`)
@@ -70,6 +63,7 @@ if (mode === "create") {
   console.log(`photo place ${id} approved at ${receipt.approved}; marker ${marker}`)
 } else if (mode === "withdraw") {
   const receipt = JSON.parse(readFileSync(out, "utf8"))
+  if (stagingOrigin(receipt.base) !== stagingOrigin(base)) throw new Error("Receipt is not for staging")
   const w = await ask(`/api/v1/submissions/${receipt.id}/withdraw`, {
     method: "POST",
     headers: { Authorization: `Bearer ${readFileSync(tokenFile, "utf8").trim()}` },
