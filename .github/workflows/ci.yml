@@ -1,25 +1,47 @@
-# Each commit on main, and each pull request: the static checks, the Worker's and the browser code's tests, the scripts' tests, the
-# access registry and the workflow policy, then the browser suite on the dev server. No environment and no secrets:
-# CI never reaches production (spec 12.2), and scripts/ci-policy.mjs fails the run if a change makes it.
+# Readiness for protected synthetic staging. Unknown/sensitive changes require full regression here;
+# allowlisted presentation changes get core + affected tests here, and full regression in regression.yml.
 name: ci
-
-# One run per commit: pushes to main, and pull requests (a branch's push isn't run again). GitHub Free's minutes are
-# the budget; staging.yml follows a passing run on main instead of building again.
 on:
   push:
     branches: [main]
   pull_request:
-
 permissions:
   contents: read
-
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
-
 jobs:
-  static:
+  plan:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      mode: ${{ steps.plan.outputs.mode }}
+      groups: ${{ steps.plan.outputs.groups }}
+      dev: ${{ steps.plan.outputs.dev }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ci-evidence.mjs plan
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ci-plan
+          path: ci-plan.json
+          retention-days: 7
+  static:
+    needs: plan
+    if: needs.plan.outputs.mode != 'docs'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -33,12 +55,13 @@ jobs:
       - run: npm run test:scripts
       - run: npm run check:access
       - run: node scripts/ci-policy.mjs
-      # No curated record in what would ship (Phase 7 task 6).
       - run: npm run build
       - run: node scripts/bundle-check.mjs
-
   worker:
     runs-on: ubuntu-latest
+    needs: plan
+    if: needs.plan.outputs.mode != 'docs'
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -47,9 +70,11 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
-
   client:
+    needs: plan
+    if: needs.plan.outputs.mode != 'docs'
     runs-on: ubuntu-latest
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -58,10 +83,11 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run test:client
-
-  e2e:
-    needs: [static, worker, client]
+  core:
+    needs: [plan, static, worker, client]
+    if: needs.plan.outputs.mode == 'preview'
     runs-on: ubuntu-latest
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -69,25 +95,112 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      # The browser and its system packages: normally under a minute. A stalled package mirror once held this step for
-      # two hours with no output (CI 37667926353, 7 October); bounded, a stall fails in minutes and is rerun.
       - run: npx playwright install --with-deps chromium
         timeout-minutes: 10
-      # Every spec but the frame-rate check: it measures the machine as much as the code, and this runner (no GPU) has
-      # not been established as giving valid performance evidence (main's first run, 2026-10-07: 3.4 long frames a
-      # second against 0.95). It runs, unchanged, on a suitable machine as its own stage (agent-evidence stages.sh
-      # perf-dev, perf-prod); finding P1 and its launch obligation stay open there.
-      # The panel's motion check (a spring, not a snap): two development-mode CI runs showed a stall followed by a large
-      # step; the cause remains unresolved. This unchanged scenario runs against the production build, in the step below
-      # (CI-MOTION-1, a99, a100).
-      # (The | below is the pattern's alternation, not a pipe; pipefail keeps ci-policy's pipe rule satisfied regardless.)
-      - run: |
-          set -o pipefail
-          npm run e2e -- --grep-invert "keeps the frame rate|collapses and opens again without losing its rounded corners"
-      - run: npm run e2e:prod -- e2e/panel.spec.ts -g "collapses and opens again without losing its rounded corners"
+      - env:
+          CI_GROUPS: ${{ needs.plan.outputs.groups }}
+        run: node scripts/ci-browser.mjs run core
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-core
+          path: ci-results/
+          retention-days: 7
+          if-no-files-found: error
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-results
+          name: traces-core
           path: test-results/
           retention-days: 7
+  webkit:
+    needs: [plan, static, worker, client]
+    if: needs.plan.outputs.mode != 'docs'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium webkit
+        timeout-minutes: 10
+      - run: node scripts/ci-browser.mjs run webkit
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-webkit
+          path: ci-results/
+          retention-days: 7
+          if-no-files-found: error
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: traces-webkit
+          path: test-results/
+          retention-days: 7
+  dev:
+    needs: [plan, static, worker, client]
+    if: needs.plan.outputs.dev == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+        timeout-minutes: 10
+      - run: node scripts/ci-browser.mjs run dev
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-dev
+          path: ci-results/
+          retention-days: 7
+          if-no-files-found: error
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: traces-dev
+          path: test-results/
+          retention-days: 7
+  regression:
+    needs: [plan, static, worker, client]
+    if: needs.plan.outputs.mode == 'full'
+    uses: ./.github/workflows/browser-suite.yml
+    with:
+      sha: ${{ github.sha }}
+  ready:
+    if: always()
+    needs: [plan, static, worker, client, core, webkit, dev, regression]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v4
+        with:
+          name: ci-plan
+      - env:
+          CI_NEEDS: ${{ toJSON(needs) }}
+        run: node scripts/ci-evidence.mjs ready
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ci-ready-${{ github.sha }}
+          path: ci-evidence/ready/receipt.json
+          retention-days: 90
+          if-no-files-found: error
+      - if: needs.plan.outputs.mode == 'full'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-full-${{ github.sha }}
+          path: ci-evidence/full/receipt.json
+          retention-days: 90
+          if-no-files-found: error

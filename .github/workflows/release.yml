@@ -65,6 +65,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$(gh run list --workflow ci.yml --commit "$SHA" --status success --json databaseId --jq length)" -gt 0
+          node scripts/ci-evidence.mjs release "$SHA"
       # Staging's receipt for this commit, from a completed, successful staging.yml run, with its edge check passed. A
       # run's own head_sha is not read: for a workflow_run trigger it is main's tip, not the commit deployed (a51).
       - name: Staging passed on that commit

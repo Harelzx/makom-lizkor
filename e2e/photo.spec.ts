@@ -10,7 +10,7 @@ test.use({ reducedMotion: "reduce" })
 const DAY = { timeout: 20_000 }
 const PICTURE = fileURLToPath(new URL("../public/art/dawn-field.webp", import.meta.url))
 
-test("a photo sent with a place reaches the moderator, and is published with it", async ({ browser }) => {
+test("a photo sent with a place reaches the moderator, and is published with it", { tag: "@core-photo" }, async ({ browser }) => {
   test.setTimeout(120_000)
   const name = `ספסל דמו עם תמונה ${Date.now()}`
   const page = await (

@@ -23,7 +23,15 @@ const fails = (workflows, expected) => {
 
 test("the committed workflows keep the policy", () => {
   assert.deepEqual(policyProblems(real), [])
-  assert.deepEqual(Object.keys(real).sort(), ["ci.yml", "release.yml", "rollback.yml", "staging.yml"])
+  assert.deepEqual(Object.keys(real).sort(), [
+    "browser-suite.yml",
+    "ci.yml",
+    "compatibility.yml",
+    "regression.yml",
+    "release.yml",
+    "rollback.yml",
+    "staging.yml",
+  ])
 })
 
 test("only release and rollback reach production, and nothing else reads a secret", () => {
@@ -185,7 +193,7 @@ test("staging deploys only the commit CI passed on main, with staging's secrets 
     "outside the production environment",
   )
   fails(
-    withChange("staging.yml", "    runs-on: ubuntu-latest\n    env:", "    runs-on: ubuntu-latest\n    environment: production\n    env:"),
+    withChange("staging.yml", "    timeout-minutes: 20\n    env:", "    timeout-minutes: 20\n    environment: production\n    env:"),
     "uses the production environment",
   )
   // Staging's secrets are staging.yml's alone: CI, which runs every pull request, never reads one.
@@ -344,13 +352,19 @@ test("the release checks its built configuration for Workers Caching after the b
   )
 })
 
-test("the panel's motion check runs in CI, against the production build when the dev run leaves it out (CI-MOTION-1, a99)", () => {
-  const prodStep = '      - run: npm run e2e:prod -- e2e/panel.spec.ts -g "collapses and opens again without losing its rounded corners"\n'
-  fails(withChange("ci.yml", prodStep, ""), "ci.yml must run the panel's motion check")
+test("full production regression and aggregate coverage cannot be removed", () => {
   fails(
-    withChange("ci.yml", prodStep, '      - run: npm run e2e:prod -- e2e/panel.spec.ts -g "scroll"\n'),
-    "ci.yml must run the panel's motion check",
+    withChange("ci.yml", "uses: ./.github/workflows/browser-suite.yml", "uses: ./.github/workflows/missing.yml"),
+    "retain the full browser suite",
   )
+  fails(
+    withChange("browser-suite.yml", 'node scripts/ci-browser.mjs run full "$SHARD/2"', "true"),
+    "must run production-build browser tests",
+  )
+  fails(withChange("browser-suite.yml", "node scripts/ci-browser.mjs verify-full", "true"), "verify complete shard coverage")
+  fails(withChange("browser-suite.yml", "shard: [1, 2]", "shard: [1]"), "two independent shards")
+  fails(withChange("release.yml", 'node scripts/ci-evidence.mjs release "$SHA"', "true"), "full regression on that commit")
+  fails(withChange("staging.yml", "node scripts/ci-evidence.mjs staging", "true"), "trusted same-SHA readiness")
 })
 
 // Each deployment's checks are told its Worker cache is off (C-CACHE): production's stays off (release-cache.mjs), and

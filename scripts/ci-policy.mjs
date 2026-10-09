@@ -81,14 +81,24 @@ export function policyProblems(workflows) {
         if (change >= 0 && (check < 0 || check > change)) say(`job ${id} must search its build before the migrations and the deploy`)
       }
     }
-    // The panel's motion check stays in CI (CI-MOTION-1, a99): the dev run may leave it out only for a run of the same
-    // scenario against the production build.
     if (name === "ci.yml") {
-      const steps = Object.values(w.jobs ?? {}).flatMap((job) => runs(job))
-      const scenario = "collapses and opens again without losing its rounded corners"
-      const leftOut = steps.some((r) => /npm run e2e\b(?!:)[^\n]*--grep-invert[^\n]*/.test(r) && r.includes(scenario))
-      const inProd = steps.some((r) => /npm run e2e:prod -- e2e\/panel\.spec\.ts -g/.test(r) && r.includes(scenario))
-      if (leftOut && !inProd) say("ci.yml must run the panel's motion check, against the production build when the dev run leaves it out")
+      if (w.jobs?.regression?.uses !== "./.github/workflows/browser-suite.yml") say("CI must retain the full browser suite")
+      if (w.jobs?.ready?.if !== "always()" || !runs(w.jobs?.ready ?? {}).some((r) => r.includes("node scripts/ci-evidence.mjs ready")))
+        say("CI must aggregate every required job, even on failure")
+      for (const id of ["plan", "static", "worker", "client", "core", "webkit", "dev", "regression"])
+        if (!w.jobs?.ready?.needs?.includes(id)) say(`readiness must wait for ${id}`)
+    }
+    if (name === "browser-suite.yml") {
+      if (text(w.jobs?.browser?.strategy?.matrix?.shard) !== text([1, 2]) || w.jobs?.browser?.strategy?.["fail-fast"] !== false)
+        say("full regression needs two independent shards")
+      if (!runs(w.jobs?.browser ?? {}).some((r) => r.includes('node scripts/ci-browser.mjs run full "$SHARD/2"')))
+        say("full regression must run production-build browser tests")
+      if (
+        !runs(w.jobs?.coverage ?? {}).some((r) => r.includes("node scripts/ci-browser.mjs verify-full")) ||
+        w.jobs?.coverage?.if !== "always()" ||
+        w.jobs?.coverage?.needs !== "browser"
+      )
+        say("full regression must verify complete shard coverage")
     }
     // Workers Caching stays off in production (L-CACHE-STG, a95): the release reads the configuration it built, the one
     // it deploys, after the build and before any migration or deploy.
@@ -123,6 +133,7 @@ function releaseProblems(w) {
       ["the draft release's target commit", /targetCommitish/],
       ["the commit being on main", /merge-base --is-ancestor "\$sha" origin\/main/],
       ["CI on that commit", /--workflow ci\.yml --commit "\$SHA" --status success/],
+      ["full regression on that commit", /node scripts\/ci-evidence\.mjs release "\$SHA"/],
       ["staging on that commit", /node scripts\/staging-evidence\.mjs check "\$SHA"/],
       ["the attached manifest's content for that commit", /release-manifest\.mjs "\$SHA"[^\n]*--verify "\$RUNNER_TEMP\/manifest\.json"/],
       ["the release tag's commit", /release-manifest\.mjs "\$SHA"[^\n]*--verify[^\n]*--tag "\$RELEASE"/],
@@ -213,7 +224,27 @@ function stagingProblems(w, triggers) {
     text(w.on.workflow_run?.branches) !== text(["main"])
   )
     problems.push("staging runs only after CI completes on main (workflow_run of ci, branches main)")
-  for (const [id, job] of Object.entries(w.jobs ?? {})) {
+  const preflight = w.jobs?.verify
+  if (
+    !String(preflight?.if).includes("workflow_run.conclusion == 'success'") ||
+    !String(preflight?.if).includes("workflow_run.event == 'push'")
+  )
+    problems.push("preflight runs only when CI passed on a push")
+  if (
+    preflight?.steps?.find((s) => String(s.uses ?? "").startsWith("actions/checkout"))?.with?.ref !==
+    "${{ github.event.workflow_run.head_sha }}"
+  )
+    problems.push("preflight must check out the commit CI passed")
+  if (
+    preflight?.permissions?.actions !== "read" ||
+    !runs(preflight ?? {}).includes("node scripts/ci-evidence.mjs staging") ||
+    !String(preflight?.if).includes("workflow_run.head_repository.full_name == github.repository") ||
+    preflight?.outputs?.allowed !== "${{ steps.check.outputs.allowed }}"
+  )
+    problems.push("staging must verify trusted same-SHA readiness before using credentials")
+  if (w.jobs?.deploy?.needs !== "verify" || !String(w.jobs?.deploy?.if).includes("needs.verify.outputs.allowed == 'true'"))
+    problems.push("staging deploy must wait for explicit readiness permission")
+  for (const [id, job] of Object.entries(w.jobs ?? {}).filter(([id]) => id !== "verify")) {
     if (!/workflow_run\.conclusion == 'success'/.test(String(job.if)) || !/workflow_run\.event == 'push'/.test(String(job.if)))
       problems.push(`job ${id} must run only when CI passed on a push`)
     if (job.environment) problems.push(`job ${id} uses an environment: staging has none (GitHub Free)`)

@@ -1,4 +1,4 @@
-# Staging (spec 14.1, 14.2): every commit on main that passed CI is deployed to the staging account, synthetic data
+# Staging: eligible runtime candidates with verified CI readiness are deployed to the staging account, synthetic data
 # only, on its workers.dev address behind Cloudflare Access, and checked there. Its last step uploads a receipt named
 # for the commit it deployed; release.yml requires that receipt, from a successful run, with a passed edge check.
 #
@@ -22,10 +22,33 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  verify:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      allowed: ${{ steps.check.outputs.allowed }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ci-evidence.mjs staging
   deploy:
     # Only a push to main that CI passed: never a pull request's run, never a failed one.
-    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && needs.verify.outputs.allowed == 'true'
+    needs: verify
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
       SHA: ${{ github.event.workflow_run.head_sha }}
       CLOUDFLARE_ENV: staging

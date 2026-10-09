@@ -8,23 +8,27 @@ import { expect, test } from "./fixtures"
 // passed. Signed in through the development stand-in, as a moderator and a stranger.
 test.skip(!process.env.E2E_PROD, "the production build's runtime (npm run e2e:prod)")
 
-test("the edge check passes on the production build, and skips only what needs the real edge", async ({ baseURL }) => {
-  const { stdout } = await promisify(execFile)("node", ["scripts/edge-check.mjs", baseURL!, "--local", "--dev"])
-  const lines = Object.fromEntries(
-    stdout
-      .trim()
-      .split("\n")
-      .map((l) => [l.split(/\s+/)[1].replace(/:$/, ""), l.split(/\s+/)[0]]),
-  )
-  expect(lines).toEqual({
-    responses: "pass",
-    headers: "pass",
-    private_no_store: "pass",
-    private_isolation: "pass",
-    // The place the e2e seed imported: locally it is checked without being named (a60).
-    place_page: "pass",
-    no_shared_hit: "skip",
-    purge_freshness: "skip",
-    workers_dev_closed: "skip",
-  })
-})
+test(
+  "the edge check passes on the production build, and skips only what needs the real edge",
+  { tag: "@core-edge" },
+  async ({ baseURL }) => {
+    const { stdout } = await promisify(execFile)("node", ["scripts/edge-check.mjs", baseURL!, "--local", "--dev"])
+    const lines = Object.fromEntries(
+      stdout
+        .trim()
+        .split("\n")
+        .map((l) => [l.split(/\s+/)[1].replace(/:$/, ""), l.split(/\s+/)[0]]),
+    )
+    expect(lines).toEqual({
+      responses: "pass",
+      headers: "pass",
+      private_no_store: "pass",
+      private_isolation: "pass",
+      // The place the e2e seed imported: locally it is checked without being named (a60).
+      place_page: "pass",
+      no_shared_hit: "skip",
+      purge_freshness: "skip",
+      workers_dev_closed: "skip",
+    })
+  },
+)

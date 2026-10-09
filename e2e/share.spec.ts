@@ -10,17 +10,21 @@ const DAY = { timeout: 20_000 }
 /** A moderator's change comes from the admin page itself (the Worker refuses one from elsewhere). */
 const SAME_SITE = { "Sec-Fetch-Site": "same-origin" }
 
-test("a share page opens the site at its place, skipping the opening, under the usual address", async ({ page }) => {
-  await page.goto("/place/car-wall-tkuma")
-  await expect(page.getByRole("heading", { name: "קיר המכוניות ליד תקומה" })).toBeVisible(DAY)
-  await expect(page.getByRole("button", { name: "עם צליל" })).toHaveCount(0)
-  // The address becomes the hash route the rest of the site reads, so reload and Back work as for any card.
-  await expect(page).toHaveURL(/\/#\/place\/car-wall-tkuma$/)
-  await page.reload()
-  await expect(page.getByRole("heading", { name: "קיר המכוניות ליד תקומה" })).toBeVisible(DAY)
-  await page.getByRole("button", { name: "כל המקומות" }).click()
-  await expect(page).toHaveURL(/\/#\/$/)
-})
+test(
+  "a share page opens the site at its place, skipping the opening, under the usual address",
+  { tag: "@core-share" },
+  async ({ page }) => {
+    await page.goto("/place/car-wall-tkuma")
+    await expect(page.getByRole("heading", { name: "קיר המכוניות ליד תקומה" })).toBeVisible(DAY)
+    await expect(page.getByRole("button", { name: "עם צליל" })).toHaveCount(0)
+    // The address becomes the hash route the rest of the site reads, so reload and Back work as for any card.
+    await expect(page).toHaveURL(/\/#\/place\/car-wall-tkuma$/)
+    await page.reload()
+    await expect(page.getByRole("heading", { name: "קיר המכוניות ליד תקומה" })).toBeVisible(DAY)
+    await page.getByRole("button", { name: "כל המקומות" }).click()
+    await expect(page).toHaveURL(/\/#\/$/)
+  },
+)
 
 test("an approved contribution's share page opens its card before the feed answers", async ({ browser }) => {
   const name = `גינת דמו שיתוף ${Date.now()}`

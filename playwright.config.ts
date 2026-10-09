@@ -17,6 +17,11 @@ const fresh = `rm -rf ${state} && npx wrangler d1 migrations apply makom-dev --l
 export default defineConfig({
   testDir: "e2e",
   fullyParallel: false,
+  forbidOnly: !!process.env.CI,
+  failOnFlakyTests: !!process.env.CI,
+  retries: 0,
+  // The runner stops first, leaving time for CI to upload its failure report.
+  globalTimeout: process.env.CI ? Number(process.env.E2E_GLOBAL_TIMEOUT_MS || 35 * 60_000) : 0,
   workers: 1,
   // Each test's whole budget, not any check's: the longer recovery and accessibility walks take 23 to 28 s on a good CI
   // runner and about a fifth more on a slow one, where every step costs seconds, so 30 s timed them out midway. Each

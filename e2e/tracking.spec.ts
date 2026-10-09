@@ -57,32 +57,36 @@ async function queued(b: Browser, name: string) {
   return items.filter((i) => i.name_he === name).length
 }
 
-test("the sender follows a submission by its private link, from any browser, and withdraws it", async ({ browser }) => {
-  test.setTimeout(90_000)
-  const name = `ספסל דמו מעקב ${Date.now()}`
-  const page = await submit(browser, name)
+test(
+  "the sender follows a submission by its private link, from any browser, and withdraws it",
+  { tag: "@core-withdrawal" },
+  async ({ browser }) => {
+    test.setTimeout(90_000)
+    const name = `ספסל דמו מעקב ${Date.now()}`
+    const page = await submit(browser, name)
 
-  // From the place's own card.
-  await page.getByRole("button", { name: "מעקב אחרי ההצעה" }).click()
-  const view = page.getByRole("dialog", { name: "מצב ההצעה" })
-  await expect(view.getByText("ממתינה לבדיקה")).toBeVisible()
-  await expect(view.getByText(name)).toBeVisible()
-  const link = await view.getByLabel("קישור המעקב").inputValue()
-  expect(link).toMatch(/#\/track\/p_[0-9A-Z]{26}\/[A-Za-z0-9_-]{22}$/)
+    // From the place's own card.
+    await page.getByRole("button", { name: "מעקב אחרי ההצעה" }).click()
+    const view = page.getByRole("dialog", { name: "מצב ההצעה" })
+    await expect(view.getByText("ממתינה לבדיקה")).toBeVisible()
+    await expect(view.getByText(name)).toBeVisible()
+    const link = await view.getByLabel("קישור המעקב").inputValue()
+    expect(link).toMatch(/#\/track\/p_[0-9A-Z]{26}\/[A-Za-z0-9_-]{22}$/)
 
-  // The link opens the same view in a browser that never saw the place, and the token leaves the address bar.
-  const other = await (await browser.newContext()).newPage()
-  await other.goto(link.replace(/^https?:\/\/[^/]+/, ""))
-  const there = other.getByRole("dialog", { name: "מצב ההצעה" })
-  await expect(there.getByText("ממתינה לבדיקה")).toBeVisible(DAY)
-  await expect(other).toHaveURL(/#\/$/)
+    // The link opens the same view in a browser that never saw the place, and the token leaves the address bar.
+    const other = await (await browser.newContext()).newPage()
+    await other.goto(link.replace(/^https?:\/\/[^/]+/, ""))
+    const there = other.getByRole("dialog", { name: "מצב ההצעה" })
+    await expect(there.getByText("ממתינה לבדיקה")).toBeVisible(DAY)
+    await expect(other).toHaveURL(/#\/$/)
 
-  // Withdrawing asks first, then erases it: gone from the moderators' queue.
-  await there.getByRole("button", { name: "משיכת ההצעה" }).click()
-  await other.getByRole("alertdialog").getByRole("button", { name: "למשוך ולמחוק" }).click()
-  await expect(there.getByText("נמשכה", { exact: false })).toBeVisible()
-  expect(await queued(browser, name)).toBe(0)
-})
+    // Withdrawing asks first, then erases it: gone from the moderators' queue.
+    await there.getByRole("button", { name: "משיכת ההצעה" }).click()
+    await other.getByRole("alertdialog").getByRole("button", { name: "למשוך ולמחוק" }).click()
+    await expect(there.getByText("נמשכה", { exact: false })).toBeVisible()
+    expect(await queued(browser, name)).toBe(0)
+  },
+)
 
 test("a tracking link with a wrong token says nothing about the place", async ({ page }) => {
   await page.goto("/#/track/p_01ZZZZZZZZZZZZZZZZZZZZZZZZ/AAAAAAAAAAAAAAAAAAAAAA")
