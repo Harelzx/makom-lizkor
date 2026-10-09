@@ -62,33 +62,37 @@ const stored = (page: Page) =>
       }),
   )
 
-test("a lost receipt is not stored, and a manual retry recovers the same server submission once", async ({ browser }) => {
-  const name = `ספסל דמו אבד ${Date.now()}`
-  const page = await day(browser)
-  const keys: string[] = []
-  const bodies: string[] = []
-  await page.route("**/api/v1/submissions", async (route) => {
-    keys.push(route.request().headers()["idempotency-key"])
-    bodies.push(route.request().postData()!)
-    if (keys.length > 1) return route.continue({ headers: from(page.context(), route.request().headers()) })
-    await route.fetch({ headers: from(page.context(), route.request().headers()) })
-    await route.abort("failed")
-  })
-  await fillAndSend(page, name)
-  await expect(page.getByRole("heading", { name: "לא הצלחנו לאשר את השליחה", exact: true })).toBeVisible(DAY)
-  expect(await stored(page)).toEqual([])
-  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")))
-  await page.getByRole("button", { name: "ניסיון שליחה נוסף", exact: true }).click()
-  await acknowledge(page)
-  expect(keys).toHaveLength(2)
-  expect(keys[1]).toBe(keys[0])
-  expect(bodies[1]).toBe(bodies[0])
-  expect(await queued(browser, name)).toBe(1)
-  const rows = await stored(page)
-  expect(rows).toHaveLength(1)
-  expect(rows[0]).toMatchObject({ name, token: expect.any(String) })
-  expect(rows[0].key).toBeUndefined()
-})
+test(
+  "a lost receipt is not stored, and a manual retry recovers the same server submission once",
+  { tag: "@core-lost-receipt" },
+  async ({ browser }) => {
+    const name = `ספסל דמו אבד ${Date.now()}`
+    const page = await day(browser)
+    const keys: string[] = []
+    const bodies: string[] = []
+    await page.route("**/api/v1/submissions", async (route) => {
+      keys.push(route.request().headers()["idempotency-key"])
+      bodies.push(route.request().postData()!)
+      if (keys.length > 1) return route.continue({ headers: from(page.context(), route.request().headers()) })
+      await route.fetch({ headers: from(page.context(), route.request().headers()) })
+      await route.abort("failed")
+    })
+    await fillAndSend(page, name)
+    await expect(page.getByRole("heading", { name: "לא הצלחנו לאשר את השליחה", exact: true })).toBeVisible(DAY)
+    expect(await stored(page)).toEqual([])
+    await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")))
+    await page.getByRole("button", { name: "ניסיון שליחה נוסף", exact: true }).click()
+    await acknowledge(page)
+    expect(keys).toHaveLength(2)
+    expect(keys[1]).toBe(keys[0])
+    expect(bodies[1]).toBe(bodies[0])
+    expect(await queued(browser, name)).toBe(1)
+    const rows = await stored(page)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ name, token: expect.any(String) })
+    expect(rows[0].key).toBeUndefined()
+  },
+)
 
 test("a refusal leaves no stored place and a closed form forgets its values", async ({ browser }) => {
   const page = await day(browser)

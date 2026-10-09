@@ -8,3 +8,5 @@
 ^node\s+\S*render-film\.mjs(\s|$)
 ^(npx\s+)?remotion\s+render(\s|$)
 ^(npx\s+)?vitest(\s|$)|^npm\s+(run\s+)?test(\s|$)
+
+^node\s+scripts/ci-browser\.mjs\s+run(\s|$)

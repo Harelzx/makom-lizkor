@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs"
-import { test, expect, type Page } from "./fixtures"
+import { test, expect, type Page, type Locator } from "./fixtures"
 import { audit } from "./axe"
 
 const demo = JSON.parse(readFileSync(new URL("../fixtures/ux-preview.json", import.meta.url), "utf8"))
@@ -9,6 +9,20 @@ test.use({
   geolocation: { latitude: 31.42, longitude: 34.51 },
   permissions: ["geolocation"],
 })
+
+// WebKit's IntersectionObserver reports 0.99986 on a fully visible rounded button. Keep the intersection check
+// within 0.1%, and independently require every box edge to fit within a tenth of a CSS pixel.
+async function wholeButton(button: Locator) {
+  await expect(button).toBeInViewport({ ratio: 0.999 })
+  await expect
+    .poll(() =>
+      button.evaluate((el) => {
+        const r = el.getBoundingClientRect()
+        return Math.max(0, -r.left, -r.top, r.right - innerWidth, r.bottom - innerHeight)
+      }),
+    )
+    .toBeLessThanOrEqual(0.1)
+}
 
 async function day(page: Page) {
   await page.route("**/api/v1/version", (r) => r.fulfill({ json: { v: "0.99999" } }))
@@ -98,93 +112,105 @@ test("cold flower transition keeps a decoded image visible until the next artwor
   }
 })
 
-test("every fast retry announces its new result and uses the same request without saving failures", async ({ page }) => {
-  const sent: { key: string; body: string }[] = []
-  await page.route("**/api/v1/submissions", async (r) => {
-    sent.push({ key: r.request().headers()["idempotency-key"], body: r.request().postData()! })
-    await r.fulfill({ status: 503, json: { code: "unavailable" } })
-  })
-  await day(page)
-  const form = await confirm(page)
-  await form.getByRole("button", { name: "שליחה לבדיקה", exact: true }).click()
-  const result = page.locator("[data-submission-result]")
-  await expect(result.getByRole("status")).toContainText("ניסיון 1")
-  await expect(result.getByRole("status")).toContainText("ללא אישור קבלה")
-  for (const n of [2, 3]) {
-    await result.getByRole("button", { name: "ניסיון שליחה נוסף", exact: true }).click()
-    await expect(result.getByRole("status")).toContainText(`ניסיון ${n}`)
-    await expect(result.getByRole("button", { name: "שולחים לבדיקה…", exact: true })).toBeDisabled()
-    await expect(result.getByRole("status")).toContainText(`ניסיון ${n} הסתיים ללא אישור קבלה`)
-    await expect(result.getByRole("button", { name: "ניסיון שליחה נוסף", exact: true })).toBeEnabled()
-  }
-  expect(sent).toHaveLength(3)
-  expect(new Set(sent.map((r) => r.key)).size).toBe(1)
-  expect(new Set(sent.map((r) => r.body)).size).toBe(1)
-  expect(await storedCount(page)).toBe(0)
-  await audit(page)
-  await result.getByRole("button", { name: "סגירה ללא שמירה", exact: true }).click()
-  await page.getByRole("button", { name: "הוספת מקום", exact: true }).first().click()
-  await expect(page.getByRole("heading", { name: "איפה המקום?", exact: true })).toBeVisible()
-})
+test(
+  "every fast retry announces its new result and uses the same request without saving failures",
+  { tag: ["@core-retry-feedback", "@phone"] },
+  async ({ page }) => {
+    const sent: { key: string; body: string }[] = []
+    await page.route("**/api/v1/submissions", async (r) => {
+      sent.push({ key: r.request().headers()["idempotency-key"], body: r.request().postData()! })
+      await r.fulfill({ status: 503, json: { code: "unavailable" } })
+    })
+    await day(page)
+    const form = await confirm(page)
+    await form.getByRole("button", { name: "שליחה לבדיקה", exact: true }).click()
+    const result = page.locator("[data-submission-result]")
+    await expect(result.getByRole("status")).toContainText("ניסיון 1")
+    await expect(result.getByRole("status")).toContainText("ללא אישור קבלה")
+    for (const n of [2, 3]) {
+      await result.getByRole("button", { name: "ניסיון שליחה נוסף", exact: true }).click()
+      await expect(result.getByRole("status")).toContainText(`ניסיון ${n}`)
+      await expect(result.getByRole("button", { name: "שולחים לבדיקה…", exact: true })).toBeDisabled()
+      await expect(result.getByRole("status")).toContainText(`ניסיון ${n} הסתיים ללא אישור קבלה`)
+      await expect(result.getByRole("button", { name: "ניסיון שליחה נוסף", exact: true })).toBeEnabled()
+    }
+    expect(sent).toHaveLength(3)
+    expect(new Set(sent.map((r) => r.key)).size).toBe(1)
+    expect(new Set(sent.map((r) => r.body)).size).toBe(1)
+    expect(await storedCount(page)).toBe(0)
+    await audit(page)
+    await result.getByRole("button", { name: "סגירה ללא שמירה", exact: true }).click()
+    await page.getByRole("button", { name: "הוספת מקום", exact: true }).first().click()
+    await expect(page.getByRole("heading", { name: "איפה המקום?", exact: true })).toBeVisible()
+  },
+)
 
 for (const width of [320, 390])
-  test(`mobile sheet at ${width}px shows only its actions until opened and restores map space`, async ({ page }) => {
-    await page.setViewportSize({ width, height: 844 })
-    await day(page)
-    const sheet = page.locator("#places")
-    const sheetBox = await sheet.boundingBox()
-    expect(844 - sheetBox!.y).toBeLessThanOrEqual(120)
-    await expect(page.getByRole("heading", { name: "מקומות לזכור", exact: true })).toHaveCount(0)
-    const open = sheet.getByRole("button", { name: "הצגת המקומות", exact: true })
-    await expect(open).toBeInViewport({ ratio: 1 })
-    await expect(sheet.getByRole("button", { name: "הוספת מקום", exact: true })).toBeInViewport({ ratio: 1 })
-    await open.click()
-    await expect(sheet.getByRole("heading", { name: "מקומות לזכור", exact: true })).toBeInViewport()
-    await expect(sheet.getByRole("button", { name: "שמורים לביקור", exact: true })).toBeInViewport()
-    await audit(page)
-    await sheet.getByRole("button", { name: "חזרה למפה", exact: true }).click()
-    await expect(sheet.getByRole("heading", { name: "מקומות לזכור", exact: true })).toHaveCount(0)
-    // Browser chrome chooses its own size, but the page must no longer paint a dark background in day mode.
-    const colors = await page.evaluate(() => [
-      getComputedStyle(document.body).backgroundColor,
-      document.querySelector('meta[name="theme-color"]')?.getAttribute("content"),
-    ])
-    expect(colors).toEqual(["rgb(255, 255, 255)", "#ffffff"])
-  })
+  test(
+    `mobile sheet at ${width}px shows only its actions until opened and restores map space`,
+    { tag: width === 390 ? ["@core-sheet", "@phone"] : [] },
+    async ({ page }) => {
+      await page.setViewportSize({ width, height: 844 })
+      await day(page)
+      const sheet = page.locator("#places")
+      const sheetBox = await sheet.boundingBox()
+      expect(844 - sheetBox!.y).toBeLessThanOrEqual(120)
+      await expect(page.getByRole("heading", { name: "מקומות לזכור", exact: true })).toHaveCount(0)
+      const open = sheet.getByRole("button", { name: "הצגת המקומות", exact: true })
+      await wholeButton(open)
+      await wholeButton(sheet.getByRole("button", { name: "הוספת מקום", exact: true }))
+      await open.click()
+      await expect(sheet.getByRole("heading", { name: "מקומות לזכור", exact: true })).toBeInViewport()
+      await expect(sheet.getByRole("button", { name: "שמורים לביקור", exact: true })).toBeInViewport()
+      await audit(page)
+      await sheet.getByRole("button", { name: "חזרה למפה", exact: true }).click()
+      await expect(sheet.getByRole("heading", { name: "מקומות לזכור", exact: true })).toHaveCount(0)
+      // Browser chrome chooses its own size, but the page must no longer paint a dark background in day mode.
+      const colors = await page.evaluate(() => [
+        getComputedStyle(document.body).backgroundColor,
+        document.querySelector('meta[name="theme-color"]')?.getAttribute("content"),
+      ])
+      expect(colors).toEqual(["rgb(255, 255, 255)", "#ffffff"])
+    },
+  )
 
-test("retry can succeed, while a refusal returns to editing rather than offering endless retries", async ({ page }) => {
-  let count = 0
-  await page.route("**/api/v1/submissions", (r) => {
-    count++
-    return r.fulfill(
-      count === 1
-        ? { status: 503, json: { code: "unavailable" } }
-        : { status: 201, json: { id: "p_phone_retry", trackingToken: "synthetic_tracking_only" } },
-    )
-  })
-  await day(page)
-  const form = await confirm(page)
-  await form.getByRole("button", { name: "שליחה לבדיקה", exact: true }).click()
-  await page.getByRole("button", { name: "ניסיון שליחה נוסף", exact: true }).click()
-  await expect(page.getByRole("heading", { name: "תודה שהוספתם מקום לזכור", exact: true })).toBeVisible()
-  await expect(page.getByRole("button", { name: "לצפייה בהצעה", exact: true })).toBeEnabled()
-  expect(await storedCount(page)).toBe(1)
-  await page.getByRole("button", { name: "לצפייה בהצעה", exact: true }).click()
-  await page.unroute("**/api/v1/submissions")
-  await page.route("**/api/v1/submissions", (r) => r.fulfill({ status: 400, json: { code: "invalid_input" } }))
-  const another = await confirm(page)
-  await another.getByRole("button", { name: "שליחה לבדיקה", exact: true }).click()
-  await expect(page.getByRole("heading", { name: "ההצעה לא התקבלה", exact: true })).toBeVisible()
-  await expect(page.getByRole("button", { name: "ניסיון שליחה נוסף", exact: true })).toHaveCount(0)
-  await page.getByRole("button", { name: "חזרה לטופס", exact: true }).click()
-  await expect(page.getByRole("heading", { name: "לפני שמוסיפים", exact: true })).toBeVisible()
-  expect(await storedCount(page)).toBe(1)
-})
+test(
+  "retry can succeed, while a refusal returns to editing rather than offering endless retries",
+  { tag: ["@phone"] },
+  async ({ page }) => {
+    let count = 0
+    await page.route("**/api/v1/submissions", (r) => {
+      count++
+      return r.fulfill(
+        count === 1
+          ? { status: 503, json: { code: "unavailable" } }
+          : { status: 201, json: { id: "p_phone_retry", trackingToken: "synthetic_tracking_only" } },
+      )
+    })
+    await day(page)
+    const form = await confirm(page)
+    await form.getByRole("button", { name: "שליחה לבדיקה", exact: true }).click()
+    await page.getByRole("button", { name: "ניסיון שליחה נוסף", exact: true }).click()
+    await expect(page.getByRole("heading", { name: "תודה שהוספתם מקום לזכור", exact: true })).toBeVisible()
+    await expect(page.getByRole("button", { name: "לצפייה בהצעה", exact: true })).toBeEnabled()
+    expect(await storedCount(page)).toBe(1)
+    await page.getByRole("button", { name: "לצפייה בהצעה", exact: true }).click()
+    await page.unroute("**/api/v1/submissions")
+    await page.route("**/api/v1/submissions", (r) => r.fulfill({ status: 400, json: { code: "invalid_input" } }))
+    const another = await confirm(page)
+    await another.getByRole("button", { name: "שליחה לבדיקה", exact: true }).click()
+    await expect(page.getByRole("heading", { name: "ההצעה לא התקבלה", exact: true })).toBeVisible()
+    await expect(page.getByRole("button", { name: "ניסיון שליחה נוסף", exact: true })).toHaveCount(0)
+    await page.getByRole("button", { name: "חזרה לטופס", exact: true }).click()
+    await expect(page.getByRole("heading", { name: "לפני שמוסיפים", exact: true })).toBeVisible()
+    expect(await storedCount(page)).toBe(1)
+  },
+)
 
 test("the folded sheet opens by a keyboard skip or an upward drag", async ({ page }) => {
   await day(page)
   const sheet = page.locator("#places")
-  await expect(sheet.getByRole("button", { name: "הצגת המקומות", exact: true })).toBeInViewport({ ratio: 1 })
+  await wholeButton(sheet.getByRole("button", { name: "הצגת המקומות", exact: true }))
   // Vaul intentionally ignores drag for 500ms after opening/settling at its highest snap.
   // Exercise the initial settled sheet, not an immediate close-and-drag inside that guard.
   await page.waitForTimeout(550)

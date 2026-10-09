@@ -47,6 +47,10 @@ npm run cf-typegen         # regenerate worker-configuration.d.ts after changing
 - **Prettier is enforced**: no semicolons, double quotes, trailing commas, `printWidth` 140, with Tailwind classes sorted by `prettier-plugin-tailwindcss` (including inside `cn()` and `cva()`). An override keeps `src/components/ui/**` at shadcn's own format (80 columns, `es5` commas), so output from `shadcn add` drops in without churn. After editing, run `npm run format` and make sure `format:check` passes.
 - `vite build` warns that some chunks exceed 500 kB. Those chunks are MapLibre's own library (the lazy `controller` chunk) and its worker, which already load after the opening. The warning is expected and can't be fixed by splitting.
 
+## CI and test scope
+
+Use `docs/ci-delivery.md` for the test/deployment policy approved on 9 October 2026. It supersedes historical instructions to run full dev AND production browser suites for every checkpoint. Run affected checks while implementing; retain the full same-SHA release gate. All local browser runs, including `node scripts/ci-browser.mjs run ...`, use `scripts/heavy`. Read `docs/agent-handoff.md` for current verification and deployment evidence.
+
 ## Parallel sessions
 
 Several Claude Code sessions may work on this repo at once, each in its own worktree. Hooks in `.claude/settings.json` enforce the rules below; `docs/parallel-sessions.md` explains the machinery.

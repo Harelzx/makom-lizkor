@@ -7,8 +7,24 @@ import base from "./playwright.config"
 export default defineConfig({
   ...base,
   projects: [
-    { name: "firefox", testMatch: /a11y\.spec\.ts$/, use: { ...devices["Desktop Firefox"], viewport: { width: 1280, height: 900 } } },
-    { name: "webkit", testMatch: /a11y\.spec\.ts$/, use: { ...devices["Desktop Safari"], viewport: { width: 1280, height: 900 } } },
-    { name: "webkit-phone", testMatch: /a11y-phone\.spec\.ts$/, use: { ...devices["iPhone 13"] } },
+    { name: "seed", testMatch: /seed\.setup\.ts/, use: { ...devices["Desktop Chrome"] } },
+    {
+      name: "firefox",
+      dependencies: ["seed"],
+      testMatch: /a11y\.spec\.ts$/,
+      use: { ...devices["Desktop Firefox"], viewport: { width: 1280, height: 900 } },
+    },
+    {
+      name: "webkit",
+      dependencies: ["seed"],
+      testMatch: /a11y\.spec\.ts$/,
+      use: { ...devices["Desktop Safari"], viewport: { width: 1280, height: 900 } },
+    },
+    {
+      name: "webkit-phone",
+      dependencies: ["seed"],
+      testMatch: /(a11y-phone|phone-followup|location-feedback)\.spec\.ts$/,
+      use: { ...devices["iPhone 13"] },
+    },
   ],
 })

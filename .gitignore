@@ -40,3 +40,8 @@ __pycache__/
 .wrangler/
 # Local development vars; the committed template is .dev.vars.example
 .dev.vars
+
+# CI evidence is uploaded, never shipped with the application.
+ci-results/
+ci-evidence/
+ci-plan.json

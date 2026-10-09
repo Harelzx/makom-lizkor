@@ -1,0 +1,56 @@
+# Broader accessibility checks once a week, only if this commit has not already passed them. No cloud credentials.
+name: compatibility
+on:
+  schedule:
+    - cron: '17 2 * * 0'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: compatibility
+  cancel-in-progress: true
+jobs:
+  changed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      run: ${{ steps.changed.outputs.run }}
+    steps:
+      - id: changed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          previous=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow compatibility.yml --commit "$GITHUB_SHA" --status success --json databaseId --jq length)
+          if [ "$previous" -eq 0 ]; then echo 'run=true' >> "$GITHUB_OUTPUT"; else echo 'run=false' >> "$GITHUB_OUTPUT"; fi
+  browsers:
+    needs: changed
+    if: needs.changed.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium webkit firefox
+        timeout-minutes: 10
+      - run: node scripts/ci-browser.mjs run compatibility
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-compatibility
+          path: ci-results/
+          retention-days: 7
+          if-no-files-found: error
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: traces-compatibility
+          path: test-results/
+          retention-days: 7

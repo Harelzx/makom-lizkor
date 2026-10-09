@@ -1,0 +1,66 @@
+# A preview can be inspected while this runs. Release requires its full receipt for the exact same SHA.
+name: regression
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: background-regression
+  cancel-in-progress: true
+jobs:
+  verify:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      allowed: ${{ steps.check.outputs.allowed }}
+      sha: ${{ steps.check.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ci-evidence.mjs background
+  regression:
+    needs: verify
+    if: needs.verify.outputs.allowed == 'true'
+    uses: ./.github/workflows/browser-suite.yml
+    with:
+      sha: ${{ needs.verify.outputs.sha }}
+  record:
+    if: always() && needs.verify.outputs.allowed == 'true'
+    needs: [verify, regression]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.verify.outputs.sha }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ needs.verify.outputs.sha }}
+          CI_NEEDS: ${{ toJSON(needs) }}
+        run: node scripts/ci-evidence.mjs full
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ci-full-${{ needs.verify.outputs.sha }}
+          path: ci-evidence/full/receipt.json
+          retention-days: 90
+          if-no-files-found: error

@@ -66,7 +66,7 @@ test.describe("desktop", () => {
     await audit(page)
   })
 
-  test("adding a place, every step", async ({ page, context }) => {
+  test("adding a place, every step", { tag: "@core-form-a11y" }, async ({ page, context }) => {
     await context.grantPermissions(["geolocation"])
     await context.setGeolocation({ latitude: 31.39, longitude: 34.47 })
     await day(page)

@@ -57,7 +57,7 @@ for (const [mode, explanation] of [
     await expect(page.getByText("לחצו על המפה במקום המדויק", { exact: true })).toBeVisible()
   })
 
-test("a silent GPS has a loading state, a deadline, repeat feedback and no late pin", async ({ page }) => {
+test("a silent GPS has a loading state, a deadline, repeat feedback and no late pin", { tag: ["@phone"] }, async ({ page }) => {
   const form = await openForm(page)
   await page.clock.install()
   for (const count of [1, 2]) {
@@ -92,39 +92,43 @@ test("closing and map selection cancel GPS, while a successful retry marks a pin
   await expect(form.locator("[data-location-status]")).toContainText("המיקום נמצא")
 })
 
-test("mobile artwork keeps its DOM nodes and header position through scrolling and all step transitions", async ({ page }) => {
-  const form = await openForm(page)
-  await page.emulateMedia({ reducedMotion: "no-preference" })
-  await form.getByRole("button", { name: "המיקום הנוכחי שלי", exact: true }).click()
-  await page.evaluate(() => window.dispatchEvent(new Event("test:location")))
-  await expect(form.getByText("סומן מיקום", { exact: false })).toBeVisible()
-  const header = form.locator("[data-add-art-header]")
-  const first = await header.boundingBox()
-  await form
-    .locator("img[src^='/art/']")
-    .evaluateAll((imgs) => imgs.forEach((img, i) => img.setAttribute("data-test-original-node", String(i))))
-  async function stable() {
-    const box = await header.boundingBox()
-    expect(Math.abs(box!.y - first!.y)).toBeLessThan(1)
-    expect(box!.height).toBe(first!.height)
-    await expect(form.locator("img[data-test-original-node]")).toHaveCount(3)
-    await expect(header).toBeInViewport({ ratio: 1 })
-  }
-  await form.getByRole("button", { name: "המשך", exact: true }).click()
-  await form.getByLabel("שם המקום", { exact: true }).fill("ספסל בדיקת איור")
-  // Scroll the long details; the decoration belongs to a separate fixed region, so it must stay in place.
-  await form.locator("fieldset:not([data-slot])").evaluate((el) => {
-    let scroll: HTMLElement | null = el.parentElement
-    while (scroll && getComputedStyle(scroll).overflowY !== "auto") scroll = scroll.parentElement
-    if (scroll) scroll.scrollTop = scroll.scrollHeight
-  })
-  await stable()
-  await form.getByRole("button", { name: "המשך", exact: true }).click()
-  await expect(form.getByRole("heading", { name: "לפני שמוסיפים", exact: true })).toBeVisible()
-  await stable()
-  await form.getByRole("button", { name: "חזרה", exact: true }).click()
-  await stable()
-  await form.getByRole("button", { name: "חזרה", exact: true }).click()
-  await stable()
-  await audit(page)
-})
+test(
+  "mobile artwork keeps its DOM nodes and header position through scrolling and all step transitions",
+  { tag: ["@core-artwork", "@phone"] },
+  async ({ page }) => {
+    const form = await openForm(page)
+    await page.emulateMedia({ reducedMotion: "no-preference" })
+    await form.getByRole("button", { name: "המיקום הנוכחי שלי", exact: true }).click()
+    await page.evaluate(() => window.dispatchEvent(new Event("test:location")))
+    await expect(form.getByText("סומן מיקום", { exact: false })).toBeVisible()
+    const header = form.locator("[data-add-art-header]")
+    const first = await header.boundingBox()
+    await form
+      .locator("img[src^='/art/']")
+      .evaluateAll((imgs) => imgs.forEach((img, i) => img.setAttribute("data-test-original-node", String(i))))
+    async function stable() {
+      const box = await header.boundingBox()
+      expect(Math.abs(box!.y - first!.y)).toBeLessThan(1)
+      expect(box!.height).toBe(first!.height)
+      await expect(form.locator("img[data-test-original-node]")).toHaveCount(3)
+      await expect(header).toBeInViewport({ ratio: 1 })
+    }
+    await form.getByRole("button", { name: "המשך", exact: true }).click()
+    await form.getByLabel("שם המקום", { exact: true }).fill("ספסל בדיקת איור")
+    // Scroll the long details; the decoration belongs to a separate fixed region, so it must stay in place.
+    await form.locator("fieldset:not([data-slot])").evaluate((el) => {
+      let scroll: HTMLElement | null = el.parentElement
+      while (scroll && getComputedStyle(scroll).overflowY !== "auto") scroll = scroll.parentElement
+      if (scroll) scroll.scrollTop = scroll.scrollHeight
+    })
+    await stable()
+    await form.getByRole("button", { name: "המשך", exact: true }).click()
+    await expect(form.getByRole("heading", { name: "לפני שמוסיפים", exact: true })).toBeVisible()
+    await stable()
+    await form.getByRole("button", { name: "חזרה", exact: true }).click()
+    await stable()
+    await form.getByRole("button", { name: "חזרה", exact: true }).click()
+    await stable()
+    await audit(page)
+  },
+)
