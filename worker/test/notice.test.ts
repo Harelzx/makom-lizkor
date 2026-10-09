@@ -115,7 +115,7 @@ it("version 12 keeps the text it was shown with; version 13 says how each tracki
   const thirteen = noticeHtml("notice.submission@2026-10-13")
   expect(thirteen).toContain("וקישור המעקב שנשלח אליכם במייל כבר לא ייפתח")
   expect(thirteen).toContain("ומפסיק לעבוד כשהוא נמחק")
-  expect(CURRENT_SUBMISSION_NOTICE).toBe("notice.submission@2026-10-13")
+  expect(CURRENT_SUBMISSION_NOTICE).toBe("notice.submission@2026-10-14")
 })
 
 it("a submission made under version 12 is kept under 12, its retry is the same submission, and its link still works", async () => {
@@ -159,4 +159,11 @@ it("a submission made under version 12 is kept under 12, its retry is the same s
     .first("n")
   // One address check, sent once: the retry is the same submission, not a second mail.
   expect(mails).toBe(1)
+})
+
+it("version 14 describes receipt-only local storage, without rewriting version 13", () => {
+  expect(noticeHtml("notice.submission@2026-10-13")).not.toContain("אין ניסיון שליחה אוטומטי")
+  const current = noticeHtml(CURRENT_SUBMISSION_NOTICE)
+  expect(current).toContain("אין עותק מקומי ואין ניסיון שליחה אוטומטי")
+  expect(current).toContain("ייתכן שההצעה כבר הגיעה לשרת")
 })

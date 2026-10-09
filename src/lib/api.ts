@@ -8,7 +8,7 @@ export type SendResult =
   /** `retryAfter` (seconds) when the server said when to come back: a full queue, a busy check, too many at once. */
   | { ok: false; kind: "temporary"; code?: string; retryAfter?: number }
 
-/** One key per place, made before the first try and kept with the place, so every retry is the same submission. */
+/** One key per attempt, kept in the open form's memory so a manual retry is the same submission. */
 export function newSubmitKey(): string {
   const b = crypto.getRandomValues(new Uint8Array(16))
   return btoa(String.fromCharCode(...b))
@@ -30,7 +30,21 @@ export async function submitPlace(input: SubmissionInput, key: string): Promise<
       body: JSON.stringify(input),
       signal: AbortSignal.timeout(8000),
     })
-    if (res.status === 201 || res.status === 200) return { ok: true, ...((await res.json()) as { id: string; trackingToken: string }) }
+    if (res.status === 201 || res.status === 200) {
+      const receipt: unknown = await res.json()
+      if (!receipt || typeof receipt !== "object") return { ok: false, kind: "temporary", code: "invalid_receipt" }
+      const { id, trackingToken } = receipt as Record<string, unknown>
+      if (
+        typeof id !== "string" ||
+        !id ||
+        id.length > 128 ||
+        typeof trackingToken !== "string" ||
+        !trackingToken ||
+        trackingToken.length > 512
+      )
+        return { ok: false, kind: "temporary", code: "invalid_receipt" }
+      return { ok: true, id, trackingToken }
+    }
     if (REJECTED.has(res.status)) {
       const code = ((await res.json().catch(() => ({}))) as { code?: string }).code ?? `http_${res.status}`
       return { ok: false, kind: "rejected", code }

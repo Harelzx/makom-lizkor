@@ -2,6 +2,7 @@ import { create } from "zustand"
 import type { LocalFields, Place } from "@/types"
 import { importable } from "@/lib/export"
 import { changeLocal, loadLocal, loadTributes, markUnlisted, saveTributes } from "@/lib/storage"
+import { unacceptedLocal } from "@/lib/local-policy"
 import { superviseReports } from "@/lib/report-outbox"
 
 /** intro: 06:29, the dark map and the opening words · dawn: the sunrise is playing · day: the site itself */
@@ -123,8 +124,6 @@ const onDevice = new Set<string>()
 const neverStored = new Set<string>()
 /** Whether the device could be read when this tab started; if not, what it holds is unknown. */
 let readable = false
-/** A place stored as "sending" by a visit that closed mid-send, or by another tab: here it waits for a retry. */
-const waiting = (p: Place): Place => (p.local?.send === "sending" ? { ...p, local: { ...p.local, send: "waiting" as const } } : p)
 
 /**
  * Saves a change to the visitor's places on the device; false when the browser won't keep them (a private window, a
@@ -132,13 +131,13 @@ const waiting = (p: Place): Place => (p.local?.send === "sending" ? { ...p, loca
  */
 async function persist(change: (stored: Place[]) => Place[]): Promise<boolean> {
   try {
-    const stored = await changeLocal(change)
+    const stored = await changeLocal((rows) => change(rows.filter((p) => !unacceptedLocal(p))))
     for (const p of stored) {
       onDevice.add(p.id)
       neverStored.delete(p.id)
     }
     // Only places this tab has never held: one it removed is not brought back by a write that was still in flight.
-    const theirs = stored.filter((p) => !held.has(p.id)).map(waiting)
+    const theirs = stored.filter((p) => !held.has(p.id) && !unacceptedLocal(p))
     for (const p of theirs) held.add(p.id)
     if (theirs.length) useStore.setState({ local: [...useStore.getState().local, ...theirs] })
     return true
@@ -180,8 +179,15 @@ export const useStore = create<State>((set, get) => ({
     void superviseReports()
     const [stored, tributes] = await Promise.all([loadLocal(), loadTributes()])
     readable = stored !== null
-    // A place still "sending" is from a visit that closed mid-send; nothing is sending it now, so it waits for a retry.
-    const local = (stored ?? []).map(waiting)
+    // Earlier builds kept unsuccessful sends. Remove them on upgrade; they must never be auto-submitted again.
+    const local = (stored ?? []).filter((p) => !unacceptedLocal(p))
+    if (stored?.some(unacceptedLocal)) {
+      try {
+        await changeLocal((rows) => rows.filter((p) => !unacceptedLocal(p)))
+      } catch {
+        // A blocked device cannot be erased yet, but those entries stay off the map and cannot be resent.
+      }
+    }
     for (const p of local) {
       held.add(p.id)
       onDevice.add(p.id)

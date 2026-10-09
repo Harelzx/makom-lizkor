@@ -42,6 +42,27 @@ export async function changeLocal(change: (stored: Place[]) => Place[]): Promise
   return next
 }
 
+const visitIds = (value: unknown): string[] =>
+  Array.isArray(value) ? [...new Set(value.filter((id): id is string => typeof id === "string" && /^[a-zA-Z0-9_-]{1,100}$/.test(id)))] : []
+
+export async function loadSavedVisits(): Promise<string[] | null> {
+  try {
+    const s = db()
+    return s ? visitIds(await get("saved-visits", s)) : null
+  } catch {
+    return null
+  }
+}
+
+/** Atomic across tabs, separate from submissions and their private capabilities. */
+export async function changeSavedVisits(change: (ids: string[]) => string[]): Promise<string[]> {
+  const s = db()
+  if (!s) throw new Error("storage_unavailable")
+  let next: string[] = []
+  await update("saved-visits", (stored) => (next = visitIds(change(visitIds(stored)))), s)
+  return next
+}
+
 export async function loadTributes(): Promise<Record<string, number>> {
   try {
     const s = db()

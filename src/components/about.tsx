@@ -35,7 +35,6 @@ export function About() {
   }
   // Counted from the feed: the site's own places and approved contributions alike.
   const sites = useStore((s) => s.remote.filter((p) => p.kind !== "community").length)
-  const communities = useStore((s) => s.remote.filter((p) => p.kind === "community").length)
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -60,27 +59,22 @@ export function About() {
           <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-popover to-transparent" />
         </div>
         <SheetHeader className="gap-3 px-7 pt-6">
-          <SheetTitle className="text-title-1 font-black text-ink-1">על המקום הזה</SheetTitle>
+          <SheetTitle className="text-title-1 font-black text-ink-1">על מקום לזכור</SheetTitle>
           <SheetDescription className="text-body-lg text-pretty text-ink-1">
-            ב־7 באוקטובר 2023 נרצחו ונפלו בדרום אנשים שיצאו מהבית, מהמסיבה, מהמשמרת. מאז הוקמו לזכרם מקומות רבים: אנדרטאות, מצפורים על
-            גבעות, ספסלים מול הנוף, עצים וגינות. רובם לא מופיעים בשום מפה.
+            אחרי 7 באוקטובר הקימו משפחות וחברים פינות לזכר יקיריהם — ספסל מול הנוף, גינה, עץ או מקום קטן שאפשר לעצור בו. מקום לזכור עוזר
+            למצוא את הפינות האלה ולהכיר את האדם והסיפור שמאחוריהן.
           </SheetDescription>
         </SheetHeader>
 
         <div className="flex flex-col gap-4 px-7 pt-4 pb-8 text-body-lg text-pretty text-ink-1">
-          {/* Written for the third anniversary and dated, because some of it will stop being true. */}
-          <div className="flex flex-col gap-1.5">
-            <p>
-              עברו שלוש שנים. בתים נבנו מחדש, ורוב המפונים כבר חזרו הביתה. אבל הבוקר ההוא עדיין לא נגמר: המלחמה נמשכת, ועדיין לא ידוע לנו כל
-              מה שקרה בו. לזכור זה גם לרצות לדעת. ככל שהזמן עובר, החדשות עוברות הלאה. המקומות נשארים, והם הדרך שלנו להגיד: אנחנו זוכרים, ולא
-              נשכח.
-            </p>
-            <p className="text-caption text-ink-3">נכתב באוקטובר 2026</p>
-          </div>
           <p>
-            מקום לזכור מרכז אותם במפה אחת: כרגע {sites} אתרי זיכרון ו־{communities} קהילות. לכל קהילה יש כאן שני סיפורים: מי שהיא איבדה,
-            ואיך היא חוזרת לחיים. בחרנו בכלנית, הפרח של הנגב המערבי, כי היא חוזרת לפרוח בכל חורף.
+            אפשר לעבור ממש ליד מקום כזה בלי לדעת שהוא שם. המפה נועדה לעזור לזיכרון להישאר חלק מהדרך שלנו, גם כשהזמן עובר. אפשר לגלות מקום
+            לביקור ולהציע פינה שחסרה במפה.
           </p>
+          <p>
+            המיזם נוצר לקראת סיום לימודי הנדסת תוכנה, מתוך רצון להשתמש בידע שנצבר לעשייה חברתית. המשפחות, האנשים והסיפורים שלהם הם הלב שלו.
+          </p>
+          <p className="text-caption text-ink-2">כרגע במפה {sites} מקומות לזכור. בחרנו בכלנית, הפרח שחוזר לפרוח בנגב המערבי בכל חורף.</p>
           {landscapes.length > 0 && (
             <PhotoGallery
               photos={landscapePhotos.filter((p) => /שוקדה|בארי|דרום אדום/.test(p.subject_he)).slice(0, 6)}

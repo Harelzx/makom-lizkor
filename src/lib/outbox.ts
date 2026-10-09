@@ -1,4 +1,5 @@
-import { submitPlace, uploadPhoto } from "@/lib/api"
+import { uploadPhoto } from "@/lib/api"
+import { unacceptedLocal } from "@/lib/local-policy"
 import { useStore } from "@/store"
 
 let busy = false
@@ -16,30 +17,13 @@ async function sendPhotos() {
   }
 }
 
-/** Sends again every place still waiting, with the key and body of its first try; refused ones are never resent. */
+/** Only photos of accepted submissions retry. Unaccepted places are discarded, never sent in the background. */
 export async function retryWaiting(): Promise<void> {
   if (busy) return
   busy = true
   try {
     for (const p of useStore.getState().local) {
-      const l = p.local
-      if (l?.send !== "waiting" || !l.submitKey || !l.submission || (l.nextTryAt ?? 0) > Date.now()) continue
-      // The list was read before the first send; a place removed since (here, or in another tab) isn't sent.
-      if (!(await useStore.getState().stillLocal(p.id))) continue
-      const r = await submitPlace(l.submission, l.submitKey)
-      // Answered: the key is dropped with the body, so the device can't ask the server for the tracking link again (and a
-      // refused body, which nothing can send again, takes its email and name with it).
-      if (r.ok)
-        await useStore
-          .getState()
-          .updateLocal(p.id, { send: "sent", remoteId: r.id, trackingToken: r.trackingToken, submission: undefined, submitKey: undefined })
-      else if (r.kind === "rejected")
-        await useStore.getState().updateLocal(p.id, { send: "rejected", sendError: r.code, submitKey: undefined, submission: undefined })
-      else {
-        // Still unreachable, or asked to wait: the next wake tries again, not before the server's time.
-        if (r.retryAfter) await useStore.getState().updateLocal(p.id, { nextTryAt: Date.now() + r.retryAfter * 1000, sendError: r.code })
-        break
-      }
+      if (unacceptedLocal(p)) await useStore.getState().removeLocal(p.id)
     }
     await sendPhotos()
   } finally {

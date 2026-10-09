@@ -52,14 +52,15 @@ test("a place submitted without email is moderated, published, and seen in anoth
   await expect(notice).toContainText("מתפרסמת רק אם המקום אושר")
   for (const box of await dialog.getByRole("checkbox").all()) await box.check()
   const sent = visitor.waitForResponse((r) => r.url().endsWith("/api/v1/submissions") && r.status() === 201)
-  await dialog.getByRole("button", { name: "שמירה והנחת כלנית" }).click()
+  await dialog.getByRole("button", { name: "שליחה לבדיקה" }).click()
   const { id } = (await (await sent).json()) as { id: string }
   const body = (await sent).request().postDataJSON() as Record<string, unknown>
   expect(Object.keys(body)).not.toContain("email")
   // The version recorded is the notice the form showed.
-  expect(body.consent_version).toBe("notice.submission@2026-10-13")
+  expect(body.consent_version).toBe("notice.submission@2026-10-14")
   // The browser check ran, and its single-use token went with the place.
   expect((await sent).request().headers()["turnstile-token"]).toBeTruthy()
+  await visitor.getByRole("button", { name: "לצפייה בהצעה", exact: true }).click({ timeout: 15_000 })
   // The submitter's own card says where the place went; it doesn't promise it stays only in this browser.
   await expect(visitor.getByText("נשלח לבדיקה", { exact: false }).first()).toBeVisible(DAY)
   await expect(visitor.getByText("נשמר רק בדפדפן הזה")).toHaveCount(0)
@@ -120,11 +121,13 @@ test("saving twice while the first send is slow sends the place once", async ({ 
   // the leaving step is collected and never comes back.
   await expect(dialog.getByRole("checkbox")).toHaveCount(2)
   for (const box of await dialog.getByRole("checkbox").all()) await box.check()
-  const save = dialog.getByRole("button", { name: "שמירה והנחת כלנית" })
+  const save = dialog.locator("button[aria-busy]")
   await save.click()
-  await save.click({ force: true }).catch(() => {})
-  await page.keyboard.press("Enter")
-  await expect(dialog).toBeHidden({ timeout: 10_000 })
+  await expect(save).toBeDisabled()
+  await save.dispatchEvent("click")
+  await dialog.locator("input").first().dispatchEvent("keydown", { key: "Enter" })
+  await page.getByRole("button", { name: "לצפייה בהצעה", exact: true }).click({ timeout: 15_000 })
+  await expect(dialog).toBeHidden()
   expect(posts).toBe(1)
 })
 

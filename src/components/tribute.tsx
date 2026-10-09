@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { AnimatePresence, motion } from "motion/react"
+import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { Anemone } from "@/components/anemone"
 import { useStore } from "@/store"
 import { spring } from "@/lib/motion"
@@ -10,17 +10,8 @@ import { canShare, queueTribute, shared } from "@/lib/tributes"
  * Each one blooms into a small row of flowers kept on this device. At a place published on the server, one a day from
  * this device also joins the shared count (spec 4); elsewhere, or when the browser keeps nothing, they stay here.
  */
-// where each petal drifts: [x, y, rotation]
-const PETALS: [number, number, number][] = [
-  [-26, -38, -80],
-  [-10, -52, 40],
-  [12, -46, 120],
-  [28, -30, -30],
-  [-32, -14, 160],
-  [22, -60, -140],
-]
-
 export function Tribute({ placeId }: { placeId: string }) {
+  const reduce = useReducedMotion()
   const count = useStore((s) => s.tributes[placeId] ?? 0)
   const leave = useStore((s) => s.leaveAnemone)
   const total = useStore((s) => s.tributeTotals[placeId] ?? 0)
@@ -51,29 +42,15 @@ export function Tribute({ placeId }: { placeId: string }) {
       >
         <span className="relative grid size-9 place-items-center">
           <Anemone state="open" size={30} />
-          {/* a handful of petals let go from the flower and drift up */}
           <AnimatePresence>
-            {burst > 0 && (
+            {burst > 0 && !reduce && (
               <motion.span
                 key={burst}
-                className="pointer-events-none absolute inset-0"
-                initial={{ opacity: 1 }}
-                animate={{ opacity: 0 }}
-                transition={{ delay: 0.9, duration: 0.4 }}
-              >
-                {PETALS.map(([dx, dy, rot], i) => (
-                  <motion.svg
-                    key={i}
-                    viewBox="-10 -16 20 18"
-                    className="absolute top-1/2 left-1/2 size-3 -translate-x-1/2 -translate-y-1/2"
-                    initial={{ x: 0, y: 0, rotate: 0, scale: 0.4, opacity: 0 }}
-                    animate={{ x: dx, y: dy, rotate: rot, scale: 1, opacity: [0, 1, 1, 0] }}
-                    transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1], delay: i * 0.02 }}
-                  >
-                    <path d="M0 0 C -6 -3 -9 -9 -6 -14 C -3 -17 3 -17 6 -14 C 9 -9 6 -3 0 0 Z" fill="var(--brand)" />
-                  </motion.svg>
-                ))}
-              </motion.span>
+                className="pointer-events-none absolute inset-0 rounded-full border border-brand/30"
+                initial={{ scale: 0.8, opacity: 0.7 }}
+                animate={{ scale: 1.5, opacity: 0 }}
+                transition={{ duration: 0.6 }}
+              />
             )}
           </AnimatePresence>
         </span>

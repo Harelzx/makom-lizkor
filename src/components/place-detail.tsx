@@ -1,6 +1,6 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { motion } from "motion/react"
-import { ArrowRightIcon, CheckIcon, ExternalLinkIcon, NavigationIcon, Share2Icon, Trash2Icon } from "lucide-react"
+import { ArrowRightIcon, CheckIcon, ExternalLinkIcon, NavigationIcon, Share2Icon, BookmarkIcon } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -10,7 +10,9 @@ import { PhotoGallery } from "@/components/photo-figure"
 import { SafetyNote, useFocusOnOpen } from "@/components/kit"
 import { ReportRequest } from "@/components/report"
 import { KINDS } from "@/data/taxonomy"
-import { useStore } from "@/store"
+import { allPlaces, useStore } from "@/store"
+import { nextPlace, useVisits, visitKey } from "@/lib/visit-list"
+import { LocalRemoval } from "@/components/local-removal"
 import { spring } from "@/lib/motion"
 import type { LocalFields, Place } from "@/types"
 
@@ -35,9 +37,17 @@ const SOURCE: Record<Place["coord_source"], string> = {
 
 // `ref` lets AnimatePresence (popLayout) lift the leaving card out of the flow, so the list can take its place at once.
 export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () => void; ref?: React.Ref<HTMLElement> }) {
-  const removeLocal = useStore((s) => s.removeLocal)
   const setTracking = useStore((s) => s.setTracking)
   const [copied, setCopied] = useState(false)
+  const visits = useVisits()
+  const initVisits = visits.init
+  useEffect(() => {
+    void initVisits()
+  }, [initVisits])
+  const remote = useStore((s) => s.remote)
+  const places = useStore((s) => s.local)
+  const next = nextPlace(place, allPlaces({ remote, local: places }))
+  const isSaved = visits.ids.includes(visitKey(place))
   const photos = place.photos ?? []
   const local = place.local
   // Contributions (a visitor's own or approved ones) are where private property comes up; curated places are public sites.
@@ -50,6 +60,11 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
       ? `${location.origin}/#/place/${encodeURIComponent(place.id)}`
       : `${location.origin}/place/${encodeURIComponent(place.id)}`
     try {
+      if (local) {
+        await navigator.clipboard.writeText(url)
+        toast("הקישור המקומי הועתק", { description: "הוא פותח את העותק במכשיר הזה בלבד. יהיה אפשר לשתף עם אחרים אחרי שהמקום יפורסם." })
+        return
+      }
       if (navigator.share && matchMedia("(pointer: coarse)").matches) await navigator.share({ title: place.name_he, url })
       else {
         await navigator.clipboard.writeText(url)
@@ -69,7 +84,7 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
       initial={{ opacity: 0, x: -32 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -32, transition: { duration: 0.2 } }}
-      transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+      transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
       // the card's parts settle in one short sequence; the photo is already flying in from the list
       className="cascade flex flex-col gap-6"
     >
@@ -137,10 +152,11 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
         </p>
       )}
 
-      <p className="text-body-lg text-pretty text-ink-1">{local?.story || place.summary_he}</p>
+      <p className="text-body-lg text-pretty whitespace-pre-line text-ink-1">{local?.story || place.summary_he}</p>
 
-      <Tribute placeId={place.id} />
-
+      {place.precision === "approx" && (
+        <p className="rounded-xl bg-surface-2 p-3 text-body text-ink-2">המיקום משוער: הוא מצביע על האזור, לא על הנקודה המדויקת.</p>
+      )}
       {place.accessNote && (
         <p className="text-body text-ink-1">
           <span className="text-ink-2">איך מגיעים: </span>
@@ -152,26 +168,61 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
         {/* A family's place on private property shown approximately leads nobody to it: no navigation (spec 4). */}
         {!(inPrivate && place.precision === "approx") && (
           <>
-            <Button variant="ghost" className="h-9 rounded-full px-2.5 text-label text-ink-1 hover:bg-surface-2" asChild>
+            <Button variant="ghost" className="min-h-11 rounded-full px-2.5 text-label text-ink-1 hover:bg-surface-2" asChild>
               <a href={`https://waze.com/ul?ll=${place.lat},${place.lng}&navigate=yes`} target="_blank" rel="noopener">
                 <NavigationIcon data-icon="inline-start" />
                 ניווט ב־Waze
               </a>
             </Button>
-            <Button variant="ghost" className="h-9 rounded-full px-2.5 text-label text-ink-1 hover:bg-surface-2" asChild>
+            <Button variant="ghost" className="min-h-11 rounded-full px-2.5 text-label text-ink-1 hover:bg-surface-2" asChild>
               <a href={`https://www.google.com/maps/search/?api=1&query=${place.lat},${place.lng}`} target="_blank" rel="noopener">
                 Google Maps
               </a>
             </Button>
           </>
         )}
-        <Button variant="ghost" className="h-9 rounded-full px-2.5 text-label text-ink-1 hover:bg-surface-2" onClick={share}>
+        <Button variant="ghost" className="min-h-11 rounded-full px-2.5 text-label text-ink-1 hover:bg-surface-2" onClick={share}>
           {copied ? <CheckIcon data-icon="inline-start" /> : <Share2Icon data-icon="inline-start" />}
-          שיתוף
+          {local ? "העתקת קישור מקומי" : "שיתוף"}
         </Button>
       </div>
       {place.region === "envelope" && <SafetyNote lead="המקום קרוב לגבול עזה." className="-mt-3" />}
 
+      {!local && (
+        <Button
+          variant={isSaved ? "secondary" : "outline"}
+          className="min-h-11 self-start rounded-full px-4"
+          aria-pressed={isSaved}
+          disabled={!visits.ready || visits.busy}
+          onClick={async () => {
+            const ok = await visits.toggle(visitKey(place))
+            toast(ok ? (useVisits.getState().ids.includes(visitKey(place)) ? "נשמר לביקור" : "הוסר מהשמורים") : "לא הצלחנו לשמור במכשיר", {
+              description: ok ? "רשימת הביקורים נשמרת במכשיר הזה בלבד." : "הרשימה לא השתנתה. אפשר לנסות שוב או לשתף את הקישור.",
+            })
+          }}
+        >
+          <BookmarkIcon className="size-4" fill={isSaved ? "currentColor" : "none"} />
+          {isSaved ? "שמור לביקור" : "שמירה לביקור"}
+        </Button>
+      )}
+      <Tribute placeId={place.id} />
+      {next && (
+        <section className="rounded-2xl bg-surface-2 p-4" aria-label="מקום נוסף לגלות">
+          <p className="text-caption text-ink-2">מקום נוסף לגלות</p>
+          <button
+            className="pressable mt-1 flex min-h-11 w-full items-center justify-between gap-3 text-start text-body font-semibold text-ink-1"
+            onClick={() => useStore.getState().select(next.id)}
+          >
+            <span>
+              {next.name_he}
+              <span className="block text-caption font-normal text-ink-2">
+                {KINDS[next.kind].label} · {next.place_he}
+              </span>
+            </span>
+            <ArrowRightIcon className="size-4 rotate-180" />
+          </button>
+        </section>
+      )}
       {place.links.length > 0 && (
         <section className="flex flex-col gap-1" aria-labelledby={`links-${place.id}`}>
           <h3 id={`links-${place.id}`} className="px-2 text-label text-ink-2">
@@ -198,55 +249,12 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
       <Separator />
 
       <footer className="flex flex-col gap-1 text-caption text-ink-3">
-        <p className="tabular-nums" dir="ltr" style={{ textAlign: "right" }}>
-          {place.lat.toFixed(5)}, {place.lng.toFixed(5)}
-        </p>
-        {place.precision === "approx" && <p>המיקום משוער: הוא מצביע על האזור, לא על הנקודה המדויקת.</p>}
-        {local ? (
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            {/* A place sent for review is on the server too; deleting this copy doesn't withdraw it, the tracking view does. */}
-            <span>{SEND_STATE[sendState(local)]}</span>
-            {/* A withdrawn place keeps its link only while its files wait to be erased: the view can finish them. */}
-            {local.remoteId && local.trackingToken && (
-              <Button variant="ghost" size="xs" onClick={() => setTracking({ id: local.remoteId!, token: local.trackingToken! })}>
-                מעקב אחרי ההצעה
-              </Button>
-            )}
-            <Button
-              variant="ghost"
-              size="xs"
-              onClick={async () => {
-                const sentCopy = local.remoteId && local.send !== "withdrawn"
-                // Still being sent: a try may have reached the server before its answer was lost; that submission stands.
-                const inFlight = !!local.submitKey && (local.send === "waiting" || local.send === "sending")
-                const whatStands = sentCopy
-                  ? "ההצעה שנשלחה לבדיקה לא נמשכה, וקישור המעקב נמחק עם העותק. כדי למשוך אותה עכשיו, כתבו לנו."
-                  : inFlight
-                    ? "ייתכן שההצעה כבר הגיעה אלינו לפני שנמחקה מכאן. אם כך, היא תיבדק כרגיל; כדי לבקש שנסיר אותה, כתבו לנו."
-                    : undefined
-                // One message, once the device has answered: removed, still kept there, or not known.
-                const outcome = await removeLocal(place.id)
-                if (outcome === "kept")
-                  return void toast("המקום הוסר מהרשימה, אבל לא מהמכשיר", {
-                    description: inFlight
-                      ? "בביקור הבא הוא יחזור, ואם עדיין לא נשלח, יישלח לבדיקה. כדי לעצור אותו, מחקו אותו שוב אז."
-                      : "הוא יחזור בביקור הבא. נסו שוב אז.",
-                  })
-                if (outcome === "unknown")
-                  return void toast("המקום הוסר מהרשימה, אבל לא ברור אם נמחק מהמכשיר", {
-                    description: inFlight
-                      ? "אם הוא עדיין שמור, הוא יחזור בביקור הבא ויישלח לבדיקה. כדי לעצור אותו, מחקו אותו שוב אז."
-                      : (whatStands ?? "אם הוא עדיין שמור, הוא יחזור בביקור הבא."),
-                  })
-                toast("המקום נמחק מהמכשיר", { description: whatStands })
-              }}
-            >
-              <Trash2Icon data-icon="inline-start" />
-              מחיקה
-            </Button>
-          </div>
-        ) : (
-          <p>
+        <details className="rounded-xl border border-line px-3 py-1">
+          <summary className="pressable min-h-11 cursor-pointer py-3 text-label text-ink-2">פרטי המיקום והמקורות</summary>
+          <p className="pb-2 tabular-nums" dir="ltr" style={{ textAlign: "right" }}>
+            {place.lat.toFixed(5)}, {place.lng.toFixed(5)}
+          </p>
+          <p className="pb-2">
             מקור המיקום:{" "}
             {place.coord_source_url ? (
               <a className="underline underline-offset-2" href={place.coord_source_url} target="_blank" rel="noopener">
@@ -256,7 +264,25 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
               SOURCE[place.coord_source]
             )}
           </p>
-        )}
+        </details>
+        {local ? (
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            {/* A place sent for review is on the server too; deleting this copy doesn't withdraw it, the tracking view does. */}
+            <span>{SEND_STATE[sendState(local)]}</span>
+            {/* A withdrawn place keeps its link only while its files wait to be erased: the view can finish them. */}
+            {local.remoteId && local.trackingToken && (
+              <Button
+                variant="ghost"
+                className="min-h-11 rounded-full"
+                onClick={() => setTracking({ id: local.remoteId!, token: local.trackingToken! })}
+              >
+                מעקב אחרי ההצעה
+              </Button>
+            )}
+            <LocalRemoval place={place} />
+          </div>
+        ) : null}
+
         {/* A removal or a correction goes to a person through the request form (spec 6); places on this device only are the visitor's own. */}
         {!local && <ReportRequest key={place.id} place={place} />}
       </footer>

@@ -55,3 +55,11 @@ it("a copy without its own link isn't changed by another link's 404, which prove
   await settleOwnCopy("p_1", "mailed", null)
   expect(copy()).toEqual({ send: "sent", remoteId: "p_1" })
 })
+
+it("removes a refused proposal, but keeps a published place whose correction was refused", async () => {
+  await settleOwnCopy("p_1", "own", { status: "rejected", name_he: "x" })
+  expect(useStore.getState().local).toEqual([])
+  useStore.setState({ local: [own()] })
+  await settleOwnCopy("p_1", "own", { status: "published", revision_state: "rejected", name_he: "x" })
+  expect(copy().remoteId).toBe("p_1")
+})

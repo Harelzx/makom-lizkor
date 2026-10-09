@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { flushSync } from "react-dom"
 import { motion } from "motion/react"
 import { Drawer } from "vaul"
@@ -28,11 +28,15 @@ function useIsMobile() {
 
 export function Wordmark({ className, compact }: { className?: string; compact?: boolean }) {
   return (
-    <a href="#/" className={cn("group flex items-center gap-2.5", className)} aria-label="מקום לזכור, חזרה למפה">
+    <a href="#/" className={cn("group flex items-center gap-2.5 whitespace-nowrap", className)} aria-label="מקום לזכור, חזרה למפה">
       <span className="transition-transform duration-500 ease-[var(--ease-spring)] group-hover:rotate-[24deg]">
-        <Anemone size={compact ? 24 : 30} />
+        <Anemone size={compact ? 22 : 30} />
       </span>
-      <span className={cn("font-display leading-none font-black text-ink-1", compact ? "text-title-3" : "text-title-2")}>מקום לזכור</span>
+      <span
+        className={cn("font-display leading-none font-black text-ink-1", compact ? "text-[16px] min-[360px]:text-[18px]" : "text-title-2")}
+      >
+        מקום לזכור
+      </span>
     </a>
   )
 }
@@ -67,7 +71,7 @@ function Actions({ compact }: { compact?: boolean }) {
   const setAddOpen = useStore((s) => s.setAddOpen)
 
   return (
-    <div className="flex flex-wrap items-center justify-end gap-2">
+    <div className={cn("flex items-center justify-end", compact ? "shrink-0 gap-1" : "flex-wrap gap-2")}>
       {!compact && (
         <Button variant="float" className="h-11 rounded-full ps-4 pe-2 text-label text-ink-2" onClick={() => setSearchOpen(true)}>
           <SearchIcon data-icon="inline-start" />
@@ -136,7 +140,7 @@ function usePanelScroll() {
   return { ref, onScroll }
 }
 
-const SNAPS = [0.24, 0.6, 0.94]
+const SNAPS = ["88px", 0.6, 0.88]
 
 export function Shell() {
   const mobile = useIsMobile()
@@ -146,12 +150,31 @@ export function Shell() {
   const setAddOpen = useStore((s) => s.setAddOpen)
   const picking = useStore((s) => s.picking)
   const addOpen = useStore((s) => s.addOpen)
-  const [snap, setSnap] = useState<number | string | null>(() => (mobile && (selectedId || tab === "journey") ? SNAPS[1] : SNAPS[0]))
+  const [snap, setSnap] = useState<number | string | null>(() => (mobile && (selectedId || tab === "journey") ? SNAPS[2] : SNAPS[0]))
+  const [peek, setPeek] = useState("88px")
+  const folded = typeof snap !== "number"
   const [collapsed, setCollapsed] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   const headerRef = useRef<HTMLDivElement>(null)
   const { ref: scrollRef, onScroll: onPanelScroll } = usePanelScroll()
   const [heights, setHeights] = useState({ open: window.innerHeight - 32, closed: 0 })
+
+  // Measure the actions, including the phone's safe area. A percentage peek wastes space on tall phones.
+  const measureMobileBar = useCallback((bar: HTMLDivElement | null) => {
+    if (!bar) return
+    const measure = () => {
+      const height = Math.ceil(bar.getBoundingClientRect().height)
+      // Presence briefly measures zero while a dialog removes the sheet. Never turn that into an offscreen snap.
+      if (height <= 0) return
+      const next = `${height}px`
+      setPeek(next)
+      setSnap((current) => (typeof current === "number" ? current : next))
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(bar)
+    return () => observer.disconnect()
+  }, [])
 
   // The panel's height is animated between two measured numbers. A layout animation used to do this, but while the
   // list faded out the panel briefly measured thousands of pixels tall, which squared its corners and made it snap.
@@ -169,7 +192,7 @@ export function Shell() {
   if (seen.selectedId !== selectedId || seen.tab !== tab || seen.mobile !== mobile) {
     setSeen({ selectedId, tab, mobile })
     if (selectedId && selectedId !== seen.selectedId) setCollapsed(false)
-    if (mobile && (selectedId || tab === "journey")) setSnap(SNAPS[1])
+    if (mobile && (selectedId || tab === "journey")) setSnap(SNAPS[2])
   }
 
   if (phase !== "day") return null
@@ -255,9 +278,9 @@ export function Shell() {
       <motion.header
         initial={{ opacity: 0, y: -12 }}
         animate={{ opacity: 1, y: 0 }}
-        className="fixed inset-x-3 top-[max(12px,env(safe-area-inset-top))] z-20 flex items-center justify-between gap-2"
+        className="fixed inset-x-3 top-[max(12px,env(safe-area-inset-top))] z-40 flex items-center justify-between gap-2"
       >
-        <div className="rounded-full bg-surface px-4 py-2 shadow-chip ring-1 ring-line">
+        <div className="rounded-full bg-surface px-2.5 py-3 shadow-chip ring-1 ring-line">
           <Wordmark compact />
         </div>
         <Actions compact />
@@ -268,7 +291,7 @@ export function Shell() {
         open={!picking && !addOpen}
         modal={false}
         dismissible={false}
-        snapPoints={SNAPS}
+        snapPoints={[peek, SNAPS[1], SNAPS[2]]}
         activeSnapPoint={snap}
         setActiveSnapPoint={setSnap}
         direction="bottom"
@@ -277,18 +300,44 @@ export function Shell() {
           <Drawer.Content
             id="places"
             tabIndex={-1}
+            onFocus={(e) => {
+              // Reveal keyboard skip focus. Safari also focuses this container on pointer-down;
+              // opening then would make the button's following click immediately close it again.
+              if (e.target === e.currentTarget && e.currentTarget.matches(":focus-visible")) setSnap(SNAPS[2])
+            }}
             dir="rtl"
             aria-describedby={undefined}
-            className="fixed inset-x-0 bottom-0 z-30 flex h-[96dvh] flex-col rounded-t-[28px] bg-surface shadow-panel ring-1 ring-line outline-none"
+            // Vaul offsets numeric snap points against the whole viewport, not the drawer's CSS height.
+            // Keep that height, but reserve its offscreen part so every scroll position remains reachable.
+            style={{ paddingBottom: typeof snap === "number" ? `${(1 - snap) * 100}dvh` : `calc(100dvh - ${peek})` }}
+            className="fixed inset-x-0 bottom-0 z-30 flex h-dvh flex-col rounded-t-[28px] bg-surface shadow-panel ring-1 ring-line outline-none"
           >
             <Drawer.Title className="sr-only">מקומות וקהילות</Drawer.Title>
-            <div className="mx-auto mt-2.5 mb-2 h-1.5 w-10 shrink-0 rounded-full bg-line-strong" aria-hidden="true" />
+            <div ref={measureMobileBar} className="flow-root shrink-0 pb-[max(12px,env(safe-area-inset-bottom))]">
+              <div data-sheet-grip className="mx-auto mt-2.5 mb-2 h-1.5 w-10 shrink-0 rounded-full bg-line-strong" aria-hidden="true" />
+              <div className="flex items-center justify-between gap-2 px-4">
+                <Button
+                  variant="secondary"
+                  className="h-11 rounded-full px-3"
+                  aria-expanded={!folded}
+                  onClick={() => setSnap(folded ? SNAPS[2] : peek)}
+                >
+                  {!folded ? "חזרה למפה" : selectedId ? "לסיפור ולפרטי הביקור" : "הצגת המקומות"}
+                </Button>
+                <Button variant="brand" className="h-11 rounded-full px-3" onClick={() => setAddOpen(true)}>
+                  <PlusIcon className="size-4" />
+                  הוספת מקום
+                </Button>
+              </div>
+            </div>
             <div
               ref={scrollRef}
               onScroll={onPanelScroll}
+              inert={folded}
+              aria-hidden={folded}
               className={cn(
                 "min-h-0 flex-1 px-4 pb-[max(24px,env(safe-area-inset-bottom))] [overflow-anchor:none]",
-                snap === SNAPS[2] ? "overflow-y-auto" : "overflow-hidden",
+                "overflow-y-auto overscroll-contain",
               )}
             >
               <Explorer />
@@ -296,19 +345,6 @@ export function Shell() {
           </Drawer.Content>
         </Drawer.Portal>
       </Drawer.Root>
-
-      <Button
-        onClick={() => setAddOpen(true)}
-        aria-label="הוספת מקום"
-        variant="brand"
-        className="fixed end-4 z-20 size-14 rounded-full"
-        style={{
-          bottom: `calc(${(typeof snap === "number" ? snap : SNAPS[0]) * 100}dvh + 62px)`,
-          transition: "bottom 0.4s cubic-bezier(.22,1,.36,1)",
-        }}
-      >
-        <PlusIcon className="size-6" />
-      </Button>
     </>
   )
 }

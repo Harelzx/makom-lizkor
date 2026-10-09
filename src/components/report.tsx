@@ -50,6 +50,7 @@ function elementsOf(place: Place): Element[] {
  */
 export function ReportRequest({ place }: { place: Place }) {
   const uid = useId()
+  const [intent, setIntent] = useState<"correction" | "removal">("correction")
   const [opened, setOpened] = useState(false)
   const [draft, setDraft] = useState<Fields>(EMPTY)
   useReports()
@@ -138,11 +139,38 @@ export function ReportRequest({ place }: { place: Place }) {
         </>
       ) : (
         <>
-          <p className="text-caption text-ink-2">כל בקשה נבדקת בידי אדם בדחיפות. אין צורך בשם, בתעודה מזהה או במסמכים.</p>
+          <p className="text-body text-ink-2">הבקשה תועבר לבדיקה. אם תשאירו מייל, נוכל לחזור אליכם.</p>
+          <p className="text-caption text-ink-2">אין צורך בשם, בתעודה מזהה או במסמכים. בקשה עשויה להוביל להסתרה זמנית במהלך הבדיקה.</p>
           <fieldset disabled={!!kept || busy || restoring} className="contents">
             <FieldGroup>
+              {!kept && (
+                <FieldSet>
+                  <FieldLegend variant="label">איך נוכל לעזור?</FieldLegend>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      variant={intent === "correction" ? "secondary" : "outline"}
+                      className="min-h-11 rounded-xl"
+                      aria-pressed={intent === "correction"}
+                      onClick={() => setIntent("correction")}
+                    >
+                      תיקון מידע
+                    </Button>
+                    <Button
+                      variant={intent === "removal" ? "secondary" : "outline"}
+                      className="min-h-11 rounded-xl"
+                      aria-pressed={intent === "removal"}
+                      onClick={() => setIntent("removal")}
+                    >
+                      בקשת הסרה
+                    </Button>
+                  </div>
+                </FieldSet>
+              )}
+
               <FieldSet>
-                <FieldLegend variant="label">מה לבקש להסיר או לתקן</FieldLegend>
+                <FieldLegend variant="label">
+                  {kept ? "מה לבקש להסיר או לתקן" : intent === "correction" ? "איזה מידע צריך לתקן?" : "מה תרצו להסיר?"}
+                </FieldLegend>
                 {elementsOf(place).map((e) => (
                   <Field key={e} orientation="horizontal">
                     <Checkbox
@@ -191,6 +219,7 @@ export function ReportRequest({ place }: { place: Place }) {
                   onChange={(e) => change({ explanation: e.target.value })}
                   maxLength={2000}
                   rows={4}
+                  placeholder={intent === "correction" ? "מה לא מדויק, ומה המידע הנכון?" : "מה תרצו להסיר, ומה הסיבה לבקשה?"}
                 />
                 <FieldDescription>כמה משפטים מספיקים. אל תכתבו כאן פרטים מזהים שאינם נחוצים לבקשה.</FieldDescription>
               </Field>

@@ -56,11 +56,13 @@ test.describe("desktop details", () => {
   test("the return count plays once, not every time the tab comes back", async ({ page }) => {
     await page.goto("/")
     await page.getByRole("button", { name: "דילוג" }).click()
-    await page.getByRole("tab", { name: "קהילות" }).click()
+    await page.getByText("עוד על האזור", { exact: true }).click()
+    await page.getByRole("button", { name: "קהילות" }).click()
     const heading = page.getByRole("heading", { name: /מהמפונים כבר חזרו הביתה/ })
     await expect(heading).toContainText("90")
-    await page.getByRole("tab", { name: "מקומות" }).click()
-    await page.getByRole("tab", { name: "קהילות" }).click()
+    await page.getByRole("button", { name: "חזרה למקומות", exact: true }).click()
+    await page.getByText("עוד על האזור", { exact: true }).click()
+    await page.getByRole("button", { name: "קהילות" }).click()
     await expect(heading).toContainText("90", { timeout: 100 })
   })
 
