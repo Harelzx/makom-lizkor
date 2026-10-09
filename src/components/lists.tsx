@@ -26,7 +26,7 @@ function Row({ place, i, children }: { place: Place; i: number; children: React.
         onFocus={() => hover(place.id)}
         onBlur={() => hover(null)}
         className={cn(
-          "pressable flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-start outline-none hover:bg-surface-2 focus-visible:bg-surface-2 focus-visible:ring-2 focus-visible:ring-ring",
+          "pressable flex w-full items-start gap-3 rounded-2xl px-3 py-2.5 text-start outline-none hover:bg-surface-2 focus-visible:bg-surface-2 focus-visible:ring-2 focus-visible:ring-ring",
           hovered && "bg-surface-2",
         )}
       >
@@ -102,7 +102,7 @@ export function PlacesList() {
           <GroupLabel id={`g-${g.id}`} count={g.items.length}>
             {g.title}
           </GroupLabel>
-          <ul className="flex flex-col">
+          <ul className="flex flex-col gap-1">
             {g.items.map((p, i) => (
               <Row key={p.id} place={p} i={i}>
                 {p.local?.photo || p.contributedPhoto ? (
@@ -122,8 +122,8 @@ export function PlacesList() {
                   </span>
                 )}
                 <span className="flex min-w-0 flex-col">
-                  <span className="truncate text-body font-semibold text-ink-1">{p.name_he}</span>
-                  <span className="truncate text-caption text-ink-2">
+                  <span className="line-clamp-2 text-body font-semibold text-ink-1">{p.name_he}</span>
+                  <span className="line-clamp-2 text-caption text-ink-2">
                     {KINDS[p.kind].label} · {p.place_he}
                   </span>
                 </span>
@@ -146,7 +146,7 @@ export function CommunitiesList() {
   return (
     <div className="flex flex-col gap-3">
       <RevivalStrip />
-      <p className="px-3 pt-1 text-caption text-pretty text-ink-2">לכל קהילה שני סיפורים: מי שהיא איבדה, ואיך היא חוזרת.</p>
+      <p className="px-3 pt-1 text-body text-pretty text-ink-2">לכל קהילה שני סיפורים: מי שהיא איבדה, ואיך היא חוזרת.</p>
       <ul className="flex flex-col">
         {communities.map((c, i) => {
           const n = sitesNear(c, all).length
@@ -156,7 +156,7 @@ export function CommunitiesList() {
                 <span className="text-headline font-bold text-ink-1">{c.name_he}</span>
                 <span className="text-caption text-ink-2">{n ? `${n} אתרי זיכרון` : "קהילה שהותקפה"}</span>
               </span>
-              {c.revival && c.revival.status !== "unknown" && <StatusText status={c.revival.status} className="shrink-0" />}
+              {c.revival && c.revival.status !== "unknown" && <StatusText status={c.revival.status} className="max-w-[45%] shrink-0" />}
             </Row>
           )
         })}

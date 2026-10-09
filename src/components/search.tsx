@@ -107,8 +107,8 @@ export function Search() {
               <CommandItem key={p.id} className="py-2" value={`place:${p.id}`} onSelect={() => go(p.id)}>
                 <Anemone size={18} variant={p.local ? "pale" : "crimson"} />
                 <span className="flex min-w-0 flex-col">
-                  <span className="truncate">{p.name_he}</span>
-                  <span className="truncate text-caption text-ink-3">
+                  <span className="line-clamp-2">{p.name_he}</span>
+                  <span className="line-clamp-2 text-caption text-ink-2">
                     {KINDS[p.kind].label} · {p.place_he}
                   </span>
                 </span>

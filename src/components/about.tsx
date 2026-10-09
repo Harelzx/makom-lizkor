@@ -74,7 +74,7 @@ export function About() {
           <p>
             המיזם נוצר לקראת סיום לימודי הנדסת תוכנה, מתוך רצון להשתמש בידע שנצבר לעשייה חברתית. המשפחות, האנשים והסיפורים שלהם הם הלב שלו.
           </p>
-          <p className="text-caption text-ink-2">כרגע במפה {sites} מקומות לזכור. בחרנו בכלנית, הפרח שחוזר לפרוח בנגב המערבי בכל חורף.</p>
+          <p className="text-body text-ink-2">כרגע במפה {sites} מקומות לזכור. בחרנו בכלנית, הפרח שחוזר לפרוח בנגב המערבי בכל חורף.</p>
           {landscapes.length > 0 && (
             <PhotoGallery
               photos={landscapePhotos.filter((p) => /שוקדה|בארי|דרום אדום/.test(p.subject_he)).slice(0, 6)}
@@ -85,7 +85,7 @@ export function About() {
             המשפחות והחברים יודעים על המקומות הקטנים יותר מכולם. לכן כל אחד יכול להוסיף מקום. מקום שמוסיפים נשלח אלינו לבדיקה, ומופיע אצל
             כולם אחרי שאושר.
           </p>
-          <p className="text-caption text-ink-2">
+          <p className="text-body text-ink-2">
             זו יוזמה פרטית והתנדבותית, ללא מטרות רווח. היא אינה אתר רשמי ואינה קשורה לגוף ממשלתי. את הנצחת הנופלים והנרצחים מנהלים האתרים{" "}
             <a className="underline underline-offset-2" href="https://www.izkor.gov.il" target="_blank" rel="noopener">
               יזכור
@@ -96,7 +96,7 @@ export function About() {
             </a>
             .
           </p>
-          <div className="flex flex-wrap gap-2 pt-1">
+          <div className="flex flex-wrap gap-2 border-y border-line py-5">
             <Button
               variant="brand"
               className="rounded-full px-5"
@@ -159,7 +159,7 @@ export function About() {
                 <AccordionTrigger className="text-headline text-ink-1">{s.title}</AccordionTrigger>
                 <AccordionContent>
                   <div
-                    className="flex flex-col gap-3 text-body text-ink-2 [&_a]:text-ink-1 [&_a]:underline [&_a]:underline-offset-2 [&_li]:ms-4 [&_li]:list-disc [&_ul]:flex [&_ul]:flex-col [&_ul]:gap-2"
+                    className="reading-copy flex flex-col gap-4 text-body text-ink-2 [&_a]:text-ink-1 [&_a]:underline [&_a]:underline-offset-2 [&_li]:ms-4 [&_li]:list-disc [&_ul]:flex [&_ul]:flex-col [&_ul]:gap-2"
                     dangerouslySetInnerHTML={{ __html: fillLegal(s.html).replaceAll("{{FONTS}}", FONT_CREDIT) }}
                   />
                 </AccordionContent>

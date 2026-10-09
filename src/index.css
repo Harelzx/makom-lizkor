@@ -156,29 +156,29 @@
   --text-statement: clamp(1.6rem, 4vw, 2.75rem);
   --text-statement--line-height: 1.22;
   --text-statement--font-weight: 750;
-  --text-title-1: 2.5rem;
-  --text-title-1--line-height: 1.02;
+  --text-title-1: clamp(2rem, 1.75rem + 1vw, 2.5rem);
+  --text-title-1--line-height: 1.2;
   --text-title-1--font-weight: 900;
-  --text-title-2: 1.875rem;
-  --text-title-2--line-height: 1.12;
+  --text-title-2: clamp(1.625rem, 1.375rem + 1vw, 1.875rem);
+  --text-title-2--line-height: 1.25;
   --text-title-2--font-weight: 800;
   --text-title-3: 1.3125rem;
-  --text-title-3--line-height: 1.25;
+  --text-title-3--line-height: 1.35;
   --text-title-3--font-weight: 800;
   --text-headline: 1.0625rem;
   --text-headline--line-height: 1.35;
   --text-headline--font-weight: 650;
-  --text-body-lg: 1.0625rem;
-  --text-body-lg--line-height: 1.8;
-  --text-body: 0.9375rem;
-  --text-body--line-height: 1.6;
-  --text-label: 0.875rem;
-  --text-label--line-height: 1.35;
+  --text-body-lg: 1.125rem;
+  --text-body-lg--line-height: 1.75;
+  --text-body: 1rem;
+  --text-body--line-height: 1.7;
+  --text-label: 0.9375rem;
+  --text-label--line-height: 1.5;
   --text-label--font-weight: 550;
-  --text-caption: 0.8125rem;
-  --text-caption--line-height: 1.45;
-  --text-micro: 0.6875rem;
-  --text-micro--line-height: 1.4;
+  --text-caption: 0.875rem;
+  --text-caption--line-height: 1.55;
+  --text-micro: 0.75rem;
+  --text-micro--line-height: 1.5;
 
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
@@ -296,6 +296,15 @@
 }
 
 @layer utilities {
+  /* Reading and controls share a scale, but not a measure. Long copy keeps a comfortable line length. */
+  .reading-copy {
+    max-inline-size: 60ch;
+    overflow-wrap: anywhere;
+    text-wrap: pretty;
+  }
+  .action-section {
+    @apply flex flex-col gap-4 border-y border-line py-5;
+  }
   /* Press feedback for any tappable surface */
   .pressable {
     transition:
@@ -445,7 +454,7 @@
   position: absolute;
   top: calc(100% + 2px);
   white-space: nowrap;
-  font-size: 0.8125rem;
+  font-size: var(--text-caption);
   font-weight: 650;
   color: var(--ink-1);
   background: var(--surface);
@@ -586,7 +595,7 @@
 }
 .mk-community-name {
   font-weight: 800;
-  font-size: 0.875rem;
+  font-size: var(--text-label);
   color: var(--ink-1);
   -webkit-text-stroke: 3px var(--surface);
   paint-order: stroke fill;
@@ -842,6 +851,13 @@
 }
 .toaster [data-sonner-toast][data-styled="true"].cn-toast {
   padding-inline-start: 38px;
+  font-family: var(--font-sans);
+  font-size: var(--text-label);
+  line-height: var(--text-label--line-height);
+}
+.toaster [data-sonner-toast][data-styled="true"].cn-toast [data-description] {
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
 }
 @media (max-width: 600px) {
   .toaster [data-sonner-toast][data-styled="true"].cn-toast {

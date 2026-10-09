@@ -79,7 +79,7 @@ export function SubmissionResult({
           אפשר לנסות שוב בעוד {remaining < 60 ? `${remaining} שניות` : `${Math.ceil(remaining / 60)} דקות`}.
         </p>
       )}
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-2 border-t border-line pt-5">
         <Button
           variant={success ? "brand" : "default"}
           className="min-h-12 rounded-full"

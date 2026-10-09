@@ -85,7 +85,7 @@ export function Explorer() {
                 {tab === "places" ? "מקומות לזכור" : TABS.find((t) => t.id === tab)?.label}
               </h2>
               <details className="relative">
-                <summary className="pressable flex min-h-11 cursor-pointer list-none items-center gap-1 rounded-full px-2 text-caption text-ink-2">
+                <summary className="pressable flex min-h-11 cursor-pointer list-none items-center gap-1 rounded-full px-2 text-label text-ink-2">
                   עוד על האזור <ChevronDownIcon className="size-4" />
                 </summary>
                 <div className="absolute end-0 top-full z-10 flex w-44 flex-col items-stretch gap-1 rounded-2xl bg-surface p-2 shadow-panel ring-1 ring-line">
@@ -134,7 +134,7 @@ export function Explorer() {
               </Button>
             )}
             {tab === "places" && visits.filter === "saved" && (
-              <p className="px-2 text-caption text-ink-2">רשימה פרטית במכשיר הזה בלבד. נשמרים קישורים למקומות שעדיין מוצגים במפה.</p>
+              <p className="px-2 text-body text-ink-2">רשימה פרטית במכשיר הזה בלבד. נשמרים קישורים למקומות שעדיין מוצגים במפה.</p>
             )}
 
             {tab !== "journey" && (

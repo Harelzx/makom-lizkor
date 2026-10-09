@@ -29,7 +29,7 @@ export function Tribute({ placeId }: { placeId: string }) {
   const shown = Math.min(count, 9)
 
   return (
-    <div className="flex items-center gap-4">
+    <div className="flex flex-wrap items-center gap-4">
       <button
         type="button"
         onClick={() => {
@@ -57,7 +57,7 @@ export function Tribute({ placeId }: { placeId: string }) {
         השארת כלנית
       </button>
 
-      <div className="min-w-0 flex-1">
+      <div className="min-w-[8rem] flex-1">
         <div className="flex h-6 items-center -space-x-1.5 rtl:space-x-reverse" aria-hidden="true">
           <AnimatePresence initial={false}>
             {Array.from({ length: shown }, (_, i) => (

@@ -301,12 +301,12 @@ function ReportCard({ report, reload, fail }: { report: Report; reload: () => Pr
           .filter(Boolean)
           .join(" · ")}
       </p>
-      <h3 className="text-label font-bold text-ink-1">{report.place_name ?? report.place_id}</h3>
+      <h3 className="text-headline text-ink-1">{report.place_name ?? report.place_id}</h3>
       <p className="text-caption text-ink-2">
         {[`מבקשים להסיר: ${elements}`, REQUESTER_LABEL[report.requester_type], report.relationship].filter(Boolean).join(" · ")}
       </p>
       {report.explanation && <p className="mt-2 whitespace-pre-line text-ink-1">{report.explanation}</p>}
-      {report.handling_note && <p className="mt-1 text-caption text-ink-2">טיפול: {report.handling_note}</p>}
+      {report.handling_note && <p className="mt-1 text-body text-ink-2">טיפול: {report.handling_note}</p>}
       {!!report.has_contact &&
         (contact ? (
           <p className="mt-1 text-caption text-ink-1" dir="ltr">

@@ -49,14 +49,14 @@ export function CommunityDetail({ place, onBack, ref }: { place: Place; onBack: 
       )}
 
       <header className="flex flex-col gap-2">
-        <h2 ref={titleRef} tabIndex={-1} className="text-title-1 text-ink-1 outline-none">
+        <h2 ref={titleRef} tabIndex={-1} className="text-title-1 text-balance text-ink-1 outline-none">
           {place.name_he}
         </h2>
-        <p className="text-label font-normal text-ink-2">{place.place_he}</p>
+        <p className="text-body font-normal text-ink-2">{place.place_he}</p>
         {r && r.status !== "unknown" && <StatusText status={r.status} date={r.date ? formatMonth(r.date) : undefined} className="mt-1" />}
       </header>
 
-      <p className="text-body-lg text-pretty text-ink-1">{place.summary_he}</p>
+      <p className="reading-copy text-body-lg text-ink-1">{place.summary_he}</p>
 
       <section className="flex flex-col gap-4 border-t border-line pt-6" aria-labelledby="revival-h">
         <SectionTitle id="revival-h" icon={<SproutIcon className="size-5" />} tone="hope">
@@ -64,7 +64,7 @@ export function CommunityDetail({ place, onBack, ref }: { place: Place; onBack: 
         </SectionTitle>
         {r ? (
           <>
-            <p className="text-body-lg text-pretty text-ink-1">{r.revival_he}</p>
+            <p className="reading-copy text-body-lg text-ink-1">{r.revival_he}</p>
             {r.milestones_he.length > 0 && (
               // A small timeline: the date carries the line, the event follows.
               <ol className="relative flex flex-col gap-4 ps-5 before:absolute before:inset-y-1.5 before:start-[5px] before:w-px before:bg-hope/35">

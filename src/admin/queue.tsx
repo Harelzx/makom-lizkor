@@ -63,7 +63,7 @@ function Decision({
   if (returning)
     return (
       <form
-        className="mt-3 flex flex-col gap-2"
+        className="mt-4 flex flex-col gap-3 border-t border-line pt-4"
         onSubmit={(e) => {
           e.preventDefault()
           if (note.trim()) void decide(item, "return", note.trim())
@@ -85,7 +85,7 @@ function Decision({
       </form>
     )
   return (
-    <div className="mt-3 flex flex-wrap gap-2">
+    <div className="mt-4 flex flex-wrap gap-2 border-t border-line pt-4">
       <Button className="pressable" disabled={busy} onClick={() => decide(item, "approve")}>
         אישור
       </Button>
@@ -159,7 +159,7 @@ export function Queue() {
                   {item.hidden ? "תיקון למקום שמוסתר כרגע: אישור לא יחזיר אותו לאתר" : "תיקון למקום שכבר מופיע באתר"}
                 </p>
               )}
-              <h2 className="text-label font-bold text-ink-1">{item.name_he}</h2>
+              <h2 className="text-title-3 text-ink-1">{item.name_he}</h2>
               <p className="text-caption text-ink-2">
                 {[KINDS[item.kind].label, item.place_he, item.in_memory_of && `לזכר ${item.in_memory_of}`].filter(Boolean).join(" · ")}
               </p>
@@ -182,7 +182,7 @@ export function Queue() {
                     {item.location_permission ? "במקום פרטי, במיקום מדויק באישור הבעלים" : "במקום פרטי, בלי אישור הבעלים: יוצג מיקום משוער"}
                   </p>
                   {item.access_note_he && (
-                    <p className="mt-1 text-caption whitespace-pre-line text-ink-1">
+                    <p className="mt-1 text-body whitespace-pre-line text-ink-1">
                       <span className="text-ink-2">איך מגיעים (יפורסם): </span>
                       {item.access_note_he}
                     </p>
