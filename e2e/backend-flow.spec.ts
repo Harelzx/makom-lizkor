@@ -57,9 +57,10 @@ test("a place submitted without email is moderated, published, and seen in anoth
   const body = (await sent).request().postDataJSON() as Record<string, unknown>
   expect(Object.keys(body)).not.toContain("email")
   // The version recorded is the notice the form showed.
-  expect(body.consent_version).toBe("notice.submission@2026-10-13")
+  expect(body.consent_version).toBe("notice.submission@2026-10-14")
   // The browser check ran, and its single-use token went with the place.
   expect((await sent).request().headers()["turnstile-token"]).toBeTruthy()
+  await visitor.getByRole("button", { name: "לצפייה בהצעה", exact: true }).click({ timeout: 15_000 })
   // The submitter's own card says where the place went; it doesn't promise it stays only in this browser.
   await expect(visitor.getByText("נשלח לבדיקה", { exact: false }).first()).toBeVisible(DAY)
   await expect(visitor.getByText("נשמר רק בדפדפן הזה")).toHaveCount(0)
@@ -124,8 +125,9 @@ test("saving twice while the first send is slow sends the place once", async ({ 
   await save.click()
   await expect(save).toBeDisabled()
   await save.dispatchEvent("click")
-  await dialog.locator("input").first().press("Enter")
-  await expect(dialog).toBeHidden({ timeout: 10_000 })
+  await dialog.locator("input").first().dispatchEvent("keydown", { key: "Enter" })
+  await page.getByRole("button", { name: "לצפייה בהצעה", exact: true }).click({ timeout: 15_000 })
+  await expect(dialog).toBeHidden()
   expect(posts).toBe(1)
 })
 

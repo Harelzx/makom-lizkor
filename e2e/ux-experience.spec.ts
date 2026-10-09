@@ -126,8 +126,8 @@ for (const width of [320, 390])
   })
 
 for (const scenario of [
-  { code: 201, title: "ההצעה נשלחה לבדיקה", data: { id: "p_preview_sent", trackingToken: "test_tracking_token" } },
-  { code: 503, title: "ההצעה נשמרה במכשיר וממתינה לשליחה", data: { code: "unavailable" } },
+  { code: 201, title: "תודה שהוספתם מקום לזכור", data: { id: "p_preview_sent", trackingToken: "test_tracking_token" } },
+  { code: 503, title: "לא הצלחנו לאשר את השליחה", data: { code: "unavailable" } },
   { code: 400, title: "ההצעה לא התקבלה", data: { code: "invalid_input" } },
 ])
   test(`submission feedback matches the actual ${scenario.code} answer`, async ({ page }) => {
@@ -135,10 +135,12 @@ for (const scenario of [
     await page.route("**/api/v1/submissions", (r) => r.fulfill({ status: scenario.code, json: scenario.data }))
     const form = await confirm(page)
     await form.getByRole("button", { name: "שליחה לבדיקה", exact: true }).click()
-    await expect(page.locator("[data-sonner-toast] [data-title]").filter({ hasText: scenario.title })).toBeVisible()
+    await expect(page.getByRole("heading", { name: scenario.title, exact: true })).toBeVisible()
     await expect(page.getByText("הכלנית במקומה", { exact: true })).toHaveCount(0)
     if (scenario.code !== 201) await expect(page.locator('[aria-hidden="true"] > span.size-20')).toHaveCount(0)
     if (scenario.code === 201) {
+      await audit(page)
+      await page.getByRole("button", { name: "לצפייה בהצעה", exact: true }).click()
       await page.getByRole("button", { name: "מחיקת העותק מהמכשיר", exact: true }).click()
       await expect(page.getByRole("alertdialog")).toContainText("ההצעה שכבר נשלחה תישאר במערכת")
       await expect(page.getByRole("button", { name: "למעקב ולמשיכת ההצעה", exact: true })).toBeVisible()
@@ -146,6 +148,12 @@ for (const scenario of [
       await page.keyboard.press("Escape")
       await expect(page.getByRole("alertdialog")).toBeHidden()
       await expect(page.getByRole("button", { name: "מעקב אחרי ההצעה", exact: true })).toBeVisible()
+    } else {
+      await expect(page.getByRole("dialog")).toContainText("לא נשמרה במכשיר")
+      await page.getByRole("button", { name: "סגירה ללא שמירה", exact: true }).click()
+      await expect(page.getByRole("heading", { name: "ספסל בדיקת ממשק", exact: true })).toHaveCount(0)
+      await page.getByRole("button", { name: "הוספת מקום", exact: true }).first().click()
+      await expect(page.getByRole("heading", { name: "איפה המקום?", exact: true })).toBeVisible()
     }
   })
 

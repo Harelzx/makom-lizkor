@@ -28,7 +28,14 @@ vi.mock("@/lib/storage", () => ({
 const { useStore } = await import("@/store")
 
 const place = (id: string, extra: Partial<Place["local"]> = {}): Place =>
-  ({ id, name_he: id, kind: "bench", lat: 31.4, lng: 34.5, local: { send: "waiting", submitKey: `key-${id}`, ...extra } }) as Place
+  ({
+    id,
+    name_he: id,
+    kind: "bench",
+    lat: 31.4,
+    lng: 34.5,
+    local: { send: "sent", remoteId: `p_${id}`, trackingToken: `token-${id}`, ...extra },
+  }) as Place
 
 beforeEach(async () => {
   disk.stored = []
@@ -54,10 +61,10 @@ describe("the visitor's places in the store", () => {
     await earlier
     expect(useStore.getState().local.map((p) => p.id)).toEqual(["local-y"])
     expect(disk.stored.map((p) => p.id)).toEqual(["local-y"])
-    // On the next visit too: the removal is what was stored, and the other place keeps its key.
+    // On the next visit too: the removal is what was stored, and the other place keeps its tracking link.
     useStore.setState({ local: [] })
     await useStore.getState().init()
-    expect(useStore.getState().local.map((p) => [p.id, p.local?.submitKey])).toEqual([["local-y", "key-local-y"]])
+    expect(useStore.getState().local.map((p) => [p.id, p.local?.trackingToken])).toEqual([["local-y", "token-local-y"]])
   })
 
   it("a place removed while its first save is still settling stays removed, and is never sent", async () => {
@@ -79,13 +86,13 @@ describe("the visitor's places in the store", () => {
     expect(useStore.getState().local).toEqual([])
   })
 
-  it("a place another tab stored joins this tab's list, waiting rather than 'sending'", async () => {
+  it("an unsuccessful send from an older tab is discarded, never imported into this map", async () => {
     await useStore.getState().init()
     disk.stored = [place("local-other", { send: "sending" })]
     await useStore.getState().addLocal(place("local-mine"))
     const other = useStore.getState().local.find((p) => p.id === "local-other")
-    expect(other?.local?.send).toBe("waiting")
-    expect(disk.stored.map((p) => p.id).sort()).toEqual(["local-mine", "local-other"])
+    expect(other).toBeUndefined()
+    expect(disk.stored.map((p) => p.id).sort()).toEqual(["local-mine"])
   })
 
   it("a removal the device couldn't save says the place is kept there, for a place read from it or written to it", async () => {

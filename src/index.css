@@ -834,3 +834,15 @@
     opacity: 0;
   }
 }
+
+/* The notification is centered on phones; its dismiss control remains a real touch target. */
+.toaster[data-sonner-toaster] [data-sonner-toast][data-styled="true"] .cn-toast-close {
+  width: 44px;
+  height: 44px;
+}
+@media (max-width: 600px) {
+  .toaster [data-sonner-toast][data-styled="true"].cn-toast {
+    padding: 20px;
+    padding-inline-start: 38px;
+  }
+}

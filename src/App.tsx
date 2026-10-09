@@ -128,7 +128,7 @@ export default function App() {
     prevPhase.current = phase
   }, [phase])
 
-  // The visitor's own places, read from the device once; the day waits for them before sending any still waiting.
+  // The visitor's accepted proposals are read once; unsuccessful records from older versions are discarded.
   const ready = useRef<Promise<void> | null>(null)
   useEffect(() => {
     ready.current = init()
@@ -154,8 +154,8 @@ export default function App() {
       stop?.()
     }
   }, [])
-  // The anemone totals once the day has begun, and the visitor's places that a closed tab or a lost connection left
-  // waiting: sent as the day begins, once the device's list is read (the feed's first wake comes before it).
+  // Anemone totals and photos of accepted proposals sync once the day begins and the device's list is read.
+  // Failed or interrupted proposals are never automatically resent.
   useEffect(() => {
     if (phase !== "day") return
     let stopTributes: (() => void) | undefined

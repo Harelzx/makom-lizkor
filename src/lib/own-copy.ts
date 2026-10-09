@@ -16,6 +16,8 @@ export async function settleOwnCopy(id: string, openedWith: string, status: Trac
   if (!own?.local) return
   const mine = token && token !== openedWith ? await trackSubmission(id, token) : status
   if (mine === undefined) return
+  // A moderation refusal drops the accepted proposal's local copy too. A refused revision of a published place does not.
+  if (mine?.status === "rejected") return void (await useStore.getState().removeLocal(own.id))
   // Without its own link, a 404 from another link proves nothing about this copy.
   if (mine === null && !token) return
   if (mine === null || (FINAL.has(mine.status) && !mine.files))

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from "vitest"
 import type { Place } from "@/types"
-import { submissionFeedback } from "@/lib/submission-feedback"
+import { unacceptedLocal } from "@/lib/local-policy"
 
 const disk = vi.hoisted(() => ({ ids: [] as string[], fail: false }))
 vi.mock("@/lib/storage", () => ({
@@ -36,16 +36,12 @@ beforeEach(() => {
   useVisits.setState({ ids: [], busy: false })
 })
 
-describe("truthful submission acknowledgements", () => {
-  it("only acceptance permits a success animation, regardless of local storage", () => {
-    for (const stored of [true, false]) {
-      expect(submissionFeedback("sent", stored).success).toBe(true)
-      for (const kind of ["temporary", "rejected"] as const) expect(submissionFeedback(kind, stored).success).toBe(false)
-    }
-  })
-  it("an unstored pending submission never claims it is saved", () => {
-    expect(submissionFeedback("temporary", false)).toMatchObject({ title: "לא הצלחנו לשלוח או לשמור", button: "לא נשלחה" })
-    expect(submissionFeedback("temporary", true)).toMatchObject({ button: "ממתינה לשליחה" })
+describe("local proposal policy", () => {
+  it("discards interrupted, waiting and refused sends but preserves confirmed tracking copies", () => {
+    for (const send of ["sending", "waiting", "rejected"] as const)
+      expect(unacceptedLocal(place("local-demo", { local: { createdAt: "", consentAt: "", send } }))).toBe(true)
+    expect(unacceptedLocal(place("local-sent", { local: { createdAt: "", consentAt: "", send: "sent", remoteId: "p_1" } }))).toBe(false)
+    expect(unacceptedLocal(place("p_public"))).toBe(false)
   })
 })
 
