@@ -1,4 +1,6 @@
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
+import { Collapsible } from "radix-ui"
+import { ChevronDownIcon } from "lucide-react"
 import { motion } from "motion/react"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Anemone } from "@/components/anemone"
@@ -41,6 +43,8 @@ export function PlacesList() {
   const remote = useStore((s) => s.remote)
   const query = useStore((s) => s.query)
   const visits = useVisits()
+  // One group at a time. A search reveals every matching group so results never hide in a closed section.
+  const [opened, setOpened] = useState<string | null>(null)
   const places = useMemo(
     () =>
       allPlaces({ remote, local }).filter(
@@ -53,6 +57,8 @@ export function PlacesList() {
     { id: "envelope", title: "בעוטף עזה", items: places.filter((p) => !p.local && p.region === "envelope") },
     { id: "country", title: "ברחבי הארץ", items: places.filter((p) => !p.local && p.region === "country") },
   ].filter((g) => g.items.length)
+  const active = opened === null ? groups[0]?.id : opened
+  const searching = !!query.trim()
 
   if (!places.length)
     return (
@@ -98,39 +104,56 @@ export function PlacesList() {
   return (
     <div className="flex flex-col gap-5">
       {groups.map((g) => (
-        <section key={g.id} aria-labelledby={`g-${g.id}`} className="flex flex-col gap-1">
-          <GroupLabel id={`g-${g.id}`} count={g.items.length}>
-            {g.title}
-          </GroupLabel>
-          <ul className="flex flex-col gap-1">
-            {g.items.map((p, i) => (
-              <Row key={p.id} place={p} i={i}>
-                {p.local?.photo || p.contributedPhoto ? (
-                  <img src={p.local?.photo ?? p.contributedPhoto!.url} alt="" className="size-12 shrink-0 rounded-xl object-cover" />
-                ) : p.photos?.[0] ? (
-                  <motion.span
-                    layoutId={`ph-${p.id}`}
-                    transition={spring.soft}
-                    style={{ borderRadius: 12 }}
-                    className="size-12 shrink-0 overflow-hidden"
-                  >
-                    <Img src={p.photos[0].thumb_url} alt="" className="size-full object-cover" />
-                  </motion.span>
-                ) : (
-                  <span className="grid size-12 shrink-0 place-items-center rounded-xl bg-surface-2 text-ink-3">
-                    {p.local ? <Anemone size={26} variant="pale" /> : <KindIcon kind={p.kind} className="size-5" />}
+        <Collapsible.Root key={g.id} open={searching || active === g.id} onOpenChange={(open) => setOpened(open ? g.id : "")}>
+          {searching ? (
+            <GroupLabel id={`g-${g.id}`} count={g.items.length}>
+              {g.title}
+            </GroupLabel>
+          ) : (
+            <h3>
+              <Collapsible.Trigger asChild>
+                <button className="flex min-h-12 w-full items-center gap-3 rounded-xl border border-line bg-surface-2 px-3 py-3 text-start text-label text-ink-2 outline-none hover:bg-surface-3 focus-visible:ring-2 focus-visible:ring-ring">
+                  <span className="min-w-0 flex-1">{g.title}</span>
+                  <span className="text-caption tabular-nums">{g.items.length}</span>
+                  <ChevronDownIcon
+                    aria-hidden="true"
+                    className={cn("size-4 shrink-0 transition-transform motion-reduce:transition-none", active === g.id && "rotate-180")}
+                  />
+                </button>
+              </Collapsible.Trigger>
+            </h3>
+          )}
+          <Collapsible.Content>
+            <ul aria-label={g.title} className="mt-2 flex flex-col gap-1">
+              {g.items.map((p, i) => (
+                <Row key={p.id} place={p} i={i}>
+                  {p.local?.photo || p.contributedPhoto ? (
+                    <img src={p.local?.photo ?? p.contributedPhoto!.url} alt="" className="size-12 shrink-0 rounded-xl object-cover" />
+                  ) : p.photos?.[0] ? (
+                    <motion.span
+                      layoutId={`ph-${p.id}`}
+                      transition={spring.soft}
+                      style={{ borderRadius: 12 }}
+                      className="size-12 shrink-0 overflow-hidden"
+                    >
+                      <Img src={p.photos[0].thumb_url} alt="" className="size-full object-cover" />
+                    </motion.span>
+                  ) : (
+                    <span className="grid size-12 shrink-0 place-items-center rounded-xl bg-surface-2 text-ink-3">
+                      {p.local ? <Anemone size={26} variant="pale" /> : <KindIcon kind={p.kind} className="size-5" />}
+                    </span>
+                  )}
+                  <span className="flex min-w-0 flex-col">
+                    <span className="line-clamp-2 text-body font-semibold text-ink-1">{p.name_he}</span>
+                    <span className="line-clamp-2 text-caption text-ink-2">
+                      {KINDS[p.kind].label} · {p.place_he}
+                    </span>
                   </span>
-                )}
-                <span className="flex min-w-0 flex-col">
-                  <span className="line-clamp-2 text-body font-semibold text-ink-1">{p.name_he}</span>
-                  <span className="line-clamp-2 text-caption text-ink-2">
-                    {KINDS[p.kind].label} · {p.place_he}
-                  </span>
-                </span>
-              </Row>
-            ))}
-          </ul>
-        </section>
+                </Row>
+              ))}
+            </ul>
+          </Collapsible.Content>
+        </Collapsible.Root>
       ))}
     </div>
   )

@@ -2,6 +2,7 @@ import { Hono, type Context } from "hono"
 import type { AppEnv } from "../index"
 import { publicPlace } from "../db/places"
 import { ogState } from "../lib/og"
+import { plainDashes } from "@/lib/display-text"
 
 export const share = new Hono<AppEnv>()
 
@@ -58,7 +59,7 @@ async function sharePage(c: Context<AppEnv>, id: string | null) {
   const og = await ogState(c.env.DB, id!)
   const image = og ? `${origin}/media/og/${encodeURIComponent(id!)}/${og.hash}.png` : `${origin}/og.png`
   // Cut by characters, not UTF-16 units, so an emoji at the edge isn't split into a broken glyph.
-  const words = Array.from(place.summary_he || place.place_he || "מקום לזכור")
+  const words = Array.from(plainDashes(place.summary_he || place.place_he || "מקום לזכור"))
     .slice(0, DESCRIPTION_MAX)
     .join("")
   // The tag is written whole, escaped here: the rewriter's own setAttribute leaves < and > bare in the value, which a
@@ -70,9 +71,9 @@ async function sharePage(c: Context<AppEnv>, id: string | null) {
     },
   })
   const rewriter = new HTMLRewriter()
-    .on("title", { element: (el) => void el.setInnerContent(`${place.name_he} · מקום לזכור`) })
+    .on("title", { element: (el) => void el.setInnerContent(`${plainDashes(place.name_he)} · מקום לזכור`) })
     .on('meta[name="description"]', content(words))
-    .on('meta[property="og:title"]', content(place.name_he))
+    .on('meta[property="og:title"]', content(plainDashes(place.name_he)))
     .on('meta[property="og:description"]', content(words))
     .on('meta[property="og:image"]', origin ? content(image) : {})
     .on("head", {

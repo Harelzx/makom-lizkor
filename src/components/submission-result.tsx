@@ -68,7 +68,7 @@ export function SubmissionResult({
       {!success && (
         <p role="status" aria-live="polite" aria-atomic="true" className="text-label font-semibold text-ink-1">
           {busy
-            ? `שולחים לבדיקה — ניסיון ${attemptNumber}…`
+            ? `שולחים לבדיקה - ניסיון ${attemptNumber}…`
             : result.kind === "rejected"
               ? `ניסיון ${result.attemptNumber ?? 1} הסתיים: ההצעה לא התקבלה.`
               : `ניסיון ${result.attemptNumber ?? 1} הסתיים ללא אישור קבלה.`}

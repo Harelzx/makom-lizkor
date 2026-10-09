@@ -21,8 +21,21 @@ function load(): Promise<Turnstile> {
     const s = document.createElement("script")
     s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
     s.async = true
-    s.onload = () => (window.turnstile ? resolve(window.turnstile) : reject(new Error("turnstile_missing")))
-    s.onerror = () => reject(new Error("turnstile_unreachable"))
+    // A stalled script never reaches onerror. Bound loading too, so sending cannot trap a dialog indefinitely.
+    const fail = () => {
+      clearTimeout(timer)
+      s.onload = null
+      s.onerror = null
+      s.remove()
+      reject(new Error("turnstile_unreachable"))
+    }
+    const timer = setTimeout(fail, 15_000)
+    s.onload = () => {
+      clearTimeout(timer)
+      if (window.turnstile) resolve(window.turnstile)
+      else fail()
+    }
+    s.onerror = fail
     document.head.appendChild(s)
   }).catch((err) => {
     loading = null // the next send tries to load it again
@@ -32,7 +45,7 @@ function load(): Promise<Turnstile> {
 }
 
 /** A fresh, single-use token for this action; null when the check can't run now (the send is then retried later). */
-export async function turnstileToken(action: "submit" | "revise" | "report"): Promise<string | null> {
+export async function turnstileToken(action: "submit" | "revise" | "report" | "contact"): Promise<string | null> {
   if (!SITEKEY) return null
   let t: Turnstile
   try {

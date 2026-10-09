@@ -106,7 +106,7 @@ function Actions({ compact }: { compact?: boolean }) {
             </motion.span>
           </Button>
         </TooltipTrigger>
-        <TooltipContent>{light === "night" ? "אור בוקר" : "מצב לילה, לערב יום הזיכרון"}</TooltipContent>
+        <TooltipContent>{light === "night" ? "אור בוקר" : "מצב לילה"}</TooltipContent>
       </Tooltip>
       <Button variant="float" size="icon-lg" className="size-11 rounded-full" aria-label="על הפרויקט" onClick={() => setAboutOpen(true)}>
         <InfoIcon />
@@ -167,6 +167,7 @@ export function Shell() {
       // Presence briefly measures zero while a dialog removes the sheet. Never turn that into an offscreen snap.
       if (height <= 0) return
       const next = `${height}px`
+      document.documentElement.style.setProperty("--map-peek", next)
       setPeek(next)
       setSnap((current) => (typeof current === "number" ? current : next))
     }
@@ -209,6 +210,7 @@ export function Shell() {
             picking && "pointer-events-none",
           )}
           aria-label="מקומות וקהילות"
+          data-panel-collapsed={collapsed}
           // where the skip button lands; the panel's own controls are the next stops
           id="places"
           tabIndex={-1}

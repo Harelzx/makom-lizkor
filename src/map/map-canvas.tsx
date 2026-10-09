@@ -24,6 +24,7 @@ export function MapCanvas() {
   const light = useStore((s) => s.light)
   const selectedId = useStore((s) => s.selectedId)
   const picking = useStore((s) => s.picking)
+  const addOpen = useStore((s) => s.addOpen)
   const draft = useStore((s) => s.draft)
   const places = useMemo(() => allPlaces({ remote, local }), [remote, local])
   // The communities' names, as the feed brings them, kept off the basemap's own labels.
@@ -65,7 +66,8 @@ export function MapCanvas() {
   // MapLibre owns this element's classes, so the opening flag is toggled rather than rendered.
   useEffect(() => {
     container.current?.classList.toggle("is-opening", phase !== "day")
-  }, [phase])
+    container.current?.classList.toggle("has-sheet", phase === "day" && !picking && !addOpen)
+  }, [phase, picking, addOpen])
 
   // The opening played again: the morning turns back into the blue hour.
   const lastPhase = useRef(phase)

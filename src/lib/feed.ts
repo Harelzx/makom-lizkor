@@ -3,13 +3,14 @@ import { retryWaiting } from "@/lib/outbox"
 import { loadSnapshot, loadUnlisted, relistPublished, saveSnapshot, unlistedGeneration } from "@/lib/storage"
 import { useStore } from "@/store"
 import type { Place } from "@/types"
+import { displayTextFields } from "@/lib/display-text"
 
 const EVERY_MS = 30_000
 
 function toPlace(p: PublicPlace): Place {
   if (isCurated(p)) {
     const { photos, ...fields } = p.curated
-    return {
+    return displayTextFields({
       id: p.id,
       name_he: p.name_he,
       kind: p.kind,
@@ -29,9 +30,9 @@ function toPlace(p: PublicPlace): Place {
             })),
           }
         : {}),
-    }
+    })
   }
-  return {
+  return displayTextFields({
     id: p.id,
     name_he: p.name_he,
     kind: p.kind,
@@ -46,7 +47,7 @@ function toPlace(p: PublicPlace): Place {
     links: p.link_url ? [{ label_he: "אתר הנצחה", url: p.link_url }] : [],
     coord_source: "contribution",
     region: p.lat < 31.7 && p.lng < 34.75 && p.lat > 31.1 ? "envelope" : "country",
-  }
+  })
 }
 
 /** The approved place a share page carries (its public fields, written by the Worker), so its card opens at once. */

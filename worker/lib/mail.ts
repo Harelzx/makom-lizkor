@@ -4,6 +4,15 @@ import { MAIL_BINDING, validMailFrom } from "./mail-binding"
 export type Mail = { to: string; subject: string; text: string }
 // Not bound until the production domain is chosen; use the generated platform binding type, not a custom transport.
 type MailEnv = Env & { MAIL?: SendEmail; MAIL_FROM?: string }
+/** Whether a public contact form may offer real sending. Synthetic staging and local previews never send contact mail. */
+export const contactMailReady = (env: MailEnv) =>
+  env.ENVIRONMENT === "production" &&
+  validMailFrom(env.MAIL_FROM) &&
+  typeof env.MAIL?.send === "function" &&
+  !!env.PUBLIC_ORIGIN?.startsWith("https://") &&
+  !!env.TRACKING_SECRET &&
+  !!env.TURNSTILE_SECRET &&
+  !!env.TURNSTILE_HOSTNAMES?.trim()
 /** Sends one mail; false when it couldn't be sent now. A mail never decides whether a submission or a decision stands. */
 export type SendMail = (env: MailEnv, mail: Mail) => Promise<boolean>
 

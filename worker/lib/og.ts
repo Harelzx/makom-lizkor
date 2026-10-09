@@ -5,6 +5,7 @@ import webpWasm from "@jsquash/webp/codec/dec/webp_dec.wasm"
 import { isCurated, type PublicPlace } from "@/shared/contract"
 import { CURATED_ID } from "@/shared/curated"
 import { publicPlace } from "../db/places"
+import { plainDashes } from "@/lib/display-text"
 import { OG_FONTS } from "./og-font"
 import { log } from "./log"
 
@@ -20,31 +21,41 @@ import { log } from "./log"
 // 2: a projected photo that can't be read is a failed render, never an image drawn without it (adviser a47, L4-R1).
 // 3: the photo is embedded as its own format, and a WebP (the site's own places) is decoded first: resvg reads JPEG and
 // PNG only, and a WebP, or any photo labelled with another type, drew an empty panel (P7-OG-1).
-export const OG_TEMPLATE_VERSION = 3
+// 4: the shared photograph carries its creator, licence and crop notice, as the on-site card does.
+export const OG_TEMPLATE_VERSION = 4
 const W = 1200
 const H = 630
 
 /** What the image shows, and nothing else: the hash is taken over exactly this. */
-export type OgProjection = { v: number; kind: string; name_he: string; place_he: string; photo: string | null }
+export type OgProjection = {
+  v: number
+  kind: string
+  name_he: string
+  place_he: string
+  photo: string | null
+  credit?: { author: string; license: string; url: string } | null
+}
 
 /**
  * The photo is named by its key: a key is written once (its name carries the upload's ULID) and never rewritten with
  * other bytes, so the key stands for its content.
  */
 function project(place: PublicPlace): OgProjection {
+  const firstPhoto = isCurated(place) ? place.curated.photos[0] : null
   return {
     v: OG_TEMPLATE_VERSION,
     kind: place.kind,
-    name_he: place.name_he,
-    place_he: place.place_he,
+    name_he: plainDashes(place.name_he),
+    place_he: plainDashes(place.place_he),
     // A curated place shows its first photo, a contribution its one photo; a hidden photo isn't in the projection.
     photo: (isCurated(place) ? place.curated.photos[0]?.url : place.photo?.url)?.replace(/^\/media\//, "") ?? null,
+    credit: firstPhoto ? { author: plainDashes(firstPhoto.author), license: firstPhoto.license, url: firstPhoto.license_url ?? "" } : null,
   }
 }
 
 async function hashOf(p: OgProjection) {
   // Keys in a fixed order: the same state always hashes the same.
-  const canonical = JSON.stringify([p.v, p.kind, p.name_he, p.place_he, p.photo])
+  const canonical = JSON.stringify([p.v, p.kind, p.name_he, p.place_he, p.photo, p.credit ?? null])
   const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(canonical))
   return [...new Uint8Array(d)].map((x) => x.toString(16).padStart(2, "0")).join("")
 }
@@ -112,6 +123,17 @@ export function ogSvg(p: OgProjection, photo: { type: "image/jpeg" | "image/png"
        <image x="0" y="0" width="440" height="${H}" preserveAspectRatio="xMidYMid slice" clip-path="url(#c)"
          href="data:${photo.type};base64,${base64(photo.bytes)}"/>`
     : ""
+  const creditPart =
+    photo && p.credit
+      ? `<rect x="0" y="${H - 120}" width="440" height="120" fill="#16131c" fill-opacity="0.9"/>
+    <g font-family="Heebo" direction="rtl" text-anchor="end" fill="#f4efe8">
+      ${wrap(`צילום: ${p.credit.author}`, 32, 2)
+        .map((line, i) => `<text x="420" y="${H - 92 + i * 23}" font-size="18">${esc(line)}</text>`)
+        .join("")}
+      <text x="420" y="${H - 38}" font-size="16">${esc(p.credit.license)} · חיתוך</text>
+    </g>
+    <text x="420" y="${H - 16}" font-family="Heebo" text-anchor="end" font-size="13" fill="#f4efe8">${esc(p.credit.url.replace(/^https?:\/\//, ""))}</text>`
+      : ""
   const name = nameLines
     .map((l, i) => `<text x="${textRight}" y="${250 + i * 82}" font-size="68" font-weight="700" fill="#f4efe8">${esc(l)}</text>`)
     .join("")
@@ -122,7 +144,7 @@ export function ogSvg(p: OgProjection, photo: { type: "image/jpeg" | "image/png"
     )
     .join("")
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
-    <rect width="${W}" height="${H}" fill="#16131c"/>${photoPart}
+    <rect width="${W}" height="${H}" fill="#16131c"/>${photoPart}${creditPart}
     <g font-family="Heebo" direction="rtl" text-anchor="end">${name}${place}
       <text x="${textRight}" y="${H - 70}" font-size="34" font-weight="700" fill="#e05a4f">מקום לזכור</text>
     </g></svg>`
