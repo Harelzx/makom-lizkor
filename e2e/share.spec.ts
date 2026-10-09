@@ -38,10 +38,15 @@ test("an approved contribution's share page opens its card before the feed answe
 })
 
 test("the share button gives the share page's address, which link previews can read", async ({ browser }) => {
+  // A place name can contain the action's label. Keep that collision present even when this test runs alone;
+  // CI 37971360998 matched a demo list row as well as the actual Share button with the old substring selector.
+  const otherName = `גינת דמו שיתוף נוספת ${Date.now()}`
+  await published(browser, otherName)
   const ctx = await browser.newContext({ permissions: ["clipboard-read", "clipboard-write"] })
   const page = await ctx.newPage()
   await page.goto("/#/place/car-wall-tkuma")
-  await page.getByRole("button", { name: "שיתוף" }).click()
+  await expect(page.getByRole("button", { name: new RegExp(otherName) })).toBeVisible(DAY)
+  await page.getByRole("button", { name: "שיתוף", exact: true }).click()
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toMatch(/^http:\/\/[^/]+\/place\/car-wall-tkuma$/)
 })
 
