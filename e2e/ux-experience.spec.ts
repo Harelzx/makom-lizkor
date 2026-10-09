@@ -173,6 +173,8 @@ for (const width of [320, 390])
     await cancel.click()
     await page.getByRole("button", { name: "כל המקומות", exact: true }).click()
     await page.getByRole("button", { name: "חזרה למפה", exact: true }).click()
+    // Returning to the map folds the list and its footer. Open it as a visitor does before reaching privacy.
+    await page.locator("#places").getByRole("button", { name: "הצגת המקומות", exact: true }).click()
     const privacy = page.locator("#places").getByRole("button", { name: "פרטיות", exact: true })
     await privacy.scrollIntoViewIfNeeded()
     await expect(privacy).toBeInViewport({ ratio: 1 })

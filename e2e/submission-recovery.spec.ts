@@ -121,27 +121,55 @@ test("blocked browser storage does not prevent receipt, and the warning stays un
   await expect(page.getByRole("button", { name: "מעקב אחרי ההצעה", exact: true })).toBeVisible()
 })
 
-test("closing a tab during a send leaves no queued place to resend on the next visit", async ({ browser }) => {
-  const name = `ספסל דמו נסגר ${Date.now()}`
-  const page = await day(browser)
-  let started!: () => void
-  const request = new Promise<void>((r) => (started = r))
-  await page.route("**/api/v1/submissions", async (r) => {
-    started()
-    await new Promise(() => {})
-    await r.abort()
+for (const delivery of ["blocked", "accepted"] as const)
+  test(`closing a tab with an unanswered ${delivery} send stores nothing and never resends on the next visit`, async ({ browser }) => {
+    const name = `ספסל דמו נסגר ${delivery} ${Date.now()}`
+    const page = await day(browser)
+    const context = page.context()
+    let started!: () => void
+    let release!: () => void
+    let settled!: () => void
+    const request = new Promise<void>((r) => (started = r))
+    const gate = new Promise<void>((r) => (release = r))
+    const aborted = new Promise<void>((r) => (settled = r))
+    let posts = 0
+    await context.route("**/api/v1/submissions", async (route) => {
+      posts++
+      if (delivery === "accepted") {
+        const response = await route.fetch({ headers: from(context, route.request().headers()) })
+        expect(response.status()).toBe(201)
+      }
+      started()
+      await gate
+      // The target has closed, so abort may report that it is gone; it must not leave an unresolved test handler.
+      await route.abort("failed").catch(() => {})
+      settled()
+    })
+    try {
+      await fillAndSend(page, name)
+      await request
+      expect(await stored(page)).toEqual([])
+      // Closing a target can release Chromium's paused network interception. For the not-delivered case,
+      // disconnect first so the test proves that the server has received nothing, rather than racing close.
+      if (delivery === "blocked") await context.setOffline(true)
+      await page.close()
+      release()
+      await aborted
+      await context.setOffline(false)
+      const next = await context.newPage()
+      // The cached feed is still current: syncing reads the version but correctly skips downloading it again.
+      const sync = next.waitForResponse((r) => r.url().endsWith("/api/v1/version") && r.ok())
+      await next.goto("/")
+      await next.getByRole("button", { name: "דילוג", exact: true }).click()
+      await expect(next.getByRole("button", { name: /^חיפוש מקום/ })).toBeVisible(DAY)
+      await sync
+      expect(await stored(next)).toEqual([])
+      expect(posts).toBe(1)
+      expect(await queued(browser, name)).toBe(delivery === "accepted" ? 1 : 0)
+    } finally {
+      release()
+    }
   })
-  await fillAndSend(page, name)
-  await request
-  expect(await stored(page)).toEqual([])
-  await page.close()
-  const next = await page.context().newPage()
-  await next.goto("/")
-  await next.getByRole("button", { name: "דילוג", exact: true }).click()
-  await expect(next.getByRole("button", { name: /^חיפוש מקום/ })).toBeVisible(DAY)
-  expect(await stored(next)).toEqual([])
-  expect(await queued(browser, name)).toBe(0)
-})
 
 test("a full queue leaves no local place and respects the server's wait before manual retry", async ({ browser }) => {
   const page = await day(browser)
