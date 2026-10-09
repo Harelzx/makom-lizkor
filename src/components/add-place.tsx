@@ -16,6 +16,7 @@ import { ADDABLE_KINDS, KINDS } from "@/data/taxonomy"
 import { CONSENT_TEXT, FAMILY_CONSENT_TEXT, noticeHtml, PHOTO_RIGHTS_TEXT } from "@/data/legal"
 import { useVisibleViewport } from "@/lib/use-visible-viewport"
 import { SubmissionResult, type SubmissionOutcome } from "@/components/submission-result"
+import { FormFlower } from "@/components/form-flower"
 import { newSubmitKey, submitPlace, uploadPhoto } from "@/lib/api"
 import { exportable } from "@/lib/export"
 import { downloadJSON, resizeImage } from "@/lib/storage"
@@ -48,8 +49,6 @@ const DESCRIPTIONS = [
   "כמה פרטים, כפי שהמשפחה רוצה שיופיעו.",
   "ההצעה תישלח לבדיקה ותופיע לכולם אחרי אישור. עותק למעקב יישמר אצלכם רק אחרי שהשליחה תאושר.",
 ]
-/** The flower opens as the form moves on: a bud, then one anemone, then a bouquet. */
-const ART = ["/art/bud.webp", "/art/anemone-watercolor.webp", "/art/bouquet.webp"]
 /** And the sky behind it warms toward morning, the way the map does at the opening. */
 const SKY = [
   "bg-[radial-gradient(130%_120%_at_20%_0%,var(--p-sky-100),var(--p-field-50)_55%,var(--surface)_100%)] dark:bg-[radial-gradient(130%_120%_at_20%_0%,var(--p-ink-700),var(--p-ink-800)_60%,var(--surface)_100%)]",
@@ -116,6 +115,8 @@ export function AddPlace() {
   const [error, setError] = useState("")
   const [errorField, setErrorField] = useState("")
   const [outcome, setOutcome] = useState<SubmissionOutcome | null>(null)
+  const sendCount = useRef(0)
+  const [sendNumber, setSendNumber] = useState(0)
   // Only RAM, never IndexedDB: an uncertain retry uses the exact original body and key.
   const attempt = useRef<{ place: Place; submission: SubmissionInput; key: string } | null>(null)
   const accepted = useRef<Place | null>(null)
@@ -178,6 +179,8 @@ export function AddPlace() {
     setError("")
     setErrorField("")
     setOutcome(null)
+    sendCount.current = 0
+    setSendNumber(0)
     setSaved(false)
     attempt.current = null
     accepted.current = null
@@ -245,6 +248,10 @@ export function AddPlace() {
     if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return fail("כתובת המייל לא נראית תקינה.", "email")
     sending.current = true
     setBusy(true)
+    const startedAt = performance.now()
+    sendCount.current += 1
+    const attemptNumber = sendCount.current
+    setSendNumber(attemptNumber)
     const now = new Date().toISOString()
     const approximate = privateLand && !permission
     const place: Place = {
@@ -298,6 +305,7 @@ export function AddPlace() {
         if (r.kind === "rejected") attempt.current = null
         setOutcome({
           kind: r.kind,
+          attemptNumber,
           retryAt: r.kind === "temporary" && r.retryAfter ? Date.now() + r.retryAfter * 1000 : undefined,
           description:
             r.kind === "rejected"
@@ -306,7 +314,9 @@ export function AddPlace() {
                 ? QUEUE_FULL
                 : r.code === "turnstile_failed"
                   ? CHECK_FAILED
-                  : "לא התקבל אישור מהשרת. ההצעה לא נשמרה במכשיר ולא נוספה למפה. אפשר לנסות שוב כאן; היא לא תישלח ברקע. אם התשובה אבדה, ייתכן שההצעה כבר הגיעה. בסגירת החלון הפרטים יימחקו.",
+                  : r.code === "turnstile_required"
+                    ? "לא הצלחנו להשלים את בדיקת הדפדפן. בדקו את החיבור ונסו שוב. ההצעה לא נשמרה במכשיר ולא תישלח ברקע. בסגירת החלון הפרטים יימחקו."
+                    : "לא התקבל אישור מהשרת. ההצעה לא נשמרה במכשיר ולא נוספה למפה. אפשר לנסות שוב כאן; היא לא תישלח ברקע. אם התשובה אבדה, ייתכן שההצעה כבר הגיעה. בסגירת החלון הפרטים יימחקו.",
         })
         return
       }
@@ -328,6 +338,7 @@ export function AddPlace() {
       }
       setOutcome({
         kind: "sent",
+        attemptNumber,
         stored,
         description:
           "עזרתם לעוד אדם להכיר את המקום ואת מי שהוא מנציח. נבדוק את ההצעה לפני שתופיע לכולם." +
@@ -342,14 +353,19 @@ export function AddPlace() {
       if (accepted.current)
         setOutcome({
           kind: "sent",
+          attemptNumber,
           description: "ההצעה התקבלה לבדיקה. אפשר לראות את מצבה מתוך הכרטיס שלה; התמונה עשויה עדיין להמתין להעלאה.",
         })
       else
         setOutcome({
           kind: "temporary",
+          attemptNumber,
           description: "לא הצלחנו לוודא שההצעה הגיעה. היא לא נשמרה במכשיר ולא תישלח ברקע. אפשר לנסות שוב כאן; בסגירת החלון הפרטים יימחקו.",
         })
     } finally {
+      // A fast repeated failure still has a perceptible sending state, followed by a persistent numbered result.
+      const feedbackTime = 600 - (performance.now() - startedAt)
+      if (feedbackTime > 0) await new Promise((resolve) => setTimeout(resolve, feedbackTime))
       sending.current = false
       setBusy(false)
     }
@@ -383,6 +399,7 @@ export function AddPlace() {
           <SubmissionResult
             result={outcome}
             busy={busy}
+            attemptNumber={sendNumber}
             onContinue={close}
             onClose={close}
             onRetry={() => void save()}
@@ -411,19 +428,7 @@ export function AddPlace() {
                     transition={{ duration: 0.7, ease }}
                   />
                 ))}
-                <AnimatePresence initial={false}>
-                  <motion.img
-                    key={step}
-                    src={ART[step]}
-                    alt=""
-                    data-add-art
-                    className="absolute inset-y-2 start-1/2 h-[calc(100%-1rem)] w-28 -translate-x-1/2 object-contain drop-shadow-sm sm:start-auto sm:end-8 sm:w-32 sm:translate-x-0 rtl:translate-x-1/2 rtl:sm:translate-x-0"
-                    initial={lessMotion ? false : { y: 12, scale: 0.92, opacity: 0 }}
-                    animate={{ y: 0, scale: 1, opacity: 1 }}
-                    exit={{ opacity: 0, transition: { duration: lessMotion ? 0 : 0.14, ease } }}
-                    transition={{ duration: lessMotion ? 0 : 0.25, ease }}
-                  />
-                </AnimatePresence>
+                <FormFlower step={step} />
               </div>
               <DialogHeader className="gap-2 px-6 pt-2">
                 <div className="flex flex-col gap-2.5">

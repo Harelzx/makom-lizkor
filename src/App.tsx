@@ -174,10 +174,13 @@ export default function App() {
 
   // The interface wears the night palette during the opening and whenever night is chosen.
   useEffect(() => {
-    document.documentElement.classList.toggle("dark", phase === "intro" || light === "night")
-    document
-      .querySelector('meta[name="theme-color"]')
-      ?.setAttribute("content", phase === "intro" || light === "night" ? "#0b1120" : "#e5eedb")
+    const night = phase === "intro" || light === "night"
+    const chromeColor = night ? "#0b1120" : "#ffffff"
+    document.documentElement.classList.toggle("dark", night)
+    // Safari also samples page backgrounds behind its own controls. The boot-time inline night color must not survive dawn.
+    document.documentElement.style.backgroundColor = chromeColor
+    document.body.style.backgroundColor = chromeColor
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", chromeColor)
   }, [light, phase])
 
   return (

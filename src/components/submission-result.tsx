@@ -10,12 +10,14 @@ export type SubmissionOutcome = {
   description: string
   stored?: boolean
   retryAt?: number
+  attemptNumber?: number
 }
 
 /** An acknowledgement stays until the visitor acts; even an instant response gets time to be read. */
 export function SubmissionResult({
   result,
   busy,
+  attemptNumber,
   onContinue,
   onRetry,
   onEdit,
@@ -23,6 +25,7 @@ export function SubmissionResult({
 }: {
   result: SubmissionOutcome
   busy: boolean
+  attemptNumber: number
   onContinue: () => void
   onRetry: () => void
   onEdit: () => void
@@ -60,6 +63,15 @@ export function SubmissionResult({
         <p className="flex items-center justify-center gap-2 text-label font-semibold text-ink-1">
           <CheckIcon className="size-4" />
           ההצעה התקבלה לבדיקה, עדיין לא פורסמה.
+        </p>
+      )}
+      {!success && (
+        <p role="status" aria-live="polite" aria-atomic="true" className="text-label font-semibold text-ink-1">
+          {busy
+            ? `שולחים לבדיקה — ניסיון ${attemptNumber}…`
+            : result.kind === "rejected"
+              ? `ניסיון ${result.attemptNumber ?? 1} הסתיים: ההצעה לא התקבלה.`
+              : `ניסיון ${result.attemptNumber ?? 1} הסתיים ללא אישור קבלה.`}
         </p>
       )}
       {remaining > 0 && (

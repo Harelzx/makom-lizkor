@@ -16,25 +16,29 @@ for (const width of [320, 390, 1280])
     await day(page)
     const f = page.locator('[role="dialog"][data-slot="dialog-content"]')
     const artwork = f.locator("[data-add-art]")
-    async function artFits() {
+    async function artFits(src: string) {
       await expect(artwork).toHaveCount(1)
+      await expect(artwork).toHaveAttribute("src", src)
       await expect.poll(() => artwork.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0)).toBe(true)
-      const rect = await artwork.boundingBox()
-      const frame = await artwork.locator("..").boundingBox()
-      expect(rect!.y).toBeGreaterThanOrEqual(frame!.y)
-      expect(rect!.y + rect!.height).toBeLessThanOrEqual(frame!.y + frame!.height)
-      expect(rect!.x).toBeGreaterThanOrEqual(frame!.x)
-      expect(rect!.x + rect!.width).toBeLessThanOrEqual(frame!.x + frame!.width)
+      // Read both boxes in one browser frame: the whole dialog can move as the next step changes its height.
+      const fits = await artwork.evaluate((el) => {
+        const rect = el.getBoundingClientRect()
+        const frame = el.parentElement!.getBoundingClientRect()
+        return (
+          rect.y >= frame.y - 0.01 && rect.bottom <= frame.bottom + 0.01 && rect.x >= frame.x - 0.01 && rect.right <= frame.right + 0.01
+        )
+      })
+      expect(fits).toBe(true)
       expect(await artwork.evaluate((el) => getComputedStyle(el).objectFit)).toBe("contain")
     }
-    await artFits()
+    await artFits("/art/bud.webp")
     await f.getByRole("button", { name: "המיקום הנוכחי שלי", exact: true }).click()
     await expect(f.getByText("סומן מיקום", { exact: false })).toBeVisible()
     await f.getByRole("button", { name: "המשך", exact: true }).click()
-    await artFits()
+    await artFits("/art/anemone-watercolor.webp")
     await f.getByLabel("שם המקום", { exact: true }).fill("ספסל בדיקת אישור נגיש")
     await f.getByRole("button", { name: "המשך", exact: true }).click()
-    await artFits()
+    await artFits("/art/bouquet.webp")
     for (const box of await f.getByRole("checkbox").all()) await box.check()
     await page.route("**/api/v1/submissions", (r) =>
       r.fulfill({ status: 201, json: { id: "p_preview_receipt", trackingToken: "test_tracking_token" } }),

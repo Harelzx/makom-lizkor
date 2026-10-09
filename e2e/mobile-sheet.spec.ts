@@ -22,7 +22,7 @@ test("the sheet leaves the header and the map reachable for screen readers and k
 })
 
 test("after the add dialog closes, the page still answers taps", async ({ page }) => {
-  await page.locator('button.fixed[aria-label="הוספת מקום"]').click()
+  await page.getByRole("button", { name: "הוספת מקום", exact: true }).click()
   await expect(page.getByRole("dialog", { name: /איפה המקום/ })).toBeVisible()
   // the dialog listens for Esc once it has taken focus
   await expect.poll(() => page.evaluate(() => !!document.activeElement?.closest('[role="dialog"]'))).toBe(true)
