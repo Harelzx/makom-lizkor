@@ -129,6 +129,21 @@ test(
     await stable()
     await form.getByRole("button", { name: "חזרה", exact: true }).click()
     await stable()
+    // The test intentionally keeps motion on. Visibility alone also matches a fading-in step, and axe would
+    // measure its transient blended text colors. Audit the final state, without disabling the motion or contrast rule.
+    await expect(form.getByRole("button", { name: "עריכת הפרטים", exact: true })).toHaveCount(0)
+    await expect(form.getByLabel("שם המקום", { exact: true })).toHaveCount(0)
+    const cascade = form.locator("fieldset .cascade")
+    await expect(cascade).toHaveCount(1)
+    await expect
+      .poll(() =>
+        cascade.evaluate((el) => {
+          const nodes: Element[] = [el, ...el.children]
+          for (let parent = el.parentElement; parent; parent = parent.parentElement) nodes.push(parent)
+          return nodes.every((node) => Number(getComputedStyle(node).opacity) === 1)
+        }),
+      )
+      .toBe(true)
     await audit(page)
   },
 )
