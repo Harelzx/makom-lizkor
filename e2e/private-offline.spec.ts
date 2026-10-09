@@ -63,6 +63,7 @@ test("a family's place on private property is shown approximately, with no way t
   await expect(page.getByText("המיקום משוער", { exact: false })).toBeVisible()
   await expect(page.getByRole("link", { name: /Waze/ })).toHaveCount(0)
   await expect(page.getByRole("link", { name: "Google Maps" })).toHaveCount(0)
+  await page.getByText("פרטי המיקום והמקורות", { exact: true }).click()
   await expect(page.getByText("31.42000, 34.50000")).toBeVisible()
 })
 

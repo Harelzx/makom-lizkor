@@ -22,10 +22,10 @@ async function details(page: Page) {
   await page.getByRole("button", { name: "הוספת מקום", exact: true }).first().click()
   const form = page.locator('[data-slot="dialog-content"][data-state="open"]')
   await expect(form).toBeVisible()
-  await form.getByRole("button", { name: "המיקום הנוכחי שלי", exact: true }).click()
-  // Emit a fresh GPS update for each request. Chromium's mocked provider otherwise keeps the earlier timestamp
-  // when a second proposal asks for maximumAge=0, and never delivers that second position.
+  // Refresh the mocked provider before requesting a fix. Replacing it while a request is already pending can
+  // deliver POSITION_UNAVAILABLE to that request, especially when this test opens a second proposal.
   await page.context().setGeolocation({ latitude: 31.42, longitude: 34.51 })
+  await form.getByRole("button", { name: "המיקום הנוכחי שלי", exact: true }).click()
   await expect(form.getByText("סומן מיקום", { exact: false })).toBeVisible()
   return form
 }

@@ -121,27 +121,72 @@ test("blocked browser storage does not prevent receipt, and the warning stays un
   await expect(page.getByRole("button", { name: "מעקב אחרי ההצעה", exact: true })).toBeVisible()
 })
 
-test("closing a tab during a send leaves no queued place to resend on the next visit", async ({ browser }) => {
-  const name = `ספסל דמו נסגר ${Date.now()}`
-  const page = await day(browser)
-  let started!: () => void
-  const request = new Promise<void>((r) => (started = r))
-  await page.route("**/api/v1/submissions", async (r) => {
-    started()
-    await new Promise(() => {})
-    await r.abort()
+for (const delivery of ["cancelled-before-close", "accepted-response-lost"] as const)
+  test(`a ${delivery} submission stores nothing and never resends after closing the tab`, async ({ browser }) => {
+    const name = `ספסל דמו נסגר ${delivery} ${Date.now()}`
+    const page = await day(browser)
+    const context = page.context()
+    let started!: () => void
+    let release!: () => void
+    const request = new Promise<void>((r) => (started = r))
+    const gate = new Promise<void>((r) => (release = r))
+    let handled: Promise<void> | undefined
+    let intercepted: import("@playwright/test").Request | undefined
+    let posts = 0
+    await context.route("**/api/v1/submissions", (route) => {
+      posts++
+      // An unexpected resend must fail the count, without leaving another request hanging.
+      if (posts > 1) return route.abort("failed")
+      intercepted = route.request()
+      handled = (async () => {
+        if (delivery === "accepted-response-lost") {
+          const response = await route.fetch({ headers: from(context, route.request().headers()) })
+          expect(response.status()).toBe(201)
+        }
+        started()
+        await gate
+        // Cancellation is a barrier only while the target is alive. Errors there must fail the test.
+        try {
+          await route.abort("failed")
+        } catch (error) {
+          // The accepted request is already on the server; after close this is only handler cleanup.
+          if (!page.isClosed() || !/Target.*closed|has been closed/i.test(String(error))) throw error
+        }
+      })()
+      return handled
+    })
+    try {
+      await fillAndSend(page, name)
+      await request
+      expect(await stored(page)).toEqual([])
+      if (delivery === "cancelled-before-close") {
+        const failed = page.waitForEvent("requestfailed", { predicate: (r) => r === intercepted })
+        release()
+        await handled
+        await failed
+        await expect(page.getByRole("heading", { name: "לא הצלחנו לאשר את השליחה", exact: true })).toBeVisible(DAY)
+        expect(await queued(browser, name)).toBe(0)
+      }
+      // This case does not claim that closing an arbitrary in-flight POST prevents server delivery.
+      await page.close()
+      release()
+      await handled
+      const next = await context.newPage()
+      // The cached feed is still current: syncing reads the version but correctly skips downloading it again.
+      const sync = next.waitForResponse((r) => r.url().endsWith("/api/v1/version") && r.ok())
+      await next.goto("/")
+      await next.getByRole("button", { name: "דילוג", exact: true }).click()
+      await expect(next.getByRole("button", { name: /^חיפוש מקום/ })).toBeVisible(DAY)
+      await sync
+      expect(await stored(next)).toEqual([])
+      expect(posts).toBe(1)
+      expect(await queued(browser, name)).toBe(delivery === "accepted-response-lost" ? 1 : 0)
+    } finally {
+      release()
+      // Preserve the original failure, but settle the intercepted request during teardown.
+      await handled?.catch(() => {})
+    }
   })
-  await fillAndSend(page, name)
-  await request
-  expect(await stored(page)).toEqual([])
-  await page.close()
-  const next = await page.context().newPage()
-  await next.goto("/")
-  await next.getByRole("button", { name: "דילוג", exact: true }).click()
-  await expect(next.getByRole("button", { name: /^חיפוש מקום/ })).toBeVisible(DAY)
-  expect(await stored(next)).toEqual([])
-  expect(await queued(browser, name)).toBe(0)
-})
 
 test("a full queue leaves no local place and respects the server's wait before manual retry", async ({ browser }) => {
   const page = await day(browser)
