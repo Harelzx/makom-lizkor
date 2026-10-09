@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
-import { CrosshairIcon, DownloadIcon, ImagePlusIcon, LocateFixedIcon, MapPinIcon, UploadIcon, XIcon } from "lucide-react"
+import { CrosshairIcon, DownloadIcon, ImagePlusIcon, Loader2Icon, LocateFixedIcon, MapPinIcon, UploadIcon, XIcon } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -17,6 +17,7 @@ import { CONSENT_TEXT, FAMILY_CONSENT_TEXT, noticeHtml, PHOTO_RIGHTS_TEXT } from
 import { useVisibleViewport } from "@/lib/use-visible-viewport"
 import { SubmissionResult, type SubmissionOutcome } from "@/components/submission-result"
 import { FormFlower } from "@/components/form-flower"
+import { requestCurrentLocation, type LocationUpdate } from "@/lib/current-location"
 import { newSubmitKey, submitPlace, uploadPhoto } from "@/lib/api"
 import { exportable } from "@/lib/export"
 import { downloadJSON, resizeImage } from "@/lib/storage"
@@ -83,15 +84,24 @@ export function AddPlace() {
   const local = useStore((s) => s.local)
   const importLocal = useStore((s) => s.importLocal)
 
+  const [locationStatus, setLocationStatus] = useState<LocationUpdate | null>(null)
+  const locationRequest = useRef<(() => void) | null>(null)
+  const stopLocating = useCallback(() => {
+    locationRequest.current?.()
+    locationRequest.current = null
+    setLocationStatus(null)
+  }, [])
   const [step, setStepRaw] = useState<Step>(0)
   // which way the steps slide: forward comes in from the reading direction, back returns the other way
   const [dir, setDir] = useState(1)
-  const setStep = (next: Step | ((s: Step) => Step)) =>
+  const setStep = (next: Step | ((s: Step) => Step)) => {
+    stopLocating()
     setStepRaw((cur) => {
       const n = typeof next === "function" ? next(cur) : next
       setDir(n >= cur ? 1 : -1)
       return n
     })
+  }
   // a failed "next" shakes the button, so the eye goes to the message
   const [shake, setShake] = useState(0)
   const [kind, setKind] = useState<Kind>("bench")
@@ -114,6 +124,8 @@ export function AddPlace() {
   const [consent, setConsent] = useState(false)
   const [error, setError] = useState("")
   const [errorField, setErrorField] = useState("")
+  // A response to a closed form must never change the next proposal or a manually selected point.
+  useEffect(() => () => locationRequest.current?.(), [open, picking, step])
   const [outcome, setOutcome] = useState<SubmissionOutcome | null>(null)
   const sendCount = useRef(0)
   const [sendNumber, setSendNumber] = useState(0)
@@ -139,12 +151,12 @@ export function AddPlace() {
   }
   // The step area grows and shrinks to fit each step, instead of the dialog jumping between sizes.
   const [bodyH, setBodyH] = useState(0)
-  const measureBody = (el: HTMLDivElement | null) => {
+  const measureBody = useCallback((el: HTMLDivElement | null) => {
     if (!el) return
     const ro = new ResizeObserver(() => setBodyH(el.offsetHeight))
     ro.observe(el)
     return () => ro.disconnect()
-  }
+  }, [])
   // A new step takes focus at its heading, so keyboards start there and screen readers read where they are.
   const moved = useRef(false)
   useEffect(() => {
@@ -158,6 +170,7 @@ export function AddPlace() {
   }, [step])
 
   const reset = useCallback(() => {
+    stopLocating()
     setStepRaw(0)
     setDir(1)
     setName("")
@@ -184,20 +197,20 @@ export function AddPlace() {
     setSaved(false)
     attempt.current = null
     accepted.current = null
-  }, [])
+  }, [stopLocating])
 
   const locate = () => {
-    if (!navigator.geolocation) return setError("הדפדפן לא תומך באיתור מיקום. סמנו את המקום על המפה.")
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const p = { lat: pos.coords.latitude, lng: pos.coords.longitude }
-        setDraft(p)
-        setError("")
-        getMap()?.flyTo({ center: [p.lng, p.lat], zoom: 17, duration: reducedMotion() ? 0 : 2000 })
-      },
-      () => setError("לא הצלחנו לאתר את המיקום. אפשר לסמן אותו על המפה."),
-      { enableHighAccuracy: true, timeout: 12000 },
-    )
+    setError("")
+    setErrorField("")
+    locationRequest.current?.()
+    locationRequest.current = requestCurrentLocation({ secure: window.isSecureContext, geolocation: navigator.geolocation }, (result) => {
+      setLocationStatus(result)
+      if (result.kind !== "found") return
+      const p = result.point
+      setDraft(p)
+      setError("")
+      getMap()?.flyTo({ center: [p.lng, p.lat], zoom: 17, duration: reducedMotion() ? 0 : 2000 })
+    })
   }
 
   const fail = (msg: string, field = "") => {
@@ -412,24 +425,24 @@ export function AddPlace() {
             onEscapeKeyDown={(e) => busy && e.preventDefault()}
             onPointerDownOutside={(e) => busy && e.preventDefault()}
             style={{ maxHeight: visibleViewport.height * 0.92, top: visibleViewport.top + visibleViewport.height / 2 }}
-            className="flex max-h-[92dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-[560px]"
+            className="flex h-[min(760px,92dvh)] max-h-[92dvh] flex-col gap-0 overflow-hidden p-0 sm:h-auto sm:max-w-[560px]"
           >
+            <div data-add-art-header className="relative h-24 shrink-0 overflow-hidden rounded-t-[inherit] sm:h-32" aria-hidden="true">
+              {SKY.map((sky, i) => (
+                <motion.div
+                  key={i}
+                  className={cn("absolute inset-0", sky)}
+                  initial={false}
+                  animate={{ opacity: i <= step ? 1 : 0 }}
+                  transition={{ duration: 0.7, ease }}
+                />
+              ))}
+              <FormFlower step={step} />
+            </div>
             <div
               ref={scrollRef}
-              className="min-h-0 [scroll-padding-block:16px] overflow-y-auto overscroll-contain [&_input]:text-base [&_textarea]:text-base"
+              className="min-h-0 flex-1 [scroll-padding-block:16px] overflow-y-auto overscroll-contain [&_input]:text-base [&_textarea]:text-base"
             >
-              <div className="relative h-24 shrink-0 overflow-hidden rounded-t-[inherit] sm:h-32" aria-hidden="true">
-                {SKY.map((sky, i) => (
-                  <motion.div
-                    key={i}
-                    className={cn("absolute inset-0", sky)}
-                    initial={false}
-                    animate={{ opacity: i <= step ? 1 : 0 }}
-                    transition={{ duration: 0.7, ease }}
-                  />
-                ))}
-                <FormFlower step={step} />
-              </div>
               <DialogHeader className="gap-2 px-6 pt-2">
                 <div className="flex flex-col gap-2.5">
                   <ol className="grid grid-cols-3 items-center gap-1.5" aria-label={`שלב ${step + 1} מתוך 3`}>
@@ -560,16 +573,44 @@ export function AddPlace() {
                                 {...invalid("point")}
                                 variant="outline"
                                 className="h-14 justify-start rounded-2xl"
-                                onClick={() => setPicking(true)}
+                                onClick={() => {
+                                  stopLocating()
+                                  setPicking(true)
+                                }}
                               >
                                 <CrosshairIcon data-icon="inline-start" />
                                 סימון על המפה
                               </Button>
-                              <Button variant="outline" className="h-14 justify-start rounded-2xl" onClick={locate}>
-                                <LocateFixedIcon data-icon="inline-start" />
-                                המיקום הנוכחי שלי
+                              <Button
+                                variant="outline"
+                                className="h-14 justify-start rounded-2xl"
+                                onClick={locate}
+                                disabled={locationStatus?.kind === "locating"}
+                                aria-busy={locationStatus?.kind === "locating"}
+                                aria-describedby={locationStatus ? `${uid}-location-status` : undefined}
+                              >
+                                {locationStatus?.kind === "locating" ? (
+                                  <Loader2Icon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
+                                ) : (
+                                  <LocateFixedIcon data-icon="inline-start" />
+                                )}
+                                {locationStatus?.kind === "locating" ? "מאתרים מיקום…" : "המיקום הנוכחי שלי"}
                               </Button>
                             </div>
+                            {locationStatus && (
+                              <p
+                                id={`${uid}-location-status`}
+                                data-location-status
+                                role={locationStatus.kind === "error" ? "alert" : "status"}
+                                className={cn("text-caption", locationStatus.kind === "error" ? "text-destructive" : "text-ink-2")}
+                              >
+                                {locationStatus.kind === "error"
+                                  ? locationStatus.message
+                                  : locationStatus.kind === "locating"
+                                    ? "ממתינים למיקום מהמכשיר. אם תופיע בקשת הרשאה, אפשר לאשר אותה. אפשר גם לסמן על המפה."
+                                    : "המיקום נמצא וסומן על המפה. בדקו שזו הפינה שרציתם להוסיף."}
+                              </p>
+                            )}
                             {errorFor("point")}
                             {draft && (
                               <Alert key={`${draft.lat},${draft.lng}`} className="has-[>svg]:grid-cols-[auto_minmax(0,1fr)]">
@@ -582,7 +623,15 @@ export function AddPlace() {
                                     </bdi>
                                     . אפשר לגרור את הסיכה במפה כדי לדייק.
                                   </span>
-                                  <Button variant="ghost" size="sm" className="self-end" onClick={() => setDraft(null)}>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="self-end"
+                                    onClick={() => {
+                                      stopLocating()
+                                      setDraft(null)
+                                    }}
+                                  >
                                     <XIcon data-icon="inline-start" />
                                     הסרת הסיכה
                                   </Button>

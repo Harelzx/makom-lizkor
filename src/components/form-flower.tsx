@@ -1,6 +1,5 @@
 import { useState } from "react"
-import { motion, useReducedMotion } from "motion/react"
-import { ease } from "@/lib/motion"
+import { useReducedMotion } from "motion/react"
 
 const ART = ["/art/bud.webp", "/art/anemone-watercolor.webp", "/art/bouquet.webp"]
 
@@ -12,9 +11,9 @@ export function FormFlower({ step }: { step: number }) {
   if (ready[step] && shown !== step) setShown(step)
 
   return (
-    <div className="absolute inset-y-2 start-1/2 w-28 -translate-x-1/2 sm:start-auto sm:end-8 sm:w-32 sm:translate-x-0 rtl:translate-x-1/2 rtl:sm:translate-x-0">
+    <div className="absolute inset-y-2 start-1/2 isolate w-28 -translate-x-1/2 sm:start-auto sm:end-8 sm:w-32 sm:translate-x-0 rtl:translate-x-1/2 rtl:sm:translate-x-0">
       {ART.map((src, i) => (
-        <motion.img
+        <img
           key={src}
           src={src}
           alt=""
@@ -28,10 +27,8 @@ export function FormFlower({ step }: { step: number }) {
               .catch(() => undefined)
           }}
           data-add-art={i === shown ? "" : undefined}
-          className="absolute inset-0 size-full object-contain drop-shadow-sm"
-          initial={false}
-          animate={{ opacity: i === shown ? 1 : 0 }}
-          transition={{ duration: lessMotion ? 0 : 0.4, ease }}
+          className="absolute inset-0 size-full object-contain transition-opacity ease-out will-change-[opacity]"
+          style={{ opacity: i === shown ? 1 : 0, transitionDuration: lessMotion ? "0s" : "400ms", transform: "translateZ(0)" }}
         />
       ))}
     </div>
