@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { artifactFor, checkReceipt, readiness, trustedCI } from "./ci-evidence.mjs"
+import { artifactFor, checkReceipt, checkTriggerReadiness, readiness, trustedCI } from "./ci-evidence.mjs"
 import { selection, validateReport, verifyShards } from "./ci-browser.mjs"
 const sha = "a".repeat(40),
   repository = "Harelzx/makom-lizkor"
@@ -43,16 +43,46 @@ test("release evidence is bound to run, attempt, repository, SHA and full mode",
 })
 test("background evidence verifies its triggering CI, never workflow_run's default-branch SHA", () => {
   const background = { ...run, id: 9, path: ".github/workflows/regression.yml", event: "workflow_run", head_sha: "b".repeat(40) }
-  const receipt = { ...full, run_id: 9, source_ci_run: 7, mode: "preview" }
+  const receipt = { ...full, run_id: 9, source_ci_run: 7, source_ci_attempt: 1, mode: "preview" }
   assert.equal(check(receipt, background, { sourceRun: run }), receipt)
   assert.throws(() => check(receipt, background))
   assert.throws(() => check(receipt, background, { sourceRun: { ...run, conclusion: "failure" } }))
+})
+test("a newer CI attempt invalidates old background evidence until its own regression passes", () => {
+  const background = { ...run, id: 9, path: ".github/workflows/regression.yml", event: "workflow_run", head_sha: "b".repeat(40) }
+  const receipt = { ...full, run_id: 9, source_ci_run: 7, source_ci_attempt: 1, mode: "preview" }
+  assert.equal(check(receipt, background, { sourceRun: run }), receipt)
+  const rerun = { ...run, run_attempt: 2 }
+  assert.throws(() => check(receipt, background, { sourceRun: rerun }))
+  assert.throws(() => check({ ...receipt, source_ci_attempt: undefined }, background, { sourceRun: run }))
+  const replacement = { ...receipt, run_id: 10, source_ci_attempt: 2 }
+  const newBackground = { ...background, id: 10 }
+  for (const [status, conclusion] of [
+    ["in_progress", null],
+    ["completed", "failure"],
+    ["completed", "cancelled"],
+  ]) {
+    assert.throws(() => check(receipt, background, { sourceRun: rerun }))
+    assert.throws(() => check(replacement, { ...newBackground, status, conclusion }, { sourceRun: rerun }))
+  }
+  assert.equal(check(replacement, newBackground, { sourceRun: rerun }), replacement)
 })
 test("expired or wrong-run artifacts cannot supply evidence", () => {
   const artifact = { id: 1, name: `ci-full-${sha}`, expired: false, workflow_run: { id: 7 } }
   assert.equal(artifactFor([artifact], "full", sha, 7).id, 1)
   assert.throws(() => artifactFor([artifact], "full", sha, 8))
   assert.throws(() => artifactFor([{ ...artifact, expired: true }], "full", sha))
+})
+test("background admission and recording cannot relabel an old event with a rerun's readiness", () => {
+  const ready = { ...full, kind: "ready", mode: "preview", full: false }
+  assert.equal(checkTriggerReadiness(run, ready, sha, repository), ready)
+  const nextReady = { ...ready, attempt: 2 },
+    nextRun = { ...run, run_attempt: 2 }
+  // This is the same guard called at admission and after regression, immediately before writing its full receipt.
+  assert.throws(() => checkTriggerReadiness(run, nextReady, sha, repository))
+  assert.throws(() => checkTriggerReadiness(nextRun, ready, sha, repository))
+  assert.equal(checkTriggerReadiness(nextRun, nextReady, sha, repository), nextReady)
+  assert.throws(() => checkTriggerReadiness({ ...run, run_attempt: undefined }, ready, sha, repository))
 })
 const jobs = (mode) =>
   Object.fromEntries(

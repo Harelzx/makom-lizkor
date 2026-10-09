@@ -44,6 +44,9 @@ export function checkReceipt({ kind, sha, receipt, run, repository, sourceRun })
       run.event !== "workflow_run" ||
       run.head_branch !== "main" ||
       receipt.source_ci_run !== sourceRun?.id ||
+      !Number.isInteger(receipt.source_ci_attempt) ||
+      receipt.source_ci_attempt < 1 ||
+      receipt.source_ci_attempt !== sourceRun?.run_attempt ||
       !trustedCI(sourceRun, sha, repository)
     )
       throw new Error("Regression source is not trusted CI for this commit")
@@ -54,6 +57,11 @@ export function checkReceipt({ kind, sha, receipt, run, repository, sourceRun })
   if (kind === "ready" && (receipt.deploy_allowed !== (receipt.mode !== "docs") || receipt.full !== (receipt.mode === "full")))
     throw new Error("Readiness flags disagree")
   return receipt
+}
+// The immutable workflow_run event names the attempt whose work is being admitted/recorded. Fetching a newer
+// successful readiness receipt must never relabel an older event's work after the source CI has been rerun.
+export function checkTriggerReadiness(eventRun, ready, sha, repository) {
+  return checkReceipt({ kind: "ready", sha, receipt: ready, run: eventRun, repository })
 }
 function download(artifact) {
   const dir = mkdtempSync(join(tmpdir(), "makom-ci-"))
@@ -171,6 +179,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       sha = run?.head_sha
     if (!trustedCI(run, sha, repo())) throw new Error("Untrusted triggering run")
     const ready = fetchEvidence("ready", sha, run.id)
+    checkTriggerReadiness(run, ready, sha, repo())
     let allowed = ready.deploy_allowed && (command === "staging" || ready.mode === "preview")
     // A queued deployment may not overwrite newer application code. Documentation after this SHA is harmless.
     if (command === "staging" && allowed) {
@@ -190,8 +199,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     const event = json(process.env.GITHUB_EVENT_PATH),
       run = event.workflow_run
     const ready = fetchEvidence("ready", process.env.TARGET_SHA, run.id)
+    checkTriggerReadiness(run, ready, process.env.TARGET_SHA, repo())
     if (ready.mode !== "preview") throw new Error("Background full evidence requires a preview readiness receipt")
-    writeReceipt("full", { mode: "preview", full: true, deploy_allowed: true, source_ci_run: run.id })
+    writeReceipt("full", { mode: "preview", full: true, deploy_allowed: true, source_ci_run: run.id, source_ci_attempt: run.run_attempt })
     summary(`Full regression verified: ${process.env.TARGET_SHA}. Release still requires staging and all launch checks.`)
   } else if (command === "release") {
     const ready = fetchEvidence("ready", arg),
