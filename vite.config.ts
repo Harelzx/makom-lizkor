@@ -8,6 +8,14 @@ import { checkoutPorts } from "./scripts/parallel/ports.mjs"
 // MapLibre v6 loads its worker via `new URL(..., import.meta.url)`; pre-bundling breaks that path.
 export default defineConfig({
   plugins: [
+    {
+      name: "public-preview-indexing",
+      transformIndexHtml() {
+        return process.env.VITE_PUBLIC_PREVIEW === "true"
+          ? [{ tag: "meta", attrs: { name: "robots", content: "noindex, nofollow" }, injectTo: "head" as const }]
+          : []
+      },
+    },
     react(),
     tailwindcss(),
     // The e2e servers keep their local D1 and R2 apart (E2E_STATE, fresh each run), so demo submissions from earlier

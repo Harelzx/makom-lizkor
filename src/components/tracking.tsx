@@ -88,7 +88,7 @@ function Correction({ draft, onSend }: { draft: Draft; onSend: (d: Draft) => Pro
         <FieldLabel htmlFor="fix-link">קישור לאתר הנצחה (לא חובה)</FieldLabel>
         <Input id="fix-link" dir="ltr" maxLength={300} {...field("link_url")} />
       </Field>
-      <details className="rounded-2xl border border-line px-4 py-3 text-caption text-ink-2">
+      <details className="rounded-2xl border border-line px-4 py-3 text-body text-ink-2">
         <summary className="pressable cursor-pointer text-label text-ink-1">הודעת הפרטיות ותנאי השליחה</summary>
         <div
           className="mt-2 flex flex-col gap-2 [&_a]:text-ink-1 [&_a]:underline [&_a]:underline-offset-2"
@@ -223,14 +223,14 @@ export function Tracking() {
                   : (STATUS[current.result.status] ?? current.result.status)}
               </p>
               {current.result.status === "published" && current.result.revision_state === "pending" && (
-                <p className="text-caption text-ink-2">התיקון ששלחתם ממתין לבדיקה. עד אז מופיעה הגרסה הקודמת.</p>
+                <p className="text-body text-ink-2">התיקון ששלחתם ממתין לבדיקה. עד אז מופיעה הגרסה הקודמת.</p>
               )}
               {current.result.status === "published" && current.result.revision_state === "rejected" && (
-                <p className="text-caption text-ink-2">התיקון האחרון לא אושר. באתר מופיעה הגרסה שאושרה.</p>
+                <p className="text-body text-ink-2">התיקון האחרון לא אושר. באתר מופיעה הגרסה שאושרה.</p>
               )}
               {current.result.status === "withdrawn" && current.result.files === "pending" && current.ended && (
                 // This link can't ask again: it ended with the withdrawal.
-                <p className="text-caption text-ink-2">
+                <p className="text-body text-ink-2">
                   הקישור הזה כבר לא פותח את ההצעה. את מחיקת התמונה אפשר להשלים מהמכשיר ששלח את ההצעה, ואם לא, היא תימחק מהשרת בהמשך.
                 </p>
               )}
@@ -242,7 +242,7 @@ export function Tracking() {
               )}
               {current.result.note && (
                 <div className="rounded-2xl border border-line p-3">
-                  <p className="text-caption text-ink-2">הערת המאשרים</p>
+                  <p className="text-body text-ink-2">הערת המאשרים</p>
                   <p className="whitespace-pre-line text-ink-1">{current.result.note}</p>
                 </div>
               )}

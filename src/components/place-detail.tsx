@@ -113,7 +113,7 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
             className="aspect-[4/3] w-full rounded-3xl object-cover"
           />
           {(local ? local.photoCredit : place.contributedPhoto?.credit) && (
-            <figcaption className="px-1 pt-2 text-micro text-ink-3">
+            <figcaption className="px-1 pt-2 text-caption text-ink-2">
               צילום: <bdi>{local ? local.photoCredit : place.contributedPhoto?.credit}</bdi>
             </figcaption>
           )}
@@ -143,7 +143,7 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
         <h2 ref={titleRef} tabIndex={-1} className="text-title-2 text-balance text-ink-1 outline-none">
           {place.name_he}
         </h2>
-        <p className="text-label font-normal text-ink-2">{place.place_he}</p>
+        <p className="text-body font-normal text-ink-2">{place.place_he}</p>
       </header>
 
       {(place.inMemoryOf ?? local?.inMemoryOf) && (
@@ -152,7 +152,7 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
         </p>
       )}
 
-      <p className="text-body-lg text-pretty whitespace-pre-line text-ink-1">{local?.story || place.summary_he}</p>
+      <p className="reading-copy text-body-lg whitespace-pre-line text-ink-1">{local?.story || place.summary_he}</p>
 
       {place.precision === "approx" && (
         <p className="rounded-xl bg-surface-2 p-3 text-body text-ink-2">המיקום משוער: הוא מצביע על האזור, לא על הנקודה המדויקת.</p>
@@ -164,47 +164,52 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
         </p>
       )}
 
-      <div className="-mx-2.5 flex flex-wrap gap-x-1 gap-y-1">
+      <section className="action-section" aria-label="פעולות למקום">
         {/* A family's place on private property shown approximately leads nobody to it: no navigation (spec 4). */}
         {!(inPrivate && place.precision === "approx") && (
-          <>
-            <Button variant="ghost" className="min-h-11 rounded-full px-2.5 text-label text-ink-1 hover:bg-surface-2" asChild>
+          <div className="flex flex-wrap gap-2" aria-label="ניווט למקום">
+            <Button variant="ghost" className="min-h-11 rounded-full px-3 text-label text-ink-1 hover:bg-surface-2" asChild>
               <a href={`https://waze.com/ul?ll=${place.lat},${place.lng}&navigate=yes`} target="_blank" rel="noopener">
                 <NavigationIcon data-icon="inline-start" />
                 ניווט ב־Waze
               </a>
             </Button>
-            <Button variant="ghost" className="min-h-11 rounded-full px-2.5 text-label text-ink-1 hover:bg-surface-2" asChild>
+            <Button variant="ghost" className="min-h-11 rounded-full px-3 text-label text-ink-1 hover:bg-surface-2" asChild>
               <a href={`https://www.google.com/maps/search/?api=1&query=${place.lat},${place.lng}`} target="_blank" rel="noopener">
                 Google Maps
               </a>
             </Button>
-          </>
+          </div>
         )}
-        <Button variant="ghost" className="min-h-11 rounded-full px-2.5 text-label text-ink-1 hover:bg-surface-2" onClick={share}>
-          {copied ? <CheckIcon data-icon="inline-start" /> : <Share2Icon data-icon="inline-start" />}
-          {local ? "העתקת קישור מקומי" : "שיתוף"}
-        </Button>
-      </div>
-      {place.region === "envelope" && <SafetyNote lead="המקום קרוב לגבול עזה." className="-mt-3" />}
+        <div className="flex flex-wrap gap-2" aria-label="שיתוף ושמירה">
+          <Button variant="outline" className="min-h-11 rounded-full px-4" onClick={share}>
+            {copied ? <CheckIcon data-icon="inline-start" /> : <Share2Icon data-icon="inline-start" />}
+            {local ? "העתקת קישור מקומי" : "שיתוף"}
+          </Button>
+          {!local && (
+            <Button
+              variant={isSaved ? "secondary" : "outline"}
+              className="min-h-11 self-start rounded-full px-4"
+              aria-pressed={isSaved}
+              disabled={!visits.ready || visits.busy}
+              onClick={async () => {
+                const ok = await visits.toggle(visitKey(place))
+                toast(
+                  ok ? (useVisits.getState().ids.includes(visitKey(place)) ? "נשמר לביקור" : "הוסר מהשמורים") : "לא הצלחנו לשמור במכשיר",
+                  {
+                    description: ok ? "רשימת הביקורים נשמרת במכשיר הזה בלבד." : "הרשימה לא השתנתה. אפשר לנסות שוב או לשתף את הקישור.",
+                  },
+                )
+              }}
+            >
+              <BookmarkIcon className="size-4" fill={isSaved ? "currentColor" : "none"} />
+              {isSaved ? "שמור לביקור" : "שמירה לביקור"}
+            </Button>
+          )}
+        </div>
+      </section>
+      {place.region === "envelope" && <SafetyNote lead="המקום קרוב לגבול עזה." />}
 
-      {!local && (
-        <Button
-          variant={isSaved ? "secondary" : "outline"}
-          className="min-h-11 self-start rounded-full px-4"
-          aria-pressed={isSaved}
-          disabled={!visits.ready || visits.busy}
-          onClick={async () => {
-            const ok = await visits.toggle(visitKey(place))
-            toast(ok ? (useVisits.getState().ids.includes(visitKey(place)) ? "נשמר לביקור" : "הוסר מהשמורים") : "לא הצלחנו לשמור במכשיר", {
-              description: ok ? "רשימת הביקורים נשמרת במכשיר הזה בלבד." : "הרשימה לא השתנתה. אפשר לנסות שוב או לשתף את הקישור.",
-            })
-          }}
-        >
-          <BookmarkIcon className="size-4" fill={isSaved ? "currentColor" : "none"} />
-          {isSaved ? "שמור לביקור" : "שמירה לביקור"}
-        </Button>
-      )}
       <Tribute placeId={place.id} />
       {next && (
         <section className="rounded-2xl bg-surface-2 p-4" aria-label="מקום נוסף לגלות">

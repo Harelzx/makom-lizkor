@@ -2,10 +2,7 @@ import { describe, expect, it } from "vitest"
 import { OG_TEMPLATE_VERSION, renderOg, type OgProjection } from "../lib/og"
 import { pixels } from "./png"
 
-// The photo in a share image is drawn from its own bytes, whatever their format (P7-OG-1): the site's own places carry
-// WebP photos, which resvg can't decode, and a photo labelled with another type drew nothing (a black panel). Each
-// test renders a small photo of one colour and reads the rendered pixels back: the photo panel (x < 440) must be that
-// colour, and the text side the background.
+// Template 5 intentionally uses fixed brand art, regardless of place photos or their formats.
 
 const b = (s: string) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0))
 const RED_WEBP_LOSSLESS = b("UklGRh4AAABXRUJQVlA4TBEAAAAvD8ADAAdQiprXo/+BiOh/AAA=")
@@ -18,29 +15,17 @@ const GREEN_JPEG = b(
 )
 const projection: OgProjection = { v: OG_TEMPLATE_VERSION, kind: "grove", name_he: "חורשת דמו", place_he: "יישוב דמו", photo: "public/x" }
 
-const near = (got: number[], want: number[]) => got.every((v, i) => Math.abs(v - want[i]) <= 24)
-
-describe("a share image's photo", () => {
-  for (const [what, bytes, colour] of [
-    ["a lossless WebP", RED_WEBP_LOSSLESS, [230, 20, 30]],
-    ["a lossy WebP", BLUE_WEBP_LOSSY, [20, 40, 230]],
-    ["a PNG", YELLOW_PNG, [240, 200, 20]],
-    ["a JPEG", GREEN_JPEG, [20, 200, 40]],
-  ] as const) {
-    it(`is drawn from ${what}`, async () => {
-      const at = await pixels(await renderOg(projection, bytes))
-      for (const [x, y] of [
-        [40, 40],
-        [220, 315],
-        [400, 600],
-      ])
-        expect(near(at(x, y), [...colour]), `${what} at ${x},${y}: ${at(x, y)}`).toBe(true)
-      // The text side keeps the background, not the photo.
-      expect(near(at(700, 40), [0x16, 0x13, 0x1c])).toBe(true)
-    })
-  }
-
-  it("is refused, not drawn as an empty panel, when its bytes are no picture the renderer reads", async () => {
-    await expect(renderOg(projection, new TextEncoder().encode("<svg/>"))).rejects.toThrow(/photo_format/)
+describe("uniform sharing art", () => {
+  it("produces identical bytes for the same place with every photo format, no photo, or unreadable bytes", async () => {
+    const fixed = await renderOg(projection, null)
+    for (const bytes of [RED_WEBP_LOSSLESS, BLUE_WEBP_LOSSY, YELLOW_PNG, GREEN_JPEG, new TextEncoder().encode("<svg/>")])
+      expect(await renderOg(projection, bytes)).toEqual(fixed)
+    const at = await pixels(fixed)
+    expect(at(40, 40)).toEqual([249, 247, 242])
+    // Real pixels in the botanical mark must differ from the cream background.
+    expect(at(195, 220)).not.toEqual([249, 247, 242])
+  })
+  it("keeps each place identifiable rather than turning every link into the same card", async () => {
+    expect(await renderOg({ ...projection, name_he: "ספסל אחר" }, null)).not.toEqual(await renderOg(projection, null))
   })
 })

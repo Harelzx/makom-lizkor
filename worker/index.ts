@@ -8,6 +8,7 @@ import { siteverify, type VerifyTurnstile } from "./lib/turnstile"
 import { admin } from "./routes/admin"
 import { dev } from "./routes/dev"
 import { email } from "./routes/email"
+import { contact } from "./routes/contact"
 import { feed } from "./routes/feed"
 import { reports } from "./routes/reports"
 import { share } from "./routes/share"
@@ -67,6 +68,7 @@ export function createApp(deps: Deps) {
   app.get("/api/v1/health", (c) => c.json({ ok: true }))
   app.route("/api/v1/submissions", submissions)
   app.route("/api/v1/email", email)
+  app.route("/api/v1/contact", contact)
   app.route("/api/v1/tributes", tributes)
   app.route("/api/v1/reports", reports)
   app.route("/api/v1/purge-probe", probe)

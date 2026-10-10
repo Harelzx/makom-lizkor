@@ -172,17 +172,17 @@ describe("a place's own share image (L4)", () => {
     expect((await get(`/media/og/${id}/${h}.png`)).status).toBe(200)
   })
 
-  it("a photo that isn't there while drawing sends the general image and stores nothing; once it's back the image has it (a47 L4-R1)", async () => {
+  it("the uniform share card does not depend on the place photograph being readable", async () => {
     const { id } = await publishedWithPhoto("גן דמו שתמונתו חסרה לרגע")
     const state = (await ogState(env.DB, id))!
     const key = state.projection.photo!
     const bytes = new Uint8Array(await (await env.MEDIA.get(key))!.arrayBuffer())
     await env.MEDIA.delete(key)
     const missing = await get(`/media/og/${id}/${state.hash}.png`)
-    expect(missing.status).toBe(302)
-    expect(missing.headers.get("Location")).toBe("/og.png")
-    expect(missing.headers.get("Cache-Control")).toBe("no-store")
-    expect(await files(id)).toEqual([])
+    expect(missing.status).toBe(200)
+    const fixed = new Uint8Array(await missing.arrayBuffer())
+    expect(fixed).toEqual(await renderOg(state.projection, null))
+    expect(await files(id)).toHaveLength(1)
     await env.MEDIA.put(key, bytes)
     const back = await get(`/media/og/${id}/${state.hash}.png`)
     expect(back.status).toBe(200)

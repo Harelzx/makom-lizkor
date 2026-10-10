@@ -100,7 +100,7 @@ export function SectionTitle({
 /** Small group label above a list: plain sentence case, quiet, with an optional count. */
 export function GroupLabel({ children, count, id }: { children: ReactNode; count?: number; id?: string }) {
   return (
-    <h3 id={id} className="flex items-baseline justify-between px-3 pb-1 text-caption font-semibold text-ink-3">
+    <h3 id={id} className="flex items-baseline justify-between gap-3 border-b border-line px-3 pb-2 text-label font-semibold text-ink-2">
       {children}
       {count !== undefined && <span className="tabular-nums">{count}</span>}
     </h3>
@@ -114,7 +114,7 @@ export function GroupLabel({ children, count, id }: { children: ReactNode; count
  */
 export function SafetyNote({ lead, className }: { lead: string; className?: string }) {
   return (
-    <p className={cn("text-caption text-pretty text-ink-2", className)}>
+    <p className={cn("reading-copy text-body text-ink-2", className)}>
       {lead} הופעה כאן אינה אומרת שהמקום פתוח לביקור או שמותר להגיע אליו. לפני יציאה בדקו את{" "}
       <a className="text-ink-1 underline underline-offset-2" href="https://www.oref.org.il" target="_blank" rel="noopener">
         ההנחיות של פיקוד העורף

@@ -120,16 +120,16 @@ export function Journey() {
               עצירה {index + 1} מתוך {stops.length} · {KINDS[stop.kind].label}
             </p>
             <h3 className="text-title-2 text-balance text-ink-1">{stop.name_he}</h3>
-            <p className="text-label font-normal text-ink-2">{stop.place_he}</p>
+            <p className="text-body font-normal text-ink-2">{stop.place_he}</p>
             {stop.photos?.[0] && (
               <Img src={stop.photos[0].url} alt={stop.photos[0].subject_he} className="aspect-[16/10] w-full rounded-3xl object-cover" />
             )}
-            <p className="text-body-lg text-pretty text-ink-1">{stop.summary_he}</p>
+            <p className="reading-copy text-body-lg text-ink-1">{stop.summary_he}</p>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-5">
         <div className="flex items-center gap-2">
           <Button
             variant="secondary"

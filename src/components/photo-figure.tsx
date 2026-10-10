@@ -5,7 +5,7 @@ import type { Photo } from "@/types"
 
 function Credit({ photo }: { photo: Photo }) {
   return (
-    <figcaption className="px-1 text-micro text-ink-3">
+    <figcaption className="px-1 text-caption text-ink-2">
       {photo.subject_he}.{" "}
       <a href={photo.commons_url} target="_blank" rel="noopener" className="underline underline-offset-2">
         צילום

@@ -17,6 +17,7 @@ import { CONSENT_TEXT, FAMILY_CONSENT_TEXT, noticeHtml, PHOTO_RIGHTS_TEXT } from
 import { useVisibleViewport } from "@/lib/use-visible-viewport"
 import { SubmissionResult, type SubmissionOutcome } from "@/components/submission-result"
 import { FormFlower } from "@/components/form-flower"
+import { PreviewNotice } from "@/components/preview-notice"
 import { requestCurrentLocation, type LocationUpdate } from "@/lib/current-location"
 import { newSubmitKey, submitPlace, uploadPhoto } from "@/lib/api"
 import { exportable } from "@/lib/export"
@@ -227,7 +228,7 @@ export function AddPlace() {
   }
   const errorFor = (field: string) =>
     error && errorField === field ? (
-      <p id={`${uid}-${field}-error`} role="alert" className="text-caption text-destructive">
+      <p id={`${uid}-${field}-error`} role="alert" className="text-body text-destructive">
         {error}
       </p>
     ) : null
@@ -443,13 +444,13 @@ export function AddPlace() {
               ref={scrollRef}
               className="min-h-0 flex-1 [scroll-padding-block:16px] overflow-y-auto overscroll-contain [&_input]:text-base [&_textarea]:text-base"
             >
-              <DialogHeader className="gap-2 px-6 pt-2">
-                <div className="flex flex-col gap-2.5">
-                  <ol className="grid grid-cols-3 items-center gap-1.5" aria-label={`שלב ${step + 1} מתוך 3`}>
+              <DialogHeader className="gap-2 px-[clamp(16px,3vw,24px)] pt-2">
+                <div className="@container/steps flex flex-col gap-2.5">
+                  <ol className="grid grid-cols-3 items-center gap-1" aria-label={`שלב ${step + 1} מתוך 3`}>
                     {STEPS.map((label, i) => (
                       <li
                         key={label}
-                        className="flex min-w-0 items-center justify-center gap-2.5 text-label font-semibold"
+                        className="flex min-w-0 flex-col items-center justify-center gap-2 text-label font-semibold @min-[16rem]/steps:flex-row"
                         aria-current={i === step ? "step" : undefined}
                       >
                         <span
@@ -491,7 +492,9 @@ export function AddPlace() {
                             <span className="text-caption tabular-nums">{i + 1}</span>
                           )}
                         </span>
-                        <span className={cn("whitespace-nowrap transition-colors duration-300", i === step ? "text-ink-1" : "text-ink-3")}>
+                        <span
+                          className={cn("max-w-full text-center transition-colors duration-300", i === step ? "text-ink-1" : "text-ink-3")}
+                        >
                           {label}
                         </span>
                       </li>
@@ -543,8 +546,13 @@ export function AddPlace() {
                     </motion.span>
                   </AnimatePresence>
                 </DialogDescription>
-                {step === 0 && <p className="mt-1 text-caption text-ink-2">בלי הרשמה. המייל לא חובה. ההצעה תתפרסם אחרי בדיקה.</p>}
+                {step === 0 && <p className="mt-1 text-body text-ink-2">בלי הרשמה. המייל לא חובה. ההצעה תתפרסם אחרי בדיקה.</p>}
               </DialogHeader>
+              {import.meta.env.VITE_PUBLIC_PREVIEW === "true" && (
+                <div className="px-[clamp(16px,3vw,24px)] pt-4">
+                  <PreviewNotice />
+                </div>
+              )}
 
               <fieldset disabled={busy} className="min-w-0 px-6 pt-5 pb-6" onKeyDown={onKeyDown}>
                 {/* the clip has a little room on every side so focus rings are never cut */}
@@ -602,7 +610,7 @@ export function AddPlace() {
                                 id={`${uid}-location-status`}
                                 data-location-status
                                 role={locationStatus.kind === "error" ? "alert" : "status"}
-                                className={cn("text-caption", locationStatus.kind === "error" ? "text-destructive" : "text-ink-2")}
+                                className={cn("text-body", locationStatus.kind === "error" ? "text-destructive" : "text-ink-2")}
                               >
                                 {locationStatus.kind === "error"
                                   ? locationStatus.message
@@ -1020,7 +1028,7 @@ export function AddPlace() {
                               {errorFor("family")}
                             </Field>
                             {/* The notice sits beside the form it is about, as the privacy law asks, and before the box that says it was read. */}
-                            <details className="group rounded-2xl border border-line px-4 py-3 text-caption text-ink-2">
+                            <details className="group rounded-2xl border border-line px-4 py-3 text-body text-ink-2">
                               <summary className="pressable cursor-pointer text-label text-ink-1 marker:text-ink-3">הודעת הפרטיות</summary>
                               <div
                                 className="mt-2 flex flex-col gap-2 [&_a]:text-ink-1 [&_a]:underline [&_a]:underline-offset-2"

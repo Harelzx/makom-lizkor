@@ -58,7 +58,7 @@ export function createMap(container: HTMLElement, light: "night" | "morning", la
   if (import.meta.env.DEV) (window as unknown as { __map: maplibregl.Map }).__map = map
   if (ownLabels.length) setOwnLabels(ownLabels)
   map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "bottom-left")
-  map.addControl(new maplibregl.AttributionControl({ compact: false }), "bottom-left")
+  map.addControl(new maplibregl.AttributionControl({ compact: false }), "bottom-right")
   return map
 }
 

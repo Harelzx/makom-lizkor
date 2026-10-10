@@ -34,7 +34,7 @@ export function VerifyEmail() {
           <DialogTitle>אימות כתובת המייל</DialogTitle>
           <DialogDescription>כדי שנוכל לשלוח לכתובת שהשארתם את קישור המעקב ועדכונים על ההצעה.</DialogDescription>
         </DialogHeader>
-        <div aria-live="polite" className="flex flex-col items-start gap-3">
+        <div aria-live="polite" className="flex flex-col items-start gap-4 border-t border-line pt-5">
           {result && <p className="text-ink-1">{RESULT[result]}</p>}
           {(!result || RETRY.has(result)) && (
             <Button

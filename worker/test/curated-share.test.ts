@@ -4,6 +4,7 @@ import { call } from "./app"
 import { admin, withSite } from "./helpers"
 import { seedCurated, viewRev } from "./curated-helpers"
 import { pixels } from "./png"
+import { ogState, ogSvg } from "../lib/og"
 
 // The site's own places read from D1 (phase 7, task 3; adviser a50, P7-OG-1): their share pages carry their public
 // fields like a contribution's, name their own share image, go 410 when hidden, and a request about one is stored
@@ -37,9 +38,18 @@ describe("one of the site's own places, from the database", () => {
     expect(png.headers.get("Content-Type")).toBe("image/png")
     const bytes = new Uint8Array(await png.arrayBuffer())
     expect(String.fromCharCode(...bytes.slice(1, 4))).toBe("PNG")
-    // Its photo (the importer's stand-in, a red WebP) fills the panel, not the background it showed without it (P7-OG-1).
+    // Template 5 uses the same modest brand art for every place; a curated red fixture never fills a photo panel.
     const at = await pixels(bytes)
-    for (const y of [40, 315, 590]) expect(at(220, y).map((v, i) => Math.abs(v - [230, 20, 30][i]) <= 24)).toEqual([true, true, true])
+    expect(at(40, 40)).toEqual([249, 247, 242])
+    expect(at(220, 315)).not.toEqual([230, 20, 30])
+    const state = (await ogState(env.DB, "community-beeri"))!
+    expect(state.projection.credit?.author).toBe(data.curated.photos[0].author)
+    expect(state.projection.credit?.license).toBe(data.curated.photos[0].license)
+    const svg = ogSvg(state.projection)
+    expect(svg).toContain("שבעה באוקטובר")
+    expect(svg).toContain("07.10.2023")
+    expect(svg).not.toContain("חיתוך")
+    expect(svg).not.toContain(data.curated.photos[0].license)
   })
 
   it("is gone (410, not indexed) once hidden whole, and its old share image is refused", async () => {
@@ -61,6 +71,7 @@ describe("one of the site's own places, from the database", () => {
     expect((await hide("community-kfar-aza", ["photo"])).status).toBe(200)
     const after = await (await page("community-kfar-aza")).text()
     expect(placeData(after).curated.photos).toEqual([])
+    expect((await ogState(env.DB, "community-kfar-aza"))!.projection.credit).toBeNull()
     expect(meta(after, "og:image")).not.toBe(meta(before, "og:image"))
   })
 

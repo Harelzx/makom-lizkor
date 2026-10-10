@@ -140,7 +140,7 @@ export function ReportRequest({ place }: { place: Place }) {
       ) : (
         <>
           <p className="text-body text-ink-2">הבקשה תועבר לבדיקה. אם תשאירו מייל, נוכל לחזור אליכם.</p>
-          <p className="text-caption text-ink-2">אין צורך בשם, בתעודה מזהה או במסמכים. בקשה עשויה להוביל להסתרה זמנית במהלך הבדיקה.</p>
+          <p className="text-body text-ink-2">אין צורך בשם, בתעודה מזהה או במסמכים. בקשה עשויה להוביל להסתרה זמנית במהלך הבדיקה.</p>
           <fieldset disabled={!!kept || busy || restoring} className="contents">
             <FieldGroup>
               {!kept && (
@@ -237,7 +237,7 @@ export function ReportRequest({ place }: { place: Place }) {
                 <FieldDescription>רק כדי שנוכל לעדכן אתכם או לשאול שאלה. המייל לא יתפרסם.</FieldDescription>
               </Field>
               {/* The notice sits beside the form it is about, as the privacy law asks. */}
-              <details className="group rounded-2xl border border-line px-4 py-3 text-caption text-ink-2">
+              <details className="group rounded-2xl border border-line px-4 py-3 text-body text-ink-2">
                 <summary className="pressable cursor-pointer text-label text-ink-1 marker:text-ink-3">הודעת הפרטיות</summary>
                 <div
                   className="mt-2 flex flex-col gap-2 [&_a]:text-ink-1 [&_a]:underline [&_a]:underline-offset-2"
