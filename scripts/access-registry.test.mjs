@@ -57,5 +57,8 @@ test("an unknown permission, a duplicate, or a person holding nothing fails", ()
 test("release needs real names and no more moderators than Access sign-ins", () => {
   assert.deepEqual(registryBlockers(base(), ["a@x.org.il", "b@x.org.il"]), [])
   assert.equal(registryBlockers(base(), ["a@x.org.il", "b@x.org.il", "c@x.org.il"]).length, 1)
-  assert.ok(registryBlockers(readRegistry(), []).some((b) => b.includes("no real name")))
+  // The committed registry now names the confirmed operator. Missing names are a fixture, not a deployment assumption.
+  const unnamed = base()
+  unnamed.people[0].name = "[שם המפעיל]"
+  assert.ok(registryBlockers(unnamed, []).some((b) => b.includes("no real name")))
 })

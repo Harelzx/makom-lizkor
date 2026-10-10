@@ -2,6 +2,8 @@
 
 ## מצב מרוכז לקראת השקת 11.10.2026
 
+עדכון CI: `9d4f7ce` נדחף ל-main ו-CI `38078136063` בחר full אך נעצר בבדיקת סקריפט יחידה `CI-REGISTRY-FIXTURE-1`. הבדיקה הניחה שלרשומת המפעיל עדיין אין שם אמיתי, אף שהשם כבר אושר ונקבע. `access-registry.test.mjs` תוקן להשתמש ב-fixture עצמאי עם placeholder; מימוש guards, האתר, הרשאות ו-timeouts לא שונו. כל 263 בדיקות הסקריפטים עברו, exit 0, עם format/lint/diff ממוקדים. הראיות המקוריות נשמרו; staging של הכשל לא פרסה. נדרש CI רגיל חדש ואותו receipt, בלי rerun עיוור.
+
 המצב הקובע ב-[launch-readiness-20261010.md](launch-readiness-20261010.md) וברשומת `../agent-evidence/launch-readiness-20261010/progress.json`. main המקומי ו-GitHub אומתו ב-`57de6136`; קוד האזורים ו-Gmail בענף `codex/region-groups-20261010` מעל `5543c0b9`. אתר preview ציבורי אך הדואר בו disabled. אין לייחס לו את העדכונים המקומיים לפני CI ו-receipt של אותו SHA.
 
 Wrangler התחבר בהליך Device Authorization הרשמי, ושש ההרשאות שהראל אישר נבדקו בחשבון `8f355daed33cf31c238047e6b455ec9a`. הוחלו 18 migrations בשני מסדי production EU הריקים. Access owner-only נוצר עבור `harelzx41@gmail.com`, app `181c702f-44a3-4906-8c87-41999f7ab289`, ו-Turnstile managed עבור host הייצור. נעילות exports 34 ימים ו-ledger לכל חיי המיזם הוחלו; הראל אישר במפורש את משך ledger אחרי דחיית האישור הראשונית. quarantine lifecycle 30 ימים הוסף בלי לפגוע בכלל multipart. כל controls אלה נבדקו בקריאה חוזרת; אין בכך תרגיל שחזור production או אימות מחיקה פיזית. Worker production עדיין ללא גרסת קוד או סודות. אין להשתמש ב-secret bulk ליצירת stub לא בדוק.
