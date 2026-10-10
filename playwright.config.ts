@@ -12,7 +12,7 @@ const port = prod ? ports.prod : ports.e2e
 // A fresh local D1 and R2 for every run, with every migration applied first: what earlier runs left (hundreds of demo
 // submissions) would otherwise fill the review queue.
 const state = `.wrangler/e2e-state-${prod ? "prod" : "dev"}`
-const fresh = `rm -rf ${state} && npx wrangler d1 migrations apply makom-dev --local --persist-to ${state}`
+const fresh = `rm -rf ${state} && npx wrangler d1 migrations apply DB --env development --local --persist-to ${state}`
 
 export default defineConfig({
   testDir: "e2e",
@@ -47,7 +47,7 @@ export default defineConfig({
     command: prod
       ? `node scripts/dev-vars.mjs && ${fresh} && npm run build && npx vite preview --port ${port} --strictPort`
       : `${fresh} && npm run dev -- --port ${port} --strictPort`,
-    env: { E2E_STATE: state },
+    env: { E2E_STATE: state, CLOUDFLARE_ENV: "development" },
     url: `http://localhost:${port}`,
     // Never another process's server: only one started here has the fresh state above.
     reuseExistingServer: false,

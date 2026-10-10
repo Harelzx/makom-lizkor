@@ -12,6 +12,8 @@ const provider = vi.fn(async (mail: { to: string; from: string; subject: string;
 const ready = {
   ...env,
   ENVIRONMENT: "production",
+  // This suite exercises the Cloudflare binding explicitly; production now selects Gmail in its configuration.
+  MAIL_PROVIDER: "cloudflare",
   PUBLIC_ORIGIN: "https://project.test",
   MAIL_FROM: "contact@makom-unit.org",
   MAIL: { send: provider },

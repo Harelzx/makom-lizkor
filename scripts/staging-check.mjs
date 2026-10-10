@@ -96,6 +96,10 @@ export function stagingBlockers(raw, { deploy = false, env = {} } = {}) {
     blockers.push("staging needs production's DRILL_DB binding")
   if (!same(names(s.r2_buckets, "binding"), names(raw.r2_buckets, "binding"))) blockers.push("staging needs production's R2 bindings")
   if (!same(names(s.ratelimits, "name"), names(raw.ratelimits, "name"))) blockers.push("staging needs production's rate limits")
+  // Both environments now use one account. Cloudflare counters are shared by namespace, even across Workers.
+  const productionNamespaces = new Set(names(raw.ratelimits, "namespace_id"))
+  if ((s.ratelimits ?? []).some((limit) => productionNamespaces.has(limit.namespace_id)))
+    blockers.push("staging rate-limit namespaces must not share production's counters")
   if (!same(Object.keys(s.vars ?? {}), Object.keys(raw.vars ?? {}))) blockers.push("staging needs production's vars, by name")
   if (deploy) {
     for (const d of s.d1_databases ?? [])

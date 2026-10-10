@@ -49,6 +49,12 @@ test("staging runs production's bindings, its own name, and no preview URLs", ()
   assert.deepEqual(stagingBlockers({ name: "x" }), ["env.staging is missing"])
 })
 
+test("same-account staging cannot consume production's rate-limit counters", () => {
+  const r = real()
+  r.env.staging.ratelimits[0].namespace_id = r.ratelimits[0].namespace_id
+  assert.ok(stagingBlockers(r).some((x) => x.includes("share production's counters")))
+})
+
 test("a deploy needs the real database id and every account value", () => {
   // The committed config has the staging database's id since it was created (2026-10-07); the placeholder is refused.
   const placeholder = real()
@@ -92,7 +98,10 @@ test("staging's export keys are public keys of its own, and optional (L-RET A2, 
 
 test("staging drill is isolated; optional commissioning doesn't create production resources", () => {
   const r = real()
-  assert.ok(!r.d1_databases.some((d) => d.binding === "DRILL_DB"))
+  // Recovery used to be commissioned in staging first. Retain that case independently of today's production plan.
+  const stagingFirst = structuredClone(r)
+  stagingFirst.d1_databases = stagingFirst.d1_databases.filter((d) => d.binding !== "DRILL_DB")
+  assert.deepEqual(stagingBlockers(stagingFirst), [])
   const drill = r.env.staging.d1_databases.find((d) => d.binding === "DRILL_DB")
   assert.ok(drill)
   for (const change of [
@@ -101,6 +110,9 @@ test("staging drill is isolated; optional commissioning doesn't create productio
     },
     (d) => {
       d.database_id = r.d1_databases[0].database_id
+    },
+    (d) => {
+      d.database_id = r.d1_databases.find((database) => database.binding === "DRILL_DB").database_id
     },
     (d) => {
       d.database_name = "production-recovery"

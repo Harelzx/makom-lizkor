@@ -8,7 +8,7 @@
   },
   "scripts": {
     "predev": "node scripts/dev-vars.mjs",
-    "dev": "vite",
+    "dev": "CLOUDFLARE_ENV=development vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "format": "prettier --write \"**/*.{ts,tsx,js,mjs}\"",
@@ -25,7 +25,7 @@
     "e2e:prod": "E2E_PROD=1 playwright test",
     "test": "vitest run",
     "cf-typegen": "wrangler types --strict-vars=false",
-    "db:migrate:local": "wrangler d1 migrations apply makom-dev --local",
+    "db:migrate:local": "wrangler d1 migrations apply DB --env development --local",
     "db:seed:local": "node scripts/seed-dev.mjs",
     "e2e:browsers": "playwright test -c playwright.browsers.config.ts"
   },

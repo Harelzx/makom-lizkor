@@ -16,17 +16,31 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "makom-dev",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_name": "makom-production",
+      // Separate EU database created with the owner's same-account approval on 2026-10-10.
+      // Local commands use binding DB and --local; these IDs never imply remote access locally.
+      "database_id": "5746963d-62ca-45f1-991b-35a2b34756ab",
+      "migrations_dir": "migrations",
+    },
+    {
+      "binding": "DRILL_DB",
+      "database_name": "makom-production-drill",
+      "database_id": "fb7fee60-098e-416b-b886-c004c1090610",
       "migrations_dir": "migrations",
     },
   ],
-  // What a deploy ships: production, with no moderators until the deploy names them and no development secret.
-  // Locally, .dev.vars (read by the dev server and the tests, never deployed) turns development on.
+  // Production preparation: the owner selected this one administrator. Access still needs commissioning.
+  // Local dev and browser tests select env.development; production never inherits its stand-in identity.
   "vars": {
     "ENVIRONMENT": "production",
     "EPOCH": "0",
-    "MODERATORS": "",
+    "MODERATORS": "harelzx41@gmail.com",
+    // Gmail API was explicitly selected instead of a purchased sender domain. No automatic fallback.
+    "MAIL_PROVIDER": "gmail",
+    "MAIL_FROM": "makomlizkor@gmail.com",
+    "GMAIL_ACCOUNT": "makomlizkor@gmail.com",
+    // Truthful current status; release:check and runtime refuse Testing for production.
+    "GMAIL_OAUTH_STATUS": "testing",
     // The diagnostic agent's Access service token client ids (spec 12.1), comma-separated; empty: no one.
     "OPS_SERVICE_TOKENS": "",
     // A machine moderator's service token client ids: staging only (H1). Production refuses any, and release:check
@@ -37,10 +51,10 @@
     // A shorter retention day, staging only (worker/lib/durations.ts); empty everywhere a deploy ships, and refused
     // outside staging by the Worker and by release:check.
     "RETENTION_DAY_SECONDS": "",
-    "ACCESS_TEAM_DOMAIN": "",
-    "ACCESS_AUD": "",
+    "ACCESS_TEAM_DOMAIN": "makom-staging.cloudflareaccess.com",
+    "ACCESS_AUD": "caaf96997451ebbdaa85e6bcf0aec39d94b58a3848bc4314a3bdb1274148f81e",
     // The hostnames Turnstile may vouch for; set per deploy. The secret is a secret, never a var.
-    "TURNSTILE_HOSTNAMES": "",
+    "TURNSTILE_HOSTNAMES": "makom-lizkor.makom-staging.workers.dev",
     // Past this many submissions waiting for review, the form stops politely (spec 12, load shedding).
     "QUEUE_LIMIT": "200",
     // The Worker's own cache, as this configuration's `cache` block sets it: off, so Cloudflare stores none of the
@@ -51,8 +65,10 @@
     "PUBLIC_ORIGIN": "",
     // The public keys each export is encrypted to (a JSON array of RSA-OAEP JWKs): the owner's, whose private half
     // stays offline, and the drill's, whose private half is a secret. Empty: no export is written, and the check alerts.
-    "EXPORT_PUBLIC_KEYS": "",
+    "EXPORT_PUBLIC_KEYS": "[{\"kty\":\"RSA\",\"n\":\"2oItWWdTNxOH6iXDiVBSVkMjma4SYlYq8GS5X6gly9vcvKPVbt3YE4IP9iFVlfSpzlYuZuZAAIeICzqAyvVy4rvRSwMLLA2IG9ySc8AnmCr8zGEAABLv17GHeganpGqd4-Bsk5-v0RrW8MeMHB6rqkg8l6twwScvS7dqel9l-7nuccmu80YI3p8DYXM3wTscgod-nOZhL8mrIEC7pSCaz8gX41qPbjVz9__OLJs5-IT4mFkDh11V61zx-Nucitwaurx9seED9N0ZikNKZXcr0J8_rndPCO1_mO3h5EsXMR6EAJFO1JQwqBWU8Jjjotq6pgCjcESnzjUq6HKXOr2YBNV2-UO35TkTVT_yZo2q62ikJqStbtklOgQz6e8Veg2gyZGVzXd4f9NV2z1odRsC28VDHIeRrRzvGTTYs7AHV7UNby2Di0LW1t-9Hir9brEEA3kYR6uyfdgklC_ivof1IacLxQivCKLKXFYGEWltg7Nw7HjTYdkKy08cwQDOzLHhWD1SE3jxm-bDeR9JF55AY21UZdNH9frdaIbdrQCJpuJ6VRNQh9yFY5EvzhKEpk0bBtJ6bv7z4OemvznCt-Y7jEYuLyWC0fbON6vzx-Klgm518iXkZ-VX70euW416D-azRkptay9HK8F7vSz3XpKqCKCRP1aaHgfenWHlPeiLS1U\",\"e\":\"AQAB\",\"alg\":\"RSA-OAEP-256\"},{\"kty\":\"RSA\",\"n\":\"wuGk7EnQgyuDkOZ0WcUcE5FQo7CYoj8ozQl9u-yclDsmpH8MbCQBdthyFzka95iRQvXGysip9et_MXGVb5CfEHpQJjDImrJlf241vARJSTvQQRaNQyKYgc548Gm8UOl3J-t9qwWnA_TV7ylchoxjChYW7hPQu3BOui82jGQ46IpW1DA-jYwBZHTh-cJpMyR8xtBmRmO8M6UhbxPMFfK83D7anIhFtH4mcVh7NZUim-OFN4eigjcy9E-lwobYp_yLzARKSWOpgAD1sr8oABWud1S192M3VxXFBdy1wYYzjuO9hgeuObl-AOqRju71yHzgTnVkjZgrgOUYyTcArE6lLZWRrZP-fUQifQrQfUSYu84E4scqTKF--8xVWd952vCUV9jSGTYVPmXP0sym6ry8_KecwYfCcNs0rhelpgQX_XxV0fFo9ptjenSL4nTSvyizgtX5U2p44hhgXbmcEN5VaGY_qr5_fNY_GOjRgMhBuVJb1opU86npYsVYuQyNeJ3nCaQFkx0rnNZjF9Lws7bTT2Mq1EbgEOXGeMvzDC-XEY0RGpHnSKaOzOeuwiCENQDkSpWx5YIgPsPHsgv-TFj9s_QE2odwcbFo-uzH8rJ8JDpBI8wzuxU0IXtR9zRza7cvhMMF-iqP-IQms7ZygXVqfyMVYbqN1PGbEbj1qQpdfjk\",\"e\":\"AQAB\",\"alg\":\"RSA-OAEP-256\"}]",
   },
+  // Production secrets only; development has its own local environment below.
+  "secrets": { "required": ["TRACKING_SECRET", "TRIBUTE_SECRET", "TURNSTILE_SECRET", "DRILL_PRIVATE_KEY", "GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET", "GMAIL_REFRESH_TOKEN"] },
   // Photos: quarantine/ until a moderator approves, public/ after. No public bucket; the Worker serves public/ only.
   // The ledger: every decision, ids and codes only, written before and after it (spec 8.2). Bucket lock is an account
   // setting, applied with the retention work before launch.
@@ -65,13 +81,13 @@
   ],
   // A coarse outer cap per visitor's address, counted by Cloudflare at the edge: nothing about the address is stored.
   "ratelimits": [
-    { "name": "SUBMIT_LIMIT", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } },
+    { "name": "SUBMIT_LIMIT", "namespace_id": "2001", "simple": { "limit": 10, "period": 60 } },
     // Anemones: generous, since a visitor may leave one at many places; the database already counts one a day each.
-    { "name": "TRIBUTE_LIMIT", "namespace_id": "1002", "simple": { "limit": 60, "period": 60 } },
+    { "name": "TRIBUTE_LIMIT", "namespace_id": "2002", "simple": { "limit": 60, "period": 60 } },
     // Removal requests: a few a minute is plenty for a person; the database counts the day's (REPORT_GUARDS).
-    { "name": "REPORT_LIMIT", "namespace_id": "1003", "simple": { "limit": 5, "period": 60 } },
+    { "name": "REPORT_LIMIT", "namespace_id": "2003", "simple": { "limit": 5, "period": 60 } },
     // CSP reports: a page breaking the policy sends one per blocked load; past twenty a minute it is the same news.
-    { "name": "CSP_LIMIT", "namespace_id": "1004", "simple": { "limit": 20, "period": 60 } },
+    { "name": "CSP_LIMIT", "namespace_id": "2004", "simple": { "limit": 20, "period": 60 } },
   ],
   // The scheduled jobs (worker/jobs.ts): unfinished decisions, the 24-hour backstop, reminders to moderators, and the
   // removal requests' abuse codes, cleared after RETENTION.reportAbuseCodeHours.
@@ -82,6 +98,35 @@
   // check right after a deploy can tell the new version's answers from the previous one's (a61).
   "version_metadata": { "binding": "CF_VERSION_METADATA" },
   "env": {
+    // Local simulation only. No cloud resources are created by this named environment.
+    // Required names include the synthetic dev overrides because Vite copies only declared values into preview.
+    "development": {
+      "name": "makom-lizkor-development",
+      "workers_dev": false,
+      "preview_urls": false,
+      "d1_databases": [
+        { "binding": "DB", "database_name": "makom-dev", "database_id": "00000000-0000-0000-0000-000000000001", "migrations_dir": "migrations" },
+        { "binding": "DRILL_DB", "database_name": "makom-dev-drill", "database_id": "00000000-0000-0000-0000-000000000002", "migrations_dir": "migrations" }
+      ],
+      "r2_buckets": [
+        { "binding": "MEDIA", "bucket_name": "makom-dev-media", "jurisdiction": "eu" },
+        { "binding": "LEDGER", "bucket_name": "makom-dev-ledger", "jurisdiction": "eu" },
+        { "binding": "EXPORTS", "bucket_name": "makom-dev-exports", "jurisdiction": "eu" }
+      ],
+      "ratelimits": [
+        { "name": "SUBMIT_LIMIT", "namespace_id": "3001", "simple": { "limit": 10, "period": 60 } },
+        { "name": "TRIBUTE_LIMIT", "namespace_id": "3002", "simple": { "limit": 60, "period": 60 } },
+        { "name": "REPORT_LIMIT", "namespace_id": "3003", "simple": { "limit": 5, "period": 60 } },
+        { "name": "CSP_LIMIT", "namespace_id": "3004", "simple": { "limit": 20, "period": 60 } }
+      ],
+      "vars": {
+        "EPOCH": "0",
+        "MAIL_PROVIDER": "cloudflare", "MAIL_FROM": "", "GMAIL_ACCOUNT": "", "GMAIL_OAUTH_STATUS": "",
+        "RETENTION_DAY_SECONDS": "", "ACCESS_TEAM_DOMAIN": "", "ACCESS_AUD": "",
+        "QUEUE_LIMIT": "200", "EDGE_CACHE": "off", "PUBLIC_ORIGIN": ""
+      },
+      "secrets": { "required": ["ENVIRONMENT", "MODERATORS", "OPS_SERVICE_TOKENS", "MODERATOR_SERVICE_TOKENS", "PROBE_SERVICE_TOKENS", "DEV_ACCESS_SECRET", "TURNSTILE_SECRET", "TURNSTILE_HOSTNAMES", "TRACKING_SECRET", "TRIBUTE_SECRET", "EXPORT_PUBLIC_KEYS"] }
+    },
     // Staging (spec 14.1): synthetic data only, in the staging account, on its workers.dev address behind Cloudflare
     // Access. Built with CLOUDFLARE_ENV=staging and deployed only by .github/workflows/staging.yml, which fills the
     // empty vars from the repository's variables and the secrets from its secrets. Never development: ENVIRONMENT is
@@ -89,6 +134,7 @@
     // Bindings aren't inherited from the top level, so each is named here, apart from production's.
     "staging": {
       "name": "makom-lizkor-staging",
+      "secrets": { "required": ["TRACKING_SECRET", "TRIBUTE_SECRET", "TURNSTILE_SECRET", "DRILL_PRIVATE_KEY"] },
       "workers_dev": true,
       "preview_urls": false,
       "version_metadata": { "binding": "CF_VERSION_METADATA" },
@@ -112,6 +158,11 @@
         "ENVIRONMENT": "staging",
         "EPOCH": "0",
         "MODERATORS": "",
+        // Synthetic staging never receives the real Gmail account or its secrets.
+        "MAIL_PROVIDER": "gmail",
+        "MAIL_FROM": "",
+        "GMAIL_ACCOUNT": "",
+        "GMAIL_OAUTH_STATUS": "",
         "OPS_SERVICE_TOKENS": "",
         // Staging's synthetic machine moderator (H1): filled from STAGING_MODERATOR_SERVICE_TOKENS at deploy time.
         "MODERATOR_SERVICE_TOKENS": "",

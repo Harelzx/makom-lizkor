@@ -7,7 +7,7 @@
 
 // The privacy notices must name whoever controls the data (Privacy Protection Law s.11(2א)), and the email receives
 // corrections and takedown requests.
-export const OPERATOR = { name: "[שם המפעיל]", email: "makomlizkor@gmail.com" }
+export const OPERATOR = { name: "הראל ארונוביץ׳", email: "makomlizkor@gmail.com" }
 
 // The project's own managed mailbox. Its provider holds the mail people send us, so the notices name it. The owner
 // chose a per-message rule (5.10): each message is kept at most `maxMonths` from receipt, or from sending for our own,
