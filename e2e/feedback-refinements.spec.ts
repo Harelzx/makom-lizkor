@@ -1,11 +1,30 @@
 import { test, expect, type Page } from "./fixtures"
 import { audit } from "./axe"
 test.use({ reducedMotion: "reduce" })
+// The day phase and its lazy UI are separate. CI 38030128446 reached day while Shell was still rendering;
+// one trace showed the control only after the default 5 s assertion had expired. Use the same bounded
+// day-readiness budget as the other functional specs, without changing any feature assertion or retry.
+const DAY = { timeout: 20_000 }
 async function day(page: Page) {
   await page.goto("/")
   await page.getByRole("button", { name: "דילוג", exact: true }).click()
-  await expect(page.getByRole("button", { name: "על הפרויקט", exact: true })).toBeVisible()
+  await expect(page.getByRole("button", { name: "על הפרויקט", exact: true })).toBeVisible(DAY)
 }
+test("feedback waits for the lazy interface when its module arrives after the assertion default", async ({ page }) => {
+  // Production chunks and the development module both use the real response; only arrival is delayed.
+  // Opening/map behavior is not mocked. No real contact message or submission is sent.
+  let delayed = 0
+  await page.route(/\/(?:assets\/shell-[^/]+\.js|src\/components\/shell\.tsx)(?:\?.*)?$/, async (route) => {
+    const response = await route.fetch()
+    await new Promise((resolve) => setTimeout(resolve, 6_000))
+    await route.fulfill({ response })
+    delayed++
+  })
+  await day(page)
+  expect(delayed).toBe(1)
+  const form = await write(page)
+  await expect(form.getByRole("button", { name: "שליחת הפנייה", exact: true })).toBeDisabled()
+})
 async function write(page: Page) {
   await page.getByRole("button", { name: "על הפרויקט", exact: true }).click()
   await page.getByRole("button", { name: "כתבו לנו", exact: true }).click()
