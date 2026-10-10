@@ -59,3 +59,25 @@ test("a staging sender cannot satisfy production's sender requirement", () => {
   const raw = { send_email: [{ name: "MAIL" }], env: { staging: { vars: { MAIL_FROM: "mail@makom-lizkor.org" } } } }
   assert.match(mailBlockers(raw, ready).join("\n"), /MAIL_FROM/)
 })
+
+const gmail = {
+  vars: { MAIL_PROVIDER: "gmail", MAIL_FROM: "project@gmail.com", GMAIL_ACCOUNT: "project@gmail.com", GMAIL_OAUTH_STATUS: "production" },
+  secrets: { required: ["GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET", "GMAIL_REFRESH_TOKEN"] },
+}
+test("Gmail needs its own authorized account and declared secrets, not a bought domain or Cloudflare binding", () => {
+  assert.deepEqual(mailBlockers(gmail, ready), [])
+  assert.match(mailBlockers({ ...gmail, vars: { ...gmail.vars, GMAIL_OAUTH_STATUS: "testing" } }, ready).join("\n"), /seven days/)
+  for (const secret of gmail.secrets.required) {
+    assert.match(
+      mailBlockers({ ...gmail, secrets: { required: gmail.secrets.required.filter((s) => s !== secret) } }, ready).join("\n"),
+      new RegExp(secret),
+    )
+    assert.match(mailBlockers({ ...gmail, vars: { ...gmail.vars, [secret]: "must-not-be-a-var" } }, ready).join("\n"), /must be a secret/)
+  }
+})
+test("Gmail rejects mismatched sender, staging-only configuration and a non-sending adapter", () => {
+  assert.match(mailBlockers({ ...gmail, vars: { ...gmail.vars, MAIL_FROM: "other@gmail.com" } }, ready).join("\n"), /GMAIL_ACCOUNT/)
+  assert.ok(mailBlockers({ env: { staging: gmail } }, ready).length)
+  assert.match(mailBlockers(gmail, { ...ready, sends: false }).join("\n"), /doesn't send/)
+  assert.match(mailBlockers({ vars: { MAIL_PROVIDER: "unknown" } }, ready).join("\n"), /unknown/)
+})

@@ -14,6 +14,7 @@ import type { Place } from "@/types"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { useVisits, visitKey } from "@/lib/visit-list"
+import { groupPlaces } from "@/lib/regions"
 
 function Row({ place, i, children }: { place: Place; i: number; children: React.ReactNode }) {
   const select = useStore((s) => s.select)
@@ -52,11 +53,7 @@ export function PlacesList() {
       ),
     [remote, local, query, visits.filter, visits.ids],
   )
-  const groups = [
-    { id: "local", title: "הוספתם במכשיר הזה", items: places.filter((p) => p.local) },
-    { id: "envelope", title: "בעוטף עזה", items: places.filter((p) => !p.local && p.region === "envelope") },
-    { id: "country", title: "ברחבי הארץ", items: places.filter((p) => !p.local && p.region === "country") },
-  ].filter((g) => g.items.length)
+  const groups = useMemo(() => groupPlaces(places), [places])
   const active = opened === null ? groups[0]?.id : opened
   const searching = !!query.trim()
 

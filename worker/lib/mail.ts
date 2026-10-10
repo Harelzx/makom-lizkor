@@ -1,14 +1,19 @@
 import { ulid } from "./ids"
 import { MAIL_BINDING, validMailFrom } from "./mail-binding"
+import { gmailReady, gmailSend, type GmailSettings } from "./gmail"
 
 export type Mail = { to: string; subject: string; text: string }
-// Not bound until the production domain is chosen; use the generated platform binding type, not a custom transport.
-type MailEnv = Env & { MAIL?: SendEmail; MAIL_FROM?: string }
+// Optional commissioning settings; a transport cannot become ready merely by choosing its name.
+type MailEnv = Env & GmailSettings & { MAIL?: SendEmail; MAIL_PROVIDER?: string }
+const cloudflareSelected = (env: MailEnv) => env.MAIL_PROVIDER === undefined || env.MAIL_PROVIDER === "cloudflare"
+const transportReady = (env: MailEnv) =>
+  env.MAIL_PROVIDER === "gmail"
+    ? gmailReady(env)
+    : cloudflareSelected(env) && validMailFrom(env.MAIL_FROM) && typeof env.MAIL?.send === "function"
 /** Whether a public contact form may offer real sending. Synthetic staging and local previews never send contact mail. */
 export const contactMailReady = (env: MailEnv) =>
   env.ENVIRONMENT === "production" &&
-  validMailFrom(env.MAIL_FROM) &&
-  typeof env.MAIL?.send === "function" &&
+  transportReady(env) &&
   !!env.PUBLIC_ORIGIN?.startsWith("https://") &&
   !!env.TRACKING_SECRET &&
   !!env.TURNSTILE_SECRET &&
@@ -25,11 +30,13 @@ const devOutbox: SendMail = async (env, m) => {
 }
 
 /**
- * Production uses Cloudflare Email Service's structured builder; its sender domain must be onboarded and verified.
+ * Production chooses one configured provider. Cloudflare needs a verified domain; Gmail needs owner-authorized OAuth.
  * A message id means accepted by the provider, not proof of arrival. Provider refusals remain retryable by callers;
  * never log their errors, which may contain recipients, message text or tracking links.
  */
 const productionMail: SendMail = async (env, m) => {
+  if (env.MAIL_PROVIDER === "gmail") return gmailSend(env, m)
+  if (!cloudflareSelected(env)) return false
   const binding = env[MAIL_BINDING]
   if (!validMailFrom(env.MAIL_FROM) || !binding || typeof binding.send !== "function") return false
   try {

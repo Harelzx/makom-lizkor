@@ -42,7 +42,7 @@ export interface Place {
   links: Link[]
   coord_source: "osm" | "wikidata" | "manual" | "community" | "contribution"
   coord_source_url?: string
-  /** Which area the place belongs to, for grouping: the Gaza envelope or elsewhere in Israel. */
+  /** Legacy envelope collection/safety label. Navigation regions are derived separately from coordinates. */
   region: "envelope" | "country"
   photos?: Photo[]
   /** Whom a contributed place remembers, as the family wrote it. */
