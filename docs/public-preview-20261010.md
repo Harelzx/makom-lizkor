@@ -43,7 +43,7 @@ Sources:
 
 ## Illustration
 
-Generated with built-in OpenAI image generation, then PNG resizing preserving alpha. Original is preserved in the evidence directory; application asset is `public/art/dam-hamaccabim-share.png`, embedded identical bytes in `worker/lib/og-art.ts`. The date/site identity are typeset by code, not generated text. The full prompt is saved in `asset-metadata.json`.
+Generated with built-in OpenAI image generation, then PNG resizing preserving alpha. Original is preserved in the evidence directory; application asset is `public/art/dam-hamaccabim-share.png`, embedded identical bytes in `worker/lib/og-art.ts`. The date/site identity are typeset by code, not generated text. The full prompt is saved in `asset-generation.json`.
 
 Botanical reference: https://flora.org.il/plants/HELSAG/
 
@@ -54,3 +54,4 @@ Evidence directory: `../agent-evidence/public-preview-20261010/`.
 - Worker sharing/removal/contact: 34/34 passed before the final subtitle-only adjustment; final focused render checks are recorded separately.
 - Final production build feedback/keyboard/a11y/mobile/map/contact: 9/9 passed. Sending tests use synthetic responses; no real email is sent.
 - Staging build, lint/typecheck, CI, exact SHA, receipt, public/private live reads and screenshots: see `deployment-progress.json` and their original logs. A stage not yet completed is never labelled verified here.
+- First cloud run `38029725008` stopped on generated-data consistency: presentation punctuation had been edited in `src/data/places.json` while its generated import fixture stayed original. Restored exactly the original JSON after proving the only differences were dash characters. Display normalization remains in the existing read-only UI adapter. The generator check is retained and passes 4/4; no cloud deploy occurred on that failed run. `ci-failed.log` preserves the diagnosis.
