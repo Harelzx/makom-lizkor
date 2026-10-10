@@ -104,7 +104,9 @@ export async function gmailSend(env: GmailSettings, mail: Mail, request: typeof 
     const token = await smallJson(
       await request("https://oauth2.googleapis.com/token", {
         method: "POST",
-        redirect: "error",
+        // workerd supports follow/manual only. smallJson rejects every non-2xx response,
+        // so manual refuses redirects without forwarding OAuth credentials.
+        redirect: "manual",
         signal: controller.signal,
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
@@ -126,7 +128,7 @@ export async function gmailSend(env: GmailSettings, mail: Mail, request: typeof 
     const receipt = await smallJson(
       await request("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
         method: "POST",
-        redirect: "error",
+        redirect: "manual",
         signal: controller.signal,
         headers: { Authorization: `Bearer ${token.access_token}`, "Content-Type": "application/json" },
         body: JSON.stringify({ raw }),

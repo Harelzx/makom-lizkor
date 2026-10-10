@@ -38,10 +38,10 @@ describe("Gmail send-only transport, without live Google requests", () => {
     const [url, refresh] = fake.mock.calls[0]
     expect(url).toBe("https://oauth2.googleapis.com/token")
     expect(new URLSearchParams(refresh?.body as URLSearchParams).get("refresh_token")).toBe("synthetic-refresh")
-    expect(refresh?.redirect).toBe("error")
+    expect(refresh?.redirect).toBe("manual")
     const [endpoint, send] = fake.mock.calls[1]
     expect(endpoint).toBe("https://gmail.googleapis.com/gmail/v1/users/me/messages/send")
-    expect(send?.redirect).toBe("error")
+    expect(send?.redirect).toBe("manual")
     expect(send?.headers).toEqual({ Authorization: "Bearer synthetic-access", "Content-Type": "application/json" })
     const mime = from64(JSON.parse(send?.body as string).raw)
     expect(mime).toContain(`From: ${settings.MAIL_FROM}\r\nTo: ${message.to}\r\n`)
