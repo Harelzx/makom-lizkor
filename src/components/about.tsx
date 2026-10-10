@@ -8,6 +8,7 @@ import { HEADLINES } from "@/data/headlines"
 import { LAST_UPDATED } from "@/config"
 import { FONT_CREDIT } from "@/lib/fonts"
 import { ContactForm } from "@/components/contact-form"
+import { PreviewNotice } from "@/components/preview-notice"
 import { useStore } from "@/store"
 
 export function About() {
@@ -48,7 +49,6 @@ export function About() {
               className="size-full object-cover object-[65%_52%] dark:brightness-[0.55] dark:saturate-[0.8]"
             />
             <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-popover to-transparent" />
-            <span className="absolute start-5 bottom-4 text-caption text-ink-2">איור למיזם</span>
           </div>
           <SheetHeader className="gap-3 px-7 pt-6">
             <SheetTitle className="text-title-1 font-black text-ink-1">על מקום לזכור</SheetTitle>
@@ -59,6 +59,7 @@ export function About() {
           </SheetHeader>
 
           <div className="flex flex-col gap-4 px-7 pt-4 pb-8 text-body-lg text-pretty text-ink-1">
+            <PreviewNotice />
             <p>
               אפשר לעבור ממש ליד מקום כזה בלי לדעת שהוא שם. המפה נועדה לעזור לזיכרון להישאר חלק מהדרך שלנו, גם כשהזמן עובר. אפשר לגלות מקום
               לביקור ולהציע פינה שחסרה במפה.

@@ -17,6 +17,7 @@ import { CONSENT_TEXT, FAMILY_CONSENT_TEXT, noticeHtml, PHOTO_RIGHTS_TEXT } from
 import { useVisibleViewport } from "@/lib/use-visible-viewport"
 import { SubmissionResult, type SubmissionOutcome } from "@/components/submission-result"
 import { FormFlower } from "@/components/form-flower"
+import { PreviewNotice } from "@/components/preview-notice"
 import { requestCurrentLocation, type LocationUpdate } from "@/lib/current-location"
 import { newSubmitKey, submitPlace, uploadPhoto } from "@/lib/api"
 import { exportable } from "@/lib/export"
@@ -547,6 +548,11 @@ export function AddPlace() {
                 </DialogDescription>
                 {step === 0 && <p className="mt-1 text-body text-ink-2">בלי הרשמה. המייל לא חובה. ההצעה תתפרסם אחרי בדיקה.</p>}
               </DialogHeader>
+              {import.meta.env.VITE_PUBLIC_PREVIEW === "true" && (
+                <div className="px-[clamp(16px,3vw,24px)] pt-4">
+                  <PreviewNotice />
+                </div>
+              )}
 
               <fieldset disabled={busy} className="min-w-0 px-6 pt-5 pb-6" onKeyDown={onKeyDown}>
                 {/* the clip has a little room on every side so focus rings are never cut */}

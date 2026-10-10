@@ -40,12 +40,21 @@ test("About uses the project illustration and timeless copy, with a simple night
   await expect(page.getByRole("tooltip")).toHaveText("מצב לילה")
   await page.getByRole("button", { name: "על הפרויקט", exact: true }).click()
   const about = page.getByRole("dialog", { name: "על מקום לזכור", exact: true })
-  await expect(about.getByText("איור למיזם", { exact: true })).toBeVisible()
+  await expect(about.getByText("איור למיזם", { exact: true })).toHaveCount(0)
   await expect(about.getByText(/כרגע במפה \d+ מקומות/)).toHaveCount(0)
   await expect(about.locator('img[src="/art/memorial-corner.webp"]')).toBeVisible()
   expect(
     await about.locator('img[src="/art/memorial-corner.webp"]').evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0),
   ).toBe(true)
+})
+test("only the staging preview build names its protected actions and asks crawlers not to index it", async ({ page }) => {
+  await day(page)
+  const preview = process.env.VITE_PUBLIC_PREVIEW === "true"
+  const robots = page.locator('meta[name="robots"][content="noindex, nofollow"]')
+  await expect(robots).toHaveCount(preview ? 1 : 0)
+  await page.getByRole("button", { name: "על הפרויקט", exact: true }).click()
+  await expect(page.getByRole("link", { name: "כניסה לבדיקות", exact: true })).toHaveCount(preview ? 1 : 0)
+  if (preview) await audit(page)
 })
 for (const width of [320, 390, 1280])
   test(`map attribution stays by the real bottom bar at ${width}px`, async ({ page }) => {

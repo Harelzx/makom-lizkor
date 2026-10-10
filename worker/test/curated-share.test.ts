@@ -38,17 +38,18 @@ describe("one of the site's own places, from the database", () => {
     expect(png.headers.get("Content-Type")).toBe("image/png")
     const bytes = new Uint8Array(await png.arrayBuffer())
     expect(String.fromCharCode(...bytes.slice(1, 4))).toBe("PNG")
-    // Its photo (the importer's stand-in, a red WebP) fills the panel, not the background it showed without it (P7-OG-1).
+    // Template 5 uses the same modest brand art for every place; a curated red fixture never fills a photo panel.
     const at = await pixels(bytes)
-    for (const y of [40, 315, 490]) expect(at(220, y).map((v, i) => Math.abs(v - [230, 20, 30][i]) <= 24)).toEqual([true, true, true])
-    // The footer overlays the photograph rather than changing which photo the card uses.
-    expect(at(20, 600)[0]).toBeLessThan(60)
+    expect(at(40, 40)).toEqual([249, 247, 242])
+    expect(at(220, 315)).not.toEqual([230, 20, 30])
     const state = (await ogState(env.DB, "community-beeri"))!
     expect(state.projection.credit?.author).toBe(data.curated.photos[0].author)
     expect(state.projection.credit?.license).toBe(data.curated.photos[0].license)
-    const svg = ogSvg(state.projection, { type: "image/png", bytes: new Uint8Array() })
-    expect(svg).toContain("חיתוך")
-    expect(svg).toContain(data.curated.photos[0].license)
+    const svg = ogSvg(state.projection)
+    expect(svg).toContain("שבעה באוקטובר")
+    expect(svg).toContain("07.10.2023")
+    expect(svg).not.toContain("חיתוך")
+    expect(svg).not.toContain(data.curated.photos[0].license)
   })
 
   it("is gone (410, not indexed) once hidden whole, and its old share image is refused", async () => {

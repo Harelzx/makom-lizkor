@@ -55,6 +55,8 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.STAGING_CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.STAGING_CLOUDFLARE_ACCOUNT_ID }}
       VITE_TURNSTILE_SITEKEY: ${{ vars.STAGING_TURNSTILE_SITEKEY }}
+      # Public viewing, while Access still protects all synthetic write/private routes.
+      VITE_PUBLIC_PREVIEW: "true"
       STAGING_ACCESS_TEAM_DOMAIN: ${{ vars.STAGING_ACCESS_TEAM_DOMAIN }}
       STAGING_ACCESS_AUD: ${{ vars.STAGING_ACCESS_AUD }}
       STAGING_PUBLIC_ORIGIN: ${{ vars.STAGING_PUBLIC_ORIGIN }}
