@@ -45,6 +45,9 @@ test("accepts exact whole-Worker owner protection before opening, and the exact 
   assert.deepEqual(check(fixture()), [])
   assert.deepEqual(check(fixture("public"), "public"), [])
   assert.notDeepEqual(check(fixture("public")), [])
+  assert(PUBLIC_PATHS.length <= 25)
+  for (const path of ["/api/v1/submissions/*", "/api/v1/submissions/*/*", "/api/csp-report", "/licenses/fonts/"])
+    assert(PUBLIC_PATHS.includes(path), path)
   assert(!PUBLIC_PATHS.some((p) => /health|admin|ops|purge-probe|__dev|preview-login/.test(p)))
 })
 test("rejects changed host, owner, Worker, audience, previews, or environment", () => {

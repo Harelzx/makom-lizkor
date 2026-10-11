@@ -11,43 +11,36 @@ export const WORKERS_ACCESS = Object.freeze({
 })
 export const PUBLIC_PATHS = Object.freeze([
   "/",
-  "/index.html",
   "/favicon.svg",
   "/og.png",
   "/assets/*",
   "/art/*",
   "/headlines/*",
   "/sound/*",
-  "/licenses/*",
   "/licenses/fonts/",
   "/licenses/fonts/*",
   "/mail-connection/",
   "/mail-connection/privacy/",
   "/mail-connection/terms/",
   "/place/*",
-  "/place/*/",
   "/media/og/*/*",
   "/media/public/*/*",
   "/api/v1/version",
   "/api/v1/feed",
   "/api/v1/contact",
-  "/api/v1/contact/",
   "/api/v1/submissions",
-  "/api/v1/submissions/",
   "/api/v1/submissions/*",
-  "/api/v1/submissions/*/photo",
-  "/api/v1/submissions/*/revisions",
-  "/api/v1/submissions/*/withdraw",
+  // Only visitor tracking capabilities live below this subtree; the Worker checks their tokens.
+  "/api/v1/submissions/*/*",
   "/api/v1/email/verify",
   "/api/v1/reports",
-  "/api/v1/reports/",
   "/api/v1/tributes",
-  "/api/v1/tributes/",
   "/api/csp-report",
 ])
 
 export function accessDestinations(phase = "protected") {
   if (!["protected", "public"].includes(phase)) throw new Error("Unknown Access phase")
+  if (PUBLIC_PATHS.length > 25) throw new Error("Access supports at most 25 overrides per destination")
   return [
     {
       type: "public",
