@@ -12,6 +12,8 @@ test.describe("desktop", () => {
   test("the opening's choice of sound", async ({ page }) => {
     await page.goto("/")
     await expect(page.getByRole("button", { name: "בלי צליל" })).toBeVisible()
+    // Visibility also passes at opacity 0; contrast needs the choice's completed entrance, not a frame of its fade.
+    await expect(page.getByRole("group", { name: "איך לצפות" })).toHaveCSS("opacity", "1")
     await audit(page)
   })
 
