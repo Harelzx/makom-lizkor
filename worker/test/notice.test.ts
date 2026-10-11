@@ -79,7 +79,7 @@ it("keeps every report notice a request may have recorded, in the order they wer
   }
   expect(REPORT_NOTICES.slice(0, REPORTS_SHOWN.length)).toEqual(REPORTS_SHOWN)
   expect(REPORT_NOTICES.at(-1)).toBe(CURRENT_REPORT_NOTICE)
-  expect(CURRENT_REPORT_NOTICE).toBe("notice.report@2026-10-3")
+  expect(CURRENT_REPORT_NOTICE).toBe("notice.report@2026-10-4")
 })
 
 it("the report notice says what the browser keeps and for how long, from the configured hours, and names the button that lets it go", () => {
@@ -115,7 +115,7 @@ it("version 12 keeps the text it was shown with; version 13 says how each tracki
   const thirteen = noticeHtml("notice.submission@2026-10-13")
   expect(thirteen).toContain("וקישור המעקב שנשלח אליכם במייל כבר לא ייפתח")
   expect(thirteen).toContain("ומפסיק לעבוד כשהוא נמחק")
-  expect(CURRENT_SUBMISSION_NOTICE).toBe("notice.submission@2026-10-14")
+  expect(CURRENT_SUBMISSION_NOTICE).toBe("notice.submission@2026-10-15")
 })
 
 it("a submission made under version 12 is kept under 12, its retry is the same submission, and its link still works", async () => {
@@ -166,4 +166,18 @@ it("version 14 describes receipt-only local storage, without rewriting version 1
   const current = noticeHtml(CURRENT_SUBMISSION_NOTICE)
   expect(current).toContain("אין עותק מקומי ואין ניסיון שליחה אוטומטי")
   expect(current).toContain("ייתכן שההצעה כבר הגיעה לשרת")
+})
+
+it("new mailbox notices distinguish the checked rule from provider recovery and physical deletion, while keeping old consent text", () => {
+  for (const key of [CURRENT_SUBMISSION_NOTICE, CURRENT_REPORT_NOTICE]) {
+    const text = noticeHtml(key)
+    expect(text).toContain("מתוזמן מדי שעה")
+    expect(text).toContain("תשובה חדשה באותו שרשור")
+    expect(text).toContain("חלון שחזור מתועד של הספק")
+    expect(text).toContain("לא מדידה שלנו של מחיקה פיזית")
+    expect(text).not.toContain("אצל ספק הדואר הם נמחקים תוך")
+    expect(text).not.toContain("[מדינת האחסון]")
+  }
+  expect(noticeHtml("notice.submission@2026-10-14")).toContain("אצל ספק הדואר הם נמחקים תוך")
+  expect(noticeHtml("notice.report@2026-10-3")).toContain("אצל ספק הדואר הם נמחקים תוך")
 })

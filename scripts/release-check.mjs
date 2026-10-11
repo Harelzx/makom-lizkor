@@ -13,10 +13,10 @@ for (const [key, value] of Object.entries(config.RETENTION)) if (value === null)
 if (!config.RETENTION.verified)
   blockers.push("RETENTION.verified is false: the deletion and backup periods haven't been tested end to end (restore drills included)")
 for (const promise of config.PENDING_PROMISES) blockers.push(`promised but not built: ${promise}`)
-if (!config.MAILBOX.verified)
-  blockers.push(
-    "MAILBOX.verified is false: the 12-month per-message policy isn't configured and its trash tail measured on the real mailbox",
-  )
+const { mailboxBlockers } = await import("./release-mailbox.mjs")
+const { readFileSync } = await import("node:fs")
+const mailboxReceipt = JSON.parse(readFileSync(new URL("../docs/mailbox-verification-20261011.json", import.meta.url), "utf8"))
+blockers.push(...mailboxBlockers(config.MAILBOX, mailboxReceipt, config.CONTACT_EMAIL))
 
 // The browser check: a public build needs the site's own Turnstile sitekey, not Cloudflare's test key from .env.
 const sitekey = process.env.VITE_TURNSTILE_SITEKEY ?? ""

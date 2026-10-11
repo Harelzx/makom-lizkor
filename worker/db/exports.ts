@@ -34,7 +34,14 @@ const LEFT_OUT: Partial<Record<ExportTable, string[]>> = { reports: ["reporter_k
 const EXPORT_EVERY_HOURS = 23
 
 /** `durations`: this deployment's retention day and hour (worker/lib/durations.ts); left out (the tests), real. */
-export type ExportEnv = { db: D1Database; media: R2Bucket; exports: R2Bucket; keys: string; durations?: Durations }
+export type ExportEnv = {
+  db: D1Database
+  media: R2Bucket
+  exports: R2Bucket
+  keys: string
+  durations?: Durations
+  limits?: { files: number; photoBytes: number }
+}
 
 /**
  * The nightly export, called only after the deletion run of the same pass finished (spec 7: deletion before export).
@@ -54,10 +61,16 @@ export async function runExport(env: ExportEnv, retentionRun: string, now: Date)
   if (recent) return null
   const id = `ex_${ulid(now.getTime())}`
   await db.prepare("INSERT INTO exports (id, created_at, retention_run) VALUES (?, ?, ?)").bind(id, at, retentionRun).run()
+  await writeSnapshot(env, await captureTables(db), id, retentionRun, now)
+  await db.prepare("UPDATE exports SET ok = 1 WHERE id = ?").bind(id).run()
+  return id
+}
 
+/** Shared capture for scheduled backups and the bounded commissioning snapshot. No database writes. */
+export async function captureTables(db: D1Database, limit?: number) {
   const [schema, ...results] = await db.batch([
     db.prepare("SELECT name FROM d1_migrations ORDER BY id DESC LIMIT 1"),
-    ...EXPORT_TABLES.map((t) => db.prepare(`SELECT * FROM ${t} ORDER BY rowid`)),
+    ...EXPORT_TABLES.map((t) => db.prepare(`SELECT * FROM ${t} ORDER BY rowid${limit === undefined ? "" : ` LIMIT ${limit + 1}`}`)),
   ])
   const tables: Record<string, Record<string, unknown>[]> = {}
   const counts: Manifest["tables"] = {}
@@ -70,8 +83,22 @@ export async function runExport(env: ExportEnv, retentionRun: string, now: Date)
     counts[t] = { rows: rows.length, sha256: await sha256(new TextEncoder().encode(JSON.stringify(rows))) }
   }
   const name = (schema.results[0] as { name: string } | undefined)?.name ?? null
+  return { tables, counts, schema: name }
+}
 
-  const files = await backUpPhotos(env.media, env.exports, tables)
+/** Seal an already captured transaction. The caller owns scheduling and attempt records. */
+export async function writeSnapshot(
+  env: ExportEnv,
+  captured: Awaited<ReturnType<typeof captureTables>>,
+  id: string,
+  retentionRun: string,
+  now: Date,
+) {
+  const recipients = publicKeys(env.keys)
+  if (!recipients.length) throw new Error("no_export_key")
+  const { tables, counts, schema: name } = captured
+  const at = now.toISOString()
+  const files = await backUpPhotos(env.media, env.exports, tables, env.limits)
   const plain = new TextEncoder().encode(JSON.stringify({ format: 1, id, created_at: at, schema: name, tables }))
   const sealed = await seal(await gzip(plain), recipients)
   const dataKey = `exports/${id}/data.bin`
@@ -93,8 +120,7 @@ export async function runExport(env: ExportEnv, retentionRun: string, now: Date)
     files,
   }
   await env.exports.put(`exports/${id}/manifest.json`, JSON.stringify(manifest), { httpMetadata: { contentType: "application/json" } })
-  await db.prepare("UPDATE exports SET ok = 1 WHERE id = ?").bind(id).run()
-  return id
+  return manifest
 }
 
 /**
@@ -104,7 +130,12 @@ export async function runExport(env: ExportEnv, retentionRun: string, now: Date)
  * and its copy ends with the last manifest that rightly listed it. Copied under its sha256 unless already there. Not
  * quarantine/: an unapproved photo isn't restored (spec 8.3), and its sender can send it again.
  */
-async function backUpPhotos(media: R2Bucket, exports: R2Bucket, tables: Record<string, Record<string, unknown>[]>) {
+async function backUpPhotos(
+  media: R2Bucket,
+  exports: R2Bucket,
+  tables: Record<string, Record<string, unknown>[]>,
+  limits?: ExportEnv["limits"],
+) {
   const published = new Set(
     (tables.places ?? []).filter((p) => p.status === "published" || p.status === "hidden").map((p) => p.published_revision_id),
   )
@@ -118,11 +149,13 @@ async function backUpPhotos(media: R2Bucket, exports: R2Bucket, tables: Record<s
       .flatMap((p) => [p.key, p.thumb_key])
       .filter((k): k is string => typeof k === "string" && k.startsWith("public/")),
   ])
+  if (limits && keys.size > limits.files) throw new Error("photo_budget")
   const files: Manifest["files"] = []
   for (const key of keys)
     for (const name of [key, key.replace(/^public\//, "held/")]) {
       const object = await media.get(name)
       if (!object) continue
+      if (limits && object.size > limits.photoBytes) throw new Error("photo_budget")
       const bytes = new Uint8Array(await object.arrayBuffer())
       const hash = await sha256(bytes)
       const copy = `photos/${hash}`
@@ -131,6 +164,7 @@ async function backUpPhotos(media: R2Bucket, exports: R2Bucket, tables: Record<s
       files.push({ key: name, sha256: hash, size: bytes.length })
       break
     }
+  if (limits && files.length !== keys.size) throw new Error("photo_missing")
   return files
 }
 

@@ -13,13 +13,16 @@ export const OPERATOR = { name: "הראל ארונוביץ׳", email: "makomlizk
 // chose a per-message rule (5.10): each message is kept at most `maxMonths` from receipt, or from sending for our own,
 // and deleted earlier where required. The provider's trash and admin recovery add a tail on top. Nothing here promises
 // deletion at case closure: the mailbox doesn't do that. `verified` waits for the policy to be configured on the real
-// tenant and its tail measured.
+// tenant and checked per message. The trash window is provider policy, not a physical-erasure measurement.
 export const MAILBOX = {
   provider: "Google (Gmail)",
-  storedIn: "[מדינת האחסון]",
+  storedIn: "מדינות שונות; לא נקבע אזור אחסון יחיד לתיבה",
   maxMonths: 12,
-  deletionTailDays: null as number | null,
-  verified: false,
+  deletionTailDays: 30 as number | null,
+  trashTailBasis: "provider_policy",
+  physicalDeletionVerified: false,
+  // The reviewed receipt is checked by release-mailbox.mjs as well; this flag alone cannot pass release.
+  verified: true,
 }
 
 // Where the site itself is served from; its logs see visitors' IP addresses.
@@ -68,7 +71,7 @@ export const RETENTION = {
 export const ACCESS_RESPONSE_DAYS = 30
 
 export const CONTACT_EMAIL = OPERATOR.email
-export const LAST_UPDATED = "2026-10-10"
+export const LAST_UPDATED = "2026-10-11"
 
 /**
  * What the notices already promise but the code doesn't do yet. Publishing with any of these would be publishing a
