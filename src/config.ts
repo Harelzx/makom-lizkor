@@ -28,7 +28,9 @@ export const MAILBOX = {
 // Where the site itself is served from; its logs see visitors' IP addresses.
 export const HOSTING = { provider: "Cloudflare" }
 
-// Provisional until the architecture's deletion and backup jobs are tested end to end, restore drills included.
+// Operational verification: native duration boundaries, live cloud controls, and the protected production
+// withdrawal/isolated recovery exercise. See docs/retention-verification-20261011.json for evidence and limits.
+// This is not a measurement of provider physical erasure or 37 days of elapsed cloud operation.
 export const RETENTION = {
   /** contact details, report text and moderator notes, after the case closes */
   contactAfterCloseDays: 90,
@@ -40,7 +42,7 @@ export const RETENTION = {
    * target for production and the staging plan Harel activated on 8 October; 7 on Workers Free. No code
    * reads it. A window of recovery, not of erasure: on its own it bounds nothing; the backend spec's timeline (section 7)
    * derives drill copies gone by deletion + 32 days and exports by + 37, provided a drill loads only the newest export,
-   * which the code enforces. Unproven until the end-to-end test sets `verified` */
+   * which the code enforces. Operationally checked with the isolated recovery exercise; physical erasure is unmeasured. */
   restoreDrillCopyDays: 30 as number | null,
   /** the two codes a removal request keeps to catch abuse (one from the network address, one from the explanation): the
    * job clears them once this much has passed since the request came */
@@ -64,7 +66,7 @@ export const RETENTION = {
   auditMonths: 24,
   /** an unapproved photo waiting this long reminds the moderators, daily, to decide (spec 7: the moderation target) */
   reviewReminderDays: 14,
-  verified: false,
+  verified: true,
 }
 
 /** Privacy Protection (Access) Regulations: an answer to a request to see one's data within 30 days. */

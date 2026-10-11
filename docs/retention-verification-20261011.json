@@ -1,0 +1,112 @@
+{
+  "format": 1,
+  "at": "2026-10-11T07:32:55.164335+00:00",
+  "source_sha": "6f59d9c15217fe6e3e17554d349977f0cb11904f",
+  "state": "operational_production_verification_complete",
+  "snapshot": "ex_01M4MWX80DMKD7TB8708CJ6QQZ",
+  "fixtures": [
+    "p_01M4MKR97MH3WC4N2Y8F2CZVXM",
+    "p_01M4MT8YN5KHHTPZ8Z6DY4MR0F"
+  ],
+  "snapshot_files": 1,
+  "snapshot_recipients": 2,
+  "withdrawal_owner_confirmed": true,
+  "normal_ui_withdrawals_verified": true,
+  "live_content_contact_photo_erasure_verified": true,
+  "ledger_commits_after_snapshot_verified_by_recovery": true,
+  "filtered_original_restore_verified": true,
+  "files_checked": 1,
+  "public_photo_writes": 0,
+  "drill_tables_cleaned": 11,
+  "independent_drill_empty_readback": true,
+  "normal_export_and_drill_metadata_unchanged": true,
+  "scheduled_rows_written": 0,
+  "serving_restore_performed": false,
+  "real_time_37_day_observation": false,
+  "provider_physical_erasure_measured": false,
+  "review": "Root agent evidence review; not an independent review. Duration boundaries use the retained native timeline tests and existing cloud controls, not 37 days of elapsed observation.",
+  "evidence": [
+    {
+      "file": "manual-commissioning-20261011/manual-snapshot-receipt.json",
+      "sha256": "e22ec9dab478c753ada694ea012527dbd95a2e7e54280d3851f49023d018cdbc"
+    },
+    {
+      "file": "manual-commissioning-20261011/withdrawal-serving-readback.json",
+      "sha256": "53d3f29a80174b6d573d4319134ed4c7718a7f77dcd3662bdbb94cdcf99feedd"
+    },
+    {
+      "file": "manual-commissioning-20261011/manual-recovery-receipt.json",
+      "sha256": "bf6b96337556d80abfa018a594d0c1f10f8880b53924fc1498b451b979789a62"
+    },
+    {
+      "file": "manual-commissioning-20261011/recovery-independent-readback.json",
+      "sha256": "1101005b57b15220bf27375a344a8e08304a940af5ff0fb0aee45d0859c32189"
+    },
+    {
+      "file": "manual-commissioning-20261011/jobs-after-snapshot.json",
+      "sha256": "564b62f4210fc9bc768ac5d810aad1776deb8741c00189f435f467fd50b63ee3"
+    },
+    {
+      "file": "manual-commissioning-20261011/private-deploy-result.json",
+      "sha256": "76593fe374df60fbd823634bb2128af4595c18e56d24a8b25d9c7822c0699c46"
+    },
+    {
+      "file": "manual-commissioning-20261011/postdeploy-validation.json",
+      "sha256": "7b501de3590127f97e96b25bc6b17e44a258b42e741cdd98bc297f00c092bc98"
+    },
+    {
+      "file": "manual-commissioning-20261011/cloud/browser-validation.json",
+      "sha256": "6ee0c2df1b7de5efe04903160461ea02ae466edcbe1d54b51c674fe0fe8d59e4"
+    },
+    {
+      "file": "exports-lock-readback.log",
+      "sha256": "73c98f789ea4a737cfc917536eaf8668efb1b6f7fcf9f7bae174ce7d1747e281"
+    },
+    {
+      "file": "ledger-lock-readback.log",
+      "sha256": "4d5489013ee327208151c5ded36746a5778fe85bb3c9c755fdeb25ce92192a0d"
+    },
+    {
+      "file": "media-lifecycle-readback.log",
+      "sha256": "db10698bc7e5cc05baf5591a5451128b307fd1dc13af84781d4376bd5d611d9a"
+    },
+    {
+      "file": "manual-commissioning-20261011/withdrawal-public-boundary.json",
+      "sha256": "d590e800fd48b48015dca839d020632e33f74736811a47864f95b457be5fe2be"
+    },
+    {
+      "file": "manual-commissioning-20261011/retention-assessment-result.json",
+      "sha256": "1d47c3feb8c6d0ab0a7cb243abf12ce1b6eec03f30709bc477dd18112d70127f"
+    }
+  ],
+  "assessment": {
+    "verified": true,
+    "scope": "operational_deletion_and_backup_recovery",
+    "assessor": "root_agent",
+    "independentReview": false,
+    "publicLaunchAuthorized": false
+  },
+  "cloudControls": {
+    "exportsLockDays": 34,
+    "ledgerLock": "project_lifetime_owner_approved",
+    "quarantineExpiryDays": 30,
+    "defaultMultipartRulePreserved": true,
+    "servingAndDrillDatabases": "distinct_EU",
+    "scheduledExportCadenceHours": 23,
+    "scheduledDrillCadenceDays": 7,
+    "cadenceChanged": false
+  },
+  "evidenceRoot": "../agent-evidence/launch-readiness-20261010",
+  "durationBoundaries": {
+    "method": "retained_native_workerd_timeline_tests_with_simulated_clock",
+    "record": "docs/retention-timeline.md",
+    "elapsedCloudObservation": false
+  },
+  "limits": [
+    "The encrypted snapshot and isolated restore contain only two expressly approved synthetic places and one project-art image.",
+    "The exercise decrypts and checks the image backup, then prevents publication of withdrawn content; it does not restore any image to public storage or restore the serving database.",
+    "A separate read confirms all 11 target tables are empty; provider Time Travel remains a recovery window, not proof of physical erasure.",
+    "Duration boundaries were tested in native workerd with simulated time, and the actual cloud controls were read back; no 37-day observation or provider physical-erasure measurement was performed.",
+    "Root-agent review of the evidence is not an independent review. Access remains owner-only; public launch requires its own unchanged release checks."
+  ]
+}
