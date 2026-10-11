@@ -1,5 +1,15 @@
 # Backend continuation record
 
+## Current authority and public delivery - 11 October 2026
+
+Harel explicitly authorized public production launch with the real places after all checks pass. Earlier statements below withholding public authority are historical. Production is still owner-only on source6f59d9c/versione832bf48; the already completed backup, withdrawal, recovery and actual Gmail commissioning must not be repeated.
+
+main1cb376b passed CI38122307628 and automatic staging38123652959. The next source candidate adds the owner import UI and exact Workers Access guard; it needs its own normal full CI and nine-pass staging receipt. The owner packet is prepared privately:90 curated places,32 photo entries,29 licensed files. It is imported through the real moderator routes in the ordinary owner browser session, never direct SQL. A CLI login attempt was rejected by automatic approval review and is abandoned; do not retry or extract credentials.
+
+[public-launch-20261011.md](public-launch-20261011.md) defines the exact order: checked package, protected deployment, owner import, fresh Access snapshot and exact public host overrides, then anonymous boundary and live desktop/narrow verification. Keep whole-Worker protection on all non-public paths, audience/policy unchanged, preview URLs disabled, existing resources/scopes and cadence unchanged. No further owner decision is pending for this approved scope. Record actual results; the plan is not completion evidence.
+
+The following sections describe earlier observed states.
+
 ## מצב מאומת כעת - 11.10.2026, לאחר בדיקת השחזור ב-07:29 UTC
 
 main המקומי וב-GitHub הוא `6f59d9c15217fe6e3e17554d349977f0cb11904f`. CI `38118781446` עבר full, עם 137 תכונות Chromium ייחודיות וכיסוי WebKit; רשימות מתוכננות ותוצאות בפועל תואמות וכל הבדיקות עברו בניסיון הראשון. staging האוטומטי `38120348752` עבר באותו SHA וכל תשע בדיקות receipt הן pass. הראיות ב-`manual-commissioning-20261011/cloud/`. אין צורך בריצה חוזרת.

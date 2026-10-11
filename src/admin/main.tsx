@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client"
 import "@/index.css"
 import { Queue } from "./queue"
 import { Reports } from "./reports"
+import { CuratedImport } from "./curated-import"
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
@@ -13,6 +14,7 @@ createRoot(document.getElementById("root")!).render(
         <h1 className="sr-only">ניהול · מקום לזכור</h1>
         <Reports />
         <Queue />
+        <CuratedImport />
       </div>
     </main>
   </StrictMode>,
