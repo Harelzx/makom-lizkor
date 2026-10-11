@@ -38,7 +38,7 @@ async function empty(db: D1Database) {
 }
 
 /** An export's data opened in memory with a recipient's private key: never written anywhere. */
-async function openExport(data: Uint8Array, manifest: Manifest, key: string) {
+export async function openExport(data: Uint8Array, manifest: Manifest, key: string) {
   const plain = await unseal(data, manifest.data, JSON.parse(key) as JsonWebKey)
   return JSON.parse(await new Response(new Blob([plain]).stream().pipeThrough(new DecompressionStream("gzip"))).text()) as ExportPayload
 }

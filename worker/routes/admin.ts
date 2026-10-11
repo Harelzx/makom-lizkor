@@ -17,6 +17,7 @@ import { clock } from "../lib/clock"
 import { PRIVATE, problem } from "../lib/http"
 import { machineMay, syntheticRev } from "../lib/synthetic"
 import { opEnv } from "../lib/purge"
+import { commissioningAllowed, commissioningStatus, manualRecovery, manualSnapshot } from "../db/commissioning"
 
 type AdminEnv = { Bindings: Env; Variables: AppEnv["Variables"] & { actor: string; machine: boolean; machineRev: number | null } }
 type AdminContext = Context<AdminEnv>
@@ -39,6 +40,43 @@ admin.use("*", async (c, next) => {
     c.set("machineRev", may.rev)
   }
   await next()
+})
+
+// A dated private commissioning screen, behind the same human Access verification as every moderator action.
+const commissioningPage = (receipt: object) =>
+  `<!doctype html><html lang="he" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>בדיקת השקה מבוקרת</title><body><main><h1>בדיקת השקה מבוקרת</h1><p>גיבוי חד-פעמי של מקומות הדמה בלבד. השחזור כותב רק למסד הניסוי ומנקה אותו. התזמון הרגיל אינו משתנה.</p><form method="post"><button name="action" value="snapshot">יצירת גיבוי ידני</button><button name="action" value="recovery">בדיקת שחזור אחרי הסרה</button></form><pre dir="ltr">${JSON.stringify(receipt, null, 2).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")}</pre></main></body></html>`
+
+admin.on(["GET", "POST"], "/commissioning", async (c) => {
+  const now = new Date()
+  const origin = new URL(c.req.url).origin
+  if (!commissioningAllowed(c.env, c.get("actor"), c.get("machine"), origin, now)) return problem(c, 404, "not_found")
+  c.header("Content-Security-Policy", "default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'")
+  c.header("Referrer-Policy", "no-referrer")
+  if (c.req.method === "GET") return c.html(commissioningPage(await commissioningStatus(c.env.EXPORTS)))
+  if (c.req.header("Origin") !== origin) return problem(c, 403, "cross_site")
+  if (c.req.header("Content-Type") !== "application/x-www-form-urlencoded" || Number(c.req.header("Content-Length") ?? Infinity) > 100)
+    return problem(c, 400, "invalid_input")
+  const encoded = await c.req.text()
+  if (new TextEncoder().encode(encoded).byteLength > 100) return problem(c, 400, "invalid_input")
+  const body = new URLSearchParams(encoded)
+  if ([...body.keys()].length !== 1 || !["snapshot", "recovery"].includes(body.get("action") ?? "")) return problem(c, 400, "invalid_input")
+  if (!c.env.DRILL_DB || !c.env.DRILL_PRIVATE_KEY) return problem(c, 409, "bindings")
+  const env = {
+    db: c.env.DB,
+    target: c.env.DRILL_DB,
+    media: c.env.MEDIA,
+    exports: c.env.EXPORTS,
+    ledger: c.env.LEDGER,
+    keys: c.env.EXPORT_PUBLIC_KEYS ?? "",
+    drillKey: c.env.DRILL_PRIVATE_KEY,
+  }
+  try {
+    const receipt = body.get("action") === "snapshot" ? await manualSnapshot(env, now) : await manualRecovery(env, now)
+    return c.html(commissioningPage(receipt))
+  } catch (e) {
+    const code = e instanceof Error && /^[a-z_]+$/.test(e.message) ? e.message : "operation_failed"
+    return c.html(commissioningPage({ ok: false, failure: code }), 409)
+  }
 })
 
 admin.get("/queue", async (c) => {

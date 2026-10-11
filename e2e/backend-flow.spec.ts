@@ -60,7 +60,7 @@ test(
     const body = (await sent).request().postDataJSON() as Record<string, unknown>
     expect(Object.keys(body)).not.toContain("email")
     // The version recorded is the notice the form showed.
-    expect(body.consent_version).toBe("notice.submission@2026-10-14")
+    expect(body.consent_version).toBe("notice.submission@2026-10-15")
     // The browser check ran, and its single-use token went with the place.
     expect((await sent).request().headers()["turnstile-token"]).toBeTruthy()
     await visitor.getByRole("button", { name: "לצפייה בהצעה", exact: true }).click({ timeout: 15_000 })

@@ -28,6 +28,7 @@ export const SUBMISSION_NOTICES = [
   "notice.submission@2026-10-12",
   "notice.submission@2026-10-13",
   "notice.submission@2026-10-14",
+  "notice.submission@2026-10-15",
 ] as const
 export const CURRENT_SUBMISSION_NOTICE = SUBMISSION_NOTICES[SUBMISSION_NOTICES.length - 1]
 
@@ -138,7 +139,12 @@ export type Element = (typeof ELEMENTS)[number]
 export const REQUESTER_TYPES = ["family", "rights_holder", "other"] as const
 
 /** The report notices a form may record, as for submissions: never removed, new ones at the end. */
-export const REPORT_NOTICES = ["notice.report@2026-10-1", "notice.report@2026-10-2", "notice.report@2026-10-3"] as const
+export const REPORT_NOTICES = [
+  "notice.report@2026-10-1",
+  "notice.report@2026-10-2",
+  "notice.report@2026-10-3",
+  "notice.report@2026-10-4",
+] as const
 export const CURRENT_REPORT_NOTICE = REPORT_NOTICES[REPORT_NOTICES.length - 1]
 
 /**

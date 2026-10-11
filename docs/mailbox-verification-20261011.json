@@ -1,0 +1,61 @@
+{
+  "format": 1,
+  "mailbox": "makomlizkor@gmail.com",
+  "assessedAt": "2026-10-11",
+  "configuration": {
+    "maxMonths": 12,
+    "triggerHours": 1,
+    "triggerCount": 1,
+    "unit": "message"
+  },
+  "actualExecution": {
+    "type": "time-driven",
+    "startedAt": "2026-10-10T20:52:39Z",
+    "status": "completed",
+    "manual": false
+  },
+  "fixture": {
+    "at": "2026-10-10T21:34:04.377Z",
+    "fixtureVerified": true,
+    "eligible": 1,
+    "trashed": 1,
+    "oldTrashed": true,
+    "recentKept": true,
+    "sameThread": true,
+    "mailSent": false,
+    "permanentDeletion": false
+  },
+  "providerTrash": {
+    "days": 30,
+    "basis": "provider_policy",
+    "source": "https://support.google.com/mail/answer/7401"
+  },
+  "physicalDeletionVerified": false,
+  "limits": [
+    "Google service availability and quotas apply; a failed apply disables scheduled writes until owner-reviewed preview.",
+    "The fixture proves per-message selection and reversible trashing, not physical deletion of internal copies or backups.",
+    "30 days is documented Gmail recovery policy; no 30-day mailbox observation was performed."
+  ],
+  "evidence": [
+    {
+      "name": "actual-hourly-execution.json",
+      "sha256": "086291f1455ae1ca290697346759d1bdf69c776fe8a88f6c8052a0b433f0f44b"
+    },
+    {
+      "name": "same-thread-retention-result.json",
+      "sha256": "d4478e56f8663b01c842b1419936c8f3e91f2f3710fa8e4c5c7392b748c70f11"
+    },
+    {
+      "name": "google-trigger-hourly.jpg",
+      "sha256": "106a96a4dfab73d658a73087da177dd91ca59b6e37af3c26edc8859c777f7078"
+    },
+    {
+      "name": "empty-list-fix-tests.log",
+      "sha256": "fc2b9a8a9733d8405ea94ff81e1fbe4a034853efbecf66f1d8b01cb7533e6495"
+    },
+    {
+      "name": "Code.js",
+      "sha256": "b76cdac544c1589a44d10e7a7a8740b034437c3e0de3fadb95d1153126a0d410"
+    }
+  ]
+}
