@@ -8,6 +8,8 @@ main1cb376b passed CI38122307628 and automatic staging38123652959. The next sour
 
 [public-launch-20261011.md](public-launch-20261011.md) defines the exact order: checked package, protected deployment, owner import, fresh Access snapshot and exact public host overrides, then anonymous boundary and live desktop/narrow verification. Keep whole-Worker protection on all non-public paths, audience/policy unchanged, preview URLs disabled, existing resources/scopes and cadence unchanged. No further owner decision is pending for this approved scope. Record actual results; the plan is not completion evidence.
 
+CI38124611342 on eee5e0f completed with one feature failure: CI-OPENING-CONTRAST-1, in the desktop sound-choice accessibility audit. Browser shard1 passed80/81 (including seed); shard2 passed60/60, and WebKit/static/worker/client passed. Readiness and staging publication remain blocked. The preserved trace shows visibility passing while the choice group had opacity0 and the axe scan beginning during its entrance; its opacity reached1 later. The only test correction waits for actual group opacity1 under the unchanged default assertion deadline before the same complete axe audit. No site source, accessibility rule, test deadline, retry or deployment protection changed. The focused final-build check passed2/2 including seed, and its passing trace is preserved beside the original cloud failure under `public-launch-20261011/`. This is a root review, not an independent review. Require the corrected candidate's own normal full CI and nine-pass staging receipt; do not rerun the failed commit blindly.
+
 The following sections describe earlier observed states.
 
 ## מצב מאומת כעת - 11.10.2026, לאחר בדיקת השחזור ב-07:29 UTC
