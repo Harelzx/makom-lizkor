@@ -70,3 +70,9 @@ export async function rateKey(secret: string, address: string): Promise<string> 
   const mac = new Uint8Array(await crypto.subtle.sign("HMAC", k, new TextEncoder().encode(`rate:${visitor(address)}`)))
   return [...mac].map((b) => b.toString(16).padStart(2, "0")).join("")
 }
+/** A visitor's anemones at one place on one day: keyed, and different every day, so days can't be linked. */
+export async function addressKey(secret: string, address: string, day: string): Promise<string> {
+  const k = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"])
+  const mac = new Uint8Array(await crypto.subtle.sign("HMAC", k, new TextEncoder().encode(`tribute-address:${visitor(address)}|${day}`)))
+  return [...mac].map((b) => b.toString(16).padStart(2, "0")).join("")
+}
