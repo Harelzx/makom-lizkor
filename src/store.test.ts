@@ -25,7 +25,7 @@ vi.mock("@/lib/storage", () => ({
   },
 }))
 
-const { useStore } = await import("@/store")
+const { useStore, allPlaces } = await import("@/store")
 
 const place = (id: string, extra: Partial<Place["local"]> = {}): Place =>
   ({
@@ -36,6 +36,51 @@ const place = (id: string, extra: Partial<Place["local"]> = {}): Place =>
     lng: 34.5,
     local: { send: "sent", remoteId: `p_${id}`, trackingToken: `token-${id}`, ...extra },
   }) as Place
+
+describe("selection when this device's proposal becomes public", () => {
+  beforeEach(() => useStore.setState({ local: [], remote: [], selectedId: null }))
+  const published = () => ({ id: "p_local-mine", name_he: "approved", kind: "bench", lat: 31.4, lng: 34.5 }) as Place
+
+  it("moves an already open device card to its public id without putting tracking metadata in the feed", async () => {
+    const own = place("local-mine")
+    await useStore.getState().addLocal(own)
+    useStore.getState().select(own.id)
+    useStore.getState().setRemote("2", [published()])
+    const s = useStore.getState()
+    expect(s.selectedId).toBe("p_local-mine")
+    expect(allPlaces(s).map((p) => p.id)).toEqual(["p_local-mine"])
+    expect(s.remote[0].local).toBeUndefined()
+    expect(s.local[0].local?.trackingToken).toBe("token-local-mine")
+  })
+
+  it("resolves the receipt's old device id when approval arrived before the receipt was closed", async () => {
+    await useStore.getState().addLocal(place("local-mine"))
+    useStore.getState().setRemote("2", [published()])
+    useStore.getState().select("local-mine")
+    expect(useStore.getState().selectedId).toBe("p_local-mine")
+    expect(await useStore.getState().removeLocal("local-mine")).toBe("removed")
+    expect(useStore.getState().local).toEqual([])
+    expect(useStore.getState().remote[0].id).toBe("p_local-mine")
+  })
+
+  it("keeps a pending card selected and never invents a public place from its receipt", async () => {
+    await useStore.getState().addLocal(place("local-mine"))
+    useStore.getState().select("local-mine")
+    useStore.getState().setRemote("2", [])
+    expect(useStore.getState().selectedId).toBe("local-mine")
+    expect(useStore.getState().remote).toEqual([])
+  })
+
+  it("resolves a reloaded device link when the public feed arrives before device storage", async () => {
+    disk.stored = [place("local-mine")]
+    useStore.setState({ selectedId: "local-mine" })
+    useStore.getState().setRemote("2", [published()])
+    expect(useStore.getState().selectedId).toBe("local-mine")
+    await useStore.getState().init()
+    expect(useStore.getState().selectedId).toBe("p_local-mine")
+    expect(useStore.getState().remote[0].local).toBeUndefined()
+  })
+})
 
 beforeEach(async () => {
   disk.stored = []

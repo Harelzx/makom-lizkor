@@ -146,6 +146,13 @@ async function persist(change: (stored: Place[]) => Place[]): Promise<boolean> {
   }
 }
 
+// An approved contribution replaces its device-only card in the list. Keep a visitor's selection on that public
+// card, including when approval arrives while the submission receipt is still open. Only the effective feed counts.
+function visibleSelection(remote: Place[], local: Place[], id: string | null) {
+  const remoteId = local.find((p) => p.id === id)?.local?.remoteId
+  return remoteId && remote.some((p) => p.id === remoteId) ? remoteId : id
+}
+
 export const useStore = create<State>((set, get) => ({
   // A share link to a place that isn't there skips the opening all the same: it came through a link, not the front door.
   phase: linkedToPlace() || sharedPath ? "day" : "intro",
@@ -192,11 +199,11 @@ export const useStore = create<State>((set, get) => ({
       held.add(p.id)
       onDevice.add(p.id)
     }
-    set({ local, tributes })
+    set((s) => ({ local, tributes, selectedId: visibleSelection(s.remote, local, s.selectedId) }))
   },
   setPhase: (phase) => set({ phase }),
   setLight: (light) => set({ light }),
-  select: (selectedId) => set({ selectedId }),
+  select: (selectedId) => set((s) => ({ selectedId: visibleSelection(s.remote, s.local, selectedId) })),
   hover: (hoveredId) => set({ hoveredId }),
   setTab: (tab) => set({ tab, selectedId: tab === "journey" ? get().selectedId : null }),
   setQuery: (query) => set({ query }),
@@ -209,11 +216,15 @@ export const useStore = create<State>((set, get) => ({
   setPicking: (picking) => set({ picking }),
   setDraft: (draft) => set({ draft }),
   setRemote: (feedVersion, remote, live = true) =>
-    set({
-      feedVersion,
+    set((s) => {
       // Only an offline copy is filtered: the live feed is the server's word, and a place may have been approved since.
-      remote: offMap && !live ? remote.filter((p) => p.id !== offMap) : remote,
-      feedLive: live || get().feedLive,
+      const effective = offMap && !live ? remote.filter((p) => p.id !== offMap) : remote
+      return {
+        feedVersion,
+        remote: effective,
+        feedLive: live || s.feedLive,
+        selectedId: visibleSelection(effective, s.local, s.selectedId),
+      }
     }),
   addLocal: async (p) => {
     held.add(p.id)

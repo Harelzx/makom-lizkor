@@ -69,3 +69,17 @@ it("the server's live feed is shown whole, even a place the share page said wasn
   useStore.getState().setRemote("2", [place("p_x"), place("p_y")], true)
   expect(useStore.getState().remote.map((p) => p.id)).toEqual(["p_x", "p_y"])
 })
+
+it("device-id selection resolves only against the effective feed, after offline suppression", async () => {
+  const { useStore } = await storeAt("/place/p_x", "", "gone")
+  const own = { ...place("local-own"), local: { send: "sent", remoteId: "p_x", trackingToken: "private-test-token" } } as Place
+  useStore.setState({ local: [own], selectedId: own.id })
+  useStore.getState().setRemote("1", [place("p_x")], false)
+  expect(useStore.getState().remote).toEqual([])
+  expect(useStore.getState().selectedId).toBe(own.id)
+  useStore.getState().select(own.id)
+  expect(useStore.getState().selectedId).toBe(own.id)
+  useStore.getState().setRemote("2", [place("p_x")], true)
+  expect(useStore.getState().selectedId).toBe("p_x")
+  expect(useStore.getState().remote[0].local).toBeUndefined()
+})

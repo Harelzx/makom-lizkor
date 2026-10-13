@@ -95,7 +95,15 @@ test(
     // The submitter sees one copy, not their local one beside the published one.
     await visitor.evaluate(() => document.dispatchEvent(new Event("visibilitychange")))
     await fed
+    // The keyed exit briefly retains the old device card beside the new approved card. Require one settled card.
+    await expect(visitor.getByRole("heading", { name, exact: true })).toHaveCount(1)
+    await expect(visitor.getByRole("heading", { name, exact: true })).toBeVisible(DAY)
+    await expect(visitor).toHaveURL(new RegExp(`#/place/${id}$`))
     await expect(await search(visitor, name)).toHaveCount(1)
+    await visitor.keyboard.press("Escape")
+    await expect(visitor.getByRole("button", { name: "מעקב אחרי ההצעה", exact: true })).toBeVisible()
+    await expect(visitor.getByRole("button", { name: "שיתוף", exact: true })).toBeVisible()
+    await expect(visitor.getByRole("button", { name: "העתקת קישור מקומי", exact: true })).toHaveCount(0)
 
     // A shared link to the new place opens it, even though the place arrives only with the feed.
     const linked = await (await browser.newContext()).newPage()
@@ -104,8 +112,53 @@ test(
     await expect(linked).toHaveURL(new RegExp(`#/place/${id}$`))
     // Published, the dedication is still there.
     await expect(linked.getByText("נועה דמו")).toBeVisible()
+    await expect(linked.getByRole("button", { name: "מעקב אחרי ההצעה", exact: true })).toHaveCount(0)
+
+    // Removing the owner's separate device receipt removes its capability, not the approved public card.
+    await visitor.getByRole("button", { name: "מחיקת העותק מהמכשיר", exact: true }).click()
+    await visitor.getByRole("alertdialog").getByRole("button", { name: "מחיקת העותק", exact: true }).click()
+    await expect(visitor.getByRole("heading", { name, exact: true })).toBeVisible()
+    await expect(visitor.getByRole("button", { name: "מעקב אחרי ההצעה", exact: true })).toHaveCount(0)
+    await visitor.reload()
+    await expect(visitor.getByRole("heading", { name, exact: true })).toBeVisible(DAY)
+    await expect(visitor.getByRole("button", { name: "מעקב אחרי ההצעה", exact: true })).toHaveCount(0)
   },
 )
+
+test("approval while the receipt is open resolves its device id to the public card and keeps owner tracking", async ({ page, browser }) => {
+  const name = `בדיקת קבלה לפני סגירה ${Date.now()}`
+  await page.goto("/#/place/car-wall-tkuma")
+  await expect(page.getByRole("heading", { name: "קיר המכוניות ליד תקומה", exact: true })).toBeVisible(DAY)
+  await page.getByRole("button", { name: "הוספת מקום", exact: true }).click()
+  const dialog = page.getByRole("dialog")
+  await dialog.getByText("הזנת נקודה במקלדת", { exact: true }).press("Enter")
+  await dialog.getByRole("textbox", { name: "קו רוחב", exact: true }).fill("31.42")
+  await dialog.getByRole("textbox", { name: "קו אורך", exact: true }).fill("34.49")
+  await dialog.getByRole("textbox", { name: "קו אורך", exact: true }).press("Enter")
+  await dialog.getByRole("button", { name: "המשך", exact: true }).click()
+  await dialog.getByLabel("שם המקום").fill(name)
+  await dialog.getByRole("button", { name: "המשך", exact: true }).click()
+  await expect(dialog.getByRole("checkbox")).toHaveCount(2)
+  for (const box of await dialog.getByRole("checkbox").all()) await box.check()
+  const sent = page.waitForResponse((r) => r.url().endsWith("/api/v1/submissions") && r.status() === 201)
+  await dialog.getByRole("button", { name: "שליחה לבדיקה", exact: true }).click()
+  const { id } = (await (await sent).json()) as { id: string }
+  await expect(page.getByRole("button", { name: "לצפייה בהצעה", exact: true })).toBeVisible(DAY)
+  const fed = page.waitForResponse(async (r) => r.url().includes("/api/v1/feed?") && r.status() === 200 && (await r.text()).includes(id))
+  const moderator = await browser.newContext()
+  await moderator.request.post("/__dev/login", { data: { email: "dev@example.test" } })
+  const mod = await moderator.newPage()
+  await mod.goto("/admin/")
+  const item = mod.getByRole("article", { name })
+  await item.getByRole("button", { name: "אישור", exact: true }).click()
+  await expect(item).toHaveCount(0)
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")))
+  await fed
+  await page.getByRole("button", { name: "לצפייה בהצעה", exact: true }).click()
+  await expect(page.getByRole("heading", { name, exact: true })).toBeVisible(DAY)
+  await expect(page).toHaveURL(new RegExp(`#/place/${id}$`))
+  await expect(page.getByRole("button", { name: "מעקב אחרי ההצעה", exact: true })).toBeVisible()
+})
 
 test("saving twice while the first send is slow sends the place once", async ({ browser }) => {
   const page = await skipIntro(browser, { geolocation: { latitude: 31.42, longitude: 34.49 }, permissions: ["geolocation"] })
