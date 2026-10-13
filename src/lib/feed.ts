@@ -75,11 +75,13 @@ export function startFeedSync(): () => void {
       // Where this browser's removals stood when this look at the server began: one learned after it is newer than
       // anything the response brings back.
       const askedGen = await unlistedGeneration()
-      const { v } = (await (await fetch("/api/v1/version", { cache: "no-store" })).json()) as { v: string }
+      const version = await fetch("/api/v1/version", { cache: "no-store", signal: AbortSignal.timeout(8000) })
+      if (!version.ok) return
+      const { v } = (await version.json()) as { v: string }
       const mine = useStore.getState().feedVersion
       // Nothing newer: what is shown is current, and now known to be, even if it came from the offline copy.
       if (mine && !isNewer(v, mine)) return void (!useStore.getState().feedLive && useStore.setState({ feedLive: true }))
-      const res = await fetch(`/api/v1/feed?v=${encodeURIComponent(v)}`, { cache: "no-store" })
+      const res = await fetch(`/api/v1/feed?v=${encodeURIComponent(v)}`, { cache: "no-store", signal: AbortSignal.timeout(8000) })
       // The version moved between the two requests: ask once more, then wait for the next wake.
       if (res.status === 409 && retry) {
         busy = false

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { beforeAll, describe, expect, it } from "vitest"
 import { OG_TEMPLATE_VERSION, renderOg, type OgProjection } from "../lib/og"
 import { pixels } from "./png"
 
@@ -16,16 +16,27 @@ const GREEN_JPEG = b(
 const projection: OgProjection = { v: OG_TEMPLATE_VERSION, kind: "grove", name_he: "חורשת דמו", place_he: "יישוב דמו", photo: "public/x" }
 
 describe("uniform sharing art", () => {
-  it("produces identical bytes for the same place with every photo format, no photo, or unreadable bytes", async () => {
-    const fixed = await renderOg(projection, null)
-    for (const bytes of [RED_WEBP_LOSSLESS, BLUE_WEBP_LOSSY, YELLOW_PNG, GREEN_JPEG, new TextEncoder().encode("<svg/>")])
-      expect(await renderOg(projection, bytes)).toEqual(fixed)
+  let fixed: Uint8Array
+  beforeAll(async () => {
+    fixed = await renderOg(projection, null)
+  })
+  // One real render per case: every former input remains covered under the unchanged test deadline.
+  it.each([
+    ["lossless WebP", RED_WEBP_LOSSLESS],
+    ["lossy WebP", BLUE_WEBP_LOSSY],
+    ["PNG", YELLOW_PNG],
+    ["JPEG", GREEN_JPEG],
+    ["unreadable bytes", new TextEncoder().encode("<svg/>")],
+  ])("keeps identical rendered bytes with %s", async (_format, bytes) => {
+    expect(await renderOg(projection, bytes as Uint8Array)).toEqual(fixed)
+  })
+  it("renders the botanical mark on the cream background without a photo", async () => {
     const at = await pixels(fixed)
     expect(at(40, 40)).toEqual([249, 247, 242])
     // Real pixels in the botanical mark must differ from the cream background.
     expect(at(195, 220)).not.toEqual([249, 247, 242])
   })
   it("keeps each place identifiable rather than turning every link into the same card", async () => {
-    expect(await renderOg({ ...projection, name_he: "ספסל אחר" }, null)).not.toEqual(await renderOg(projection, null))
+    expect(await renderOg({ ...projection, name_he: "ספסל אחר" }, null)).not.toEqual(fixed)
   })
 })

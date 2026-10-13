@@ -168,5 +168,6 @@ test("list output of the installed Playwright covers all core tags and partition
   verifyShards(whole, shards)
   const webkit = entries(list("webkit"))
   assert.ok(webkit.some((t) => t.project === "seed"))
-  assert.equal(webkit.filter((t) => t.project === "webkit-phone").length, 5)
+  // Existing five phone checks plus CSP enforcement, real photo upload and responsive gallery rendering.
+  assert.equal(webkit.filter((t) => t.project === "webkit-phone").length, 8)
 })

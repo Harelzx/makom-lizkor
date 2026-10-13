@@ -93,30 +93,33 @@ async function smallJson(response: Response): Promise<Record<string, unknown>> {
   }
 }
 
-/** One refresh and one send. A lost acknowledgement must not cause an automatic resend or provider fallback. */
-export async function gmailSend(env: GmailSettings, mail: Mail, request: typeof fetch = fetch): Promise<boolean> {
-  if (!gmailReady(env)) return false
+export type MailOutcome = "accepted" | "retryable" | "uncertain" | "stopped" | "deferred"
+
+/** One refresh and one send; distinguishes a safe pre-send failure from a lost acknowledgement. */
+export async function gmailAttempt(env: GmailSettings, mail: Mail, request: typeof fetch = fetch): Promise<MailOutcome> {
+  if (!gmailReady(env)) return "stopped"
   const raw = gmailRaw(env.MAIL_FROM!, mail)
-  if (!raw) return false
+  if (!raw) return "stopped"
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 12_000)
+  let sending = false
   try {
-    const token = await smallJson(
-      await request("https://oauth2.googleapis.com/token", {
-        method: "POST",
-        // workerd supports follow/manual only. smallJson rejects every non-2xx response,
-        // so manual refuses redirects without forwarding OAuth credentials.
-        redirect: "manual",
-        signal: controller.signal,
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          grant_type: "refresh_token",
-          client_id: env.GMAIL_CLIENT_ID!,
-          client_secret: env.GMAIL_CLIENT_SECRET!,
-          refresh_token: env.GMAIL_REFRESH_TOKEN!,
-        }),
+    const tokenResponse = await request("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      // workerd supports follow/manual only. smallJson rejects every non-2xx response,
+      // so manual refuses redirects without forwarding OAuth credentials.
+      redirect: "manual",
+      signal: controller.signal,
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        client_id: env.GMAIL_CLIENT_ID!,
+        client_secret: env.GMAIL_CLIENT_SECRET!,
+        refresh_token: env.GMAIL_REFRESH_TOKEN!,
       }),
-    )
+    })
+    if (tokenResponse.status >= 400 && tokenResponse.status < 500 && tokenResponse.status !== 429) return "stopped"
+    const token = await smallJson(tokenResponse)
     if (
       typeof token.access_token !== "string" ||
       !token.access_token.trim() ||
@@ -124,20 +127,29 @@ export async function gmailSend(env: GmailSettings, mail: Mail, request: typeof 
       token.token_type.toLowerCase() !== "bearer" ||
       (token.scope !== undefined && token.scope !== GMAIL_SCOPE)
     )
-      return false
-    const receipt = await smallJson(
-      await request("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
-        method: "POST",
-        redirect: "manual",
-        signal: controller.signal,
-        headers: { Authorization: `Bearer ${token.access_token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ raw }),
-      }),
-    )
-    return typeof receipt.id === "string" && !!receipt.id.trim()
+      return "stopped"
+    sending = true
+    const response = await request("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
+      method: "POST",
+      redirect: "manual",
+      signal: controller.signal,
+      headers: { Authorization: `Bearer ${token.access_token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ raw }),
+    })
+    // A 429 explicitly refuses the send. A 5xx/timeout/redirect/malformed acknowledgement might follow acceptance:
+    // leave it for a person instead of guessing and automatically duplicating mail.
+    if (response.status === 429) return "retryable"
+    if (response.status >= 400 && response.status < 500) return "stopped"
+    const receipt = await smallJson(response)
+    return typeof receipt.id === "string" && !!receipt.id.trim() ? "accepted" : "uncertain"
   } catch {
-    return false
+    return sending ? "uncertain" : "retryable"
   } finally {
     clearTimeout(timer)
   }
+}
+
+/** Existing callers keep their boolean receipt contract. */
+export async function gmailSend(env: GmailSettings, mail: Mail, request: typeof fetch = fetch): Promise<boolean> {
+  return (await gmailAttempt(env, mail, request)) === "accepted"
 }

@@ -7,12 +7,14 @@ export { OpsSummary }
 /**
  * What the diagnostic agent may see of production (spec 10, 12.1; adviser a49): counts, dates and codes, under a closed
  * schema, so a field that could carry a person's words can't be added without the schema (and the release manifest's
- * snapshot of it) saying so. Error rates come from the structured logs through a source the deployment connects; with
+ * snapshot of it) saying so. Error rates come from the connected aggregate source (production uses sampled counters); with
  * none connected, or one that fails, they are unavailable, never zero.
  */
 
-/** A log-backed aggregate: error responses by code over a window, and the requests in it (the denominator). */
-export type ErrorRates = () => Promise<{ windowHours: number; requests: number; byCode: Record<string, number> } | null>
+/** Error responses by code over a window, and the requests in it (the denominator); sampling must be disclosed. */
+export type ErrorRates = (
+  env: Env,
+) => Promise<{ windowHours: number; requests: number; byCode: Record<string, number>; sampleEvery?: number } | null>
 
 const snakeKeys = (o: Record<string, number>) =>
   Object.fromEntries(Object.entries(o).map(([k, v]) => [k.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`), v]))
@@ -20,7 +22,7 @@ const snakeKeys = (o: Record<string, number>) =>
 export async function opsSummary(env: Env, errorRates: ErrorRates | undefined, now: Date): Promise<OpsSummary> {
   const db = env.DB
   const overdueBefore = new Date(now.getTime() - OVERDUE_DAYS * 86_400_000).toISOString()
-  const [places, queue, reports, attention, run, unfinished, exp, drill, alerts] = await db.batch([
+  const [places, queue, reports, attention, run, unfinished, exp, drill, alerts, delivery, budget] = await db.batch([
     db.prepare("SELECT status, COUNT(*) AS n FROM places GROUP BY status"),
     db.prepare("SELECT COUNT(*) AS pending, SUM(created_at <= ?) AS overdue FROM revisions WHERE state = 'pending'").bind(overdueBefore),
     db.prepare("SELECT status, COUNT(*) AS n FROM reports GROUP BY status"),
@@ -40,6 +42,10 @@ export async function opsSummary(env: Env, errorRates: ErrorRates | undefined, n
     db.prepare("SELECT created_at, ok FROM exports ORDER BY created_at DESC LIMIT 1"),
     db.prepare("SELECT started_at, ok, failure FROM drill_runs ORDER BY started_at DESC LIMIT 1"),
     db.prepare("SELECT job, sent_at FROM job_alerts ORDER BY job"),
+    db.prepare(
+      "SELECT verify_mail_state AS state, COUNT(*) AS n FROM contacts WHERE verify_mail_state IS NOT NULL GROUP BY verify_mail_state",
+    ),
+    db.prepare("SELECT kind, attempts AS n FROM mail_budget WHERE day = ?").bind(now.toISOString().slice(0, 10)),
   ])
   const grouped = <K extends readonly string[]>(keys: K, rows: unknown[], key: string) => {
     const out = Object.fromEntries(keys.map((k) => [k, 0])) as Record<K[number], number>
@@ -53,13 +59,14 @@ export async function opsSummary(env: Env, errorRates: ErrorRates | undefined, n
   const d = drill.results[0] as { started_at: string; ok: number | null; failure: string | null } | undefined
   let errors: OpsSummary["errors"] = { status: "unavailable" }
   try {
-    const rates = errorRates ? await errorRates() : null
+    const rates = errorRates ? await errorRates(env) : null
     if (rates)
       errors = {
         status: "ok",
         window_hours: rates.windowHours,
         requests: rates.requests,
         by_code: rates.byCode,
+        ...(rates.sampleEvery ? { sample_every: rates.sampleEvery, measurement: "sampled" as const } : {}),
         per_thousand: Object.fromEntries(
           Object.entries(rates.byCode).map(([k, n]) => [k, rates.requests ? Math.round((n * 1000 * 100) / rates.requests) / 100 : 0]),
         ),
@@ -88,6 +95,13 @@ export async function opsSummary(env: Env, errorRates: ErrorRates | undefined, n
     drill: d ? { started_at: d.started_at, ok: d.ok === null ? null : d.ok === 1, failure: d.failure } : null,
     deletion_check: await checkDeletion({ db, exports: env.EXPORTS, keys: env.EXPORT_PUBLIC_KEYS ?? "", durations: durations(env) }, now),
     alerts: alerts.results as { job: string; sent_at: string }[],
+    mail_delivery: grouped(["due", "retry", "sending", "accepted", "uncertain", "stopped"] as const, delivery.results, "state"),
+    mail_budget: {
+      day: now.toISOString().slice(0, 10),
+      ...grouped(["public", "ops"] as const, budget.results, "kind"),
+      public_limit: Number(env.MAIL_DAILY_LIMIT || 230),
+      ops_limit: Number(env.MAIL_OPS_DAILY_LIMIT || 20),
+    },
     errors,
   })
 }

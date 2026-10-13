@@ -15,6 +15,7 @@ export function Img({ className, onLoad, placeholder, style, ...props }: React.C
       >
         <img
           decoding="async"
+          loading="lazy"
           {...props}
           onLoad={(e) => {
             setLoaded(true)

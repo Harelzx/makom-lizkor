@@ -34,6 +34,14 @@ export const OpsSummary = z
     drill: z.object({ started_at: iso, ok: z.boolean().nullable(), failure: code.nullable() }).strict().nullable(),
     deletion_check: counts,
     alerts: z.array(z.object({ job: code, sent_at: iso }).strict()),
+    mail_delivery: z
+      .object({ due: count, retry: count, sending: count, accepted: count, uncertain: count, stopped: count })
+      .strict()
+      .optional(),
+    mail_budget: z
+      .object({ day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), public: count, ops: count, public_limit: count, ops_limit: count })
+      .strict()
+      .optional(),
     errors: z.discriminatedUnion("status", [
       z.object({ status: z.literal("unavailable") }).strict(),
       z
@@ -43,6 +51,8 @@ export const OpsSummary = z
           requests: count,
           by_code: counts,
           per_thousand: z.record(code, z.number().nonnegative()),
+          sample_every: z.number().int().positive().optional(),
+          measurement: z.literal("sampled").optional(),
         })
         .strict(),
     ]),

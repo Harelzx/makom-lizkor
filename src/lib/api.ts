@@ -28,7 +28,8 @@ export async function submitPlace(input: SubmissionInput, key: string): Promise<
       method: "POST",
       headers: { "Content-Type": "application/json", "Idempotency-Key": key, ...(token ? { "Turnstile-Token": token } : {}) },
       body: JSON.stringify(input),
-      signal: AbortSignal.timeout(8000),
+      // Turnstile siteverify has an 8s server deadline; leave room for the transactional receipt, never Gmail.
+      signal: AbortSignal.timeout(12_000),
     })
     if (res.status === 201 || res.status === 200) {
       const receipt: unknown = await res.json()
@@ -205,7 +206,8 @@ export async function confirmEmail(token: string): Promise<Confirmed> {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token }),
-      signal: AbortSignal.timeout(8000),
+      // Tracking-mail provider is bounded at 12s. Keep the confirmed-email result readable after that budget.
+      signal: AbortSignal.timeout(20_000),
     })
     if (res.ok) {
       const { first, mail } = (await res.json()) as { first?: boolean; mail?: string }
@@ -336,7 +338,8 @@ export async function sendReport(input: ReportInput, key: string, deadline = Inf
       method: "POST",
       headers: { "Content-Type": "application/json", "Idempotency-Key": key, ...(token ? { "Turnstile-Token": token } : {}) },
       body: JSON.stringify(input),
-      signal: AbortSignal.timeout(10_000),
+      // The stored report receipt waits for siteverify and its transaction, not alert delivery.
+      signal: AbortSignal.timeout(12_000),
     })
   } catch {
     return { ok: false, kind: "unknown" }

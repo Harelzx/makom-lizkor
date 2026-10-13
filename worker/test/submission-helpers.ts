@@ -6,7 +6,15 @@ import { admin } from "./helpers"
 
 export const seg = (marker: number, payload: number[]) => [0xff, marker, (payload.length + 2) >> 8, (payload.length + 2) & 0xff, ...payload]
 export const jpeg = (fill = 0x55) =>
-  new Uint8Array([0xff, 0xd8, ...seg(0xda, [1, 1, 0, 0, 63, 0]), ...new Array(32).fill(fill), 0xff, 0xd9])
+  new Uint8Array([
+    0xff,
+    0xd8,
+    ...seg(0xc0, [8, 0, 16, 0, 16, 1, 1, 0x11, 0]),
+    ...seg(0xda, [1, 1, 0, 0, 63, 0]),
+    ...new Array(32).fill(fill),
+    0xff,
+    0xd9,
+  ])
 export const send = async (name: string, extra: Record<string, unknown> = {}, key = crypto.randomUUID().replaceAll("-", "")) => {
   const res = await call("http://local/api/v1/submissions", {
     method: "POST",

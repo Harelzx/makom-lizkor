@@ -21,7 +21,7 @@ This directory (`web/`) is v2, the current site, and the git repository. It's th
 Run every command from this directory.
 
 ```bash
-npm install            # postinstall runs patch-package (patches/vaul+1.1.2.patch passes `modal` to the drawer context; re-check it before bumping vaul)
+npm install            # postinstall runs the hash-checked scripts/patch-vaul.mjs; re-check its modal-context fix before bumping vaul
 npm run dev            # http://localhost:5174 (strictPort)
 npm run build          # tsc -b && vite build → dist/client (the site and /admin/) and dist/makom_lizkor (the Worker)
 npm run typecheck      # tsc -b: src (tsconfig.app), vite.config (tsconfig.node), e2e + playwright.config (tsconfig.e2e)

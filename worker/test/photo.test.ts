@@ -14,6 +14,7 @@ const jpeg = (extra = 0) =>
     ...seg(0xe0, [...ascii("JFIF"), 0, 1, 1, 0, 0, 1, 0, 1, 0, 0]),
     ...seg(0xe1, [...ascii("Exif"), 0, 0, ...ascii("GPS 31.4200 34.4900")]),
     ...seg(0xfe, ascii("camera owner")),
+    ...seg(0xc0, [8, 0, 16, 0, 16, 1, 1, 0x11, 0]),
     ...seg(0xda, [1, 1, 0, 0, 63, 0]),
     ...new Array(32 + extra).fill(0x55),
     0xff,

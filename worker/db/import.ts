@@ -59,8 +59,13 @@ export function filterForImport(tables: Record<string, Row[]>, now: Date, d: Dur
     .filter((x) => !erased.has(x.place_id) && !due(x.purge_after, c.now))
     .map((x) =>
       x.email !== null && x.email_verified_at === null && due(x.email_verify_expires, c.now)
-        ? { ...x, email: null, email_verify_hash: null }
-        : x,
+        ? { ...x, email: null, email_verify_hash: null, ...("verify_mail_state" in x ? { verify_mail_state: null } : {}) }
+        : {
+            ...x,
+            ...(x.verify_mail_state && ["due", "retry", "sending"].includes(String(x.verify_mail_state))
+              ? { verify_mail_state: "uncertain" }
+              : {}),
+          },
     )
   const reports = (tables.reports ?? []).map((x) =>
     due(x.purge_after, c.now)

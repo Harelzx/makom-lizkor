@@ -22,7 +22,7 @@ const dist = (client, worker) => {
   dirs.push(d)
   mkdirSync(join(d, "client/assets"), { recursive: true })
   mkdirSync(join(d, "makom_lizkor"), { recursive: true })
-  writeFileSync(join(d, "client/assets/main.js"), client)
+  writeFileSync(join(d, "client/assets/main-TEST1234.js"), client)
   writeFileSync(join(d, "makom_lizkor/index.js"), worker)
   return d
 }
@@ -33,7 +33,7 @@ test("a build without the records passes, even with the curated field names the 
 test("a summary in the client or the Worker fails, as text or as \\u escapes", () => {
   const plain = `var s=${JSON.stringify(records)}`
   const escaped = `var s="${records[0].summary_he.replace(/[\u0080-￿]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`)}"`
-  assert.deepEqual(bundleProblems(dist(plain, "x"), records), ["client/assets/main.js: 2 marker(s) of curated records"])
+  assert.deepEqual(bundleProblems(dist(plain, "x"), records), ["client/assets/main-TEST1234.js: 2 marker(s) of curated records"])
   assert.deepEqual(bundleProblems(dist("x", escaped), records), ["makom_lizkor/index.js: 1 marker(s) of curated records"])
 })
 test("a missing build fails rather than passing", () => {
@@ -77,4 +77,11 @@ test("the committed landscapes share no file or bytes with a curated photo (P7-M
   for (const dir of ["public/landscapes", "public/landscapes/thumb"])
     for (const name of readdirSync(dir).filter((n) => n.endsWith(".webp")))
       assert.ok(!contents.has(sha(readFileSync(join(dir, name)))), `${dir}/${name} has a curated photo's bytes`)
+})
+
+test("immutable assets must be hashed while HTML and non-asset paths may revalidate", () => {
+  const d = dist("x", "y")
+  writeFileSync(join(d, "client/assets/unhashed.js"), "x")
+  writeFileSync(join(d, "client/index.html"), "<html></html>")
+  assert.deepEqual(bundleProblems(d, records), ["client/assets/unhashed.js: unhashed file in immutable asset namespace"])
 })

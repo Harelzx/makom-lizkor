@@ -14,6 +14,8 @@ const bundled = await build({
 const { sendMail } = await import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString("base64")}`)
 const message = { to: "recipient@example.invalid", subject: "אישור כתובת", text: "קישור בדיקה סינתטי" }
 const sender = "notifications@makom-lizkor.org"
+// Local atomic-budget stand-in; no provider/live database or persisted recipient.
+const DB = { prepare: () => ({ bind: () => ({ first: async () => ({ attempts: 1 }) }) }) }
 
 test("production sends the exact structured message and accepts the provider's message id", async () => {
   const calls = []
@@ -24,7 +26,7 @@ test("production sends the exact structured message and accepts the provider's m
       return { messageId: "synthetic-message" }
     },
   }
-  assert.equal(await sendMail({ ENVIRONMENT: "production", MAIL_FROM: sender, MAIL: binding }, message), true)
+  assert.equal(await sendMail({ ENVIRONMENT: "production", DB, MAIL_FROM: sender, MAIL: binding }, message), true)
   assert.deepEqual(calls, [{ from: sender, ...message }])
 })
 
@@ -65,15 +67,18 @@ test("provider exceptions and missing acknowledgements return false without logg
         throw new Error("recipient@example.invalid / private tracking link")
       },
     }
-    assert.equal(await sendMail({ ENVIRONMENT: "production", MAIL_FROM: sender, MAIL: fail }, message), false)
+    assert.equal(await sendMail({ ENVIRONMENT: "production", DB, MAIL_FROM: sender, MAIL: fail }, message), false)
+    let attempts = 0
     for (const result of [undefined, null, {}, { messageId: "" }, { messageId: " " }])
       assert.equal(
         await sendMail(
           {
             ENVIRONMENT: "production",
+            DB,
             MAIL_FROM: sender,
             MAIL: {
               async send() {
+                attempts++
                 return result
               },
             },
@@ -82,12 +87,25 @@ test("provider exceptions and missing acknowledgements return false without logg
         ),
         false,
       )
+    assert.equal(attempts, 5)
     assert.equal(error.mock.callCount(), 0)
     assert.equal(log.mock.callCount(), 0)
   } finally {
     error.mock.restore()
     log.mock.restore()
   }
+})
+
+test("a missing or failed atomic budget store fails closed before contacting the provider", async () => {
+  const send = mock.fn(async () => ({ messageId: "synthetic" }))
+  const broken = {
+    prepare() {
+      throw new Error("unavailable")
+    },
+  }
+  for (const budget of [undefined, broken])
+    assert.equal(await sendMail({ ENVIRONMENT: "production", DB: budget, MAIL_FROM: sender, MAIL: { send } }, message), false)
+  assert.equal(send.mock.callCount(), 0)
 })
 
 test("development still writes only the local outbox, even with a configured live binding", async () => {

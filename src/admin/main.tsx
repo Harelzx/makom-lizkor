@@ -4,6 +4,7 @@ import "@/index.css"
 import { Queue } from "./queue"
 import { Reports } from "./reports"
 import { CuratedImport } from "./curated-import"
+import { Operations } from "./operations"
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
@@ -12,6 +13,7 @@ createRoot(document.getElementById("root")!).render(
     <main className="h-full overflow-y-auto">
       <div className="mx-auto flex max-w-2xl flex-col gap-10 p-6">
         <h1 className="sr-only">ניהול · מקום לזכור</h1>
+        <Operations />
         <Reports />
         <Queue />
         <CuratedImport />

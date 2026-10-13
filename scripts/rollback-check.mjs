@@ -50,10 +50,18 @@ function statements(sql) {
 /**
  * A column added, by the only grammar the check accepts (a52): ALTER TABLE t ADD [COLUMN] c [type], then nothing, a
  * DEFAULT of a plain literal, or NOT NULL with a DEFAULT that is a value. A required column whose default is NULL is
- * added to an empty table, and the earlier code's insert then fails (a53). Anything else, CHECK, UNIQUE, REFERENCES,
+ * added to an empty table, and the earlier code's insert then fails (a53). The nullable literal-enum CHECK below is
+ * separately established as compatible. Other CHECK expressions, UNIQUE, REFERENCES,
  * COLLATE, a generated column, is refused: its compatibility with the earlier code's inserts isn't established.
  */
 function addColumnProblem(st) {
+  // A narrowly established nullable constraint: the earlier INSERT omits this new column, so it is NULL;
+  // SQLite's CHECK(column IN(literals)) evaluates to NULL and passes. No DEFAULT, NOT NULL, other-column
+  // reference, expression or extra constraint is accepted. Unknown grammar still fails closed below.
+  if (
+    /^ALTER TABLE [a-z_]\w* ADD (?:COLUMN )?([a-z_]\w*) (?:TEXT|INTEGER|REAL|BLOB|NUMERIC) CHECK \(\1 IN \('\?'(?:, ?'\?')*\)\)$/i.test(st)
+  )
+    return ""
   const m = /^ALTER TABLE \S+ ADD (?:COLUMN )?\S+(?: (?:TEXT|INTEGER|REAL|BLOB|NUMERIC))?(?: (.*))?$/i.exec(st)
   if (!m) return null
   const rest = (m[1] ?? "").trim()

@@ -9,20 +9,20 @@ test.use({ reducedMotion: "reduce" })
 
 const PAGES = ["/", "/favicon.svg", "/place/car-wall-tkuma", "/place/not-a-place", "/admin/", "/api/v1/health"]
 
-test("every kind of address carries the headers, with the policy only reporting", { tag: "@core-headers" }, async ({ request }) => {
+test("every kind of address carries the enforced policy", { tag: "@core-headers" }, async ({ request }) => {
   for (const path of PAGES) {
     const res = await request.get(path, { maxRedirects: 0 })
     expect(res.status(), path).toBeLessThan(500)
     const h = res.headers()
     for (const [name, value] of Object.entries(SECURITY_HEADERS)) expect(h[name.toLowerCase()], `${path} ${name}`).toBe(value)
-    expect(h["content-security-policy-report-only"], path).toBe(CSP)
-    expect(h["content-security-policy"], path).toBeUndefined()
+    expect(h["content-security-policy-report-only"], path).toBeUndefined()
+    expect(h["content-security-policy"], path).toBe(CSP)
   }
 })
 
 test(
   "a violation made on purpose is the only one the page reports, and the collector answers it",
-  { tag: "@core-csp" },
+  { tag: ["@core-csp", "@phone"] },
   async ({ page }) => {
     const consoled: string[] = []
     const reports: string[] = []
@@ -39,7 +39,19 @@ test(
     await expect(page.getByRole("heading", { name: "קיר המכוניות ליד תקומה" })).toBeVisible({ timeout: 20_000 })
     await fed
     const answered = page.waitForResponse((r) => r.url().endsWith("/api/csp-report") && !!r.request().postData()?.includes("csp-control"))
-    // An image from a host the policy doesn't name: reported, and (the policy only reports) still attempted.
+    // Positive control: the policy must actively block execution of an inline script, not merely report it.
+    await page.evaluate(() => {
+      const script = document.createElement("script")
+      script.textContent = "window.__cspUnsafeExecuted = true"
+      document.body.append(script)
+    })
+    expect(await page.evaluate(() => (window as unknown as { __cspUnsafeExecuted?: boolean }).__cspUnsafeExecuted)).toBeUndefined()
+    // A forbidden image is blocked and reported. Its network request must never leave the browser.
+    let networkAttempted = false
+    await page.route("https://csp-control.invalid/**", async (route) => {
+      networkAttempted = true
+      await route.abort()
+    })
     await page.evaluate(() => {
       const img = document.createElement("img")
       img.src = "https://csp-control.invalid/positive-control.png"
@@ -47,6 +59,8 @@ test(
     })
     expect((await answered).status()).toBe(204)
     expect(consoled.some((t) => t.includes("Content Security Policy") && t.includes("csp-control.invalid"))).toBe(true)
-    expect(reports).toEqual(["img-src https://csp-control.invalid/positive-control.png"])
+    expect(reports).toContain("img-src https://csp-control.invalid/positive-control.png")
+    expect(reports.filter((r) => !r.includes("inline"))).toEqual(["img-src https://csp-control.invalid/positive-control.png"])
+    expect(networkAttempted).toBe(false)
   },
 )

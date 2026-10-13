@@ -3,7 +3,7 @@ import { createExecutionContext } from "cloudflare:test"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { createApp } from "../index"
 import { contactMailReady, sendMail } from "../lib/mail"
-import { GMAIL_SCOPE, gmailRaw, gmailReady, gmailSend } from "../lib/gmail"
+import { GMAIL_SCOPE, gmailRaw, gmailReady, gmailSend, gmailAttempt } from "../lib/gmail"
 
 const settings = {
   MAIL_FROM: "synthetic.project@gmail.com",
@@ -31,6 +31,16 @@ afterEach(() => {
 })
 
 describe("Gmail send-only transport, without live Google requests", () => {
+  it("distinguishes safe pre-send retries from uncertain provider acknowledgement without a blind resend", async () => {
+    expect(await gmailAttempt(settings, message, vi.fn<typeof fetch>().mockRejectedValue(new Error("token network")))).toBe("retryable")
+    for (const status of [503, 302, 200]) {
+      const fake = vi.fn<typeof fetch>().mockResolvedValueOnce(json(token)).mockResolvedValueOnce(json({}, status))
+      expect(await gmailAttempt(settings, message, fake)).toBe("uncertain")
+      expect(fake).toHaveBeenCalledTimes(2)
+    }
+    const limited = vi.fn<typeof fetch>().mockResolvedValueOnce(json(token)).mockResolvedValueOnce(json({}, 429))
+    expect(await gmailAttempt(settings, message, limited)).toBe("retryable")
+  })
   it("refreshes once and sends one exact UTF-8 MIME message; only an id is acceptance", async () => {
     const fake = request()
     expect(await gmailSend(settings, message, fake)).toBe(true)

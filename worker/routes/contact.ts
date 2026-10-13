@@ -1,19 +1,19 @@
 import { Hono } from "hono"
-import { bodyLimit } from "hono/body-limit"
 import { zValidator } from "@hono/zod-validator"
 import { ContactInput } from "@/shared/contact"
 import { CONTACT_EMAIL } from "@/config"
 import type { AppEnv } from "../index"
 import { PRIVATE, problem } from "../lib/http"
 import { contactMailReady } from "../lib/mail"
-import { rateKey } from "../lib/ids"
+import { boundedBody, requestCap } from "../lib/request-guard"
 import { checkTurnstile } from "../lib/turnstile"
 
 export const contact = new Hono<AppEnv>()
 contact.get("/", (c) => c.json({ enabled: contactMailReady(c.env) }, 200, PRIVATE))
 contact.post(
   "/",
-  bodyLimit({ maxSize: 12_000, onError: (c) => problem(c, 413, "too_large") }),
+  requestCap("REPORT_LIMIT", "contact:"),
+  boundedBody(12_000),
   zValidator("json", ContactInput, (r, c) => (r.success ? undefined : problem(c, 400, "invalid_input"))),
   async (c) => {
     // The recipient is fixed on the server. This endpoint cannot relay mail to a caller's chosen address.
@@ -21,8 +21,6 @@ contact.post(
     if (c.req.header("Origin") !== c.env.PUBLIC_ORIGIN || c.req.header("Sec-Fetch-Site") !== "same-origin")
       return problem(c, 403, "cross_site")
     const address = c.req.header("CF-Connecting-IP")
-    if (address && !(await c.env.REPORT_LIMIT.limit({ key: await rateKey(c.env.TRACKING_SECRET, `contact:${address}`) })).success)
-      return problem(c, 429, "rate_limited", {}, { "Retry-After": "60" })
     const outcome = await checkTurnstile(c.env, c.get("verifyTurnstile"), c.req.header("Turnstile-Token"), "contact", address)
     if (outcome !== "ok") return problem(c, outcome === "unavailable" ? 503 : 403, `turnstile_${outcome}`)
     const { email, message } = c.req.valid("json")

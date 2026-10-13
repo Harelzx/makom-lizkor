@@ -8,8 +8,11 @@ import { CSP, SECURITY_HEADERS } from "../worker/lib/security-headers.ts"
 export const FILE = new URL("../public/_headers", import.meta.url)
 
 export function headersFile() {
-  const lines = Object.entries({ ...SECURITY_HEADERS, "Content-Security-Policy-Report-Only": CSP }).map(([k, v]) => `  ${k}: ${v}`)
-  return `# Written by scripts/security-headers.mjs from worker/lib/security-headers.ts; don't edit by hand.\n/*\n${lines.join("\n")}\n`
+  const lines = Object.entries({ ...SECURITY_HEADERS, "Content-Security-Policy": CSP }).map(([k, v]) => `  ${k}: ${v}`)
+  // /assets is reserved for Vite content-hashed build outputs. bundle-check verifies every filename before deploy.
+  // HTML must revalidate to discover the next build. No API/private/media response inherits these static rules.
+  // No Cache-Control on /*: Cloudflare combines matching custom rules, which would retain no-cache on assets.
+  return `# Written by scripts/security-headers.mjs from worker/lib/security-headers.ts; don't edit by hand.\n/*\n${lines.join("\n")}\n/\n  Cache-Control: no-cache\n/admin/*\n  Cache-Control: no-cache\n/assets/*\n  Cache-Control: public, max-age=31536000, immutable\n`
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {

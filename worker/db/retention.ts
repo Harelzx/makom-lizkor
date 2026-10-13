@@ -144,7 +144,7 @@ export async function runRetention(env: OpEnv, now: Date): Promise<{ id: string;
       (
         await db
           .prepare(
-            `UPDATE contacts SET email = NULL, email_verify_hash = NULL
+            `UPDATE contacts SET email = NULL, email_verify_hash = NULL, verify_mail_state = NULL
              WHERE email IS NOT NULL AND email_verified_at IS NULL AND email_verify_expires <= ?`,
           )
           .bind(at)
@@ -462,7 +462,7 @@ export async function tellModerators(db: D1Database, env: Env, sendMail: SendMai
     ),
   ]
   let all = moderators.length > 0
-  for (const to of moderators) if (!(await sendMail(env, { to, subject, text }))) all = false
+  for (const to of moderators) if (!(await sendMail(env, { to, subject, text, budget: "ops" }))) all = false
   if (!all) return false
   await db
     .prepare("INSERT INTO job_alerts (job, sent_at) VALUES (?1, ?2) ON CONFLICT (job) DO UPDATE SET sent_at = excluded.sent_at")

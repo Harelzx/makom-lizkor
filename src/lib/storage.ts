@@ -251,10 +251,14 @@ export function downloadJSON(filename: string, data: unknown) {
 /** Downscale a photo before storing it; re-encoding also drops EXIF location data. */
 export async function resizeImage(file: File, max = 1600): Promise<string> {
   const bitmap = await createImageBitmap(file)
-  const scale = Math.min(1, max / Math.max(bitmap.width, bitmap.height))
-  const canvas = document.createElement("canvas")
-  canvas.width = Math.round(bitmap.width * scale)
-  canvas.height = Math.round(bitmap.height * scale)
-  canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
-  return canvas.toDataURL("image/jpeg", 0.84)
+  try {
+    const scale = Math.min(1, max / Math.max(bitmap.width, bitmap.height))
+    const canvas = document.createElement("canvas")
+    canvas.width = Math.round(bitmap.width * scale)
+    canvas.height = Math.round(bitmap.height * scale)
+    canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+    return canvas.toDataURL("image/jpeg", 0.84)
+  } finally {
+    bitmap.close()
+  }
 }

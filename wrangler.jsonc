@@ -6,6 +6,8 @@
   // No side door around Access: the site is reached only at its own domain (spec 11; release:check, release-platform).
   "workers_dev": false,
   "preview_urls": false,
+  // Explicit invocation ceiling at the existing paid HTTP/<1h-cron default. Do not lower shared backup CPU blindly.
+  "limits": { "cpu_ms": 30000 },
   // The SPA is served as static assets; only these paths run the Worker.
   "assets": {
     "binding": "ASSETS",
@@ -57,6 +59,8 @@
     "TURNSTILE_HOSTNAMES": "makom-lizkor.makom-staging.workers.dev",
     // Past this many submissions waiting for review, the form stops politely (spec 12, load shedding).
     "QUEUE_LIMIT": "200",
+    "MAIL_DAILY_LIMIT": "230",
+    "MAIL_OPS_DAILY_LIMIT": "20",
     // The Worker's own cache, as this configuration's `cache` block sets it: off, so Cloudflare stores none of the
     // Worker's answers and a removal has no edge copy to purge (C-CACHE, worker/lib/purge.ts). release-cache.mjs holds
     // the two together; edge-check fails a deployment that says off and answers from a cache.
@@ -88,6 +92,7 @@
     { "name": "REPORT_LIMIT", "namespace_id": "2003", "simple": { "limit": 5, "period": 60 } },
     // CSP reports: a page breaking the policy sends one per blocked load; past twenty a minute it is the same news.
     { "name": "CSP_LIMIT", "namespace_id": "2004", "simple": { "limit": 20, "period": 60 } },
+    { "name": "READ_LIMIT", "namespace_id": "2005", "simple": { "limit": 240, "period": 60 } },
   ],
   // The scheduled jobs (worker/jobs.ts): unfinished decisions, the 24-hour backstop, reminders to moderators, and the
   // removal requests' abuse codes, cleared after RETENTION.reportAbuseCodeHours.
@@ -117,13 +122,16 @@
         { "name": "SUBMIT_LIMIT", "namespace_id": "3001", "simple": { "limit": 10, "period": 60 } },
         { "name": "TRIBUTE_LIMIT", "namespace_id": "3002", "simple": { "limit": 60, "period": 60 } },
         { "name": "REPORT_LIMIT", "namespace_id": "3003", "simple": { "limit": 5, "period": 60 } },
-        { "name": "CSP_LIMIT", "namespace_id": "3004", "simple": { "limit": 20, "period": 60 } }
+        { "name": "CSP_LIMIT", "namespace_id": "3004", "simple": { "limit": 20, "period": 60 } },
+        { "name": "READ_LIMIT", "namespace_id": "3005", "simple": { "limit": 240, "period": 60 } }
       ],
       "vars": {
         "EPOCH": "0",
         "MAIL_PROVIDER": "cloudflare", "MAIL_FROM": "", "GMAIL_ACCOUNT": "", "GMAIL_OAUTH_STATUS": "",
         "RETENTION_DAY_SECONDS": "", "ACCESS_TEAM_DOMAIN": "", "ACCESS_AUD": "",
-        "QUEUE_LIMIT": "200", "EDGE_CACHE": "off", "PUBLIC_ORIGIN": ""
+        "QUEUE_LIMIT": "200",
+    "MAIL_DAILY_LIMIT": "230",
+    "MAIL_OPS_DAILY_LIMIT": "20", "EDGE_CACHE": "off", "PUBLIC_ORIGIN": ""
       },
       "secrets": { "required": ["ENVIRONMENT", "MODERATORS", "OPS_SERVICE_TOKENS", "MODERATOR_SERVICE_TOKENS", "PROBE_SERVICE_TOKENS", "DEV_ACCESS_SECRET", "TURNSTILE_SECRET", "TURNSTILE_HOSTNAMES", "TRACKING_SECRET", "TRIBUTE_SECRET", "EXPORT_PUBLIC_KEYS"] }
     },
@@ -173,6 +181,8 @@
         "ACCESS_AUD": "",
         "TURNSTILE_HOSTNAMES": "",
         "QUEUE_LIMIT": "200",
+    "MAIL_DAILY_LIMIT": "230",
+    "MAIL_OPS_DAILY_LIMIT": "20",
         // As production: the Worker's cache off (C-CACHE).
         "EDGE_CACHE": "off",
         "PUBLIC_ORIGIN": "",
@@ -188,6 +198,7 @@
         { "name": "TRIBUTE_LIMIT", "namespace_id": "1002", "simple": { "limit": 60, "period": 60 } },
         { "name": "REPORT_LIMIT", "namespace_id": "1003", "simple": { "limit": 5, "period": 60 } },
         { "name": "CSP_LIMIT", "namespace_id": "1004", "simple": { "limit": 20, "period": 60 } },
+        { "name": "READ_LIMIT", "namespace_id": "1005", "simple": { "limit": 240, "period": 60 } },
       ],
     },
   },

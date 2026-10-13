@@ -1,0 +1,20 @@
+name: security
+on:
+  schedule:
+    - cron: "17 7 * * 1"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run security:secrets
+      - run: npm run security:deps

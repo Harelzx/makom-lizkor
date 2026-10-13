@@ -6,6 +6,7 @@ import { claimTrackingMail, MAIL_TRIES, trackingMailSent, verifyEmail } from "..
 import { clock } from "../lib/clock"
 import { PRIVATE, problem } from "../lib/http"
 import { trackingMail } from "../lib/messages"
+import { boundedBody, requestCap } from "../lib/request-guard"
 
 export const email = new Hono<AppEnv>()
 
@@ -15,6 +16,8 @@ export const email = new Hono<AppEnv>()
  */
 email.post(
   "/verify",
+  requestCap("SUBMIT_LIMIT", "verify:"),
+  boundedBody(1024),
   zValidator("json", z.object({ token: z.string().min(1).max(64) }).strict(), (r, c) =>
     r.success ? undefined : problem(c, 400, "invalid_input"),
   ),
