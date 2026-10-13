@@ -312,17 +312,13 @@ export function Shell() {
             // Vaul offsets numeric snap points against the whole viewport, not the drawer's CSS height.
             // Keep that height, but reserve its offscreen part so every scroll position remains reachable.
             style={{ paddingBottom: typeof snap === "number" ? `${(1 - snap) * 100}dvh` : `calc(100dvh - ${peek})` }}
-            className={cn(
-              "fixed inset-x-0 bottom-0 z-30 flex h-dvh flex-col rounded-t-[28px] outline-none",
-              folded ? "bg-transparent" : "bg-surface shadow-panel ring-1 ring-line",
-            )}
+            // One surface from the screen's edge, folded or raised: a sheet that comes out of the edge reads as one to
+            // pull, where a floating card read as a toolbar. Safari's bar then floats over the sheet, not over a strip of map.
+            className="fixed inset-x-0 bottom-0 z-30 flex h-dvh flex-col rounded-t-[28px] bg-surface shadow-panel ring-1 ring-line outline-none"
           >
             <Drawer.Title className="sr-only">מקומות וקהילות</Drawer.Title>
             <div ref={measureMobileBar} className="flow-root shrink-0 pb-[max(12px,env(safe-area-inset-bottom))]">
-              <div
-                className={cn("flow-root", folded && "mx-3 rounded-3xl bg-surface pb-3 shadow-panel ring-1 ring-line")}
-                data-sheet-surface
-              >
+              <div className="flow-root" data-sheet-surface>
                 <div data-sheet-grip className="flex min-h-10 shrink-0 flex-col items-center justify-center gap-1 px-3 py-1.5 select-none">
                   <span className="h-1.5 w-12 rounded-full bg-ink-3" aria-hidden="true" />
                   <span className="text-center text-caption font-medium text-ink-2">

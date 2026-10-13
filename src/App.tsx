@@ -4,6 +4,7 @@ import { Toaster } from "@/components/ui/sonner"
 import { placeIdShape, useStore } from "@/store"
 import { Intro } from "@/components/intro"
 import { Celebration } from "@/components/celebration"
+import { MORNING, NIGHT } from "@/map/palette"
 
 // The opening paints from the first, small bundle. The map engine and the panels stream in behind it,
 // and the dialogs load the first time someone opens them.
@@ -100,6 +101,7 @@ export default function App() {
   const init = useStore((s) => s.init)
   const light = useStore((s) => s.light)
   const phase = useStore((s) => s.phase)
+  const picking = useStore((s) => s.picking)
   const aboutOpen = useStore((s) => s.aboutOpen)
   const addOpen = useStore((s) => s.addOpen)
   const searchOpen = useStore((s) => s.searchOpen)
@@ -176,6 +178,13 @@ export default function App() {
   // An opaque viewport edge gives Safari a real surface to extend beneath its own controls.
   // WebGL pixels alone are not a CSS background; keep the boot fallback and day surface in the map's land palette.
   const viewportColor = nightSurface ? "#0b1120" : "#e5eedb"
+  // Until the day begins the opening's night fills the screen; the sunrise ends on the day's own edges.
+  // The bottom is the sheet's --surface (white, or ink-900 at night) on a phone, where the sheet always meets the edge.
+  const dayPalette = light === "night" ? NIGHT : MORNING
+  const edges =
+    phase !== "day"
+      ? { top: "#0b1120", bottom: "#0b1120" }
+      : { top: dayPalette.horizon, bottom: picking ? dayPalette.land : light === "night" ? "#131a2c" : "#ffffff" }
 
   // The interface wears the night palette during the opening and whenever night is chosen.
   useEffect(() => {
@@ -190,20 +199,25 @@ export default function App() {
 
   return (
     <main className="fixed inset-0" style={{ backgroundColor: viewportColor }}>
-      {/* WebKit keeps the previous sampled edge for viewport-sized layers (LocalFrameView::fixedContainerEdges).
-          Small opaque edge surfaces are ordinary candidates, so dawn and the light switch can replace that color.
-          They stay below dialogs, outside the controls, and never intercept map gestures. */}
+      {/* Safari tints the space under its own controls from what sits at the screen's edges (WebKit's
+          LocalFrameView::fixedContainerEdges). A viewport-sized layer like this main keeps whatever color was sampled
+          first, the opening's night, so two thin edge surfaces stand in as ordinary candidates. Each matches what the
+          eye meets there: the map's horizon at the top, the sheet (or, while a point is reviewed, the land) at the bottom.
+          Safari samples again only when a fixed layer is added or removed, never when a color changes, so each is
+          remounted under a new key with its color. They stay below dialogs and never intercept map gestures. */}
       <div
+        key={`top-${edges.top}`}
         aria-hidden="true"
         data-viewport-edge="top"
         className="pointer-events-none fixed inset-x-0 top-0 z-[49] h-[12px] md:hidden"
-        style={{ backgroundColor: viewportColor }}
+        style={{ backgroundColor: edges.top }}
       />
       <div
+        key={`bottom-${edges.bottom}`}
         aria-hidden="true"
         data-viewport-edge="bottom"
         className="pointer-events-none fixed inset-x-0 bottom-0 z-[49] h-[12px] md:hidden"
-        style={{ backgroundColor: viewportColor }}
+        style={{ backgroundColor: edges.bottom }}
       />
       {/* The map's flowers come first in the tab order, about ninety of them; this lets a keyboard go straight to the list.
           A button rather than a link, because the address belongs to the router. */}
