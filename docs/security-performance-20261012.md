@@ -31,3 +31,13 @@
 מסך כרטיס מוגבל ל־640/960 במערך srcset גם בצפיפות3x; מקור נשאר src fallback ואינו מאבד איכות במאגר. לא מצהירים על רוחב1600 קבוע למקורות שגודלם משתנה. מבחן WebKit חשף את בחירת המקור הגדולה והראיות נשמרו לפני התיקון.
 
 מקורות רשמיים: [Cloudflare rate limits](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/), [Workers metrics](https://developers.cloudflare.com/analytics/graphql-api/tutorials/querying-workers-metrics/), [CPU limits](https://developers.cloudflare.com/workers/platform/limits/), [jSquash Worker codecs](https://github.com/jamsinclair/jSquash), [braces advisory](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm), [Sharp advisory](https://github.com/lovell/sharp/security/advisories/GHSA-wq5f-xc86-pv6w).
+
+## תוצאת הפריסה והאימות - 13.10.2026
+
+כל תשעת התיקונים נפרסו ממקור7952f5c, בגרסהa5335a98, לאחר CI38349464545 במסלול full ו-staging38351529824 עם תשע pass באותו SHA. שני חלקי Chromium אימתו141 תכונות ייחודיות בניסיון הראשון, לצד8 תכונות WebKit. migrations19-21 הוחלו על שני מסדי EU קיימים. Access, הקצב הרגיל של התחזוקה, originals/credits, פרטיות ו-EDGE_CACHE=off נשמרו.
+
+בדיקה חיה עברה: הוספת דמה פעם אחת בטופס, אימות המייל בידי הראל, אישור בממשק המנהל, הופעה בפיד ובדף ציבורי ותמונת שיתוף1200x630. הראל אישר קבלת מיילי אימות, מעקב ואישור, מהשולח הנכון. לאחר אישור מחיקה ממוקד הדמה הוסרה:90 מקומות אמיתיים נשארו בפיד; דף הדמה410; פרטי קשר ותוכן אפס בקריאת המסד. לא חזרנו על תרגיל שחזור ולא טיפלנו בנתוני אנשים אמיתיים.
+
+19 בדיקות HTTP חיות אימתו cache/CSP/פרטיות/Turnstile וגדלי התמונות. בתמונה אמיתית אחת המקור299,406בתים;640x360 הוא52,376בתים, ו-960x540 הוא108,745בתים: חיסכון82.51% ו-63.68% בהתאמה. מדגם Workers לאחר הפריסה:124 הפעלות, אפס errors, CPU P50=2.812ms/P99=571.383ms/P99.9=794.961ms. המדגם כולל יצירת תמונות קרה, OG, טופס ו-cron ואינו השוואת ביצועים ישירה למדגם הישן או הבטחת עלות. תחזוקה רגילה הסתיימה בהצלחה ב-05:45:38UTC. תצוגות מחשב916x900 ונייד390x844 נבדקו ונשמרו.
+
+הראיות וההגבלות ב-../agent-evidence/security-performance-20261012/completion.json. MFA של חשבון Cloudflare עדיין נדחה לבקשת הראל. אין טענה לאבטחה מוחלטת, ביקורת חיצונית, CWV, WhatsApp/iPhone פיזי או מחיקה פיזית אצל ספק.
