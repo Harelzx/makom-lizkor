@@ -69,7 +69,7 @@ export function buildStyle(p: Palette, labels = true): StyleSpecification {
         minzoom: 0,
         maxzoom: BASEMAP_MAXZOOM,
         attribution:
-          '<a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">© OpenMapTiles</a> <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a>',
+          '<a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">© OpenMapTiles</a> Data from <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
       },
       dem: {
         type: "raster-dem",
