@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { createApp } from "../index"
 import { contactMailReady, sendMail } from "../lib/mail"
 import { GMAIL_SCOPE, gmailRaw, gmailReady, gmailSend, gmailAttempt } from "../lib/gmail"
+import { logLineProblems } from "../lib/log"
 
 const settings = {
   MAIL_FROM: "synthetic.project@gmail.com",
@@ -119,7 +120,7 @@ describe("Gmail send-only transport, without live Google requests", () => {
     [200, {}],
     [200, { id: " " }],
     [200, { id: 12 }],
-  ])("send failure %s causes no retry, fallback, log or outbox", async (status, data) => {
+  ])("send failure %s causes no retry, fallback or outbox; logs only a safe outcome", async (status, data) => {
     const fake = vi.fn<typeof fetch>().mockResolvedValueOnce(json(token)).mockResolvedValueOnce(json(data, status))
     const log = vi.spyOn(console, "log")
     const error = vi.spyOn(console, "error")
@@ -129,7 +130,9 @@ describe("Gmail send-only transport, without live Google requests", () => {
     expect(fake).toHaveBeenCalledTimes(2)
     expect(fallback).not.toHaveBeenCalled()
     expect(log).not.toHaveBeenCalled()
-    expect(error).not.toHaveBeenCalled()
+    const outcome = status === 429 ? "retryable" : "uncertain"
+    expect(error).toHaveBeenCalledExactlyOnceWith(JSON.stringify({ level: "error", event: "mail_delivery_failed", failure: outcome }))
+    expect(logLineProblems(String(error.mock.calls[0][0]))).toEqual([])
     expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM dev_outbox").first<number>("n")).toBe(0)
   })
 

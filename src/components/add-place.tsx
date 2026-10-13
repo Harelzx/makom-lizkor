@@ -18,6 +18,7 @@ import { useVisibleViewport } from "@/lib/use-visible-viewport"
 import { SubmissionResult, type SubmissionOutcome } from "@/components/submission-result"
 import { FormFlower } from "@/components/form-flower"
 import { PreviewNotice } from "@/components/preview-notice"
+import { PointCoordinates } from "@/components/point-coordinates"
 import { requestCurrentLocation, type LocationUpdate } from "@/lib/current-location"
 import { newSubmitKey, submitPlace, uploadPhoto } from "@/lib/api"
 import { exportable } from "@/lib/export"
@@ -619,6 +620,15 @@ export function AddPlace() {
                                     : "המיקום נמצא וסומן על המפה. בדקו שזו הפינה שרציתם להוסיף."}
                               </p>
                             )}
+                            <PointCoordinates
+                              point={draft}
+                              onSelect={(point) => {
+                                stopLocating()
+                                setDraft(point)
+                                setError("")
+                                getMap()?.flyTo({ center: [point.lng, point.lat], zoom: 17, duration: reducedMotion() ? 0 : 1000 })
+                              }}
+                            />
                             {errorFor("point")}
                             {draft && (
                               <Alert key={`${draft.lat},${draft.lng}`} className="has-[>svg]:grid-cols-[auto_minmax(0,1fr)]">

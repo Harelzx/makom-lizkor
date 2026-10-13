@@ -23,7 +23,7 @@ export default defineConfig({
     {
       name: "webkit-phone",
       dependencies: ["seed"],
-      testMatch: /(a11y-phone|phone-followup|location-feedback|performance-guards|photo|security-headers)\.spec\.ts$/,
+      testMatch: /(a11y-phone|phone-followup|location-feedback|location-keyboard|performance-guards|photo|security-headers)\.spec\.ts$/,
       use: { ...devices["iPhone 13"] },
     },
   ],
