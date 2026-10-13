@@ -157,12 +157,38 @@ for (const width of [320, 390])
       await day(page)
       const sheet = page.locator("#places")
       await expect(sheet).toHaveCSS("background-color", "rgba(0, 0, 0, 0)")
+      const card = sheet.locator("[data-sheet-surface]")
+      await expect(card).toHaveCSS("background-color", "rgb(255, 255, 255)")
+      await expect.poll(async () => (await card.boundingBox())!.width).toBe(width - 24)
+      await expect(sheet.getByText("משכו למעלה להצגת המקומות", { exact: true })).toBeInViewport()
       const sheetBox = await sheet.boundingBox()
       expect(844 - sheetBox!.y).toBeLessThanOrEqual(120)
       await expect(page.getByRole("heading", { name: "מקומות לזכור", exact: true })).toHaveCount(0)
       const open = sheet.getByRole("button", { name: "הצגת המקומות", exact: true })
       await wholeButton(open)
       await wholeButton(sheet.getByRole("button", { name: "הוספת מקום", exact: true }))
+      // A sheet must actually respond to pulling its labeled grip, beside its keyboard-accessible open button.
+      // Vaul protects the first500ms after reaching its maximum snap. Model a human pull, rather than WebKit's
+      // instant20-step mouse batch that finishes inside that opening guard; the guard and assertions stay unchanged.
+      const pull = async (x: number, fromY: number, toY: number) => {
+        await page.mouse.move(x, fromY)
+        await page.mouse.down()
+        for (let step = 1; step <= 20; step++) {
+          await page.mouse.move(x, fromY + ((toY - fromY) * step) / 20)
+          await page.waitForTimeout(35)
+        }
+        await page.mouse.up()
+      }
+      const grip = (await sheet.locator("[data-sheet-grip]").boundingBox())!
+      await pull(grip.x + grip.width / 2, grip.y + grip.height / 2, grip.y - 300)
+      await expect(sheet.getByRole("heading", { name: "מקומות לזכור", exact: true })).toBeInViewport()
+      const raisedGrip = (await sheet.locator("[data-sheet-grip]").boundingBox())!
+      await pull(raisedGrip.x + raisedGrip.width / 2, raisedGrip.y + raisedGrip.height / 2, Math.min(820, raisedGrip.y + 600))
+      await expect(sheet.getByText("משכו למעלה להצגת המקומות", { exact: true })).toBeInViewport()
+      await open.click()
+      await expect(sheet.getByRole("heading", { name: "מקומות לזכור", exact: true })).toBeInViewport()
+      await sheet.getByRole("button", { name: "חזרה למפה", exact: true }).click()
+      await expect(sheet.getByText("משכו למעלה להצגת המקומות", { exact: true })).toBeInViewport()
       await open.click()
       await expect(sheet).toHaveCSS("background-color", "rgb(255, 255, 255)")
       await expect(sheet.getByRole("heading", { name: "מקומות לזכור", exact: true })).toBeInViewport()
@@ -180,7 +206,33 @@ for (const width of [320, 390])
           getComputedStyle(document.documentElement).colorScheme,
           document.querySelector('meta[name="theme-color"]')?.getAttribute("content"),
         ])
+      const edges = (color: string) =>
+        expect
+          .poll(() =>
+            page.locator("[data-viewport-edge]").evaluateAll((nodes) =>
+              nodes.map((node) => {
+                const css = getComputedStyle(node),
+                  box = node.getBoundingClientRect()
+                return {
+                  side: node.getAttribute("data-viewport-edge"),
+                  color: css.backgroundColor,
+                  pointer: css.pointerEvents,
+                  filter: css.backdropFilter,
+                  hidden: node.getAttribute("aria-hidden"),
+                  x: box.x,
+                  y: box.y,
+                  width: box.width,
+                  height: box.height,
+                }
+              }),
+            ),
+          )
+          .toEqual([
+            { side: "top", color, pointer: "none", filter: "none", hidden: "true", x: 0, y: 0, width, height: 12 },
+            { side: "bottom", color, pointer: "none", filter: "none", hidden: "true", x: 0, y: 832, width, height: 12 },
+          ])
       await expect.poll(surface).toEqual(["rgb(229, 238, 219)", "rgb(229, 238, 219)", "rgb(229, 238, 219)", "light", "#e5eedb"])
+      await edges("rgb(229, 238, 219)")
       // Visible viewport changes must stretch the map, not leave a blank band or hide the folded actions.
       for (const height of [630, 844]) {
         await page.setViewportSize({ width, height })
@@ -190,9 +242,19 @@ for (const width of [320, 390])
       }
       await page.getByRole("button", { name: "מעבר למצב לילה", exact: true }).click()
       await expect.poll(surface).toEqual(["rgb(11, 17, 32)", "rgb(11, 17, 32)", "rgb(11, 17, 32)", "dark", "#0b1120"])
+      await edges("rgb(11, 17, 32)")
       await page.getByRole("button", { name: "מעבר לאור בוקר", exact: true }).click()
       await expect.poll(surface).toEqual(["rgb(229, 238, 219)", "rgb(229, 238, 219)", "rgb(229, 238, 219)", "light", "#e5eedb"])
-      await testInfo.attach(`floating-map-${width}`, { body: await page.screenshot(), contentType: "image/png" })
+      await edges("rgb(229, 238, 219)")
+      await testInfo.attach(`compact-sheet-${width}`, { body: await page.screenshot(), contentType: "image/png" })
+      // A larger caption may wrap and the actions may stack; the measured peek keeps both complete.
+      await page.addStyleTag({ content: "html { font-size: 200% !important; }" })
+      await wholeButton(sheet.getByRole("button", { name: "הצגת המקומות", exact: true }))
+      await wholeButton(sheet.getByRole("button", { name: "הוספת מקום", exact: true }))
+      await expect(sheet.getByText("משכו למעלה להצגת המקומות", { exact: true })).toBeInViewport()
+      for (const name of ["חיפוש", "מעבר למצב לילה", "על הפרויקט"]) await wholeButton(page.getByRole("button", { name, exact: true }))
+      await expect(page.getByRole("link", { name: "מקום לזכור, חזרה למפה", exact: true })).toBeInViewport()
+      await testInfo.attach(`compact-sheet-${width}-200`, { body: await page.screenshot(), contentType: "image/png" })
     },
   )
 

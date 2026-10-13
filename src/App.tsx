@@ -190,6 +190,21 @@ export default function App() {
 
   return (
     <main className="fixed inset-0" style={{ backgroundColor: viewportColor }}>
+      {/* WebKit keeps the previous sampled edge for viewport-sized layers (LocalFrameView::fixedContainerEdges).
+          Small opaque edge surfaces are ordinary candidates, so dawn and the light switch can replace that color.
+          They stay below dialogs, outside the controls, and never intercept map gestures. */}
+      <div
+        aria-hidden="true"
+        data-viewport-edge="top"
+        className="pointer-events-none fixed inset-x-0 top-0 z-[49] h-[12px] md:hidden"
+        style={{ backgroundColor: viewportColor }}
+      />
+      <div
+        aria-hidden="true"
+        data-viewport-edge="bottom"
+        className="pointer-events-none fixed inset-x-0 bottom-0 z-[49] h-[12px] md:hidden"
+        style={{ backgroundColor: viewportColor }}
+      />
       {/* The map's flowers come first in the tab order, about ninety of them; this lets a keyboard go straight to the list.
           A button rather than a link, because the address belongs to the router. */}
       {phase === "day" && (

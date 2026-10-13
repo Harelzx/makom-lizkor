@@ -280,7 +280,7 @@ export function Shell() {
       <motion.header
         initial={{ opacity: 0, y: -12 }}
         animate={{ opacity: 1, y: 0 }}
-        className="fixed inset-x-3 top-[max(12px,env(safe-area-inset-top))] z-40 flex items-center justify-between gap-2"
+        className="fixed inset-x-[12px] top-[max(12px,env(safe-area-inset-top))] z-40 flex flex-wrap items-center justify-between gap-2"
       >
         <div className="rounded-full bg-surface px-2.5 py-3 shadow-chip ring-1 ring-line">
           <Wordmark compact />
@@ -319,20 +319,34 @@ export function Shell() {
           >
             <Drawer.Title className="sr-only">מקומות וקהילות</Drawer.Title>
             <div ref={measureMobileBar} className="flow-root shrink-0 pb-[max(12px,env(safe-area-inset-bottom))]">
-              <div data-sheet-grip className="mx-auto mt-2.5 mb-2 h-1.5 w-10 shrink-0 rounded-full bg-line-strong" aria-hidden="true" />
-              <div className="flex items-center justify-between gap-2 px-4">
-                <Button
-                  variant="secondary"
-                  className={cn("h-11 rounded-full px-3", folded && "shadow-chip ring-1 ring-line")}
-                  aria-expanded={!folded}
-                  onClick={() => setSnap(folded ? SNAPS[2] : peek)}
-                >
-                  {!folded ? "חזרה למפה" : selectedId ? "לסיפור ולפרטי הביקור" : "הצגת המקומות"}
-                </Button>
-                <Button variant="brand" className="h-11 rounded-full px-3" onClick={() => setAddOpen(true)}>
-                  <PlusIcon className="size-4" />
-                  הוספת מקום
-                </Button>
+              <div
+                className={cn("flow-root", folded && "mx-3 rounded-3xl bg-surface pb-3 shadow-panel ring-1 ring-line")}
+                data-sheet-surface
+              >
+                <div data-sheet-grip className="flex min-h-10 shrink-0 flex-col items-center justify-center gap-1 px-3 py-1.5 select-none">
+                  <span className="h-1.5 w-12 rounded-full bg-ink-3" aria-hidden="true" />
+                  <span className="text-center text-caption font-medium text-ink-2">
+                    {folded ? "משכו למעלה להצגת המקומות" : "משכו למטה לחזרה למפה"}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2 px-3">
+                  <Button
+                    variant="secondary"
+                    className="h-11 min-w-fit flex-1 rounded-full px-3 py-1 leading-tight whitespace-normal"
+                    aria-expanded={!folded}
+                    onClick={() => setSnap(folded ? SNAPS[2] : peek)}
+                  >
+                    {!folded ? "חזרה למפה" : selectedId ? "לסיפור ולפרטי הביקור" : "הצגת המקומות"}
+                  </Button>
+                  <Button
+                    variant="brand"
+                    className="h-11 min-w-fit flex-1 rounded-full px-3 py-1 leading-tight whitespace-normal"
+                    onClick={() => setAddOpen(true)}
+                  >
+                    <PlusIcon className="size-4" />
+                    הוספת מקום
+                  </Button>
+                </div>
               </div>
             </div>
             <div
