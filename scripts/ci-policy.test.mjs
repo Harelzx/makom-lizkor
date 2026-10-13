@@ -24,6 +24,7 @@ const fails = (workflows, expected) => {
 test("the committed workflows keep the policy", () => {
   assert.deepEqual(policyProblems(real), [])
   assert.deepEqual(Object.keys(real).sort(), [
+    "availability.yml",
     "browser-suite.yml",
     "ci.yml",
     "compatibility.yml",

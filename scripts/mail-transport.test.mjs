@@ -88,7 +88,11 @@ test("provider exceptions and missing acknowledgements return false without logg
         false,
       )
     assert.equal(attempts, 5)
-    assert.equal(error.mock.callCount(), 0)
+    assert.equal(error.mock.callCount(), 6)
+    for (const call of error.mock.calls) {
+      assert.equal(call.arguments.length, 1)
+      assert.deepEqual(JSON.parse(call.arguments[0]), { level: "error", event: "mail_delivery_failed", failure: "uncertain" })
+    }
     assert.equal(log.mock.callCount(), 0)
   } finally {
     error.mock.restore()
