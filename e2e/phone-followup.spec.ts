@@ -152,10 +152,11 @@ for (const width of [320, 390])
   test(
     `mobile sheet at ${width}px shows only its actions until opened and restores map space`,
     { tag: width === 390 ? ["@core-sheet", "@phone"] : [] },
-    async ({ page }) => {
+    async ({ page }, testInfo) => {
       await page.setViewportSize({ width, height: 844 })
       await day(page)
       const sheet = page.locator("#places")
+      await expect(sheet).toHaveCSS("background-color", "rgba(0, 0, 0, 0)")
       const sheetBox = await sheet.boundingBox()
       expect(844 - sheetBox!.y).toBeLessThanOrEqual(120)
       await expect(page.getByRole("heading", { name: "מקומות לזכור", exact: true })).toHaveCount(0)
@@ -163,17 +164,35 @@ for (const width of [320, 390])
       await wholeButton(open)
       await wholeButton(sheet.getByRole("button", { name: "הוספת מקום", exact: true }))
       await open.click()
+      await expect(sheet).toHaveCSS("background-color", "rgb(255, 255, 255)")
       await expect(sheet.getByRole("heading", { name: "מקומות לזכור", exact: true })).toBeInViewport()
       await expect(sheet.getByRole("button", { name: "שמורים לביקור", exact: true })).toBeInViewport()
       await audit(page)
       await sheet.getByRole("button", { name: "חזרה למפה", exact: true }).click()
       await expect(sheet.getByRole("heading", { name: "מקומות לזכור", exact: true })).toHaveCount(0)
-      // Browser chrome chooses its own size, but the page must no longer paint a dark background in day mode.
-      const colors = await page.evaluate(() => [
-        getComputedStyle(document.body).backgroundColor,
-        document.querySelector('meta[name="theme-color"]')?.getAttribute("content"),
-      ])
-      expect(colors).toEqual(["rgb(255, 255, 255)", "#ffffff"])
+      await expect(sheet).toHaveCSS("background-color", "rgba(0, 0, 0, 0)")
+      // Safari owns its controls' dimensions. Give its edge sampler an opaque matching map surface and a light scheme.
+      const surface = () =>
+        page.evaluate(() => [
+          getComputedStyle(document.documentElement).backgroundColor,
+          getComputedStyle(document.body).backgroundColor,
+          getComputedStyle(document.querySelector("main")!).backgroundColor,
+          getComputedStyle(document.documentElement).colorScheme,
+          document.querySelector('meta[name="theme-color"]')?.getAttribute("content"),
+        ])
+      await expect.poll(surface).toEqual(["rgb(229, 238, 219)", "rgb(229, 238, 219)", "rgb(229, 238, 219)", "light", "#e5eedb"])
+      // Visible viewport changes must stretch the map, not leave a blank band or hide the folded actions.
+      for (const height of [630, 844]) {
+        await page.setViewportSize({ width, height })
+        await expect.poll(() => page.locator("main").boundingBox()).toEqual({ x: 0, y: 0, width, height })
+        await wholeButton(sheet.getByRole("button", { name: "הצגת המקומות", exact: true }))
+        await wholeButton(sheet.getByRole("button", { name: "הוספת מקום", exact: true }))
+      }
+      await page.getByRole("button", { name: "מעבר למצב לילה", exact: true }).click()
+      await expect.poll(surface).toEqual(["rgb(11, 17, 32)", "rgb(11, 17, 32)", "rgb(11, 17, 32)", "dark", "#0b1120"])
+      await page.getByRole("button", { name: "מעבר לאור בוקר", exact: true }).click()
+      await expect.poll(surface).toEqual(["rgb(229, 238, 219)", "rgb(229, 238, 219)", "rgb(229, 238, 219)", "light", "#e5eedb"])
+      await testInfo.attach(`floating-map-${width}`, { body: await page.screenshot(), contentType: "image/png" })
     },
   )
 
