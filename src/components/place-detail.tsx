@@ -50,6 +50,10 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
   const next = nextPlace(place, allPlaces({ remote, local: places }))
   const isSaved = visits.ids.includes(visitKey(place))
   const photos = place.photos ?? []
+  // The public card uses only approved content. This device's separate receipt still owns its tracking/removal
+  // controls; never attach that capability to the public feed or remove the copy by the server's different id.
+  const ownCopy = place.local ? place : places.find((p) => p.local?.remoteId === place.id)
+  const ownReceipt = ownCopy?.local
   const local = place.local
   // Contributions (a visitor's own or approved ones) are where private property comes up; curated places are public sites.
   const inPrivate = !!local || place.coord_source === "contribution"
@@ -274,21 +278,21 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
             )}
           </p>
         </details>
-        {local ? (
+        {ownReceipt && ownCopy ? (
           <div className="flex flex-wrap items-center justify-between gap-2">
             {/* A place sent for review is on the server too; deleting this copy doesn't withdraw it, the tracking view does. */}
-            <span>{SEND_STATE[sendState(local)]}</span>
+            <span>{local ? SEND_STATE[sendState(local)] : "המקום מופיע במפה"}</span>
             {/* A withdrawn place keeps its link only while its files wait to be erased: the view can finish them. */}
-            {local.remoteId && local.trackingToken && (
+            {ownReceipt.remoteId && ownReceipt.trackingToken && (
               <Button
                 variant="ghost"
                 className="min-h-11 rounded-full"
-                onClick={() => setTracking({ id: local.remoteId!, token: local.trackingToken! })}
+                onClick={() => setTracking({ id: ownReceipt.remoteId!, token: ownReceipt.trackingToken! })}
               >
                 מעקב אחרי ההצעה
               </Button>
             )}
-            <LocalRemoval place={place} />
+            <LocalRemoval place={ownCopy} />
           </div>
         ) : null}
 

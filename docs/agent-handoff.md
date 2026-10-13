@@ -1,5 +1,15 @@
 # Backend continuation record
 
+## Checklist approval receipt correction - 13 October 2026
+
+UX-APPROVED-RECEIPT-SELECTION-1 was reproduced in production after the owner verified and the ordinary admin approved the exact checklist dummy p_01M4TA6EQSA8AXG3YXGEKZ9W9B (09:58:05 /10:00:06 UTC). Closing the still-open thank-you receipt selected its device ID, but the approved feed hides the duplicate device card, so Explorer returned to the list. Published own cards also lost the private tracking footer. Production still serves7a5bc623/8c4cb6cd until the new gates finish.
+
+The store now resolves device selection against the effective feed at selection, feed update and device initialization. A separate ownReceipt adds private tracking/device-removal controls to the approved card only for this device; public content, approved photos, sharing, saved visits and reporting still use the public card. Private capability data never enters remote/feed; device deletion uses the original device ID and preserves the public card. Offline suppression remains unchanged.
+
+Focused client19/19 and final-build browser3/3 (two features plusseed) passed; typecheck/lint/format passed. A retained first test trace failed within65ms on two headings during the existing200ms keyed exit, not a functional timeout: the assertion now requires exactly one settled heading within the unchanged5s count deadline before visibility. No retries, sleeps or deadline expansion. A sandbox-denied sysctl initially stopped the client command before tests; the actual memory reader reported53 and the same heavy wrapper passed with permission to read it. No workload guards changed. Root review caught and corrected an intermediate private-footer variable that would have affected public content/share semantics; final code separates them. Review is root-only, not independent.
+
+Evidence: ../agent-evidence/approved-selection-20261013/progress.json and retained originals in checklist-closeout-20261013. Push through ordinary full CI and automatic same-source staging9-pass before the already authorized guarded production delivery. Existing Gmail verification arrival/click is owner-confirmed; tracking/decision inbox arrival is pending. Do not submit another dummy or repeat recovery/retention drills. The one published checklist dummy still requires a prepared withdrawal dialog and exact owner consent. Existing prior2 local drafts remain untouched.
+
 ## Checklist delivery live - 13 October 2026, 09:31 UTC
 
 Production now serves source7a5bc623a306e57d4eeffc12c228dd76d3edd5d8, version8c4cb6cd-669c-4cbf-ae78-0a55ab27e93a, tagchecklist-7a5bc623a306 at100%. Full CI38373334581 passed144 unique Chromium features across two machines and10 WebKit features, with exact planned/executed first-attempt coverage and ready/full receipts. Automatic staging38376408872 passed on the same source with all9 receipt checks. The previous failed sources were not deployed. The final test-only mobile correctionab621a2 merged with an identical tree; its original cloud/local traces remain preserved.
