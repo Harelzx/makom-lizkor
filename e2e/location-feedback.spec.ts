@@ -99,12 +99,18 @@ test(
   async ({ page }) => {
     const form = await openForm(page)
     await page.emulateMedia({ reducedMotion: "no-preference" })
+    // Exercise the real remounted dialog's entrance animation long enough that a visibility-only
+    // baseline would sample its zoom. Keep motion enabled and the geometry assertions exact.
+    await page.addStyleTag({ content: '[data-slot="dialog-content"][data-state="open"] { animation-duration: 800ms; }' })
     await form.getByRole("button", { name: "המיקום הנוכחי שלי", exact: true }).click()
     await page.evaluate(() => window.dispatchEvent(new Event("test:location")))
     await page.getByRole("button", { name: "זה המקום", exact: true }).click({ timeout: 15_000 })
     await expect(form.getByText("סומן מיקום", { exact: false })).toBeVisible()
     const header = form.locator("[data-add-art-header]")
+    await expect(form).toHaveCSS("animation-duration", "0.8s")
+    await expect.poll(() => form.evaluate((el) => el.getAnimations().every((animation) => animation.playState !== "running"))).toBe(true)
     const first = await header.boundingBox()
+    expect(first!.height).toBe(await header.evaluate((el) => (el as HTMLElement).offsetHeight))
     await form
       .locator("img[src^='/art/']")
       .evaluateAll((imgs) => imgs.forEach((img, i) => img.setAttribute("data-test-original-node", String(i))))
