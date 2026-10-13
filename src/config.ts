@@ -73,7 +73,7 @@ export const RETENTION = {
 export const ACCESS_RESPONSE_DAYS = 30
 
 export const CONTACT_EMAIL = OPERATOR.email
-export const LAST_UPDATED = "2026-10-11"
+export const LAST_UPDATED = "2026-10-13"
 
 /**
  * What the notices already promise but the code doesn't do yet. Publishing with any of these would be publishing a

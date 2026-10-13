@@ -2,6 +2,7 @@ import { ulid } from "./ids"
 import { MAIL_BINDING, validMailFrom } from "./mail-binding"
 import { gmailReady, gmailAttempt, type GmailSettings, type MailOutcome } from "./gmail"
 import { claimMailBudget } from "./mail-budget"
+import { log } from "./log"
 
 export type Mail = { to: string; subject: string; text: string; budget?: "ops" }
 // Optional commissioning settings; a transport cannot become ready merely by choosing its name.
@@ -56,9 +57,13 @@ export async function attemptMail(env: MailEnv, m: Mail): Promise<MailOutcome> {
     if (!(await claimMailBudget(env, m.budget === "ops" ? "ops" : "public"))) return "deferred"
   } catch {
     // A missing/unavailable budget store cannot bypass the cap or turn provider failure into a thrown HTTP error.
+    log("error", "mail_budget_unavailable", { failure: "deferred" })
     return "deferred"
   }
-  if (env.MAIL_PROVIDER === "gmail") return gmailAttempt(env, m)
-  return (await productionMail(env, m)) ? "accepted" : "uncertain"
+  const outcome = env.MAIL_PROVIDER === "gmail" ? await gmailAttempt(env, m) : (await productionMail(env, m)) ? "accepted" : "uncertain"
+  // The alert channel is independent of Gmail. Only the fixed outcome code may leave this layer, never a provider
+  // error, address, body or capability. Expected quota deferral above is not a runtime error.
+  if (outcome !== "accepted") log("error", "mail_delivery_failed", { failure: outcome })
+  return outcome
 }
 export const sendMail: SendMail = async (env, m) => (await attemptMail(env, m)) === "accepted"
