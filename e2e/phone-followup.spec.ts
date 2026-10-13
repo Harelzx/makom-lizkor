@@ -156,10 +156,9 @@ for (const width of [320, 390])
       await page.setViewportSize({ width, height: 844 })
       await day(page)
       const sheet = page.locator("#places")
-      await expect(sheet).toHaveCSS("background-color", "rgba(0, 0, 0, 0)")
-      const card = sheet.locator("[data-sheet-surface]")
-      await expect(card).toHaveCSS("background-color", "rgb(255, 255, 255)")
-      await expect.poll(async () => (await card.boundingBox())!.width).toBe(width - 24)
+      // Folded or raised, the sheet is one surface that meets the screen's edge: it reads as something to pull.
+      await expect(sheet).toHaveCSS("background-color", "rgb(255, 255, 255)")
+      await expect.poll(async () => (await sheet.boundingBox())!.width).toBe(width)
       await expect(sheet.getByText("משכו למעלה להצגת המקומות", { exact: true })).toBeInViewport()
       const sheetBox = await sheet.boundingBox()
       expect(844 - sheetBox!.y).toBeLessThanOrEqual(120)
@@ -196,7 +195,7 @@ for (const width of [320, 390])
       await audit(page)
       await sheet.getByRole("button", { name: "חזרה למפה", exact: true }).click()
       await expect(sheet.getByRole("heading", { name: "מקומות לזכור", exact: true })).toHaveCount(0)
-      await expect(sheet).toHaveCSS("background-color", "rgba(0, 0, 0, 0)")
+      await expect(sheet).toHaveCSS("background-color", "rgb(255, 255, 255)")
       // Safari owns its controls' dimensions. Give its edge sampler an opaque matching map surface and a light scheme.
       const surface = () =>
         page.evaluate(() => [
@@ -206,7 +205,7 @@ for (const width of [320, 390])
           getComputedStyle(document.documentElement).colorScheme,
           document.querySelector('meta[name="theme-color"]')?.getAttribute("content"),
         ])
-      const edges = (color: string) =>
+      const edges = (top: string, bottom: string) =>
         expect
           .poll(() =>
             page.locator("[data-viewport-edge]").evaluateAll((nodes) =>
@@ -228,11 +227,14 @@ for (const width of [320, 390])
             ),
           )
           .toEqual([
-            { side: "top", color, pointer: "none", filter: "none", hidden: "true", x: 0, y: 0, width, height: 12 },
-            { side: "bottom", color, pointer: "none", filter: "none", hidden: "true", x: 0, y: 832, width, height: 12 },
+            { side: "top", color: top, pointer: "none", filter: "none", hidden: "true", x: 0, y: 0, width, height: 12 },
+            { side: "bottom", color: bottom, pointer: "none", filter: "none", hidden: "true", x: 0, y: 832, width, height: 12 },
           ])
       await expect.poll(surface).toEqual(["rgb(229, 238, 219)", "rgb(229, 238, 219)", "rgb(229, 238, 219)", "light", "#e5eedb"])
-      await edges("rgb(229, 238, 219)")
+      // The map's horizon above, the sheet below.
+      await edges("rgb(255, 233, 211)", "rgb(255, 255, 255)")
+      // Safari samples its edges again only when a fixed layer is added or removed, so a new color is a new layer.
+      await page.locator('[data-viewport-edge="top"]').evaluate((node) => ((node as HTMLElement).dataset.before = "1"))
       // Visible viewport changes must stretch the map, not leave a blank band or hide the folded actions.
       for (const height of [630, 844]) {
         await page.setViewportSize({ width, height })
@@ -242,10 +244,11 @@ for (const width of [320, 390])
       }
       await page.getByRole("button", { name: "מעבר למצב לילה", exact: true }).click()
       await expect.poll(surface).toEqual(["rgb(11, 17, 32)", "rgb(11, 17, 32)", "rgb(11, 17, 32)", "dark", "#0b1120"])
-      await edges("rgb(11, 17, 32)")
+      await edges("rgb(107, 71, 99)", "rgb(19, 26, 44)")
+      await expect(page.locator('[data-viewport-edge="top"][data-before]')).toHaveCount(0)
       await page.getByRole("button", { name: "מעבר לאור בוקר", exact: true }).click()
       await expect.poll(surface).toEqual(["rgb(229, 238, 219)", "rgb(229, 238, 219)", "rgb(229, 238, 219)", "light", "#e5eedb"])
-      await edges("rgb(229, 238, 219)")
+      await edges("rgb(255, 233, 211)", "rgb(255, 255, 255)")
       await testInfo.attach(`compact-sheet-${width}`, { body: await page.screenshot(), contentType: "image/png" })
       // A larger caption may wrap and the actions may stack; the measured peek keeps both complete.
       await page.addStyleTag({ content: "html { font-size: 200% !important; }" })

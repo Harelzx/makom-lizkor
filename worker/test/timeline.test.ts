@@ -101,7 +101,7 @@ it("keeps every deletion date the notices give, end to end", { timeout: 600_000 
   const waitingKey = (await env.DB.prepare("SELECT photo_key AS k FROM revisions WHERE place_id = ?").bind(waiting.id).first<string>("k"))!
   await call("http://local/api/v1/tributes", {
     method: "POST",
-    headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID().replaceAll("-", "") },
+    headers: { "Content-Type": "application/json", Origin: "http://local", "Idempotency-Key": crypto.randomUUID().replaceAll("-", "") },
     body: JSON.stringify({ placeId: mailed.id, deviceId: crypto.randomUUID().replaceAll("-", "") }),
   })
   const filed = await call("http://local/api/v1/reports", {

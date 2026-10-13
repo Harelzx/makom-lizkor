@@ -128,7 +128,7 @@ export type TributeInput = z.infer<typeof TributeInput>
 /** What the server did with it: counted now or before, or why not. The visitor's own flowers stay either way. */
 export type TributeResult =
   | { counted: true; reason?: "replayed"; day: string }
-  | { counted: false; reason: "already_today"; day: string }
+  | { counted: false; reason: "already_today" | "address_cap"; day: string }
   | { counted: false; reason: "not_published" }
 /** The shared counts of published places, by id. */
 export type TributeTotals = { totals: Record<string, number> }

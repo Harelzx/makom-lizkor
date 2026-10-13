@@ -47,7 +47,7 @@ describe("the nightly export (spec 8.1)", () => {
     const id = await publishedWithPhoto("גן דמו בייצוא")
     await call("http://local/api/v1/tributes", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID().replaceAll("-", "") },
+      headers: { "Content-Type": "application/json", Origin: "http://local", "Idempotency-Key": crypto.randomUUID().replaceAll("-", "") },
       body: JSON.stringify({ placeId: id, deviceId: crypto.randomUUID().replaceAll("-", "") }),
     })
     const at = new Date(Date.now() + 1000 * DAY)
