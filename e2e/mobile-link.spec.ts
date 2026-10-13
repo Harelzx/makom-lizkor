@@ -20,7 +20,7 @@ async function readSharedPlace(page: Page) {
   // The measurement must also distinguish a folded sheet from a readable one.
   await page.getByRole("button", { name: "חזרה למפה", exact: true }).click()
   await expect.poll(sheetTop).toBeGreaterThanOrEqual(844 * 0.5)
-  await page.getByRole("button", { name: "לסיפור ולפרטי הביקור", exact: true }).click()
+  await page.getByRole("button", { name: /לסיפור ולפרטי הביקור$/ }).click()
   await expect.poll(sheetTop).toBeLessThan(844 * 0.5)
 }
 

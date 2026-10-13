@@ -8,7 +8,7 @@ import { Kbd } from "@/components/ui/kbd"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { Anemone } from "@/components/anemone"
 import { Explorer } from "@/components/explorer"
-import { useStore } from "@/store"
+import { allPlaces, useStore } from "@/store"
 import { cn } from "@/lib/utils"
 import { ease, spring } from "@/lib/motion"
 import { daysHe, since, yearsHe } from "@/lib/since"
@@ -81,11 +81,7 @@ function Actions({ compact }: { compact?: boolean }) {
           </Kbd>
         </Button>
       )}
-      {compact && (
-        <Button variant="float" size="icon-lg" className="size-11 rounded-full" aria-label="חיפוש" onClick={() => setSearchOpen(true)}>
-          <SearchIcon />
-        </Button>
-      )}
+      {/* On a phone the search lives at the foot of the screen, in the sheet, where the thumb is. */}
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
@@ -153,6 +149,17 @@ export function Shell() {
   const [snap, setSnap] = useState<number | string | null>(() => (mobile && (selectedId || tab === "journey") ? SNAPS[2] : SNAPS[0]))
   const [peek, setPeek] = useState("88px")
   const folded = typeof snap !== "number"
+  const local = useStore((s) => s.local)
+  const remote = useStore((s) => s.remote)
+  const selected = selectedId && tab !== "journey" ? allPlaces({ remote, local }).find((p) => p.id === selectedId) : undefined
+  // Raising the sheet and focusing its search field in the same tap: iOS opens the keyboard only for a focus made
+  // inside the tap itself, so the sheet is committed first (the list stops being inert) and focused at once.
+  const gripFrom = useRef(0)
+  const openSearch = () => {
+    flushSync(() => setSnap(SNAPS[2]))
+    if (useStore.getState().tab === "journey") return
+    document.querySelector<HTMLInputElement>('#places input[type="search"]')?.focus({ preventScroll: true })
+  }
   const [collapsed, setCollapsed] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   const headerRef = useRef<HTMLDivElement>(null)
@@ -163,6 +170,8 @@ export function Shell() {
   const measureMobileBar = useCallback((bar: HTMLDivElement | null) => {
     if (!bar) return
     const measure = () => {
+      // The peek is the folded bar; raised, the bar is the grabber alone and must not become the next fold.
+      if (bar.dataset.folded !== "true") return
       const height = Math.ceil(bar.getBoundingClientRect().height)
       // Presence briefly measures zero while a dialog removes the sheet. Never turn that into an offscreen snap.
       if (height <= 0) return
@@ -317,33 +326,63 @@ export function Shell() {
             className="fixed inset-x-0 bottom-0 z-30 flex h-dvh flex-col rounded-t-[28px] bg-surface shadow-panel ring-1 ring-line outline-none"
           >
             <Drawer.Title className="sr-only">מקומות וקהילות</Drawer.Title>
-            <div ref={measureMobileBar} className="flow-root shrink-0 pb-[max(12px,env(safe-area-inset-bottom))]">
-              <div className="flow-root" data-sheet-surface>
-                <div data-sheet-grip className="flex min-h-10 shrink-0 flex-col items-center justify-center gap-1 px-3 py-1.5 select-none">
-                  <span className="h-1.5 w-12 rounded-full bg-ink-3" aria-hidden="true" />
-                  <span className="text-center text-caption font-medium text-ink-2">
-                    {folded ? "משכו למעלה להצגת המקומות" : "משכו למטה לחזרה למפה"}
-                  </span>
-                </div>
-                <div className="flex flex-wrap items-center justify-between gap-2 px-3">
-                  <Button
-                    variant="secondary"
-                    className="h-11 min-w-fit flex-1 rounded-full px-3 py-1 leading-tight whitespace-normal"
-                    aria-expanded={!folded}
-                    onClick={() => setSnap(folded ? SNAPS[2] : peek)}
-                  >
-                    {!folded ? "חזרה למפה" : selectedId ? "לסיפור ולפרטי הביקור" : "הצגת המקומות"}
-                  </Button>
+            {/* Laid out as the map apps do (Apple Maps, Google Maps, Material 3's standard sheet): a grabber, then the one thing
+                worth reaching for from the map, a search field into the places, and the add action beside it. Folded, it is
+                all that shows; raised, the list takes over below the grabber alone. No instructions: a sheet that
+                comes out of the edge with its grabber and its search field is read as one to pull. */}
+            <div
+              ref={measureMobileBar}
+              data-folded={folded}
+              className={cn("shrink-0", folded && "pb-[max(12px,env(safe-area-inset-bottom))]")}
+            >
+              {/* The grabber is also a button, as in iOS: a tap moves the sheet between the map and the list. A pull that
+                  ends on it is a drag, not a tap, so it never toggles the sheet straight back. */}
+              <button
+                type="button"
+                data-sheet-grip
+                className="flex h-6 w-full items-center justify-center outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/30"
+                aria-label={folded ? (selected ? "פתיחת הסיפור" : "הצגת המקומות") : "חזרה למפה"}
+                aria-expanded={!folded}
+                onPointerDown={(e) => (gripFrom.current = e.clientY)}
+                onClick={(e) => {
+                  if (e.detail > 0 && Math.abs(e.clientY - gripFrom.current) > 6) return
+                  setSnap(folded ? SNAPS[2] : peek)
+                }}
+              >
+                <span className="h-[5px] w-9 rounded-full bg-ink-3/45" />
+              </button>
+              {folded ? (
+                <div className="flex items-center gap-2 px-3">
+                  {selected ? (
+                    <button
+                      type="button"
+                      className="pressable flex min-h-12 min-w-0 flex-1 flex-col items-start justify-center rounded-3xl bg-surface-2 px-4 py-1.5 text-start"
+                      onClick={() => setSnap(SNAPS[2])}
+                    >
+                      <span className="w-full truncate text-label font-semibold text-ink-1">{selected.name_he}</span>
+                      <span className="text-caption text-ink-2">לסיפור ולפרטי הביקור</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="pressable flex min-h-12 min-w-0 flex-1 items-center gap-2.5 rounded-full bg-surface-2 px-4 py-1.5 text-start text-body text-ink-2"
+                      onClick={openSearch}
+                    >
+                      <SearchIcon className="size-5 shrink-0 text-ink-3" aria-hidden="true" />
+                      חיפוש מקום, יישוב או שם
+                    </button>
+                  )}
                   <Button
                     variant="brand"
-                    className="h-11 min-w-fit flex-1 rounded-full px-3 py-1 leading-tight whitespace-normal"
+                    size="icon-lg"
+                    className="size-12 shrink-0 rounded-full"
+                    aria-label="הוספת מקום"
                     onClick={() => setAddOpen(true)}
                   >
-                    <PlusIcon className="size-4" />
-                    הוספת מקום
+                    <PlusIcon className="size-6" />
                   </Button>
                 </div>
-              </div>
+              ) : null}
             </div>
             <div
               ref={scrollRef}
@@ -351,13 +390,36 @@ export function Shell() {
               inert={folded}
               aria-hidden={folded}
               className={cn(
-                "min-h-0 flex-1 px-4 pb-[max(24px,env(safe-area-inset-bottom))] [overflow-anchor:none]",
+                // The list ends clear of the floating add button.
+                "min-h-0 flex-1 px-4 pb-[calc(88px+env(safe-area-inset-bottom))] [overflow-anchor:none]",
                 "overflow-y-auto overscroll-contain",
               )}
             >
               <Explorer />
             </div>
           </Drawer.Content>
+          {/* Raised, the list has the screen, and adding stays one tap away as the list's floating action (Material 3's
+              FAB, as Google Maps keeps its own). Beside the sheet, not in it, so it holds the screen's corner while the
+              sheet moves; it leaves at once, so a folded sheet never shows two of it. */}
+          {!folded && !picking && !addOpen && (
+            <motion.div
+              key="add"
+              initial={{ opacity: 0, scale: 0.6 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={spring.snappy}
+              className="fixed end-4 bottom-[max(20px,calc(env(safe-area-inset-bottom)+12px))] z-40"
+            >
+              <Button
+                variant="brand"
+                size="icon-lg"
+                className="size-14 rounded-full shadow-panel"
+                aria-label="הוספת מקום"
+                onClick={() => setAddOpen(true)}
+              >
+                <PlusIcon className="size-6" />
+              </Button>
+            </motion.div>
+          )}
         </Drawer.Portal>
       </Drawer.Root>
     </>

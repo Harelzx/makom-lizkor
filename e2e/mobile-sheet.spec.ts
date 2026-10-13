@@ -11,14 +11,17 @@ test.beforeEach(async ({ page }) => {
 })
 
 test("the sheet leaves the header and the map reachable for screen readers and keyboards", async ({ page }) => {
-  await expect(page.getByRole("button", { name: "חיפוש", exact: true })).toBeVisible()
+  // The search sits in the sheet, at the thumb, rather than among the map buttons.
+  const search = page.getByRole("button", { name: "חיפוש מקום, יישוב או שם", exact: true })
+  await expect(search).toBeVisible()
   await expect(page.getByRole("button", { name: "על הפרויקט" })).toBeVisible()
   await expect(page.locator("[data-aria-hidden]")).toHaveCount(0)
   // not modal, and still not dismissible: a tap on the map leaves the sheet where it is
   await page.mouse.click(195, 200)
   await expect(page.locator("[data-vaul-drawer]")).toBeVisible()
-  await page.getByRole("button", { name: "חיפוש", exact: true }).click()
-  await expect(page.getByRole("dialog").getByPlaceholder(/./)).toBeVisible()
+  // One tap raises the list and puts the cursor in its search field, so the keyboard comes up with it.
+  await search.click()
+  await expect(page.locator("#places").getByRole("searchbox", { name: "חיפוש", exact: true })).toBeFocused()
 })
 
 test("after the add dialog closes, the page still answers taps", async ({ page }) => {
