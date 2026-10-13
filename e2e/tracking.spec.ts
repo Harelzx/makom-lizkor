@@ -17,6 +17,7 @@ async function submit(b: Browser, name: string): Promise<Page> {
   await page.getByRole("button", { name: "הוספת מקום" }).first().click()
   const dialog = page.getByRole("dialog")
   await dialog.getByRole("button", { name: "המיקום הנוכחי שלי" }).click()
+  await page.getByRole("button", { name: "זה המקום", exact: true }).click({ timeout: 15_000 })
   // The location arrives asynchronously and grows the form; pressing on before it would land where the button was.
   await expect(dialog.getByText("סומן מיקום", { exact: false })).toBeVisible({ timeout: 15_000 })
   await dialog.getByRole("button", { name: "המשך" }).click()
