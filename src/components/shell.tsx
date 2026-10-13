@@ -312,7 +312,10 @@ export function Shell() {
             // Vaul offsets numeric snap points against the whole viewport, not the drawer's CSS height.
             // Keep that height, but reserve its offscreen part so every scroll position remains reachable.
             style={{ paddingBottom: typeof snap === "number" ? `${(1 - snap) * 100}dvh` : `calc(100dvh - ${peek})` }}
-            className="fixed inset-x-0 bottom-0 z-30 flex h-dvh flex-col rounded-t-[28px] bg-surface shadow-panel ring-1 ring-line outline-none"
+            className={cn(
+              "fixed inset-x-0 bottom-0 z-30 flex h-dvh flex-col rounded-t-[28px] outline-none",
+              folded ? "bg-transparent" : "bg-surface shadow-panel ring-1 ring-line",
+            )}
           >
             <Drawer.Title className="sr-only">מקומות וקהילות</Drawer.Title>
             <div ref={measureMobileBar} className="flow-root shrink-0 pb-[max(12px,env(safe-area-inset-bottom))]">
@@ -320,7 +323,7 @@ export function Shell() {
               <div className="flex items-center justify-between gap-2 px-4">
                 <Button
                   variant="secondary"
-                  className="h-11 rounded-full px-3"
+                  className={cn("h-11 rounded-full px-3", folded && "shadow-chip ring-1 ring-line")}
                   aria-expanded={!folded}
                   onClick={() => setSnap(folded ? SNAPS[2] : peek)}
                 >

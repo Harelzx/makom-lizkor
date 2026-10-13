@@ -172,19 +172,24 @@ export default function App() {
     }
   }, [phase])
 
+  const nightSurface = phase === "intro" || light === "night"
+  // An opaque viewport edge gives Safari a real surface to extend beneath its own controls.
+  // WebGL pixels alone are not a CSS background; keep the boot fallback and day surface in the map's land palette.
+  const viewportColor = nightSurface ? "#0b1120" : "#e5eedb"
+
   // The interface wears the night palette during the opening and whenever night is chosen.
   useEffect(() => {
-    const night = phase === "intro" || light === "night"
-    const chromeColor = night ? "#0b1120" : "#ffffff"
-    document.documentElement.classList.toggle("dark", night)
-    // Safari also samples page backgrounds behind its own controls. The boot-time inline night color must not survive dawn.
-    document.documentElement.style.backgroundColor = chromeColor
-    document.body.style.backgroundColor = chromeColor
-    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", chromeColor)
-  }, [light, phase])
+    document.documentElement.classList.toggle("dark", nightSurface)
+    // Safari also samples page backgrounds behind its own controls; keep the page surface aligned with the map mode.
+    document.documentElement.style.backgroundColor = viewportColor
+    document.body.style.backgroundColor = viewportColor
+    document.documentElement.style.colorScheme = nightSurface ? "dark" : "light"
+    document.body.style.colorScheme = nightSurface ? "dark" : "light"
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", viewportColor)
+  }, [nightSurface, viewportColor])
 
   return (
-    <main className="fixed inset-0">
+    <main className="fixed inset-0" style={{ backgroundColor: viewportColor }}>
       {/* The map's flowers come first in the tab order, about ninety of them; this lets a keyboard go straight to the list.
           A button rather than a link, because the address belongs to the router. */}
       {phase === "day" && (
