@@ -21,6 +21,7 @@ async function fillAndSend(page: Page, name: string) {
   await page.getByRole("button", { name: "הוספת מקום" }).first().click()
   const dialog = page.getByRole("dialog")
   await dialog.getByRole("button", { name: "המיקום הנוכחי שלי" }).click()
+  await page.getByRole("button", { name: "זה המקום", exact: true }).click({ timeout: 15_000 })
   await expect(dialog.getByText("סומן מיקום", { exact: false })).toBeVisible(DAY)
   await dialog.getByRole("button", { name: "המשך" }).click()
   await dialog.getByLabel("שם המקום").fill(name)

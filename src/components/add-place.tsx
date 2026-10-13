@@ -201,6 +201,15 @@ export function AddPlace() {
     accepted.current = null
   }, [stopLocating])
 
+  // Review uses the existing map and keeps the mounted form's state; closing the form would discard the draft.
+  const reviewPoint = (point = draft) => {
+    setPicking(true)
+    const map = getMap()
+    const view = { padding: { top: 0, bottom: 0, left: 0, right: 0 }, pitch: 0, bearing: 0 }
+    if (point) map?.flyTo({ ...view, center: [point.lng, point.lat], zoom: 17, duration: reducedMotion() ? 0 : 1000 })
+    else map?.easeTo({ ...view, duration: 0 })
+  }
+
   const locate = () => {
     setError("")
     setErrorField("")
@@ -211,7 +220,7 @@ export function AddPlace() {
       const p = result.point
       setDraft(p)
       setError("")
-      getMap()?.flyTo({ center: [p.lng, p.lat], zoom: 17, duration: reducedMotion() ? 0 : 2000 })
+      reviewPoint(p)
     })
   }
 
@@ -584,7 +593,7 @@ export function AddPlace() {
                                 className="h-14 justify-start rounded-2xl"
                                 onClick={() => {
                                   stopLocating()
-                                  setPicking(true)
+                                  reviewPoint()
                                 }}
                               >
                                 <CrosshairIcon data-icon="inline-start" />
@@ -617,7 +626,7 @@ export function AddPlace() {
                                   ? locationStatus.message
                                   : locationStatus.kind === "locating"
                                     ? "ממתינים למיקום מהמכשיר. אם תופיע בקשת הרשאה, אפשר לאשר אותה. אפשר גם לסמן על המפה."
-                                    : "המיקום נמצא וסומן על המפה. בדקו שזו הפינה שרציתם להוסיף."}
+                                    : "המיקום נמצא. אפשר לבדוק ולדייק את הנקודה על המפה."}
                               </p>
                             )}
                             <PointCoordinates
@@ -641,6 +650,16 @@ export function AddPlace() {
                                     </bdi>
                                     . אפשר לגרור את הסיכה במפה כדי לדייק.
                                   </span>
+                                  <Button
+                                    variant="secondary"
+                                    className="min-h-11 whitespace-normal"
+                                    onClick={() => {
+                                      stopLocating()
+                                      reviewPoint()
+                                    }}
+                                  >
+                                    בדיקת הנקודה במפה
+                                  </Button>
                                   <Button
                                     variant="ghost"
                                     size="sm"
@@ -1120,14 +1139,36 @@ export function AddPlace() {
             // appears, so without this VoiceOver said nothing and the instruction went unheard.
             ref={focusOnMount}
             tabIndex={-1}
-            className="fixed inset-x-3 bottom-[max(16px,env(safe-area-inset-bottom))] z-40 mx-auto flex max-w-md items-center justify-between gap-3 rounded-full bg-glass p-2 ps-5 shadow-[0_20px_60px_-20px_rgb(0_0_0/0.5)] ring-1 ring-border outline-none"
-            role="status"
+            className="fixed inset-x-3 bottom-[max(16px,env(safe-area-inset-bottom))] z-40 mx-auto flex max-w-md flex-col gap-3 rounded-3xl bg-surface p-4 shadow-[0_20px_60px_-20px_rgb(0_0_0/0.5)] ring-1 ring-border outline-none"
+            role="region"
+            aria-label="בחירת נקודה על המפה"
           >
-            <p className="text-label text-ink-1">{draft ? "אפשר לגרור את הסיכה, או ללחוץ במקום אחר" : "לחצו על המפה במקום המדויק"}</p>
-            <div className="flex shrink-0 items-center gap-1">
+            <div
+              className="flex max-h-[20dvh] min-h-0 flex-col gap-1 overflow-y-auto overscroll-contain outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring"
+              tabIndex={0}
+              role="group"
+              aria-label="הנחיות לבחירת הנקודה"
+              onKeyDown={(e) => {
+                const el = e.currentTarget
+                if (el.scrollHeight <= el.clientHeight) return
+                // Mobile WebKit can focus a scroll region but leave arrow keys inert. Keep native scroll commands usable.
+                const delta = { ArrowDown: 40, ArrowUp: -40, PageDown: el.clientHeight, PageUp: -el.clientHeight }[e.key]
+                const top =
+                  e.key === "Home" ? 0 : e.key === "End" ? el.scrollHeight : delta === undefined ? undefined : el.scrollTop + delta
+                if (top === undefined) return
+                e.preventDefault()
+                el.scrollTo({ top, behavior: "instant" })
+              }}
+            >
+              <p role="status" className="text-body text-ink-1">
+                {draft ? "אפשר לגרור את הסיכה, או ללחוץ במקום אחר" : "לחצו על המפה במקום המדויק"}
+              </p>
+              <p className="text-caption text-ink-2">״זה המקום״ מחזיר לטופס. הפרטים נשמרים.</p>
+            </div>
+            <div className="grid shrink-0 grid-cols-2 gap-2">
               <Button
                 variant="ghost"
-                className="rounded-full"
+                className="min-h-11 min-w-0 rounded-full px-2 whitespace-normal"
                 onClick={() => {
                   // With a pin: remove it and keep picking. Without one: go back to the form.
                   if (draft) setDraft(null)
@@ -1136,7 +1177,7 @@ export function AddPlace() {
               >
                 {draft ? "הסרת הסיכה" : "ביטול"}
               </Button>
-              <Button className="rounded-full" onClick={() => setPicking(false)} disabled={!draft}>
+              <Button className="min-h-11 min-w-0 rounded-full px-2 whitespace-normal" onClick={() => setPicking(false)} disabled={!draft}>
                 זה המקום
               </Button>
             </div>

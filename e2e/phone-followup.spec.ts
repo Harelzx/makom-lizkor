@@ -40,6 +40,7 @@ async function details(page: Page) {
   // deliver POSITION_UNAVAILABLE to that request, especially when this test opens a second proposal.
   await page.context().setGeolocation({ latitude: 31.42, longitude: 34.51 })
   await form.getByRole("button", { name: "המיקום הנוכחי שלי", exact: true }).click()
+  await page.getByRole("button", { name: "זה המקום", exact: true }).click({ timeout: 15_000 })
   await expect(form.getByText("סומן מיקום", { exact: false })).toBeVisible()
   return form
 }
