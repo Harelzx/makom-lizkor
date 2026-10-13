@@ -82,6 +82,12 @@ async function relay(upstream: string, path: string) {
   // Offline, the dev server's map simply has no basemap.
   const res = await fetch(new URL(path, upstream)).catch(() => null)
   if (!res) return new Response(null, { status: 404 })
+  // A site deployed before its tiles answers this address with its own page: that is no tile, and MapLibre would choke on
+  // every one.
+  if (res.status === 200 && !res.headers.get("Content-Type")?.startsWith("application/vnd.mapbox-vector-tile")) {
+    await res.body?.cancel()
+    return new Response(null, { status: 404 })
+  }
   const headers = new Headers()
   for (const name of ["Content-Type", "Cache-Control"]) {
     const value = res.headers.get(name)

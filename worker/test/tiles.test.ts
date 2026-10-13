@@ -131,6 +131,15 @@ describe("the basemap's tiles", () => {
       expect(new Uint8Array(await res.arrayBuffer())).toEqual(TILE)
       expect(res.headers.get("Set-Cookie")).toBeNull()
       expect(asked).toEqual([`https://upstream.example/tiles/${BASEMAP_ARCHIVE}/0/0/0.pbf`])
+      // A site that doesn't serve tiles yet answers with its page, which is relayed as no tile at all.
+      const page = new Response("<!doctype html>", { headers: { "Content-Type": "text/html" } })
+      globalThis.fetch = (async () => page) as typeof fetch
+      const html = await call(
+        url("0/0/0.pbf"),
+        {},
+        { ...env, ENVIRONMENT: "development", TILES_UPSTREAM: "https://upstream.example", TILES: empty },
+      )
+      expect(html.status).toBe(404)
       const staging = await call(
         url("0/0/0.pbf"),
         {},
