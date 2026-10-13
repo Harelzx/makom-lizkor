@@ -1,5 +1,6 @@
 import type { Map as MLMap, StyleSpecification } from "maplibre-gl"
 import { MAP_FONT_FILES } from "@/lib/fonts"
+import { BASEMAP_ARCHIVE, BASEMAP_MAXZOOM, TERRAIN_MAXZOOM, TERRAIN_VERSION, TILE_BOUNDS } from "@/shared/tiles"
 
 /**
  * Communities are drawn as our own markers; the basemap's label for the same place would double them. Their names
@@ -47,29 +48,37 @@ export const BINDINGS: [layer: string, prop: string, key: keyof Palette][] = [
 export function buildStyle(p: Palette, labels = true): StyleSpecification {
   // During the opening the labels start hidden, so names never flash over the dark map.
   const visibility = labels ? "visible" : "none"
+  // MapLibre fetches tiles from its own worker, where a relative address has nothing to resolve against.
+  const origin = window.location.origin
   return {
     version: 8,
     name: "makom-lizkor-dawn",
     transition: { duration: 0, delay: 0 },
-    glyphs: "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
+    // No glyphs URL: every label is drawn from the site's own font files (font-faces), and a character they lack falls
+    // back to the device's fonts instead of a glyph server.
     "font-faces": {
       [MAP_FONT]: MAP_FONT_FILES.regular,
       [MAP_FONT_BOLD]: MAP_FONT_FILES.bold,
     },
+    // Both from the site itself (src/shared/tiles.ts): the basemap through the Worker, the terrain as static files.
     sources: {
       openmaptiles: {
         type: "vector",
-        url: "https://tiles.openfreemap.org/planet",
+        tiles: [`${origin}/tiles/${BASEMAP_ARCHIVE}/{z}/{x}/{y}.pbf`],
+        bounds: TILE_BOUNDS,
+        minzoom: 0,
+        maxzoom: BASEMAP_MAXZOOM,
         attribution:
-          '<a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> <a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">© OpenMapTiles</a> Data from <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
+          '<a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">© OpenMapTiles</a> <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a>',
       },
       dem: {
         type: "raster-dem",
-        tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
+        tiles: [`${origin}/terrain/${TERRAIN_VERSION}/{z}/{x}/{y}.png`],
+        bounds: TILE_BOUNDS,
         tileSize: 256,
         encoding: "terrarium",
         // The western Negev is flat: relief shading from coarse tiles reads the same and costs a fraction.
-        maxzoom: 8,
+        maxzoom: TERRAIN_MAXZOOM,
         attribution:
           '<a href="https://github.com/tilezen/joerd/blob/master/docs/attribution.md" target="_blank" rel="noopener">Terrain: Mapzen / AWS Open Data</a>',
       },

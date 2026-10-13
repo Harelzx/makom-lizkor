@@ -13,7 +13,7 @@
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
     // A place's share page (/place/<id>) is the site's page with the place's preview tags, written by the Worker.
-    "run_worker_first": ["/api/*", "/__dev/*", "/media/*", "/place/*"],
+    "run_worker_first": ["/api/*", "/__dev/*", "/media/*", "/place/*", "/tiles/*"],
   },
   "d1_databases": [
     {
@@ -82,6 +82,9 @@
     // The nightly export, encrypted, and the photos it lists, stored by their sha256 (spec 8.1). Kept 35 days; the
     // 34-day bucket lock is an account setting, applied before launch.
     { "binding": "EXPORTS", "bucket_name": "makom-exports", "jurisdiction": "eu" },
+    // The map's basemap, one PMTiles archive of Israel (src/shared/tiles.ts): public map data, nothing about anyone, so
+    // it is kept apart from the photos and the ledger and has none of their retention or backup. In the EU like the rest.
+    { "binding": "TILES", "bucket_name": "makom-tiles", "jurisdiction": "eu" },
   ],
   // A coarse outer cap per visitor's address, counted by Cloudflare at the edge: nothing about the address is stored.
   "ratelimits": [
@@ -93,6 +96,9 @@
     // CSP reports: a page breaking the policy sends one per blocked load; past twenty a minute it is the same news.
     { "name": "CSP_LIMIT", "namespace_id": "2004", "simple": { "limit": 20, "period": 60 } },
     { "name": "READ_LIMIT", "namespace_id": "2005", "simple": { "limit": 240, "period": 60 } },
+    // Map tiles: a pitched view on a wide screen asks for a hundred at once, and flying around for several hundred a
+    // minute. This only stops a scraper running up the bucket's reads.
+    { "name": "TILE_LIMIT", "namespace_id": "2006", "simple": { "limit": 1200, "period": 60 } },
   ],
   // The scheduled jobs (worker/jobs.ts): unfinished decisions, the 24-hour backstop, reminders to moderators, and the
   // removal requests' abuse codes, cleared after RETENTION.reportAbuseCodeHours.
@@ -116,14 +122,16 @@
       "r2_buckets": [
         { "binding": "MEDIA", "bucket_name": "makom-dev-media", "jurisdiction": "eu" },
         { "binding": "LEDGER", "bucket_name": "makom-dev-ledger", "jurisdiction": "eu" },
-        { "binding": "EXPORTS", "bucket_name": "makom-dev-exports", "jurisdiction": "eu" }
+        { "binding": "EXPORTS", "bucket_name": "makom-dev-exports", "jurisdiction": "eu" },
+        { "binding": "TILES", "bucket_name": "makom-dev-tiles", "jurisdiction": "eu" }
       ],
       "ratelimits": [
         { "name": "SUBMIT_LIMIT", "namespace_id": "3001", "simple": { "limit": 10, "period": 60 } },
         { "name": "TRIBUTE_LIMIT", "namespace_id": "3002", "simple": { "limit": 60, "period": 60 } },
         { "name": "REPORT_LIMIT", "namespace_id": "3003", "simple": { "limit": 5, "period": 60 } },
         { "name": "CSP_LIMIT", "namespace_id": "3004", "simple": { "limit": 20, "period": 60 } },
-        { "name": "READ_LIMIT", "namespace_id": "3005", "simple": { "limit": 240, "period": 60 } }
+        { "name": "READ_LIMIT", "namespace_id": "3005", "simple": { "limit": 240, "period": 60 } },
+        { "name": "TILE_LIMIT", "namespace_id": "3006", "simple": { "limit": 1200, "period": 60 } }
       ],
       "vars": {
         "EPOCH": "0",
@@ -133,7 +141,7 @@
     "MAIL_DAILY_LIMIT": "230",
     "MAIL_OPS_DAILY_LIMIT": "20", "EDGE_CACHE": "off", "PUBLIC_ORIGIN": ""
       },
-      "secrets": { "required": ["ENVIRONMENT", "MODERATORS", "OPS_SERVICE_TOKENS", "MODERATOR_SERVICE_TOKENS", "PROBE_SERVICE_TOKENS", "DEV_ACCESS_SECRET", "TURNSTILE_SECRET", "TURNSTILE_HOSTNAMES", "TRACKING_SECRET", "TRIBUTE_SECRET", "EXPORT_PUBLIC_KEYS"] }
+      "secrets": { "required": ["ENVIRONMENT", "MODERATORS", "OPS_SERVICE_TOKENS", "MODERATOR_SERVICE_TOKENS", "PROBE_SERVICE_TOKENS", "DEV_ACCESS_SECRET", "TURNSTILE_SECRET", "TURNSTILE_HOSTNAMES", "TRACKING_SECRET", "TRIBUTE_SECRET", "EXPORT_PUBLIC_KEYS", "TILES_UPSTREAM"] }
     },
     // Staging (spec 14.1): synthetic data only, in the staging account, on its workers.dev address behind Cloudflare
     // Access. Built with CLOUDFLARE_ENV=staging and deployed only by .github/workflows/staging.yml, which fills the
@@ -192,6 +200,7 @@
         { "binding": "MEDIA", "bucket_name": "makom-staging-media", "jurisdiction": "eu" },
         { "binding": "LEDGER", "bucket_name": "makom-staging-ledger", "jurisdiction": "eu" },
         { "binding": "EXPORTS", "bucket_name": "makom-staging-exports", "jurisdiction": "eu" },
+        { "binding": "TILES", "bucket_name": "makom-staging-tiles", "jurisdiction": "eu" },
       ],
       "ratelimits": [
         { "name": "SUBMIT_LIMIT", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } },
@@ -199,6 +208,7 @@
         { "name": "REPORT_LIMIT", "namespace_id": "1003", "simple": { "limit": 5, "period": 60 } },
         { "name": "CSP_LIMIT", "namespace_id": "1004", "simple": { "limit": 20, "period": 60 } },
         { "name": "READ_LIMIT", "namespace_id": "1005", "simple": { "limit": 240, "period": 60 } },
+        { "name": "TILE_LIMIT", "namespace_id": "1006", "simple": { "limit": 1200, "period": 60 } },
       ],
     },
   },

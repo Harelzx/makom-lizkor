@@ -5,7 +5,7 @@ import { problem } from "./http"
 
 /** Counts at the edge before a parser, database lookup or provider call. No address is persisted. */
 export function requestCap(
-  binding: "SUBMIT_LIMIT" | "TRIBUTE_LIMIT" | "REPORT_LIMIT" | "READ_LIMIT",
+  binding: "SUBMIT_LIMIT" | "TRIBUTE_LIMIT" | "REPORT_LIMIT" | "READ_LIMIT" | "TILE_LIMIT",
   scope = "",
 ): MiddlewareHandler<AppEnv> {
   return async (c, next) => {
