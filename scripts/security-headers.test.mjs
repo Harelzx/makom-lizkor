@@ -2,7 +2,8 @@
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import { test } from "node:test"
-import { CSP, SECURITY_HEADERS } from "../worker/lib/security-headers.ts"
+import { CSP, SECURITY_HEADERS, developmentPreamble } from "../worker/lib/security-headers.ts"
+import react from "@vitejs/plugin-react"
 import { FILE, headersFile } from "./security-headers.mjs"
 
 test("public/_headers carries the Worker's headers, for every path", () => {
@@ -23,4 +24,11 @@ test("the policy enforces, static HTML revalidates and only hashed asset namespa
   assert.ok(!text.includes("/api/" + "*\n"))
   assert.match(CSP, /report-uri \/api\/csp-report/)
   assert.equal(SECURITY_HEADERS["X-Frame-Options"], "DENY")
+})
+
+test("the actual installed Vite preamble gets its exact development-only hash", async () => {
+  const code = react.preambleCode.replace("__BASE__", "/")
+  const page = await developmentPreamble(new Response(`<script type="module">${code}</script>`), "development")
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(code)))
+  assert.ok(page.headers.get("Content-Security-Policy").includes(`'sha256-${btoa(String.fromCharCode(...digest))}'`))
 })

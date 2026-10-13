@@ -3,6 +3,7 @@ import type { AppEnv } from "../index"
 import { publicPlace } from "../db/places"
 import { ogState } from "../lib/og"
 import { plainDashes } from "@/lib/display-text"
+import { developmentPreamble } from "../lib/security-headers"
 
 export const share = new Hono<AppEnv>()
 
@@ -23,7 +24,7 @@ share.get("/place/*", (c) => sharePage(c, null))
 
 async function sharePage(c: Context<AppEnv>, id: string | null) {
   const found = !id ? ({ kind: "none" } as const) : await publicPlace(c.env.DB, id)
-  const site = await c.env.ASSETS.fetch(new Request(new URL("/", c.req.url)))
+  const site = await developmentPreamble(await c.env.ASSETS.fetch(new Request(new URL("/", c.req.url))), c.env.ENVIRONMENT)
   // The page's own headers (any security headers the assets carry) stay; the length and validators no longer fit it,
   // nor does the static file's cache status: this page is the Worker's answer, built now, never a cache's (C-CACHE).
   const headers = (set: Record<string, string>) => {

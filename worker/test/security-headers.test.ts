@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { CSP, SECURITY_HEADERS } from "../lib/security-headers"
+import { CSP, SECURITY_HEADERS, developmentPreamble, secure } from "../lib/security-headers"
 import { call } from "./app"
 import { admin, withSite } from "./helpers"
 import { decide, feed, objects, queued, send, upload } from "./submission-helpers"
@@ -12,6 +12,34 @@ const expectSecure = (res: Response) => {
   for (const [name, value] of Object.entries(SECURITY_HEADERS)) expect(res.headers.get(name), name).toBe(value)
 }
 import { seedCurated } from "./curated-helpers"
+
+it("permits only the trusted Vite preamble by hash in development, preserving strict deployment policies", async () => {
+  const preamble = 'import { injectIntoGlobalHook } from "/@react-refresh"; injectIntoGlobalHook(window); window.$RefreshReg$ = () => {}'
+  const html = `<html><script type="module">${preamble}</script><script type="module">window.notAllowed = true</script></html>`
+  const dev = await developmentPreamble(new Response(html), "development")
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(preamble)))
+  const expected = `'sha256-${btoa(String.fromCharCode(...digest))}'`
+  expect(dev.headers.get("Content-Security-Policy")).toContain(expected)
+  expect(
+    dev.headers
+      .get("Content-Security-Policy")!
+      .split(";")
+      .find((x) => x.trim().startsWith("script-src")),
+  ).not.toContain("unsafe-inline")
+  expect(await dev.text()).toBe(html)
+  for (const environment of ["production", "staging"]) {
+    const site = new Response(html)
+    const page = await developmentPreamble(site, environment)
+    expect(page).toBe(site)
+    secure(page.headers)
+    expect(page.headers.get("Content-Security-Policy")).toBe(CSP)
+    expect(page.bodyUsed).toBe(false)
+  }
+  const plain = await developmentPreamble(new Response('<script type="module">window.notAllowed = true</script>'), "development")
+  secure(plain.headers)
+  expect(plain.headers.get("Content-Security-Policy")).toBe(CSP)
+  await expect(developmentPreamble(new Response("x".repeat(128 * 1024 + 1)), "development")).rejects.toThrow("exceeded its bound")
+})
 
 describe("the security headers", () => {
   it("are on every kind of response: JSON, an error, a refusal, and the share page found or not", async () => {

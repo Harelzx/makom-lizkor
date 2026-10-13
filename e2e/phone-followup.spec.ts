@@ -138,6 +138,8 @@ test(
     expect(new Set(sent.map((r) => r.key)).size).toBe(1)
     expect(new Set(sent.map((r) => r.body)).size).toBe(1)
     expect(await storedCount(page)).toBe(0)
+    await expect(result.getByRole("button", { name: "ניסיון שליחה נוסף", exact: true })).toHaveCSS("opacity", "1")
+    await expect(result.getByRole("button", { name: "סגירה ללא שמירה", exact: true })).toHaveCSS("opacity", "1")
     await audit(page)
     await result.getByRole("button", { name: "סגירה ללא שמירה", exact: true }).click()
     await page.getByRole("button", { name: "הוספת מקום", exact: true }).first().click()

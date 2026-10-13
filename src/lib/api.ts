@@ -339,7 +339,7 @@ export async function sendReport(input: ReportInput, key: string, deadline = Inf
       headers: { "Content-Type": "application/json", "Idempotency-Key": key, ...(token ? { "Turnstile-Token": token } : {}) },
       body: JSON.stringify(input),
       // The stored report receipt waits for siteverify and its transaction, not alert delivery.
-      signal: AbortSignal.timeout(12_000),
+      signal: AbortSignal.timeout(10_000),
     })
   } catch {
     return { ok: false, kind: "unknown" }
