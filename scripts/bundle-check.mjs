@@ -59,6 +59,8 @@ export function bundleProblems(dist, records, { contents = new Set() } = {}) {
     for (const file of list) {
       const rel = file.slice(dist.length + 1)
       const name = basename(file)
+      if (dir === "client" && rel.startsWith("client/assets/") && !/[-_][A-Za-z0-9_-]{8,}\.[a-z0-9]+$/i.test(name))
+        problems.push(`${rel}: unhashed file in immutable asset namespace`)
       if (photos.has(name)) problems.push(`${rel}: a curated record's photo`)
       else if (contents.size && /\.(webp|jpe?g|png|avif|gif)$/i.test(name) && contents.has(sha256(readFileSync(file))))
         problems.push(`${rel}: a curated record's photo (same bytes)`)

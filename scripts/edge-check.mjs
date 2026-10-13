@@ -220,7 +220,8 @@ export async function edgeChecks(
     const h = res.headers
     for (const [name, value] of Object.entries(SECURITY_HEADERS))
       if (h.get(name) !== value) headerFailures.push(`${path}: ${name} is ${h.get(name)}`)
-    if (h.get("Content-Security-Policy-Report-Only") !== CSP) headerFailures.push(`${path}: the page policy differs`)
+    if (h.get("Content-Security-Policy") !== CSP || h.has("Content-Security-Policy-Report-Only"))
+      headerFailures.push(`${path}: the page policy differs`)
   }
 
   // The named place's share page: there, and the site's page, with the same headers. A named place that is missing,
@@ -236,7 +237,8 @@ export async function edgeChecks(
       failures.push(`${path}: ${res.headers.get("Content-Type")}, not text/html`)
     for (const [name, value] of Object.entries(SECURITY_HEADERS))
       if (res.headers.get(name) !== value) headerFailures.push(`${path}: ${name} is ${res.headers.get(name)}`)
-    if (res.headers.get("Content-Security-Policy-Report-Only") !== CSP) headerFailures.push(`${path}: the page policy differs`)
+    if (res.headers.get("Content-Security-Policy") !== CSP || res.headers.has("Content-Security-Policy-Report-Only"))
+      headerFailures.push(`${path}: the page policy differs`)
     record("place_page", failures, `${path} answered`)
   }
 

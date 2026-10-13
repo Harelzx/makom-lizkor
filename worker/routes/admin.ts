@@ -18,6 +18,7 @@ import { PRIVATE, problem } from "../lib/http"
 import { machineMay, syntheticRev } from "../lib/synthetic"
 import { opEnv } from "../lib/purge"
 import { commissioningAllowed, commissioningStatus, manualRecovery, manualSnapshot } from "../db/commissioning"
+import { opsSummary } from "../lib/ops-summary"
 
 type AdminEnv = { Bindings: Env; Variables: AppEnv["Variables"] & { actor: string; machine: boolean; machineRev: number | null } }
 type AdminContext = Context<AdminEnv>
@@ -41,6 +42,9 @@ admin.use("*", async (c, next) => {
   }
   await next()
 })
+
+// The existing human administrator's view; machine scopes and the diagnostic-agent boundary stay unchanged.
+admin.get("/summary", async (c) => c.json(await opsSummary(c.env, c.get("errorRates"), clock(c.req.raw, c.env)), 200, PRIVATE))
 
 // A dated private commissioning screen, behind the same human Access verification as every moderator action.
 const commissioningPage = (receipt: object) =>

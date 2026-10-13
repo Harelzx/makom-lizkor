@@ -11,7 +11,7 @@ import { receiptFor } from "./staging-receipt.mjs"
 
 /** The stand-in sign-in names a session by the length of what was sent: the moderator's. */
 const MODERATOR = JSON.stringify({ email: "dev@example.test" }).length
-const GOOD = { ...SECURITY_HEADERS, "Content-Security-Policy-Report-Only": CSP }
+const GOOD = { ...SECURITY_HEADERS, "Content-Security-Policy": CSP }
 /** A deployment that answers everything well, with one thing changed by `bend`. */
 const deployment =
   (bend = () => {}) =>
@@ -114,8 +114,14 @@ test("a named place's share page must answer 200; one never named leaves the che
 
 test("a named place's share page without the page policy, or with another, fails the headers (P7-EDGE-HEADERS-1)", async () => {
   for (const bend of [
-    (u, _i, res) => u.pathname === "/place/car-wall-tkuma" && res.headers.delete("Content-Security-Policy-Report-Only"),
-    (u, _i, res) => u.pathname === "/place/car-wall-tkuma" && res.headers.set("Content-Security-Policy-Report-Only", "default-src *"),
+    (u, _i, res) => u.pathname === "/place/car-wall-tkuma" && res.headers.delete("Content-Security-Policy"),
+    (u, _i, res) => u.pathname === "/place/car-wall-tkuma" && res.headers.set("Content-Security-Policy", "default-src *"),
+    (u, _i, res) => {
+      if (u.pathname === "/place/car-wall-tkuma") {
+        res.headers.delete("Content-Security-Policy")
+        res.headers.set("Content-Security-Policy-Report-Only", CSP)
+      }
+    },
   ]) {
     const results = await edgeChecks("https://site.example", { fetch: deployment(bend), place: "car-wall-tkuma" })
     assert.equal(status(results).headers, "fail", String(bend))

@@ -1,8 +1,9 @@
 import { ulid } from "./ids"
 import { MAIL_BINDING, validMailFrom } from "./mail-binding"
-import { gmailReady, gmailSend, type GmailSettings } from "./gmail"
+import { gmailReady, gmailAttempt, type GmailSettings, type MailOutcome } from "./gmail"
+import { claimMailBudget } from "./mail-budget"
 
-export type Mail = { to: string; subject: string; text: string }
+export type Mail = { to: string; subject: string; text: string; budget?: "ops" }
 // Optional commissioning settings; a transport cannot become ready merely by choosing its name.
 type MailEnv = Env & GmailSettings & { MAIL?: SendEmail; MAIL_PROVIDER?: string }
 const cloudflareSelected = (env: MailEnv) => env.MAIL_PROVIDER === undefined || env.MAIL_PROVIDER === "cloudflare"
@@ -35,7 +36,7 @@ const devOutbox: SendMail = async (env, m) => {
  * never log their errors, which may contain recipients, message text or tracking links.
  */
 const productionMail: SendMail = async (env, m) => {
-  if (env.MAIL_PROVIDER === "gmail") return gmailSend(env, m)
+  if (env.MAIL_PROVIDER === "gmail") return (await gmailAttempt(env, m)) === "accepted"
   if (!cloudflareSelected(env)) return false
   const binding = env[MAIL_BINDING]
   if (!validMailFrom(env.MAIL_FROM) || !binding || typeof binding.send !== "function") return false
@@ -48,8 +49,16 @@ const productionMail: SendMail = async (env, m) => {
 }
 
 // Synthetic staging must never email real people merely because it gained a binding or copied a sender setting.
-export const sendMail: SendMail = (env, m) => {
-  if (env.ENVIRONMENT === "development") return devOutbox(env, m)
-  if (env.ENVIRONMENT === "production") return productionMail(env, m)
-  return Promise.resolve(false)
+export async function attemptMail(env: MailEnv, m: Mail): Promise<MailOutcome> {
+  if (env.ENVIRONMENT === "development") return (await devOutbox(env, m)) ? "accepted" : "retryable"
+  if (env.ENVIRONMENT !== "production" || !transportReady(env)) return "stopped"
+  try {
+    if (!(await claimMailBudget(env, m.budget === "ops" ? "ops" : "public"))) return "deferred"
+  } catch {
+    // A missing/unavailable budget store cannot bypass the cap or turn provider failure into a thrown HTTP error.
+    return "deferred"
+  }
+  if (env.MAIL_PROVIDER === "gmail") return gmailAttempt(env, m)
+  return (await productionMail(env, m)) ? "accepted" : "uncertain"
 }
+export const sendMail: SendMail = async (env, m) => (await attemptMail(env, m)) === "accepted"

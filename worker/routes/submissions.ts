@@ -18,8 +18,8 @@ import {
 import { clock } from "../lib/clock"
 import { PRIVATE, problem } from "../lib/http"
 import { opEnv } from "../lib/purge"
-import { rateKey } from "../lib/ids"
-import { verificationMail } from "../lib/messages"
+import { boundedBody, PHOTO_REQUEST_BYTES, PUBLIC_JSON_BYTES, requestCap } from "../lib/request-guard"
+import { deliverVerification } from "../db/verification-delivery"
 import { checkTurnstile } from "../lib/turnstile"
 import type { AppEnv } from "../index"
 import { log } from "../lib/log"
@@ -37,22 +37,12 @@ const KEY = /^[A-Za-z0-9_-]{22,64}$/
 const queueLimit = (c: Context<AppEnv>) => Number(c.env.QUEUE_LIMIT ?? 200)
 const queueFull = (c: Context<AppEnv>) => problem(c, 503, "queue_full", {}, { "Retry-After": "3600" })
 
-/** The coarse per-address cap, counted under a code derived from the address (rateKey), never the address itself. */
-async function overLimit(c: Context<AppEnv>): Promise<Response | null> {
-  const address = c.req.header("CF-Connecting-IP")
-  if (address && !(await c.env.SUBMIT_LIMIT.limit({ key: await rateKey(c.env.TRACKING_SECRET, address) })).success)
-    return problem(c, 429, "rate_limited", {}, { "Retry-After": "60" })
-  return null
-}
-
 /**
  * A full queue refuses a new submission before Turnstile is spent; the insert checks again, since requests at once all
  * pass this. A correction is checked only in its own update, so a stale one is told it's stale, full queue or not.
  */
 async function guard(c: Context<AppEnv>, action: "submit" | "revise"): Promise<Response | null> {
   if (action === "submit" && (await pendingCount(c.env.DB)) >= queueLimit(c)) return queueFull(c)
-  const limited = await overLimit(c)
-  if (limited) return limited
   const address = c.req.header("CF-Connecting-IP")
   const outcome = await checkTurnstile(c.env, c.get("verifyTurnstile"), c.req.header("Turnstile-Token"), action, address)
   if (outcome === "required") return problem(c, 403, "turnstile_required")
@@ -63,6 +53,8 @@ async function guard(c: Context<AppEnv>, action: "submit" | "revise"): Promise<R
 
 submissions.post(
   "/",
+  requestCap("SUBMIT_LIMIT"),
+  boundedBody(PUBLIC_JSON_BYTES),
   zValidator("json", SubmissionInput, (r, c) => (r.success ? undefined : problem(c, 400, "invalid_input"))),
   async (c) => {
     const key = c.req.header("Idempotency-Key") ?? ""
@@ -72,7 +64,7 @@ submissions.post(
     if (!c.env.TRACKING_SECRET) return problem(c, 503, "not_configured")
     // The same submission sent again (its answer was lost) was checked on its first try, and Turnstile tokens are
     // single-use, so it skips the check; it still counts against the address's cap like any request.
-    const refused = (await submissionKnown(c.env.DB, key)) ? await overLimit(c) : await guard(c, "submit")
+    const refused = (await submissionKnown(c.env.DB, key)) ? null : await guard(c, "submit")
     if (refused) return refused
     const token = await trackingTokenFor(c.env.TRACKING_SECRET, key)
     const r = await insertSubmission(
@@ -89,12 +81,14 @@ submissions.post(
     if (r.kind === "queue_full") return queueFull(c)
     // 200 for the same submission sent again, so the browser can tell, though it treats both alike.
     // An address was given: the verification mail goes first, and says nothing about the place.
-    const input = c.req.valid("json")
-    if (r.kind === "created" && r.verifyToken && input.email) {
-      const link = `${new URL(c.req.url).origin}/#/verify/${r.verifyToken}`
-      await c
-        .get("sendMail")(c.env, verificationMail(input.email, link))
-        .catch(() => false)
+    if (c.req.valid("json").email) {
+      const env = c.env.ENVIRONMENT === "development" ? { ...c.env, PUBLIC_ORIGIN: new URL(c.req.url).origin } : c.env
+      const delivery = deliverVerification(env, c.get("mailAttempt")!, clock(c.req.raw, c.env), r.id).catch((err: Error) =>
+        log("error", "verification_delivery_failed", { error: err.name }),
+      )
+      // Production receipt never waits for Gmail. Development stays deterministic for local fixtures.
+      if (c.env.ENVIRONMENT === "development") await delivery
+      else c.executionCtx.waitUntil(delivery)
     }
     return c.json({ id: r.id, trackingToken: r.trackingToken }, r.kind === "created" ? 201 : 200, PRIVATE)
   },
@@ -112,7 +106,7 @@ submissions.get("/:id", async (c) => {
   return c.json(pending ? { ...status, files: "pending" } : status, 200, PRIVATE)
 })
 
-submissions.post("/:id/withdraw", async (c) => {
+submissions.post("/:id/withdraw", requestCap("SUBMIT_LIMIT", "withdraw:"), boundedBody(0), async (c) => {
   const token = bearer(c.req.header("Authorization"))
   const done = token ? await withdraw(opEnv(c), c.req.param("id"), token, clock(c.req.raw, c.env)) : "missing"
   if (done === "missing") return problem(c, 404, "not_found")
@@ -129,6 +123,8 @@ submissions.post("/:id/withdraw", async (c) => {
 
 submissions.post(
   "/:id/revisions",
+  requestCap("SUBMIT_LIMIT"),
+  boundedBody(PUBLIC_JSON_BYTES),
   zValidator("json", RevisionInput, (r, c) => (r.success ? undefined : problem(c, 400, "invalid_input"))),
   async (c) => {
     const token = bearer(c.req.header("Authorization"))
@@ -147,30 +143,39 @@ submissions.post(
 const PhotoFields = z.object({ alt: text({ max: 140 }), credit: text({ max: 60 }).optional() })
 
 /** The photo for the sender's open revision, after the submission itself: a second request, so the submission's retry stays exact. */
-submissions.put("/:id/photo", async (c) => {
-  const token = bearer(c.req.header("Authorization"))
-  // The token first, then the declared size, and only then the body: nothing large is read for a stranger.
-  if (!token || !(await canTrack(c.env.DB, c.req.param("id"), token))) return problem(c, 404, "not_found")
-  const length = Number(c.req.header("Content-Length"))
-  if (!c.req.header("Content-Length") || !Number.isFinite(length)) return problem(c, 411, "length_required")
-  if (length > 5 * 1024 * 1024) return problem(c, 413, "too_large")
-  const body = await c.req.parseBody().catch(() => null)
-  const file = body?.photo
-  if (!(file instanceof File)) return problem(c, 400, "invalid_input")
-  const fields = PhotoFields.safeParse({ alt: body?.alt, credit: body?.credit || undefined })
-  if (!fields.success) return problem(c, 400, "invalid_input")
-  const r = await attachPhoto(
-    c.env.DB,
-    c.env.MEDIA,
-    c.req.param("id"),
-    token,
-    new Uint8Array(await file.arrayBuffer()),
-    fields.data.alt,
-    fields.data.credit,
-  )
-  if (r === "not_found") return problem(c, 404, "not_found")
-  if (r === "too_large") return problem(c, 413, "too_large")
-  if (r === "not_jpeg") return problem(c, 415, "not_jpeg")
-  if (r === "closed") return problem(c, 409, "not_open")
-  return c.json({ ok: true }, 200, PRIVATE)
-})
+submissions.put(
+  "/:id/photo",
+  requestCap("SUBMIT_LIMIT", "photo:"),
+  async (c, next) => {
+    const token = bearer(c.req.header("Authorization"))
+    // The token first, then the declared size, and only then the body: nothing large is read for a stranger.
+    if (!token || !(await canTrack(c.env.DB, c.req.param("id"), token))) return problem(c, 404, "not_found")
+    const length = Number(c.req.header("Content-Length"))
+    if (!c.req.header("Content-Length") || !Number.isFinite(length)) return problem(c, 411, "length_required")
+    if (length > PHOTO_REQUEST_BYTES) return problem(c, 413, "too_large")
+    await next()
+  },
+  boundedBody(PHOTO_REQUEST_BYTES),
+  async (c) => {
+    const token = bearer(c.req.header("Authorization"))!
+    const body = await c.req.parseBody().catch(() => null)
+    const file = body?.photo
+    if (!(file instanceof File)) return problem(c, 400, "invalid_input")
+    const fields = PhotoFields.safeParse({ alt: body?.alt, credit: body?.credit || undefined })
+    if (!fields.success) return problem(c, 400, "invalid_input")
+    const r = await attachPhoto(
+      c.env.DB,
+      c.env.MEDIA,
+      c.req.param("id"),
+      token,
+      new Uint8Array(await file.arrayBuffer()),
+      fields.data.alt,
+      fields.data.credit,
+    )
+    if (r === "not_found") return problem(c, 404, "not_found")
+    if (r === "too_large") return problem(c, 413, "too_large")
+    if (r === "not_jpeg") return problem(c, 415, "not_jpeg")
+    if (r === "closed") return problem(c, 409, "not_open")
+    return c.json({ ok: true }, 200, PRIVATE)
+  },
+)

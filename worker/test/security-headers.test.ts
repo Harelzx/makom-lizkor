@@ -26,8 +26,8 @@ describe("the security headers", () => {
     expect(responses.map((r) => r.status)).toEqual([200, 404, 401, 200, 404])
     for (const res of responses) {
       expectSecure(res)
-      expect(res.headers.get("Content-Security-Policy-Report-Only")).toBe(CSP)
-      expect(res.headers.get("Content-Security-Policy")).toBeNull()
+      expect(res.headers.get("Content-Security-Policy-Report-Only")).toBeNull()
+      expect(res.headers.get("Content-Security-Policy")).toBe(CSP)
     }
   })
 
@@ -46,7 +46,8 @@ describe("the security headers", () => {
       } as unknown as Fetcher,
     }
     const res = await call("http://local/place/nova-memorial-reim", {}, carrying)
-    expect(res.headers.get("Content-Security-Policy-Report-Only")).toBe(CSP)
+    expect(res.headers.get("Content-Security-Policy-Report-Only")).toBeNull()
+    expect(res.headers.get("Content-Security-Policy")).toBe(CSP)
     expect(res.headers.get("Referrer-Policy")).toBe(SECURITY_HEADERS["Referrer-Policy"])
   })
 
@@ -65,9 +66,12 @@ describe("the security headers", () => {
     }
   })
 
-  it("forbid framing now, while the policy only reports", () => {
+  it("forbids framing and JavaScript eval while allowing the bundled photo WASM", () => {
     expect(CSP).toContain("frame-ancestors 'none'")
     expect(SECURITY_HEADERS["X-Frame-Options"]).toBe("DENY")
+    expect(CSP).toContain("'wasm-unsafe-eval'")
+    expect(CSP).not.toContain("'unsafe-eval'")
+    expect(CSP).not.toContain("script-src 'self' 'unsafe-inline'")
   })
 })
 

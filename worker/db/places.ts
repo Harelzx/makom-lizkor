@@ -4,7 +4,7 @@ import type { Kind } from "@/types"
 import type { Feed, PublicContribution, PublicCuratedPlace, PublicPlace, RevisionInput, SubmissionInput } from "@/shared/contract"
 import { CuratedFields } from "@/shared/curated"
 import { MONTH_DAYS, type Durations } from "../lib/durations"
-import { newToken, placeId, sameHash, sha256Hex, ulid } from "../lib/ids"
+import { placeId, sameHash, sha256Hex, ulid } from "../lib/ids"
 import { stripJpeg } from "../lib/jpeg"
 import { runOp, WATCH_FIRST_LOOK_MS, type OpEnv } from "./ops"
 
@@ -99,19 +99,21 @@ export async function insertSubmission(
       ),
   ]
   // The submitter's name and email are personal data: they live with the contacts, under a fixed deletion ceiling.
-  const verifyToken = input.email ? newToken() : undefined
+  const contactId = `c_${ulid(now.getTime())}`
+  // Domain-separated capability can be re-created for a durable delivery, without retaining the token itself.
+  const verifyToken = input.email ? await hmacHex(secret, `verify:${contactId}`) : undefined
   if (input.submitter_name || input.email) {
     const ceiling = new Date(now.getTime() + RETENTION.contactMaxMonths * MONTH_DAYS * d.day).toISOString()
     const expires = new Date(now.getTime() + VERIFY_DAYS * d.day).toISOString()
     stmts.push(
       db
         .prepare(
-          `INSERT INTO contacts (id, place_id, name, email, email_verify_hash, email_verify_expires, consent_version, created_at, ceiling_at, purge_after)
-           SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+          `INSERT INTO contacts (id, place_id, name, email, email_verify_hash, email_verify_expires, consent_version, created_at, ceiling_at, purge_after, verify_mail_state)
+           SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
            WHERE EXISTS (SELECT 1 FROM places WHERE id = ?)`,
         )
         .bind(
-          `c_${ulid(now.getTime())}`,
+          contactId,
           id,
           input.submitter_name ?? null,
           input.email ?? null,
@@ -121,6 +123,7 @@ export async function insertSubmission(
           at,
           ceiling,
           ceiling,
+          input.email ? "due" : null,
           id,
         ),
     )

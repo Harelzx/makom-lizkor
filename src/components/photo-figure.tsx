@@ -2,6 +2,7 @@ import { useRef, useState } from "react"
 import { cn } from "@/lib/utils"
 import { Img } from "@/components/kit"
 import type { Photo } from "@/types"
+import { photoSrcSet, PHOTO_SIZES } from "@/lib/responsive-photo"
 
 function Credit({ photo }: { photo: Photo }) {
   return (
@@ -25,7 +26,15 @@ export function PhotoFigure({ photo, className, ratio = "aspect-[4/3]" }: { phot
   return (
     <figure className={cn("flex flex-col gap-2", className)}>
       <div className="overflow-hidden rounded-3xl bg-surface-3">
-        <Img src={photo.url} placeholder={photo.thumb_url} alt={photo.subject_he} className={cn("w-full", ratio)} />
+        <Img
+          src={photo.url}
+          srcSet={photoSrcSet(photo.url)}
+          sizes={PHOTO_SIZES}
+          loading="eager"
+          placeholder={photo.thumb_url}
+          alt={photo.subject_he}
+          className={cn("w-full", ratio)}
+        />
       </div>
       <Credit photo={photo} />
     </figure>
@@ -53,10 +62,13 @@ export function PhotoGallery({ photos, className, ratio = "aspect-[4/3]" }: { ph
             setIndex(Math.round(Math.abs(el.scrollLeft) / el.clientWidth))
           }}
         >
-          {photos.map((p) => (
+          {photos.map((p, i) => (
             <Img
               key={p.url}
-              src={p.url}
+              src={Math.abs(i - index) <= 1 ? p.url : undefined}
+              srcSet={Math.abs(i - index) <= 1 ? photoSrcSet(p.url) : undefined}
+              sizes={PHOTO_SIZES}
+              loading={i === 0 ? "eager" : "lazy"}
               placeholder={p.thumb_url}
               alt={p.subject_he}
               className={cn("w-full shrink-0 snap-center", ratio)}

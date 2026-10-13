@@ -50,7 +50,8 @@ export function ContactForm({ onClose }: { onClose: () => void }) {
         method: "POST",
         headers: { "Content-Type": "application/json", "Turnstile-Token": token },
         body: JSON.stringify({ email: email.trim(), message: message.trim() }),
-        signal: AbortSignal.timeout(20_000),
+        // Direct sending has no outbox: 8s siteverify + 12s provider, with response overhead.
+        signal: AbortSignal.timeout(25_000),
       })
       if (r.status === 202 && (await r.json()).accepted === true) {
         setSent(true)

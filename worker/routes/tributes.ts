@@ -6,7 +6,7 @@ import { leaveTribute, tributeTotals } from "../db/tributes"
 import { clock } from "../lib/clock"
 import { jerusalemDay } from "../lib/day"
 import { problem } from "../lib/http"
-import { rateKey } from "../lib/ids"
+import { boundedBody, requestCap } from "../lib/request-guard"
 
 export const tributes = new Hono<AppEnv>()
 
@@ -14,6 +14,8 @@ const KEY = /^[0-9a-f]{32}$/
 
 tributes.post(
   "/",
+  requestCap("TRIBUTE_LIMIT"),
+  boundedBody(1024),
   zValidator("json", TributeInput, (r, c) => (r.success ? undefined : problem(c, 400, "invalid_input"))),
   async (c) => {
     const key = c.req.header("Idempotency-Key") ?? ""
@@ -21,9 +23,6 @@ tributes.post(
     // Without the secret a device can't be kept apart from day to day: count nothing rather than count it loosely.
     if (!c.env.TRIBUTE_SECRET) return problem(c, 503, "not_configured")
     // A coarse ceiling per address, counted at Cloudflare's edge under a keyed code, never the address itself.
-    const address = c.req.header("CF-Connecting-IP")
-    if (address && !(await c.env.TRIBUTE_LIMIT.limit({ key: await rateKey(c.env.TRIBUTE_SECRET, address) })).success)
-      return problem(c, 429, "rate_limited", {}, { "Retry-After": "60" })
     const now = clock(c.req.raw, c.env)
     const r = await leaveTribute(c.env.DB, c.env.TRIBUTE_SECRET, { key, ...c.req.valid("json") }, jerusalemDay(now), now)
     if (r === "key_reused") return problem(c, 409, "idempotency_key_reused")

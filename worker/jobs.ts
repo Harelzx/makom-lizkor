@@ -10,6 +10,8 @@ import type { SendMail } from "./lib/mail"
 import { REPORT_GUARDS } from "./lib/guards"
 import type { Purge } from "./lib/purge"
 import { log } from "./lib/log"
+import { deliverVerification, type MailAttempt } from "./db/verification-delivery"
+import { alertOperations, pruneCounters } from "./lib/metrics"
 
 const HOUR_MS = 3600 * 1000
 /** A backstop claimed this long ago by a run that never finished it is taken again. */
@@ -35,7 +37,7 @@ const BACKSTOP_CLAIM_MS = 10 * 60_000
  *   Nothing else is cleared here: the request, and its replay detection, stay to the request's own deletion date.
  * A part that fails is logged by name and never stops the others.
  */
-export async function runJobs(env: Env, deps: { sendMail: SendMail; purge: Purge }, ctx: unknown, now: Date) {
+export async function runJobs(env: Env, deps: { sendMail: SendMail; purge: Purge; mailAttempt?: MailAttempt }, ctx: unknown, now: Date) {
   // This deployment's retention day and hour, read first: a value refused here (worker/lib/durations.ts) stops the
   // whole pass before any part writes anything.
   const d = durations(env)
@@ -52,6 +54,11 @@ export async function runJobs(env: Env, deps: { sendMail: SendMail; purge: Purge
   // First, before anything else (spec 7: erasure runs before the export, and nothing later may depend on what it erases).
   let retention: Awaited<ReturnType<typeof runRetention>> | undefined
   await part("retention", async () => (retention = await runRetention(opEnv, now)))
+  await part("verification_delivery", () =>
+    deliverVerification(env, deps.mailAttempt ?? (async (e, mail) => ((await deps.sendMail(e, mail)) ? "accepted" : "retryable")), now),
+  )
+  await part("operational_counters", () => pruneCounters(env, now))
+  await part("operations_alert", () => alertOperations(env, deps.sendMail, now))
   await part("retention_alert", () => alertStalledRetention(env.DB, env, deps.sendMail, now))
   await part("review_reminder", () => remindOverdueReview(env.DB, env, deps.sendMail, now))
 

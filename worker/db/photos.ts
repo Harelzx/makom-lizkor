@@ -1,6 +1,7 @@
 import { ulid } from "../lib/ids"
 import { ogState } from "../lib/og"
 import { log } from "../lib/log"
+import { PHOTO_WIDTHS, variantKey } from "../lib/photo-variants"
 
 /**
  * A place's photo files after upload: copied to public/ for an approval, retired when a decision makes them obsolete,
@@ -84,7 +85,8 @@ export async function retirePhotos(db: D1Database, media: R2Bucket, keys: (strin
       if (!named) obsolete.push(key)
     }
     // A photo hidden while it was published sits in held/ under the same name: it goes with its public key.
-    await deleteKeys(media, [...obsolete, ...obsolete.filter((k) => k.startsWith("public/")).map((k) => k.replace(/^public\//, "held/"))])
+    const originals = [...obsolete, ...obsolete.filter((k) => k.startsWith("public/")).map((k) => k.replace(/^public\//, "held/"))]
+    await deleteKeys(media, [...originals, ...originals.flatMap((k) => PHOTO_WIDTHS.map((w) => variantKey(k, w)))])
     return true
   } catch (err) {
     log("error", "photo_cleanup", { error: (err as Error).name })
@@ -153,6 +155,8 @@ export async function sweepPhotos(db: D1Database, media: R2Bucket, now: Date) {
   ])
   const keys = (r: D1Result) => new Set((r.results as { k: string }[]).map((x) => x.k))
   const live = keys(named)
+  // Derived public files are expendable, never a separate publication. Export restores originals and recreates sizes.
+  for (const key of [...live]) for (const width of PHOTO_WIDTHS) live.add(variantKey(key, width))
   const inFlight = keys(busy)
   const ended = keys(gone)
   const twin = (key: string) =>

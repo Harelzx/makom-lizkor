@@ -5,7 +5,8 @@
  */
 @import "tailwindcss" source(".");
 @import "tw-animate-css";
-@import "shadcn/tailwind.css";
+/* Exact MIT-licensed CSS from shadcn 4.21.1; no runtime need for its vulnerable CLI dependency tree. */
+@import "./vendor/shadcn-tailwind.css";
 @import "@fontsource-variable/heebo";
 
 @source not "./data";

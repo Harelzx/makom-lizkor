@@ -30,6 +30,7 @@ test("the committed workflows keep the policy", () => {
     "regression.yml",
     "release.yml",
     "rollback.yml",
+    "security.yml",
     "staging.yml",
   ])
 })

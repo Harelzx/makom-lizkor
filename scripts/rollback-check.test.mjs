@@ -48,6 +48,10 @@ test("refuses when today's schema would break the earlier code", () => {
     "ALTER TABLE places ADD flag INTEGER DEFAULT 0 CHECK (flag IN (1, 2));":
       "adds a column with a constraint the check can't establish as compatible",
     "ALTER TABLE places ADD code TEXT UNIQUE;": "adds a column with a constraint the check can't establish as compatible",
+    "ALTER TABLE places ADD code TEXT CHECK (id IS NOT NULL AND code IN ('due', 'sent'));":
+      "adds a column with a constraint the check can't establish as compatible",
+    "ALTER TABLE places ADD code TEXT CHECK (code IS NOT NULL);": "adds a column with a constraint the check can't establish as compatible",
+    "ALTER TABLE places ADD code TEXT CHECK (other IN ('due'));": "adds a column with a constraint the check can't establish as compatible",
     // A required column whose default is NULL, in either order: on an empty table it is added, and the earlier code's
     // insert then fails (proved with SQLite below; a53, P6-ROLLBACK-2).
     "ALTER TABLE places ADD must TEXT NOT NULL DEFAULT NULL;": "adds a required column whose default is NULL",
@@ -64,6 +68,20 @@ test("refuses when today's schema would break the earlier code", () => {
       sql,
     )
   }
+})
+
+test("only a nullable new-column literal IN check is compatible, proven against actual SQLite older INSERTs", async () => {
+  const { repo, base } = start()
+  const sql = "ALTER TABLE places ADD COLUMN mail_state TEXT CHECK (mail_state IN ('due', 'sent'));"
+  const now = repo.commit("nullable constrained metadata", { "migrations/0002_state.sql": sql })
+  assert.deepEqual(rollbackProblems({ cwd: repo.dir, target: base, deployed: now }), [])
+  const { DatabaseSync } = await import("node:sqlite")
+  const db = new DatabaseSync(":memory:")
+  db.exec("CREATE TABLE places (id TEXT PRIMARY KEY); INSERT INTO places(id) VALUES ('before');" + sql)
+  db.exec("INSERT INTO places(id) VALUES ('older-code'); INSERT INTO places(id,mail_state) VALUES ('newer-code','due')")
+  assert.equal(db.prepare("SELECT mail_state FROM places WHERE id = 'older-code'").get().mail_state, null)
+  assert.throws(() => db.exec("INSERT INTO places(id,mail_state) VALUES ('bad','unknown')"), /CHECK/)
+  db.close()
 })
 
 test("refuses when a released migration was edited", () => {

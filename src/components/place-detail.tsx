@@ -15,6 +15,7 @@ import { nextPlace, useVisits, visitKey } from "@/lib/visit-list"
 import { LocalRemoval } from "@/components/local-removal"
 import { spring } from "@/lib/motion"
 import type { LocalFields, Place } from "@/types"
+import { photoSrcSet, PHOTO_SIZES } from "@/lib/responsive-photo"
 
 /** Where the visitor's own place stands with the server. An older place sent before states existed counts as sent. */
 const sendState = (l: LocalFields) => l.send ?? (l.remoteId ? "sent" : "local")
@@ -109,6 +110,9 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
         <figure className="-mx-1">
           <img
             src={local?.photo ?? place.contributedPhoto!.url}
+            srcSet={local?.photo ? undefined : photoSrcSet(place.contributedPhoto!.url)}
+            sizes={PHOTO_SIZES}
+            decoding="async"
             alt={(local ? local.photoAlt : place.contributedPhoto?.alt) || place.name_he}
             className="aspect-[4/3] w-full rounded-3xl object-cover"
           />
