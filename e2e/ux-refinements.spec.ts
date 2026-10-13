@@ -33,6 +33,7 @@ for (const width of [320, 390, 1280])
     }
     await artFits("/art/bud.webp")
     await f.getByRole("button", { name: "המיקום הנוכחי שלי", exact: true }).click()
+    await page.getByRole("button", { name: "זה המקום", exact: true }).click({ timeout: 15_000 })
     await expect(f.getByText("סומן מיקום", { exact: false })).toBeVisible()
     await f.getByRole("button", { name: "המשך", exact: true }).click()
     await artFits("/art/anemone-watercolor.webp")

@@ -168,8 +168,9 @@ test("list output of the installed Playwright covers all core tags and partition
   verifyShards(whole, shards)
   const webkit = entries(list("webkit"))
   assert.ok(webkit.some((t) => t.project === "seed"))
-  // Existing eight phone checks plus actual keyboard location selection and pre-submit privacy.
+  // Existing checks plus keyboard selection/privacy and GPS point review with normal/doubled text.
   const phone = webkit.filter((t) => t.project === "webkit-phone")
-  assert.equal(phone.length, 10)
+  assert.equal(phone.length, 12)
   assert.equal(phone.filter((t) => t.file.split("/").at(-1) === "location-keyboard.spec.ts").length, 2)
+  assert.equal(phone.filter((t) => t.file.split("/").at(-1) === "location-review.spec.ts").length, 2)
 })

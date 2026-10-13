@@ -40,6 +40,7 @@ test(
     const dialog = visitor.getByRole("dialog")
     await dialog.getByRole("button", { name: "המיקום הנוכחי שלי" }).click()
     // The location arrives asynchronously and grows the form; pressing on before it would land where the button was.
+    await visitor.getByRole("button", { name: "זה המקום", exact: true }).click({ timeout: 15_000 })
     await expect(dialog.getByText("סומן מיקום", { exact: false })).toBeVisible({ timeout: 15_000 })
     await dialog.getByRole("button", { name: "המשך" }).click()
     await dialog.getByLabel("שם המקום").fill(name)
@@ -172,6 +173,7 @@ test("saving twice while the first send is slow sends the place once", async ({ 
   const dialog = page.getByRole("dialog")
   await dialog.getByRole("button", { name: "המיקום הנוכחי שלי" }).click()
   // The location arrives asynchronously and grows the form; pressing on before it would land where the button was.
+  await page.getByRole("button", { name: "זה המקום", exact: true }).click({ timeout: 15_000 })
   await expect(dialog.getByText("סומן מיקום", { exact: false })).toBeVisible({ timeout: 15_000 })
   await dialog.getByRole("button", { name: "המשך" }).click()
   await dialog.getByLabel("שם המקום").fill(`ספסל דמו כפול ${Date.now()}`)
