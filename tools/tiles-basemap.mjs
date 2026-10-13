@@ -1,6 +1,6 @@
 // Builds the map's basemap: one PMTiles archive of Israel in the OpenMapTiles schema, the same schema the style's layers
 // read (src/map/style.ts), from Geofabrik's OpenStreetMap extract with Planetiler. Needs Java 21 and the network; takes a
-// few minutes and about 4 GB of memory. The archive (a few hundred MB) stays out of git, in assets-src/tiles/.
+// few minutes and about 4 GB of memory. The archive (about 90 MB) stays out of git, in assets-src/tiles/.
 //   node tools/tiles-basemap.mjs           build assets-src/tiles/<BASEMAP_ARCHIVE>.pmtiles
 //   node tools/tiles-basemap.mjs --upload  then put it in the bucket of every deployment: staging, then production
 // A new extract is a new archive: set BASEMAP_ARCHIVE in src/shared/tiles.ts to a new name (the day's date) first. Tiles

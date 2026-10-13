@@ -70,7 +70,7 @@ describe("the basemap's tiles", () => {
   })
 
   it("serve a tile as it is stored, gzipped, cached for good", async () => {
-    const res = await call(url("0/0/0.pbf"))
+    const res = await call(url("0/0/0.pbf"), {}, { ...env, ENVIRONMENT: "production" })
     expect(res.status).toBe(200)
     expect(res.headers.get("Content-Type")).toBe("application/vnd.mapbox-vector-tile")
     expect(res.headers.get("Content-Encoding")).toBe("gzip")
@@ -82,6 +82,13 @@ describe("the basemap's tiles", () => {
       await new Response(new Blob([body]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer(),
     )
     expect(unpacked).toEqual(TILE)
+  })
+
+  it("unzip the tile on a dev server, whose proxy would cut a gzipped one short", async () => {
+    const res = await call(url("0/0/0.pbf"))
+    expect(res.status).toBe(200)
+    expect(res.headers.get("Content-Encoding")).toBeNull()
+    expect(new Uint8Array(await res.arrayBuffer())).toEqual(TILE)
   })
 
   it("answer an empty tile where the archive has nothing, so the map draws nothing there", async () => {

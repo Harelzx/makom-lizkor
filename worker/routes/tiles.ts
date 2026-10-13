@@ -68,8 +68,12 @@ tiles.get("/:archive/:z/:x/:file{[0-9]+\\.pbf}", async (c) => {
   // Nothing at this tile (open sea, or past the archive's zoom): an empty tile, which the map draws as nothing.
   if (!tile) return new Response(null, { status: 204, headers: cache })
   const headers = new Headers({ ...cache, "Content-Type": "application/vnd.mapbox-vector-tile" })
+  if (header.tileCompression !== Compression.Gzip && header.tileCompression !== Compression.None)
+    throw new Error("unsupported tile compression")
+  // Vite's dev server passes the gzipped body on unzipped but keeps its zipped length, cutting every tile short; there
+  // the tile is unzipped here instead. Deployed, workerd sends it as stored.
+  if (c.env.ENVIRONMENT === "development") return new Response(await gunzip(tile.data, header.tileCompression), { status: 200, headers })
   if (header.tileCompression === Compression.Gzip) headers.set("Content-Encoding", "gzip")
-  else if (header.tileCompression !== Compression.None) throw new Error("unsupported tile compression")
   // The body is already gzipped: "manual" sends it as it is, instead of compressing it a second time.
   return new Response(tile.data, { status: 200, headers, encodeBody: "manual" })
 })
