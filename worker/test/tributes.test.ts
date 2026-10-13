@@ -1,20 +1,31 @@
 import { env } from "cloudflare:workers"
 import { describe, expect, it } from "vitest"
+import { LEGAL_SECTIONS } from "@/data/legal"
+import { ADDRESS_DAILY_CAP } from "../db/tributes"
 import { jerusalemDay } from "../lib/day"
 import { call } from "./app"
 import { decide, queued, send } from "./submission-helpers"
 
 const hex = (bytes = 16) => [...crypto.getRandomValues(new Uint8Array(bytes))].map((b) => b.toString(16).padStart(2, "0")).join("")
-const tribute = (placeId: string, deviceId: string, key = hex(), at?: string, e: Env = env) =>
+const tribute = (placeId: string, deviceId: string, key = hex(), at?: string, e: Env = env, headers: Record<string, string> = {}) =>
   call(
     "http://local/api/v1/tributes",
     {
       method: "POST",
-      headers: { "Content-Type": "application/json", "Idempotency-Key": key, ...(at ? { "X-Test-Now": at } : {}) },
+      headers: {
+        "Content-Type": "application/json",
+        Origin: "http://local",
+        "Idempotency-Key": key,
+        ...(at ? { "X-Test-Now": at } : {}),
+        ...headers,
+      },
       body: JSON.stringify({ placeId, deviceId }),
     },
     e,
   )
+// The limiter at the edge is a stand-in that always allows, so only the daily cap in D1 is under test.
+const open: Env = { ...env, TRIBUTE_LIMIT: { limit: async () => ({ success: true }) } as unknown as RateLimit }
+const from = (ip: string) => ({ "CF-Connecting-IP": ip })
 const result = async (res: Response) => ({ status: res.status, ...(await res.json<{ counted?: boolean; reason?: string }>()) })
 const totals = async () => (await (await call("http://local/api/v1/tributes")).json<{ totals: Record<string, number> }>()).totals
 async function published(name: string) {
@@ -122,5 +133,56 @@ describe("anemones", () => {
   it("the totals are never cached by the browser", async () => {
     const res = await call("http://local/api/v1/tributes")
     expect(res.headers.get("Cache-Control")).toBe("no-store")
+  })
+
+  it("one address adds at most the daily cap to a place, however many device ids it claims; the next day it may again", async () => {
+    const { id } = await published("ספסל דמו תקרת כתובת")
+    const other = await published("ספסל דמו תקרת כתובת שני")
+    const day = "2026-12-01T10:00:00Z"
+    const sent = await Promise.all(
+      Array.from({ length: ADDRESS_DAILY_CAP + 5 }, async () => result(await tribute(id, hex(), hex(), day, open, from("203.0.113.9")))),
+    )
+    expect(sent.filter((r) => r.counted)).toHaveLength(ADDRESS_DAILY_CAP)
+    expect(sent.filter((r) => !r.counted).every((r) => r.status === 200 && r.reason === "address_cap")).toBe(true)
+    expect((await totals())[id]).toBe(ADDRESS_DAILY_CAP)
+    // Another visitor, the same visitor at another place, or the next day are all apart from it.
+    expect((await result(await tribute(id, hex(), hex(), day, open, from("203.0.113.10")))).counted).toBe(true)
+    expect((await result(await tribute(other.id, hex(), hex(), day, open, from("203.0.113.9")))).counted).toBe(true)
+    expect((await result(await tribute(id, hex(), hex(), "2026-12-02T10:00:00Z", open, from("203.0.113.9")))).counted).toBe(true)
+  })
+
+  it("the privacy page names the same cap the server keeps", () => {
+    expect(LEGAL_SECTIONS.find((s) => s.id === "privacy")!.html).toContain(`עד ${ADDRESS_DAILY_CAP} כלניות ביום`)
+  })
+
+  it("counts an IPv6 visitor by their /64 against the cap, and stores no address", async () => {
+    const { id } = await published("ספסל דמו תקרת IPv6")
+    for (let i = 0; i < ADDRESS_DAILY_CAP; i++) await tribute(id, hex(), hex(), undefined, open, from(`2001:db8:aa:bb::${i.toString(16)}`))
+    expect((await result(await tribute(id, hex(), hex(), undefined, open, from("2001:db8:aa:bb:ffff::1")))).reason).toBe("address_cap")
+    const { results } = await env.DB.prepare("SELECT * FROM tribute_events WHERE place_id = ?").bind(id).all<Record<string, string>>()
+    expect(JSON.stringify(results)).not.toContain("2001:db8")
+    expect(new Set(results.map((r) => r.address_key)).size).toBe(1)
+  })
+
+  it("past the cap, a retry of an anemone counted before is still answered as counted, and a repeat as already today", async () => {
+    const { id } = await published("ספסל דמו תקרה וחזרה")
+    const device = hex()
+    const key = hex()
+    await tribute(id, device, key, undefined, open, from("198.51.100.4"))
+    for (let i = 1; i < ADDRESS_DAILY_CAP; i++) await tribute(id, hex(), hex(), undefined, open, from("198.51.100.4"))
+    expect((await result(await tribute(id, device, key, undefined, open, from("198.51.100.4")))).reason).toBe("replayed")
+    expect((await result(await tribute(id, device, hex(), undefined, open, from("198.51.100.4")))).reason).toBe("already_today")
+  })
+
+  it("refuses an anemone from another site's page, or with no origin, and counts nothing", async () => {
+    const { id } = await published("ספסל דמו מקור זר")
+    for (const origin of ["https://evil.test", ""])
+      expect((await tribute(id, hex(), hex(), undefined, env, { Origin: origin })).status).toBe(403)
+    // Outside development, the origin is the configured one, never the request's own.
+    const live: Env = { ...env, ENVIRONMENT: "production", PUBLIC_ORIGIN: "https://project.test" }
+    expect((await tribute(id, hex(), hex(), undefined, live)).status).toBe(403)
+    expect((await tribute(id, hex(), hex(), undefined, live, { Origin: "https://project.test" })).status).toBe(200)
+    expect((await tribute(id, hex(), hex(), undefined, { ...live, PUBLIC_ORIGIN: "" }, { Origin: "" })).status).toBe(503)
+    expect((await totals())[id]).toBe(1)
   })
 })
