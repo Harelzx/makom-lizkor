@@ -4,7 +4,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { CONTACT_EMAIL } from "@/config"
+import { ACCESS_RESPONSE_DAYS, CONTACT_EMAIL, MAILBOX, OPERATOR } from "@/config"
+import { useStore } from "@/store"
 import { turnstileToken } from "@/lib/turnstile"
 
 /** A transient form: closing erases the fields. Only the server's confirmed provider acceptance shows success. */
@@ -131,7 +132,26 @@ export function ContactForm({ onClose }: { onClose: () => void }) {
                 disabled={busy}
               />
             </div>
-            <p className="text-caption text-ink-2">הפרטים משמשים לטיפול בפנייה. הטופס אינו שומר טיוטות; בסגירת החלון הטקסט מתאפס.</p>
+            {/* The notice the law asks for beside a form that collects personal data (s.11): who, voluntary, why, who
+                receives it, how long, and the right to see and correct it. */}
+            <div className="text-caption text-ink-2">
+              <p>
+                {OPERATOR.name}, שמפעיל את האתר, אחראי על הפרטים. אין חובה לכתוב לנו. המייל וההודעה משמשים רק לטיפול בפנייה ולתשובה: הם
+                עוברים דרך Cloudflare, שמריצה גם את בדיקת הבוטים, לתיבת הדואר של המיזם אצל {MAILBOX.provider}, ונשמרים שם לכל היותר{" "}
+                {MAILBOX.maxMonths} חודשים. אפשר לעיין במידע שלכם ולבקש לתקן או למחוק אותו, ונשיב תוך {ACCESS_RESPONSE_DAYS} יום. הטופס אינו
+                שומר טיוטות; בסגירת החלון הטקסט מתאפס.{" "}
+                <button
+                  type="button"
+                  className="pressable underline underline-offset-2"
+                  onClick={() => {
+                    onClose()
+                    useStore.getState().openAbout("privacy")
+                  }}
+                >
+                  פרטיות
+                </button>
+              </p>
+            </div>
             {enabled === false && (
               <p role="status" className="rounded-xl border border-line bg-surface-2 p-3 text-body text-ink-2">
                 השליחה מתוך האתר עדיין אינה פעילה. בינתיים אפשר לפנות לכתובת האימייל של המיזם.
