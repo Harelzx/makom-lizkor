@@ -32,14 +32,14 @@ jobs:
           SHARD: ${{ matrix.shard }}
         run: node scripts/ci-browser.mjs run full "$SHARD/2"
       - if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: browser-full-${{ matrix.shard }}
           path: ci-results/
           retention-days: 7
           if-no-files-found: error
       - if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: traces-full-${{ matrix.shard }}
           path: test-results/
