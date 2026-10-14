@@ -24,7 +24,7 @@ export async function recordRequest(env: Env, status: number, milliseconds: numb
  * before it can fire. A code only (http_500, job_export), so nothing of a request or a person is ever stored.
  */
 export async function recordFailure(env: Env, what: string, now = new Date()) {
-  if (!/^(http_5\d\d|job_[a-z][a-z0-9_]{0,40})$/.test(what)) return
+  if (!/^(http_5\d\d|job_[a-z][a-z0-9_]{0,40}|client_error)$/.test(what)) return
   await env.DB.prepare(
     `INSERT INTO request_metrics (hour, code, samples, total_ms, slow) VALUES (?1, ?2, 1, 0, 0)
      ON CONFLICT (hour, code) DO UPDATE SET samples = samples + 1`,
@@ -104,9 +104,13 @@ export async function alertFailures(env: Env, sendMail: SendMail, now: Date) {
   )
     .bind(hourOf(new Date(now.getTime() - FAILURE_ALERT_HOURS * 3600_000)))
     .all<{ code: string; n: number }>()
-  if (!results.length) return
+  // A server error or a failed job is ours at once; an error in a visitors' browser counts from three, since one alone
+  // may be an old browser or an extension the filter didn't catch.
+  const client = results.find((r) => r.code === "err_client_error")?.n ?? 0
+  if (!results.some((r) => r.code !== "err_client_error") && client < 3) return
   const lines = results.map(({ code, n }) => {
     const what = code.slice(4)
+    if (what === "client_error") return `שגיאות בדפדפן של מבקרים: ${n}`
     return what.startsWith("http_") ? `שגיאות שרת (${what.slice(5)}): ${n}` : `עבודה מתוזמנת שנכשלה, ${what.slice(4)}: ${n}`
   })
   await tellModerators(

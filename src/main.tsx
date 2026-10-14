@@ -6,6 +6,10 @@ import App from "./App.tsx"
 import { Specimen } from "@/components/specimen"
 import { DirectionProvider } from "@/components/ui/direction"
 import { TooltipProvider } from "@/components/ui/tooltip"
+import { watchErrors } from "@/lib/error-report"
+
+// Before anything renders, so an error in the first paint is told too.
+watchErrors()
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
