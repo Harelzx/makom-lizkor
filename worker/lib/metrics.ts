@@ -49,12 +49,13 @@ export const requestErrorRates: ErrorRates = async (env) => {
   }
 }
 
-/** Keep only two days of anonymous counters. Neither table is exported or restored. */
+/** Keep only two days of anonymous counters and the submission ceiling's codes. None is exported or restored. */
 export async function pruneCounters(env: Env, now: Date) {
   const before = new Date(now.getTime() - 48 * 3600_000)
   await env.DB.batch([
     env.DB.prepare("DELETE FROM request_metrics WHERE hour < ?").bind(hourOf(before)),
     env.DB.prepare("DELETE FROM mail_budget WHERE day < ?").bind(before.toISOString().slice(0, 10)),
+    env.DB.prepare("DELETE FROM submission_senders WHERE at < ?").bind(before.toISOString()),
   ])
 }
 
