@@ -158,10 +158,12 @@ export async function runRetention(env: OpEnv, now: Date): Promise<{ id: string;
       (
         await db
           .prepare(
+            // The replay check's hash was taken over the whole request, email and explanation included, so it goes with
+            // them (a fixed value: the column can't be empty, and a replay this late is refused as a different request).
             `UPDATE reports SET relationship = NULL, explanation = NULL, email = NULL, explanation_hash = NULL, reporter_key = NULL,
-               handling_note = NULL
+               handling_note = NULL, body_hash = 'purged'
              WHERE purge_after <= ?1 AND (relationship IS NOT NULL OR explanation IS NOT NULL OR email IS NOT NULL
-               OR explanation_hash IS NOT NULL OR reporter_key IS NOT NULL OR handling_note IS NOT NULL)`,
+               OR explanation_hash IS NOT NULL OR reporter_key IS NOT NULL OR handling_note IS NOT NULL OR body_hash != 'purged')`,
           )
           .bind(at)
           .run()
