@@ -150,3 +150,16 @@ it("tells the moderators of server errors and failed jobs at once, with counts o
   await alertFailures(env, send, new Date(now.getTime() + 6 * 3600_000 + 60_000))
   expect(send).toHaveBeenCalledTimes(2)
 })
+
+it("tells of errors in visitors' browsers only once there are three in six hours: one alone may be an old browser or an extension", async () => {
+  const now = new Date()
+  const send = vi.fn<(e: Env, m: { to: string; subject: string; text: string }) => Promise<boolean>>(async () => true)
+  await recordFailure(env, "client_error", now)
+  await recordFailure(env, "client_error", now)
+  await alertFailures(env, send, now)
+  expect(send).not.toHaveBeenCalled()
+  await recordFailure(env, "client_error", now)
+  await alertFailures(env, send, now)
+  expect(send).toHaveBeenCalledTimes(1)
+  expect(send.mock.calls[0][1].text).toContain("שגיאות בדפדפן של מבקרים: 3")
+})
