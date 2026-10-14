@@ -18,10 +18,25 @@ export async function recordRequest(env: Env, status: number, milliseconds: numb
     .run()
 }
 
+/**
+ * Every server error and every failed scheduled part, counted whole (never sampled) under its own code: a rare 500 on a
+ * submission would slip past a 1-in-32 sample, and the sampled alert below needs about a thousand requests an hour
+ * before it can fire. A code only (http_500, job_export), so nothing of a request or a person is ever stored.
+ */
+export async function recordFailure(env: Env, what: string, now = new Date()) {
+  if (!/^(http_5\d\d|job_[a-z][a-z0-9_]{0,40})$/.test(what)) return
+  await env.DB.prepare(
+    `INSERT INTO request_metrics (hour, code, samples, total_ms, slow) VALUES (?1, ?2, 1, 0, 0)
+     ON CONFLICT (hour, code) DO UPDATE SET samples = samples + 1`,
+  )
+    .bind(hourOf(now), `err_${what}`)
+    .run()
+}
+
 export const requestErrorRates: ErrorRates = async (env) => {
   const since = hourOf(new Date(Date.now() - 24 * 3600_000))
   const rows = (
-    await env.DB.prepare("SELECT code, SUM(samples) AS n FROM request_metrics WHERE hour > ? GROUP BY code")
+    await env.DB.prepare("SELECT code, SUM(samples) AS n FROM request_metrics WHERE hour > ? AND code GLOB 'http_*' GROUP BY code")
       .bind(since)
       .all<{ code: string; n: number }>()
   ).results
@@ -52,7 +67,7 @@ export async function alertOperations(env: Env, sendMail: SendMail, now: Date) {
       "SELECT COUNT(*) AS n FROM contacts WHERE verify_mail_state IN ('uncertain', 'stopped') AND email_verified_at IS NULL AND email IS NOT NULL",
     ),
     env.DB.prepare(
-      "SELECT SUM(samples) AS n, SUM(CASE WHEN code GLOB 'http_5??' THEN samples ELSE 0 END) AS errors, SUM(slow) AS slow FROM request_metrics WHERE hour >= ?",
+      "SELECT SUM(samples) AS n, SUM(CASE WHEN code GLOB 'http_5??' THEN samples ELSE 0 END) AS errors, SUM(slow) AS slow FROM request_metrics WHERE hour >= ? AND code GLOB 'http_*'",
     ).bind(hourOf(new Date(now.getTime() - 3600_000))),
     env.DB.prepare("SELECT SUM(attempts) AS n FROM mail_budget WHERE day = ? AND kind = 'public'").bind(now.toISOString().slice(0, 10)),
   ])
@@ -69,6 +84,38 @@ export async function alertOperations(env: Env, sendMail: SendMail, now: Date) {
     "operations",
     "מקום לזכור - נדרשת בדיקת תפעול",
     `מסירות אימות שמצריכות בדיקה: ${blocked}.\nניסיונות דואר היום: ${attempted} מתוך ${limit}.\nדגימת בקשות בשעה האחרונה: ${measured.n ?? 0}; שגיאות שרת: ${measured.errors ?? 0}; תגובות מעל שתי שניות: ${measured.slow ?? 0}.\nהדגימה היא אחת מכל ${METRIC_SAMPLE_EVERY} בקשות בממוצע ואינה מדידת חיוב. אין לבצע שליחה חוזרת למסירה לא ודאית בלי לבדוק.`,
+    now,
+  )
+}
+
+const FAILURE_ALERT_HOURS = 6
+
+/**
+ * Tells the moderators of server errors and failed scheduled parts as soon as a pass sees one (every 15 minutes), then
+ * at most every six hours while they go on: each mail covers the six hours before it, so a problem that persists keeps
+ * being told and one that stopped is told once more at most. Codes and counts only. If a mail can't go,
+ * tellModerators records nothing and the next pass tries again.
+ */
+export async function alertFailures(env: Env, sendMail: SendMail, now: Date) {
+  const latest = await env.DB.prepare("SELECT sent_at FROM job_alerts WHERE job = 'failures'").first<string>("sent_at")
+  if (latest && latest > new Date(now.getTime() - FAILURE_ALERT_HOURS * 3600_000).toISOString()) return
+  const { results } = await env.DB.prepare(
+    "SELECT code, SUM(samples) AS n FROM request_metrics WHERE hour >= ? AND code GLOB 'err_*' GROUP BY code ORDER BY code",
+  )
+    .bind(hourOf(new Date(now.getTime() - FAILURE_ALERT_HOURS * 3600_000)))
+    .all<{ code: string; n: number }>()
+  if (!results.length) return
+  const lines = results.map(({ code, n }) => {
+    const what = code.slice(4)
+    return what.startsWith("http_") ? `שגיאות שרת (${what.slice(5)}): ${n}` : `עבודה מתוזמנת שנכשלה, ${what.slice(4)}: ${n}`
+  })
+  await tellModerators(
+    env.DB,
+    env,
+    sendMail,
+    "failures",
+    "מקום לזכור - תקלות בשרת",
+    `בשש השעות האחרונות:\n${lines.join("\n")}\n\nכל שגיאה נספרת, בלי דגימה. הפרטים (המסלול וסוג השגיאה, בלי תוכן) ביומני ה־Worker: לוח הבקרה של Cloudflare, Workers & Pages, makom-lizkor, Logs.`,
     now,
   )
 }
