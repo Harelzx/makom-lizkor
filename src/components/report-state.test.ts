@@ -36,3 +36,9 @@ it("a first refusal held because its removal failed, in a browser that never kep
   expect(kept).toMatch(/עדיין שמורה בדפדפן הזה/)
   expect(messageOf({ ...base, stored: false, shown: { view: "discarded", cleared: false } }, false).alert).toMatch(/נשמרת רק בדף הפתוח/)
 })
+
+it("a day's limit reached says it wasn't sent, when to try again, and where else to write", () => {
+  const alert = messageOf({ ...base, shown: { view: "editable", code: "daily_limit", cleared: true } }, false).alert!
+  expect(alert).toMatch(/מחר/)
+  expect(alert).toMatch(/«כתבו לנו»/)
+})

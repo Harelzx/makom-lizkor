@@ -37,8 +37,6 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       TO_RELEASE: ${{ inputs.to_release }}
       REASON: ${{ inputs.reason }}
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - name: Runs from main only
         run: test "$GITHUB_REF" = "refs/heads/main"
@@ -62,5 +60,8 @@ jobs:
           # Refused when that can't be known (a51, a53, P6-ROLLBACK-1).
           node scripts/rollback-state.mjs "$target"
       - name: Deploy the earlier release's version
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           npx wrangler versions deploy --version-tag "$TO_RELEASE" --message "rollback to $TO_RELEASE: $REASON" --yes

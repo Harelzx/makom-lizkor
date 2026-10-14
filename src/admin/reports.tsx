@@ -192,6 +192,47 @@ function LiftForm({ place, sup, done }: { place: PlaceView; sup: Suppression; do
 }
 
 /** A manual hide: never limited by the automatic path's safeguards, but always with a reason. */
+/**
+ * A deletion someone asked for: final, so it takes a confirmation. The server records it as a removal, so no restore
+ * brings it back.
+ */
+function EraseForm({ place, done }: { place: PlaceView; done: (error: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const [sure, setSure] = useState(false)
+  if (place.status === "erased" || place.status === "withdrawn") return null
+  if (!open)
+    return (
+      <Button variant="ghost" className="pressable mt-2 self-start text-destructive" onClick={() => setOpen(true)}>
+        מחיקת המקום לפי בקשה
+      </Button>
+    )
+  return (
+    <form
+      className="mt-2 flex flex-col gap-2 rounded-xl border border-line p-3"
+      onSubmit={async (e) => {
+        e.preventDefault()
+        done(await send(`/api/admin/places/${place.id}/erase`, { expectedRev: place.rev, confirm: true }))
+      }}
+    >
+      <p className="text-body text-ink-1">
+        המחיקה סופית: התוכן, התמונות, המקורות ופרטי השולח נמחקים מיד, וגם שחזור מגיבוי לא יחזיר אותם. נשאר רק רישום שהמקום נמחק.
+      </p>
+      <label className="flex items-center gap-2 text-label text-ink-1">
+        <input type="checkbox" checked={sure} onChange={(e) => setSure(e.target.checked)} />
+        ביקשו למחוק את המקום, ואני מבין או מבינה שאי אפשר לבטל את המחיקה
+      </label>
+      <div className="flex gap-2">
+        <Button type="submit" variant="destructive" className="pressable" disabled={!sure}>
+          מחיקה סופית
+        </Button>
+        <Button type="button" variant="ghost" className="pressable" onClick={() => setOpen(false)}>
+          ביטול
+        </Button>
+      </div>
+    </form>
+  )
+}
+
 function HideForm({ place, reportId, done }: { place: PlaceView; reportId?: string; done: (error: string) => void }) {
   const [fields, setFields] = useState<Element[]>([])
   const [reason, setReason] = useState("")
@@ -343,6 +384,7 @@ function ReportCard({ report, reload, fail }: { report: Report; reload: () => Pr
             </div>
           ))}
           <HideForm place={place} reportId={report.id} done={after} />
+          <EraseForm place={place} done={after} />
         </div>
       )}
       <div className="mt-3 flex flex-col gap-2 border-t border-line pt-3">
@@ -382,8 +424,89 @@ function ReportCard({ report, reload, fail }: { report: Report; reload: () => Pr
             פתיחה מחדש
           </Button>
         )}
+        {(report.has_contact || report.explanation || report.relationship) && (
+          <Button
+            variant="ghost"
+            className="pressable self-start text-destructive"
+            onClick={async () => {
+              // The requester asked to be forgotten: their address and words go now, not at the request's date.
+              if (!confirm("למחוק עכשיו את פרטי המבקש ואת נוסח הבקשה? אי אפשר לבטל, והבקשה תיסגר.")) return
+              await after(await send(`/api/admin/reports/${report.id}/purge`, {}))
+            }}
+          >
+            מחיקת פרטי המבקש והנוסח עכשיו
+          </Button>
+        )}
       </div>
     </article>
+  )
+}
+
+/**
+ * A place reached by its link or id, for a request that came by mail or phone rather than through the form: hide what
+ * was asked, or delete the place on request.
+ */
+function PlaceLookup() {
+  const [input, setInput] = useState("")
+  const [place, setPlace] = useState<PlaceView | null>(null)
+  const [message, setMessage] = useState("")
+  const idOf = (s: string) => /(?:\/place\/|#\/place\/)?([A-Za-z0-9_-]{1,80})\/?$/.exec(s.trim())?.[1] ?? ""
+  const load = async (id = place?.id ?? idOf(input)) => {
+    if (!id) return
+    const res = await fetch(`/api/admin/places/${encodeURIComponent(id)}`).catch(() => null)
+    if (!res?.ok) {
+      setPlace(null)
+      setMessage(res?.status === 404 ? "לא נמצא מקום כזה." : "לא הצלחנו לטעון את המקום.")
+      return
+    }
+    setMessage("")
+    setPlace((await res.json()) as PlaceView)
+  }
+  return (
+    <div className="mt-4 rounded-2xl border border-line p-4">
+      <form
+        className="flex flex-wrap items-end gap-2"
+        onSubmit={(e) => {
+          e.preventDefault()
+          void load(idOf(input))
+        }}
+      >
+        <Field className="min-w-60 flex-1">
+          <FieldLabel htmlFor="place-lookup">מקום לפי קישור או מזהה</FieldLabel>
+          <Input id="place-lookup" dir="ltr" value={input} onChange={(e) => setInput(e.target.value)} />
+          <FieldDescription>לבקשה שהגיעה במייל או בטלפון: הדביקו את קישור השיתוף של המקום.</FieldDescription>
+        </Field>
+        <Button type="submit" variant="outline" className="pressable" disabled={!idOf(input)}>
+          פתיחה
+        </Button>
+      </form>
+      {message && (
+        <p role="status" className="mt-2 text-label text-ink-2">
+          {message}
+        </p>
+      )}
+      {place && (
+        <div className="mt-3 border-t border-line pt-3">
+          <p className="text-caption text-ink-2">
+            {place.id} · {place.status}
+          </p>
+          <HideForm
+            place={place}
+            done={async (error) => {
+              await load(place.id)
+              setMessage(error)
+            }}
+          />
+          <EraseForm
+            place={place}
+            done={async (error) => {
+              await load(place.id)
+              setMessage(error || "המקום נמחק.")
+            }}
+          />
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -406,6 +529,7 @@ export function Reports() {
       <h2 id="reports-title" className="text-title-2 text-ink-1">
         בקשות להסרה או לתיקון
       </h2>
+      <PlaceLookup />
       {error && (
         <p role="alert" className="mt-3 text-label text-destructive">
           {error}

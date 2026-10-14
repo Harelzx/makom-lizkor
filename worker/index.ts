@@ -25,7 +25,7 @@ import type { ErrorRates } from "./lib/ops-summary"
 import { requestCap } from "./lib/request-guard"
 import { publicPhotoOwner } from "./db/public-photo"
 import { productionAttempt, type MailAttempt } from "./db/verification-delivery"
-import { recordRequest, requestErrorRates, sampleRequest } from "./lib/metrics"
+import { recordFailure, recordRequest, requestErrorRates, sampleRequest } from "./lib/metrics"
 import { PHOTO_WIDTHS, createMedium, variantKey } from "./lib/photo-variants"
 
 /** What the routes reach outside the Worker; the tests pass stand-ins, the deployed Worker the real ones. */
@@ -37,6 +37,8 @@ export type Deps = {
   errorRates?: ErrorRates
   mailAttempt?: MailAttempt
   observeRequest?: typeof recordRequest
+  /** Every 5xx, counted whole (lib/metrics.ts recordFailure). */
+  observeFailure?: typeof recordFailure
 }
 export type AppEnv = { Bindings: Env; Variables: Deps }
 
@@ -50,6 +52,10 @@ export function createApp(deps: Deps) {
     c.set("mailAttempt", deps.mailAttempt ?? (async (env, mail) => ((await deps.sendMail(env, mail)) ? "accepted" : "retryable")))
     const started = performance.now()
     await next()
+    if (deps.observeFailure && c.res.status >= 500)
+      c.executionCtx.waitUntil(
+        deps.observeFailure(c.env, `http_${c.res.status}`).catch((err: Error) => log("error", "metrics_failed", { error: err.name })),
+      )
     if (deps.observeRequest && sampleRequest())
       c.executionCtx.waitUntil(
         deps
@@ -84,8 +90,9 @@ export function createApp(deps: Deps) {
   // Public reads stay fresh, but an address cannot consume unlimited database/OG work. Static assets bypass this.
   const readCap = requestCap("READ_LIMIT", "read:")
   app.use("*", async (c, next) => {
+    // HEAD too: the router answers it with the GET handler, so it does the same reads and rendering.
     if (
-      c.req.method === "GET" &&
+      (c.req.method === "GET" || c.req.method === "HEAD") &&
       (/^\/media\//.test(c.req.path) ||
         /^\/place\//.test(c.req.path) ||
         /^\/api\/v1\/(version|feed|tributes|contact|submissions)(\/|$)/.test(c.req.path))
@@ -169,6 +176,7 @@ const deps = {
   mailAttempt: productionAttempt,
   errorRates: requestErrorRates,
   observeRequest: recordRequest,
+  observeFailure: recordFailure,
 }
 const app = createApp(deps)
 
