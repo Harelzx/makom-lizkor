@@ -38,7 +38,7 @@ test("the committed workflows keep the policy", () => {
 
 test("only release and rollback reach production, and nothing else reads a secret", () => {
   fails(
-    withChange("ci.yml", "  worker:\n    runs-on: ubuntu-latest\n", "  worker:\n    runs-on: ubuntu-latest\n    environment: production\n"),
+    withChange("ci.yml", "  worker:\n    runs-on: ubuntu-26.04\n", "  worker:\n    runs-on: ubuntu-26.04\n    environment: production\n"),
     "job worker uses the production environment",
   )
   fails(
