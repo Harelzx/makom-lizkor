@@ -10,7 +10,23 @@ export const share = new Hono<AppEnv>()
 // `<` written as its JSON escape, so a name can never close the script that carries it (built here, not typed, so the
 // escape survives every editor and tool).
 const LT = `${String.fromCharCode(92)}u003c`
-const DESCRIPTION_MAX = 200
+// About three lines of a messenger's preview: 200 characters filled WhatsApp's card and pushed the link away.
+const DESCRIPTION_MAX = 120
+
+/**
+ * The words a preview shows: as many whole sentences as fit, or else whole words up to the limit and an ellipsis,
+ * never a word cut in half. Counted by characters, not UTF-16 units, so an emoji at the edge stays whole.
+ */
+function previewWords(text: string) {
+  const chars = Array.from(text.trim())
+  if (chars.length <= DESCRIPTION_MAX) return chars.join("")
+  const head = chars.slice(0, DESCRIPTION_MAX + 1).join("")
+  // The last sentence end inside the limit (a stop followed by a space), so a short first sentence brings the next.
+  const sentences = /^.*[.!?](?=\s)/su.exec(head)?.[0]
+  if (sentences) return sentences
+  const space = head.lastIndexOf(" ")
+  return (space > 0 ? head.slice(0, space) : chars.slice(0, DESCRIPTION_MAX - 1).join("")).replace(/[\s,;:–-]+$/u, "") + "…"
+}
 
 /**
  * A place's share page (spec 2.6): the site's own page, with the place's name and words in the preview tags a
@@ -59,10 +75,7 @@ async function sharePage(c: Context<AppEnv>, id: string | null) {
   // The place's own image, named by the hash of what it shows now; the general one if it can't be projected.
   const og = await ogState(c.env.DB, id!)
   const image = og ? `${origin}/media/og/${encodeURIComponent(id!)}/${og.hash}.png` : `${origin}/og.png`
-  // Cut by characters, not UTF-16 units, so an emoji at the edge isn't split into a broken glyph.
-  const words = Array.from(plainDashes(place.summary_he || place.place_he || "מקום לזכור"))
-    .slice(0, DESCRIPTION_MAX)
-    .join("")
+  const words = previewWords(plainDashes(place.summary_he || place.place_he || "מקום לזכור"))
   // The tag is written whole, escaped here: the rewriter's own setAttribute leaves < and > bare in the value, which a
   // browser reads safely but a careless preview scraper may not.
   const content = (value: string) => ({
