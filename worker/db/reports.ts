@@ -326,6 +326,8 @@ export async function startAlertRound(db: D1Database, env: Env, ticket: string, 
  * who got it isn't sent it again; a failure is retried at the next run. A request no longer open sends nothing more.
  * An ambiguous send (the run stopped after the provider took the mail) may go twice: mail is never exactly once.
  * The mail carries a link to the queue and what the automatic path did, nothing of the request.
+ * First alerts go before reminders, newest request first: when the day's mail runs short (a flood of requests), a new
+ * family request is told before older ones are told again.
  */
 export async function deliverAlerts(
   db: D1Database,
@@ -342,7 +344,7 @@ export async function deliverAlerts(
        FROM report_alerts a JOIN reports rep ON rep.id = a.report_id
        WHERE rep.status = 'open' AND a.state IN ('pending', 'failed') AND a.tries < ?1 AND (a.claimed_at IS NULL OR a.claimed_at <= ?2)
          AND (?3 IS NULL OR a.report_id = ?3)
-       ORDER BY a.report_id, a.round LIMIT 200`,
+       ORDER BY a.round, a.report_id DESC LIMIT 200`,
     )
     .bind(DELIVERY_TRIES, stale, ticket ?? null)
     .all<{ report_id: string; round: number; recipient: string; outcome: string; origin: string; received_at: string }>()

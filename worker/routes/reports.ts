@@ -1,6 +1,7 @@
 import { durations } from "../lib/durations"
 import { zValidator } from "@hono/zod-validator"
 import { Hono } from "hono"
+import { REPORT_GUARDS } from "../lib/guards"
 import { ReportInput, type ReportResult } from "@/shared/contract"
 import { deliverAlerts, insertReport, precaution, replayReport, startAlertRound, type Target } from "../db/reports"
 import { clock } from "../lib/clock"
@@ -52,6 +53,15 @@ reports.post(
     const replay = await replayReport(c.env.DB, input, key, c.env.TRACKING_SECRET)
     if (replay === "mismatch") return problem(c, 409, "idempotency_key_reused")
     if (replay) return c.json<ReportResult>(replay, 202, PRIVATE)
+    // A visitor's requests in the last day, by the keyed hash already kept for the spam signal: past the intake ceiling
+    // the next is refused before the browser check is spent (real hours: it is a rate limit).
+    if (visitor) {
+      const dayAgo = new Date(clock(c.req.raw, c.env).getTime() - 24 * 3600_000).toISOString()
+      const sent = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM reports WHERE reporter_key = ? AND received_at > ?")
+        .bind(visitor, dayAgo)
+        .first<number>("n")
+      if ((sent ?? 0) >= REPORT_GUARDS.intakePerDay) return problem(c, 429, "daily_limit", {}, { "Retry-After": "3600" })
+    }
     {
       const outcome = await checkTurnstile(c.env, c.get("verifyTurnstile"), c.req.header("Turnstile-Token"), "report", address)
       if (outcome === "required") return problem(c, 403, "turnstile_required")

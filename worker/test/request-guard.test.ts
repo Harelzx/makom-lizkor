@@ -128,4 +128,20 @@ describe("public request guards before parsers and external work", () => {
     expect(limit).toHaveBeenCalledTimes(7)
     expect((await app.fetch(new Request("https://project.test/api/ops/summary"), e, createExecutionContext())).status).toBe(401)
   })
+
+  it("caps a HEAD as it caps a GET: the router answers HEAD with the GET handler, so it does the same work", async () => {
+    const limit = vi.fn(async () => ({ success: false }))
+    const e = { ...env, READ_LIMIT: { limit } } as Env
+    for (const path of ["/api/v1/feed", "/place/p_x", "/media/og/p_x/x.png"])
+      expect(
+        (
+          await app.fetch(
+            new Request(`https://project.test${path}`, { method: "HEAD", headers: { "CF-Connecting-IP": "2001:db8::1" } }),
+            e,
+            createExecutionContext(),
+          )
+        ).status,
+      ).toBe(429)
+    expect(limit).toHaveBeenCalledTimes(3)
+  })
 })
