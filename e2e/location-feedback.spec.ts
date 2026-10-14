@@ -59,6 +59,9 @@ for (const [mode, explanation] of [
 
 test("a silent GPS has a loading state, a deadline, repeat feedback and no late pin", { tag: ["@phone"] }, async ({ page }) => {
   const form = await openForm(page)
+  // The dialog's opening motion has to settle first: with the clock frozen mid-spring, the button never counts as
+  // stable and the click waits out the test (seen on a slow WebKit runner, 14 October).
+  await form.getByRole("button", { name: "המיקום הנוכחי שלי", exact: true }).click({ trial: true })
   await page.clock.install()
   for (const count of [1, 2]) {
     await form.getByRole("button", { name: "המיקום הנוכחי שלי", exact: true }).click()

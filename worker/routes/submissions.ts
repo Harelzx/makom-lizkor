@@ -1,5 +1,6 @@
 import { durations } from "../lib/durations"
 import { zValidator } from "@hono/zod-validator"
+import { rateKey } from "../lib/ids"
 import { Hono, type Context } from "hono"
 import { z } from "zod"
 import { RevisionInput, SubmissionInput, text } from "@/shared/contract"
@@ -35,6 +36,11 @@ const KEY = /^[A-Za-z0-9_-]{22,64}$/
  * A refusal is 403; anything the sender can't help (a full queue, a busy check) is 429 or 503, which the browser retries.
  */
 const queueLimit = (c: Context<AppEnv>) => Number(c.env.QUEUE_LIMIT ?? 200)
+/**
+ * New submissions a visitor may send in a day; the next is refused (429). The queue holds QUEUE_LIMIT for everyone, so
+ * one address could otherwise fill it; a community adding its corners in one day stays well under.
+ */
+export const SUBMISSIONS_PER_DAY = 10
 const queueFull = (c: Context<AppEnv>) => problem(c, 503, "queue_full", {}, { "Retry-After": "3600" })
 
 /**
@@ -64,7 +70,18 @@ submissions.post(
     if (!c.env.TRACKING_SECRET) return problem(c, 503, "not_configured")
     // The same submission sent again (its answer was lost) was checked on its first try, and Turnstile tokens are
     // single-use, so it skips the check; it still counts against the address's cap like any request.
-    const refused = (await submissionKnown(c.env.DB, key)) ? null : await guard(c, "submit")
+    const known = await submissionKnown(c.env.DB, key)
+    // The day's ceiling, by the keyed code of the address, before the browser check is spent (a retry is not new).
+    const address = c.req.header("CF-Connecting-IP")
+    const visitor = address ? await rateKey(c.env.TRACKING_SECRET, address) : null
+    if (!known && visitor) {
+      const dayAgo = new Date(clock(c.req.raw, c.env).getTime() - 24 * 3600_000).toISOString()
+      const sent = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM submission_senders WHERE visitor = ? AND at > ?")
+        .bind(visitor, dayAgo)
+        .first<number>("n")
+      if ((sent ?? 0) >= SUBMISSIONS_PER_DAY) return problem(c, 429, "daily_limit", {}, { "Retry-After": "3600" })
+    }
+    const refused = known ? null : await guard(c, "submit")
     if (refused) return refused
     const token = await trackingTokenFor(c.env.TRACKING_SECRET, key)
     const r = await insertSubmission(
@@ -79,6 +96,10 @@ submissions.post(
     )
     if (r.kind === "mismatch") return problem(c, 409, "idempotency_key_reused")
     if (r.kind === "queue_full") return queueFull(c)
+    if (r.kind === "created" && visitor)
+      await c.env.DB.prepare("INSERT OR IGNORE INTO submission_senders (place_id, visitor, at) VALUES (?, ?, ?)")
+        .bind(r.id, visitor, clock(c.req.raw, c.env).toISOString())
+        .run()
     // 200 for the same submission sent again, so the browser can tell, though it treats both alike.
     // An address was given: the verification mail goes first, and says nothing about the place.
     if (c.req.valid("json").email) {
