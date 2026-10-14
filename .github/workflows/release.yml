@@ -42,7 +42,7 @@ jobs:
     steps:
       - name: Runs from main only
         run: test "$GITHUB_REF" = "refs/heads/main"
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           ref: main
           fetch-depth: 0
@@ -105,7 +105,7 @@ jobs:
       VITE_TURNSTILE_SITEKEY: ${{ vars.TURNSTILE_SITEKEY }}
       PUBLIC_ORIGIN: ${{ vars.PUBLIC_ORIGIN }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.verify.outputs.sha }}
       - name: The commit checked out is the one verified
