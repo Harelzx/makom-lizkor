@@ -45,15 +45,7 @@
           "maximum": 9007199254740991
         }
       },
-      "required": [
-        "pending",
-        "returned",
-        "published",
-        "hidden",
-        "rejected",
-        "withdrawn",
-        "erased"
-      ],
+      "required": ["pending", "returned", "published", "hidden", "rejected", "withdrawn", "erased"],
       "additionalProperties": false
     },
     "queue": {
@@ -74,11 +66,7 @@
           "const": 14
         }
       },
-      "required": [
-        "pending",
-        "overdue",
-        "overdue_days"
-      ],
+      "required": ["pending", "overdue", "overdue_days"],
       "additionalProperties": false
     },
     "reports": {
@@ -100,11 +88,7 @@
           "maximum": 9007199254740991
         }
       },
-      "required": [
-        "open",
-        "in_review",
-        "closed"
-      ],
+      "required": ["open", "in_review", "closed"],
       "additionalProperties": false
     },
     "attention": {
@@ -131,12 +115,7 @@
           "maximum": 9007199254740991
         }
       },
-      "required": [
-        "interrupted",
-        "ledger_repair",
-        "media_failed",
-        "purge_abandoned"
-      ],
+      "required": ["interrupted", "ledger_repair", "media_failed", "purge_abandoned"],
       "additionalProperties": false
     },
     "retention": {
@@ -178,12 +157,7 @@
                   }
                 }
               },
-              "required": [
-                "started_at",
-                "finished_at",
-                "ok",
-                "counts"
-              ],
+              "required": ["started_at", "finished_at", "ok", "counts"],
               "additionalProperties": false
             },
             {
@@ -197,10 +171,7 @@
           "maximum": 9007199254740991
         }
       },
-      "required": [
-        "last",
-        "unfinished"
-      ],
+      "required": ["last", "unfinished"],
       "additionalProperties": false
     },
     "export": {
@@ -216,10 +187,7 @@
               "type": "boolean"
             }
           },
-          "required": [
-            "created_at",
-            "ok"
-          ],
+          "required": ["created_at", "ok"],
           "additionalProperties": false
         },
         {
@@ -237,10 +205,7 @@
               "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,3})?Z$"
             },
             "ok": {
-              "type": [
-                "boolean",
-                "null"
-              ]
+              "type": ["boolean", "null"]
             },
             "failure": {
               "anyOf": [
@@ -254,11 +219,7 @@
               ]
             }
           },
-          "required": [
-            "started_at",
-            "ok",
-            "failure"
-          ],
+          "required": ["started_at", "ok", "failure"],
           "additionalProperties": false
         },
         {
@@ -292,10 +253,7 @@
             "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,3})?Z$"
           }
         },
-        "required": [
-          "job",
-          "sent_at"
-        ],
+        "required": ["job", "sent_at"],
         "additionalProperties": false
       }
     },
@@ -333,14 +291,7 @@
           "maximum": 9007199254740991
         }
       },
-      "required": [
-        "due",
-        "retry",
-        "sending",
-        "accepted",
-        "uncertain",
-        "stopped"
-      ],
+      "required": ["due", "retry", "sending", "accepted", "uncertain", "stopped"],
       "additionalProperties": false
     },
     "mail_budget": {
@@ -371,13 +322,7 @@
           "maximum": 9007199254740991
         }
       },
-      "required": [
-        "day",
-        "public",
-        "ops",
-        "public_limit",
-        "ops_limit"
-      ],
+      "required": ["day", "public", "ops", "public_limit", "ops_limit"],
       "additionalProperties": false
     },
     "errors": {
@@ -390,9 +335,7 @@
               "const": "unavailable"
             }
           },
-          "required": [
-            "status"
-          ],
+          "required": ["status"],
           "additionalProperties": false
         },
         {
@@ -445,13 +388,7 @@
               "const": "sampled"
             }
           },
-          "required": [
-            "status",
-            "window_hours",
-            "requests",
-            "by_code",
-            "per_thousand"
-          ],
+          "required": ["status", "window_hours", "requests", "by_code", "per_thousand"],
           "additionalProperties": false
         }
       ]

@@ -342,6 +342,9 @@ admin.get("/reports", async (c) => {
 })
 
 admin.get("/reports/:id/contact", async (c) => {
+  // Reading a contact is recorded in the moderator's name, so even this GET must come from our own pages: a link on
+  // another site would otherwise write a false "read" to the audit.
+  if (c.req.header("Sec-Fetch-Site") !== "same-origin") return problem(c, 403, "cross_site")
   const email = await readContact(c.env.DB, c.req.param("id"), c.get("actor"), clock(c.req.raw, c.env))
   return email ? c.json({ email }) : problem(c, 404, "not_found")
 })
