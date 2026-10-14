@@ -32,29 +32,55 @@ export function jpegDimensions(bytes: Uint8Array): { width: number; height: numb
   return null
 }
 
+/** A frame header (SOF0–SOF15), not DHT (C4), JPG (C8) or DAC (CC), which share the range. */
+const isFrame = (m: number) => m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc
+const isJfif = (bytes: Uint8Array, i: number) =>
+  bytes[i + 4] === 0x4a && bytes[i + 5] === 0x46 && bytes[i + 6] === 0x49 && bytes[i + 7] === 0x46 && bytes[i + 8] === 0
+
+/**
+ * Walks every segment to the end marker, the scans' coded data included, so metadata a progressive photo carries
+ * between its scans goes too, and nothing after the end marker is kept. APP0 stays only as a plain JFIF header (a JFXX
+ * thumbnail is another picture). A second frame header, or a photo that never ends, is refused.
+ */
 export function stripJpeg(bytes: Uint8Array): Uint8Array | null {
   if (!jpegDimensions(bytes)) return null
-  if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) return null
-  const out: number[] = [0xff, 0xd8]
+  const kept: Uint8Array[] = [bytes.subarray(0, 2)]
   let i = 2
-  while (i + 4 <= bytes.length) {
+  let scanned = false
+  while (i + 1 < bytes.length) {
     if (bytes[i] !== 0xff) return null
     const marker = bytes[i + 1]
+    // Fill bytes before a marker.
+    if (marker === 0xff) {
+      i++
+      continue
+    }
+    if (marker === 0xd9) {
+      if (!scanned) return null
+      kept.push(bytes.subarray(i, i + 2))
+      const out = new Uint8Array(kept.reduce((n, k) => n + k.length, 0))
+      let at = 0
+      for (const k of kept) {
+        out.set(k, at)
+        at += k.length
+      }
+      return out
+    }
+    if (i + 4 > bytes.length) return null
     const length = (bytes[i + 2] << 8) | bytes[i + 3]
     if (length < 2 || i + 2 + length > bytes.length) return null
-    // Start of scan: the picture itself follows, to the end. Everything before it was a header segment.
-    if (marker === 0xda) {
-      const rest = bytes.subarray(i)
-      if (rest.length < 2 || rest[rest.length - 2] !== 0xff || rest[rest.length - 1] !== 0xd9) return null
-      const result = new Uint8Array(out.length + rest.length)
-      result.set(out)
-      result.set(rest, out.length)
-      return result
-    }
-    // APP0 (JFIF) stays; APP1–APP15 and comments go.
-    const metadata = (marker >= 0xe1 && marker <= 0xef) || marker === 0xfe
-    if (!metadata) for (let k = 0; k < 2 + length; k++) out.push(bytes[i + k])
+    if (scanned && isFrame(marker)) return null
+    const metadata = (marker >= 0xe1 && marker <= 0xef) || marker === 0xfe || (marker === 0xe0 && !isJfif(bytes, i))
+    if (!metadata) kept.push(bytes.subarray(i, i + 2 + length))
     i += 2 + length
+    if (marker === 0xda) {
+      // The scan's coded data: up to the next marker, past stuffed bytes (FF 00) and restart markers (FF D0–D7).
+      scanned = true
+      const from = i
+      while (i + 1 < bytes.length && !(bytes[i] === 0xff && bytes[i + 1] !== 0 && (bytes[i + 1] < 0xd0 || bytes[i + 1] > 0xd7))) i++
+      if (i + 1 >= bytes.length) return null
+      kept.push(bytes.subarray(from, i))
+    }
   }
   return null
 }

@@ -278,6 +278,28 @@ describe("handling a request", () => {
     expect(audit).toEqual({ actor: "dev@example.test", action: "read_contact", fields: "email" })
   })
 
+  it("refuses to read a contact for a page on another site, and records no read", async () => {
+    const s = await published()
+    const { ticket } = await familyReport(s.id)
+    for (const site of ["cross-site", "same-site", "none"])
+      expect((await admin(`/api/admin/reports/${ticket}/contact`, { headers: { "Sec-Fetch-Site": site } })).status).toBe(403)
+    expect(
+      await env.DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE entity_id = ? AND action = 'read_contact'")
+        .bind(ticket)
+        .first<number>("n"),
+    ).toBe(0)
+  })
+
+  it("accepts a moderator's sign-in only when it carries an expiry and an issue time", async () => {
+    const { SignJWT } = await import("jose")
+    const token = await new SignJWT({ email: "dev@example.test" })
+      .setProtectedHeader({ alg: "HS256" })
+      .setIssuer("dev-access")
+      .setAudience("makom-dev")
+      .sign(new TextEncoder().encode(env.DEV_ACCESS_SECRET))
+    expect((await call("http://local/api/admin/summary", { headers: { "Cf-Access-Jwt-Assertion": token } })).status).toBe(401)
+  })
+
   it("closing lowers the deletion date to 90 days at most and lifts nothing; reopening moves no date", async () => {
     const s = await published()
     const { ticket } = await familyReport(s.id)

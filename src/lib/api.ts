@@ -315,7 +315,7 @@ const BEFORE_WRITE: Record<number, string[]> = {
   400: ["invalid_input"],
   403: ["turnstile_required", "turnstile_failed"],
   404: ["not_found"],
-  429: ["rate_limited"],
+  429: ["rate_limited", "daily_limit"],
   503: ["not_configured", "turnstile_unavailable"],
 }
 
