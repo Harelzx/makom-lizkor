@@ -96,6 +96,28 @@ test.describe("desktop", () => {
     await audit(page)
   })
 
+  test("the contact form «כתבו לנו», its notice and its keyboard path", async ({ page }) => {
+    await day(page)
+    await page.getByRole("button", { name: "על הפרויקט", exact: true }).click()
+    const opener = page.getByRole("button", { name: "כתבו לנו", exact: true })
+    await opener.click()
+    const form = page.getByRole("dialog", { name: "כתבו לנו", exact: true })
+    await expect(form).toBeVisible()
+    await audit(page)
+    // Focus is inside the form, and the keyboard reaches each field and the privacy link by name.
+    await expect.poll(() => form.evaluate((el) => el.contains(document.activeElement))).toBe(true)
+    const email = form.getByRole("textbox", { name: "כתובת אימייל לתשובה" })
+    const message = form.getByRole("textbox", { name: "מה תרצו לומר לנו?" })
+    await email.focus()
+    await page.keyboard.press("Tab")
+    await expect(message).toBeFocused()
+    await expect(form.getByRole("button", { name: "פרטיות", exact: true })).toBeVisible()
+    // Escape closes it, and nothing of what was typed stays.
+    await message.fill("בדיקה")
+    await page.keyboard.press("Escape")
+    await expect(form).toBeHidden()
+  })
+
   test("search", async ({ page }) => {
     await day(page)
     await page.getByRole("button", { name: /חיפוש מקום או קהילה/ }).click()
