@@ -117,7 +117,9 @@ test.describe("desktop", () => {
     await audit(page)
     await dialog.getByRole("button", { name: "המיקום הנוכחי שלי" }).click()
     // The location arrives asynchronously and grows the form; pressing on before it would land where the button was.
-    await page.getByRole("button", { name: "זה המקום", exact: true }).click({ timeout: 15_000 })
+    // With a map it opens the point's review there; without one (noWebGL) the point goes straight into the form.
+    if (await page.locator(".maplibregl-canvas").count())
+      await page.getByRole("button", { name: "זה המקום", exact: true }).click({ timeout: 15_000 })
     await expect(dialog.getByText("סומן מיקום", { exact: false })).toBeVisible({ timeout: 15_000 })
     await page.getByRole("button", { name: "המשך" }).click()
     await expect(page.getByRole("dialog", { name: /מה יש שם/ })).toBeVisible()

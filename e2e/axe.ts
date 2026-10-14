@@ -6,6 +6,21 @@ import { expect, test, type Page } from "@playwright/test"
 const TAGS = ["wcag2a", "wcag2aa"]
 
 export async function audit(page: Page) {
+  // Contrast is a property of the settled page: wait out the transitions and animations still running (a theme's
+  // colour change, a dialog's entrance), which a slow machine (CI's WebKit, without a GPU) can be measured in the middle of.
+  // Endless ones (the glow's breath, the clippings' drift) never finish and are left alone, and a paused one would wait
+  // forever, so the wait has a ceiling.
+  await page.evaluate(() =>
+    Promise.race([
+      Promise.all(
+        document
+          .getAnimations()
+          .filter((a) => a.playState === "running" && Number.isFinite(Number(a.effect?.getComputedTiming().endTime)))
+          .map((a) => a.finished.catch(() => undefined)),
+      ),
+      new Promise((done) => setTimeout(done, 3000)),
+    ]),
+  )
   const { violations } = await new AxeBuilder({ page }).withTags(TAGS).analyze()
   if (violations.length)
     await test.info().attach("accessibility-violations", { body: JSON.stringify(violations, null, 2), contentType: "application/json" })
