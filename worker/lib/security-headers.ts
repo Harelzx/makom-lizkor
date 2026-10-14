@@ -5,8 +5,8 @@
  *
  * The policy is enforced. Full browser compatibility and same-SHA staging are required before its production rollout.
  * Turnstile's one documented host is challenges.cloudflare.com (Cloudflare's Turnstile docs, 2026-10-06); the spec's
- * "two new hostnames" were not found there and are not guessed here. The map's tiles and glyphs come from OpenFreeMap,
- * its terrain from AWS, both by fetch; its worker is the site's own module file, not a blob.
+ * "two new hostnames" were not found there and are not guessed here. The map's tiles and terrain come from the
+ * site itself, and its labels from the site's own fonts; its worker is the site's own module file, not a blob.
  */
 export const CSP = [
   "default-src 'self'",
@@ -17,7 +17,8 @@ export const CSP = [
   // A visitor's own photos are data: and blob: URLs from the device's storage.
   "img-src 'self' data: blob:",
   "font-src 'self'",
-  "connect-src 'self' https://tiles.openfreemap.org https://s3.amazonaws.com https://challenges.cloudflare.com",
+  // The map's tiles and terrain are the site's own (src/shared/tiles.ts): no tile server is trusted.
+  "connect-src 'self' https://challenges.cloudflare.com",
   "worker-src 'self'",
   "frame-src https://challenges.cloudflare.com",
   "media-src 'self'",
