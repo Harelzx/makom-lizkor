@@ -16,6 +16,7 @@ function scaleFor(zoom: number) {
 export function MapCanvas() {
   const container = useRef<HTMLDivElement>(null)
   const [ready, setReady] = useState(false)
+  const [missing, setMissing] = useState(false)
   const draftMarker = useRef<maplibregl.Marker | null>(null)
 
   const local = useStore((s) => s.local)
@@ -38,6 +39,8 @@ export function MapCanvas() {
   useEffect(() => {
     const { phase, light } = useStore.getState()
     const map = createMap(container.current!, phase === "day" ? light : "night", phase !== "intro")
+    // No map in this browser: the site goes on without it, and says so once the day begins.
+    if (!map) return setMissing(true)
     // The marker scale lives in a CSS variable on the container. Writing it restyles every marker,
     // so it moves in coarse steps and is written only when the step changes, not on every zoom frame.
     let lastScale = ""
@@ -127,6 +130,11 @@ export function MapCanvas() {
       <FlowerSprite />
       {/* inline style: maplibre-gl.css is unlayered and would beat a Tailwind utility here */}
       <div ref={container} style={{ position: "absolute", inset: 0 }} />
+      {missing && phase === "day" && (
+        <p className="pointer-events-none absolute inset-x-4 top-1/3 text-center text-caption text-ink-2">
+          המפה לא נטענה בדפדפן הזה. כל המקומות זמינים ברשימה.
+        </p>
+      )}
       {ready &&
         places.map((p) => (
           <MarkerHost key={p.id} place={p}>
