@@ -74,6 +74,34 @@ describe("a place's share page", () => {
     expect(meta(html, "og:image")).toMatch(/^http:\/\/local\/media\/og\/nova-memorial-reim\/[0-9a-f]{64}\.png$/)
   })
 
+  it("keeps the preview's words to two or three lines: the first sentence, or whole words and an ellipsis", async () => {
+    // WhatsApp, 14 October: the Nova memorial's 200 characters filled the preview and ended mid-word («לנרצח»).
+    await seedCurated(["nova-memorial-reim"])
+    const nova = meta(await (await page("nova-memorial-reim")).text(), "og:description")!
+    expect(nova).toBe("אתר זיכרון רחב ידיים במתחם שבו התקיים פסטיבל נובה, ובו עמודי הנצחה אישיים לכל אחד מהנרצחים לצד מיצגים נוספים.")
+
+    const long = "ספסל עץ פשוט מול השדות שבו ישבו החברים בכל ערב שישי אחרי העבודה ודיברו על הכול ועל כלום עד שהשמש שקעה מאחורי הגבעה הרחוקה"
+    const { id } = await send("ספסל דמו ארוך", { story_he: long })
+    await decide(id, await queued(id), "approve")
+    const cut = meta(await (await page(id)).text(), "og:description")!
+    expect(Array.from(cut).length).toBeLessThanOrEqual(121)
+    expect(cut.endsWith("…")).toBe(true)
+    // Whole words only: what stands before the ellipsis is the start of the story, ending at a word's end.
+    expect(long.startsWith(cut.slice(0, -1))).toBe(true)
+    expect(long[cut.length - 1]).toBe(" ")
+
+    // A short first sentence brings the next whole one with it, rather than a preview of a few words.
+    const two =
+      "ספסל דמו קצר. " +
+      "הוא עומד מול השדות שבהם עבדו החברים, ולידו עץ זית שנשתל בשנה שאחרי. " +
+      "משפט שלישי ארוך שכבר לא נכנס לתצוגה ונשאר רק בעמוד המקום עצמו."
+    const second = await send("ספסל דמו בשני משפטים", { story_he: two })
+    await decide(second.id, await queued(second.id), "approve")
+    expect(meta(await (await page(second.id)).text(), "og:description")).toBe(
+      "ספסל דמו קצר. הוא עומד מול השדות שבהם עבדו החברים, ולידו עץ זית שנשתל בשנה שאחרי.",
+    )
+  })
+
   it("keeps a hostile name from breaking the page or running anything", async () => {
     const name = 'ספסל "דמו" </script><img src=x onerror=alert(1)>'
     const { id } = await send(name)
