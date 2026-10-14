@@ -5,6 +5,10 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    # A new release waits a week before it is proposed: a hijacked package is usually caught and pulled within days.
+    # Security updates are never held (cooldown applies to version updates only).
+    cooldown:
+      default-days: 7
     groups:
       cloudflare-toolchain:
         patterns: ["@cloudflare/*", "wrangler"]
@@ -13,3 +17,5 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 3
+    cooldown:
+      default-days: 7
