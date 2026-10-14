@@ -172,7 +172,7 @@ describe("deadlines kept with the data", () => {
     expect(left.results.map((r) => r.id)).toEqual([later])
     expect(due).not.toBe(later)
     const r = await env.DB.prepare(
-      "SELECT relationship, explanation, email, explanation_hash, reporter_key, handling_note, status FROM reports WHERE id = ?",
+      "SELECT relationship, explanation, email, explanation_hash, reporter_key, handling_note, body_hash, status FROM reports WHERE id = ?",
     )
       .bind(ticket)
       .first()
@@ -183,6 +183,8 @@ describe("deadlines kept with the data", () => {
       explanation_hash: null,
       reporter_key: null,
       handling_note: null,
+      // The replay check's hash was taken over the whole request, email and explanation included: it goes with them.
+      body_hash: "purged",
       status: "closed",
     })
   })

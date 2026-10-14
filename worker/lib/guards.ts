@@ -14,6 +14,11 @@ export const REPORT_GUARDS = {
   maxLinks: 2,
   /** Spam: more requests than this in a day from one visitor (counted under a keyed hash of the address). */
   reporterPerDay: 3,
+  /**
+   * Intake: requests a visitor may send in a day at all; the next is refused (429). Every accepted request mails every
+   * moderator, and again every reminderHours, so one address could otherwise spend the day's mail budget alone.
+   */
+  intakePerDay: 5,
   /** The backstop looks again this long after a complete request the automatic path didn't act on. */
   backstopHours: 24,
   /** Moderators are reminded this often until one records handling the request. */

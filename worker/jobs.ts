@@ -11,7 +11,7 @@ import { REPORT_GUARDS } from "./lib/guards"
 import type { Purge } from "./lib/purge"
 import { log } from "./lib/log"
 import { deliverVerification, type MailAttempt } from "./db/verification-delivery"
-import { alertOperations, pruneCounters } from "./lib/metrics"
+import { alertFailures, alertOperations, pruneCounters, recordFailure } from "./lib/metrics"
 
 const HOUR_MS = 3600 * 1000
 /** A backstop claimed this long ago by a run that never finished it is taken again. */
@@ -48,6 +48,8 @@ export async function runJobs(env: Env, deps: { sendMail: SendMail; purge: Purge
       await run()
     } catch (err) {
       log("error", "job_failed", { job: name, error: (err as Error).name })
+      // Counted too, so the failures alert below tells the moderators instead of leaving it in the logs alone.
+      await recordFailure(env, `job_${name}`, now).catch(() => {})
     }
   }
 
@@ -121,6 +123,9 @@ export async function runJobs(env: Env, deps: { sendMail: SendMail; purge: Purge
     for (const { id } of results) await startAlertRound(env.DB, env, id, now)
     await deliverAlerts(env.DB, env, deps.sendMail, now, origin)
   })
+
+  // After every part that could fail, so this pass's own failures are told now rather than 15 minutes later.
+  await part("failures_alert", () => alertFailures(env, deps.sendMail, now))
 
   // Last, and on its own: it runs even if every part before it failed.
   await part("abuse_codes", () =>
