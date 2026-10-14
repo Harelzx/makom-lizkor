@@ -3,6 +3,7 @@ import type { AppEnv } from "../index"
 import { problem } from "../lib/http"
 import { rateKey } from "../lib/ids"
 import { CSP_DIRECTIVES, log, type CspSource } from "../lib/log"
+import { recordFailure } from "../lib/metrics"
 
 export const csp = new Hono<AppEnv>()
 
@@ -48,6 +49,18 @@ function violations(parsed: unknown): { directive: unknown; blocked: unknown }[]
   const r = (parsed as { "csp-report"?: Record<string, unknown> } | null)?.["csp-report"]
   if (!r || typeof r !== "object") return []
   return [{ directive: r["effective-directive"] ?? r["violated-directive"], blocked: r["blocked-uri"] }]
+}
+
+/** The site's own error reports (src/lib/error-report.ts): a class name and a file of ours, or unknown. Three at most. */
+function clientErrors(parsed: unknown): { name: string; chunk: string }[] {
+  if (!Array.isArray(parsed)) return []
+  return parsed
+    .filter((r) => r?.type === "client-error" && typeof r.body === "object" && r.body)
+    .slice(0, 3)
+    .map((r) => ({
+      name: typeof r.body.name === "string" && /^[A-Z][A-Za-z]{0,39}$/.test(r.body.name) ? r.body.name : "unknown",
+      chunk: typeof r.body.chunk === "string" && /^[a-z][a-z0-9-]{0,39}$/.test(r.body.chunk) ? r.body.chunk : "unknown",
+    }))
 }
 
 /**
@@ -100,5 +113,10 @@ csp.post("/", async (c) => {
   const ownHost = new URL(c.req.url).host
   for (const v of violations(parsed))
     log("warn", "csp_report", { directive: directiveOf(v.directive), source: sourceOf(v.blocked, ownHost) })
+  // Errors in the site's own code, from visitors' browsers: counted for the failures alert, logged as two codes.
+  for (const e of clientErrors(parsed)) {
+    log("warn", "client_error", { error: e.name, chunk: e.chunk })
+    await recordFailure(c.env, "client_error").catch((err: Error) => log("error", "metrics_failed", { error: err.name }))
+  }
   return c.body(null, 204)
 })
