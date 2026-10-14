@@ -25,9 +25,25 @@ export const ISRAEL: [[number, number], [number, number]] = [
   [35.95, 33.35],
 ]
 
+/**
+ * The map, or null when this browser can't draw one. MapLibre needs WebGL2 and throws without it (hardware acceleration
+ * off, an old graphics driver, a locked-down machine); the opening, the list and every card work without the map, so a
+ * missing map must never take the page down with it.
+ */
 export function createMap(container: HTMLElement, light: "night" | "morning", labels = true) {
   current = light === "night" ? NIGHT : MORNING
-  map = new maplibregl.Map({
+  try {
+    map = build(container, labels)
+    if (ownLabels.length) setOwnLabels(ownLabels)
+  } catch (error) {
+    console.warn(error)
+    map = null
+  }
+  return map
+}
+
+function build(container: HTMLElement, labels: boolean) {
+  const map = new maplibregl.Map({
     container,
     style: buildStyle(current, labels),
     center: DAWN.center,
@@ -56,7 +72,6 @@ export function createMap(container: HTMLElement, light: "night" | "morning", la
     },
   })
   if (import.meta.env.DEV) (window as unknown as { __map: maplibregl.Map }).__map = map
-  if (ownLabels.length) setOwnLabels(ownLabels)
   map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "bottom-left")
   map.addControl(new maplibregl.AttributionControl({ compact: false }), "bottom-right")
   return map

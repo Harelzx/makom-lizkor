@@ -30,7 +30,7 @@ concurrency:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
       actions: read
@@ -94,7 +94,7 @@ jobs:
 
   release:
     needs: verify
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     environment: production
     permissions:
       contents: write

@@ -76,6 +76,8 @@ export function AddPlace() {
   const setOpen = useStore((s) => s.setAddOpen)
   const lessMotion = useReducedMotion()
   const picking = useStore((s) => s.picking)
+  // Without a map there is nothing to mark or check a point on: coordinates and the device's location still work.
+  const mapMissing = useStore((s) => s.mapMissing)
   const visibleViewport = useVisibleViewport(open && !picking)
   const setPicking = useStore((s) => s.setPicking)
   const draft = useStore((s) => s.draft)
@@ -220,7 +222,7 @@ export function AddPlace() {
       const p = result.point
       setDraft(p)
       setError("")
-      reviewPoint(p)
+      if (!mapMissing) reviewPoint(p)
     })
   }
 
@@ -586,20 +588,24 @@ export function AddPlace() {
                         {step === 0 && (
                           <FieldGroup className="cascade">
                             <div className="grid gap-2 sm:grid-cols-2">
+                              {!mapMissing && (
+                                <Button
+                                  id={`${uid}-point`}
+                                  {...invalid("point")}
+                                  variant="outline"
+                                  className="h-14 justify-start rounded-2xl"
+                                  onClick={() => {
+                                    stopLocating()
+                                    reviewPoint()
+                                  }}
+                                >
+                                  <CrosshairIcon data-icon="inline-start" />
+                                  סימון על המפה
+                                </Button>
+                              )}
                               <Button
-                                id={`${uid}-point`}
-                                {...invalid("point")}
-                                variant="outline"
-                                className="h-14 justify-start rounded-2xl"
-                                onClick={() => {
-                                  stopLocating()
-                                  reviewPoint()
-                                }}
-                              >
-                                <CrosshairIcon data-icon="inline-start" />
-                                סימון על המפה
-                              </Button>
-                              <Button
+                                // with no map to mark on, a missing point sends the focus here instead
+                                id={mapMissing ? `${uid}-point` : undefined}
                                 variant="outline"
                                 className="h-14 justify-start rounded-2xl"
                                 onClick={locate}
@@ -625,8 +631,10 @@ export function AddPlace() {
                                 {locationStatus.kind === "error"
                                   ? locationStatus.message
                                   : locationStatus.kind === "locating"
-                                    ? "ממתינים למיקום מהמכשיר. אם תופיע בקשת הרשאה, אפשר לאשר אותה. אפשר גם לסמן על המפה."
-                                    : "המיקום נמצא. אפשר לבדוק ולדייק את הנקודה על המפה."}
+                                    ? `ממתינים למיקום מהמכשיר. אם תופיע בקשת הרשאה, אפשר לאשר אותה.${mapMissing ? "" : " אפשר גם לסמן על המפה."}`
+                                    : mapMissing
+                                      ? "המיקום נמצא."
+                                      : "המיקום נמצא. אפשר לבדוק ולדייק את הנקודה על המפה."}
                               </p>
                             )}
                             <PointCoordinates
@@ -648,18 +656,20 @@ export function AddPlace() {
                                     <bdi dir="ltr" className="whitespace-nowrap">
                                       ({draft.lat.toFixed(5)}, {draft.lng.toFixed(5)})
                                     </bdi>
-                                    . אפשר לגרור את הסיכה במפה כדי לדייק.
+                                    .{!mapMissing && " אפשר לגרור את הסיכה במפה כדי לדייק."}
                                   </span>
-                                  <Button
-                                    variant="secondary"
-                                    className="min-h-11 whitespace-normal"
-                                    onClick={() => {
-                                      stopLocating()
-                                      reviewPoint()
-                                    }}
-                                  >
-                                    בדיקת הנקודה במפה
-                                  </Button>
+                                  {!mapMissing && (
+                                    <Button
+                                      variant="secondary"
+                                      className="min-h-11 whitespace-normal"
+                                      onClick={() => {
+                                        stopLocating()
+                                        reviewPoint()
+                                      }}
+                                    >
+                                      בדיקת הנקודה במפה
+                                    </Button>
+                                  )}
                                   <Button
                                     variant="ghost"
                                     size="sm"
