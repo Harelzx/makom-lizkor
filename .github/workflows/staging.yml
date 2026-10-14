@@ -36,7 +36,7 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
       - id: check
@@ -78,7 +78,7 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha }}
       - name: The commit checked out is the one CI passed
         run: test "$(git rev-parse HEAD)" = "$SHA"
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
