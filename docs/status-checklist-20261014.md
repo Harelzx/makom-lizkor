@@ -2,10 +2,10 @@
 
 A single view of what is done, what is open and who can close it. Built from Git, GitHub (PRs, runs, annotations), `src/config.ts`, `wrangler.jsonc`, `agent-handoff.md` and `checklist-closeout-20261013.md`, and checked against the live site. `go-live-checklist.md` and `launch-decisions.md` are historical planning (both carry banners saying so): their unchecked boxes are **not** reopened here.
 
-## Where we are (14.10, 12:30 UTC)
+## Where we are (14.10, 16:00 UTC)
 
-- Production: release `309bc8e` (version `d89f89f2`, tag `release-309bc8eb69be`), 100% since 11:34 UTC on `https://makom-lizkor.makom-staging.workers.dev`. It adds the no-WebGL fallback (PR #16) to 799119e.
-- Main is ahead of production by CI, test and dependency changes only: Ubuntu 26.04 runners (#15), Dependabot #4-#7, the compatibility fixes (#17). None changes what visitors get beyond the dependency bumps, which go out with the next release.
+- Production: release `2bc0ad8` (version `c7103280`, tag `release-2bc0ad8d6fbb`), 100% since 15:38 UTC on `https://makom-lizkor.makom-staging.workers.dev`. It adds the shorter share preview (PR #19) and the dependency bumps (Dependabot #4-#8) to 309bc8e. Evidence: `agent-evidence/release-share-20261014/`.
+- Main equals production.
 - Content: 90 curated records (68 memorials, 22 communities), 32 photo entries.
 
 ## Done (with evidence)
@@ -27,25 +27,25 @@ A single view of what is done, what is open and who can close it. Built from Git
 - [x] **CI on Ubuntu 26.04 (PR #15).** All 9 workflows name `ubuntu-26.04` ahead of `ubuntu-latest` moving on 19.10. Proven on that image: ci (with browser suites), staging, regression, availability, security, compatibility. Not yet: release.yml, rollback.yml (not used; releases run from the owner's Terminal kit).
 - [x] **Weekly compatibility run green (PR #17)**, failing since 11.10. Desktop Firefox and WebKit run without WebGL (`noWebGL` fixture option): CI's runners have no GPU, Firefox there has no WebGL2 and WebKit drew the map at about 1.5 fps, auditing animations half-way. `audit()` now waits for finite running animations. Map coverage stays in Chromium. Run 38560837237.
 - [x] **Dependabot #4, #5, #6, #7 merged** (`@types/node` 26, typescript-eslint, lucide-react, radix-ui); main CI, staging and regression green on the combination.
+- [x] **Release 2bc0ad8 (14.10, 15:38 UTC).** Same-SHA CI, staging and regression; one deploy attempt; no pending migration; Access compared in full before and after for the first time (apps, app and policies identical; 14 anonymous paths unchanged); 25 live checks including Nova's new preview words. The Access after-snapshot's probe timed out twice right after the deploy (20 s); every path answered in under 0.5 s by hand and the third take passed.
+- [x] **Shared place previews are about three lines (PR #19).** As many whole sentences as fit in 120 characters, or whole words and an ellipsis; 200 characters had filled WhatsApp's card and ended mid-word. Owner checked Nova's link in WhatsApp on iPhone, 14.10 (`release-share-20261014/whatsapp-preview-owner-iphone.png`).
+- [x] **Access API comparison works (14.10).** A read-only token in the owner's Keychain (`makom-production-access-read`) with `Access: Apps and Policies Read` and the separate `Access: Policies Read`; without the second, policies answer 1010. Wrangler's login still can't read Access and is only the fallback.
+- [x] **Owner key backup** off this computer, in Apple Passwords with iCloud sync; owner confirmed it opens on the iPhone (14.10).
+- [x] **Dependabot #1-#3 and #8 merged** (setup-node 7, upload-artifact 7, download-artifact 8, maplibre-gl 6.13); main CI, staging and regression green. Dependabot stays weekly (owner, 14.10).
 - [x] **Production releases by the agent:** a narrow rule in the untracked `web/.claude/settings.local.json` (owner-approved 14.10) lets a session write release kits under `agent-evidence/release-*` and run their `release.sh`. Every gate stays in the kit: same-SHA CI/staging/regression, main unmoved, no runtime drift or secrets in the package, no pending migration, one deploy attempt, Access probe before/after, live checks.
 
 ## Open - Harel only
 
-- [ ] **Owner key backup.** Keep a protected copy of the owner (export) private key off this computer. Confirmed not done on 13.10.
 - [ ] **iPhone Safari:** do the top/bottom edges match the map and sheet (no dark frame)? Does the folded sheet read as draggable? Both were rejected on c937da2; the fix live since 799119e is unproven on a real device.
 - [ ] **iPhone at 200% text size:** add-a-place keeps all fields while picking a point.
-- [ ] **WhatsApp share preview** of a real place link (L4).
 - [ ] **Android phone** pass (map, list, add place, GPS).
 - [ ] **Domain**: deliberately deferred. Decide only when ready; it triggers share-preview and mail checks again.
 - [ ] **Two local drafts** in the owner's browser: keep or clear (not in the public feed).
 
 ## Open - agent
 
-- [ ] **Dependabot #8** (maplibre-gl 6.11 -> 6.13): green; touches the map (self-contained worker, `maxBounds` now respects padding, terrain camera fixes). Merge, then look at staging before the next release.
-- [ ] **Dependabot #1-#3** (actions/setup-node 7, upload-artifact 7, download-artifact 8): green; major versions of CI actions. One at a time now that Ubuntu 26.04 is settled.
 - [ ] **Weekly security scan** on its own schedule (Mondays 07:17 UTC): confirm the run of 19.10. A manual run on 26.04 passed on 14.10.
-- [ ] **Access API comparison** still refused (Cloudflare error 1010 on wrangler's login) at 799119e and 309bc8e; only the anonymous probe of 6 public and 8 private paths is compared. A verification gap, not a regression.
-- [ ] **CI token scope check** blocked (API error 9109). Needs a token or dashboard read.
+- [ ] **CI token is broader than needed.** The owner pasted its 26 permissions on 14.10 (Zero Trust, DNS, Zone and many unused services among them); staging needs only Workers Scripts, D1, Account Settings and User Details. Replace it with a narrow token when the owner chooses (deferred by the owner, 14.10).
 - [ ] **`launch/tiles-check/`** (6 screenshots, 14.10 10:38): keep as tiles-release evidence or delete.
 
 ## Open - external professionals (not started, no purchase approved)
@@ -68,11 +68,8 @@ A single view of what is done, what is open and who can close it. Built from Git
 | # | Who | Action | Done when |
 |---|-----|--------|-----------|
 | 1 | Harel | iPhone Safari: edges, sheet, 200% text | Screenshot accepted, or a concrete fix request |
-| 2 | Harel | Owner key backup off this computer | Owner confirms |
-| 3 | Agent | Dependabot #8, then a release with the dependency bumps | Staging looked at, release kit green, live checks pass |
-| 4 | Agent | Dependabot #1-#3, one at a time | Each merged with main CI green |
-| 5 | Harel | WhatsApp preview and an Android pass | Screenshots saved to `agent-evidence/` |
-| 6 | Agent | Security scan of 19.10 and compatibility of 18.10 on schedule | Both runs present and green |
-| 7 | Both | First family-built corners | Sources, location, photo rights checked, imported via the admin route |
+| 2 | Harel | Android pass | Screenshots saved to `agent-evidence/` |
+| 3 | Agent | Security scan of 19.10 and compatibility of 18.10 on schedule | Both runs present and green |
+| 4 | Both | First family-built corners | Sources, location, photo rights checked, imported via the admin route |
 
 Each code change goes through a PR with full CI, automatic staging and the release kit's gates.
