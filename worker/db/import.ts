@@ -69,7 +69,16 @@ export function filterForImport(tables: Record<string, Row[]>, now: Date, d: Dur
     )
   const reports = (tables.reports ?? []).map((x) =>
     due(x.purge_after, c.now)
-      ? { ...x, relationship: null, explanation: null, email: null, explanation_hash: null, reporter_key: null, handling_note: null }
+      ? {
+          ...x,
+          relationship: null,
+          explanation: null,
+          email: null,
+          explanation_hash: null,
+          reporter_key: null,
+          handling_note: null,
+          body_hash: "purged",
+        }
       : x,
   )
   const field_suppressions = (tables.field_suppressions ?? []).map((x) =>
