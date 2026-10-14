@@ -32,7 +32,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/ci-evidence.mjs plan
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ci-plan
           path: ci-plan.json
@@ -103,14 +103,14 @@ jobs:
           CI_GROUPS: ${{ needs.plan.outputs.groups }}
         run: node scripts/ci-browser.mjs run core
       - if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: browser-core
           path: ci-results/
           retention-days: 7
           if-no-files-found: error
       - if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: traces-core
           path: test-results/
@@ -131,14 +131,14 @@ jobs:
         timeout-minutes: 10
       - run: node scripts/ci-browser.mjs run webkit
       - if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: browser-webkit
           path: ci-results/
           retention-days: 7
           if-no-files-found: error
       - if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: traces-webkit
           path: test-results/
@@ -159,14 +159,14 @@ jobs:
         timeout-minutes: 10
       - run: node scripts/ci-browser.mjs run dev
       - if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: browser-dev
           path: ci-results/
           retention-days: 7
           if-no-files-found: error
       - if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: traces-dev
           path: test-results/
@@ -193,14 +193,14 @@ jobs:
       - env:
           CI_NEEDS: ${{ toJSON(needs) }}
         run: node scripts/ci-evidence.mjs ready
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ci-ready-${{ github.sha }}
           path: ci-evidence/ready/receipt.json
           retention-days: 90
           if-no-files-found: error
       - if: needs.plan.outputs.mode == 'full'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ci-full-${{ github.sha }}
           path: ci-evidence/full/receipt.json

@@ -135,7 +135,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/receipt"
           node scripts/staging-receipt.mjs "$RUNNER_TEMP/edge.json" > "$RUNNER_TEMP/receipt/receipt.json"
       # Last, so it exists only if every step before it passed; release.yml reads it (scripts/staging-evidence.mjs).
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: staging-receipt-${{ github.event.workflow_run.head_sha }}
           path: ${{ runner.temp }}/receipt/receipt.json

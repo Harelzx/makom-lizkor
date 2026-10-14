@@ -58,7 +58,7 @@ jobs:
           TARGET_SHA: ${{ needs.verify.outputs.sha }}
           CI_NEEDS: ${{ toJSON(needs) }}
         run: node scripts/ci-evidence.mjs full
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ci-full-${{ needs.verify.outputs.sha }}
           path: ci-evidence/full/receipt.json
