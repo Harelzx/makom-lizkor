@@ -106,11 +106,17 @@ export async function probeCaller(req: Request, env: Env): Promise<{ ok: true } 
 
 const verify = (token: string, env: Env, dev: boolean) =>
   dev
-    ? jwtVerify(token, new TextEncoder().encode(env.DEV_ACCESS_SECRET), { issuer: "dev-access", audience: "makom-dev" })
-    : jwtVerify(token, keysFor(env.ACCESS_TEAM_DOMAIN), {
+    ? jwtVerify(token, new TextEncoder().encode(env.DEV_ACCESS_SECRET), {
+        issuer: "dev-access",
+        audience: "makom-dev",
+        requiredClaims: ["exp", "iat"],
+      })
+    : // An expiry is required, not only checked when present: Access always sets one, so a token without it isn't Access's.
+      jwtVerify(token, keysFor(env.ACCESS_TEAM_DOMAIN), {
         issuer: `https://${env.ACCESS_TEAM_DOMAIN}`,
         audience: env.ACCESS_AUD,
         algorithms: ["RS256"],
+        requiredClaims: ["exp", "iat"],
       })
 
 function keysFor(team: string) {

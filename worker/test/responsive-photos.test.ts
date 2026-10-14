@@ -83,3 +83,36 @@ it("creates variants for curated WebP too, without changing source keys/credits 
   expect((await call(`http://local${photo.url}?w=50000`)).status).toBe(400)
   expect((await feed()).find((p) => p.id === place.id)).toEqual(place)
 })
+
+it("strips metadata between a progressive photo's scans and anything after its end, keeping every scan whole", () => {
+  // A progressive JPEG has several scans; an editor (or someone crafting a file) can put EXIF, a comment or bytes after
+  // the end marker between or after them. The browser's re-encode drops these, but an upload can come from elsewhere.
+  const ascii = (t: string) => [...new TextEncoder().encode(t)]
+  const sof = seg(0xc2, [8, 0, 16, 0, 16, 1, 1, 0x11, 0])
+  const scan1 = [...seg(0xda, [1, 1, 0, 0, 0, 0]), 0x12, 0xff, 0x00, 0x34, 0xff, 0xd0, 0x56]
+  const exif = seg(0xe1, [...ascii("Exif"), 0, 0, ...ascii("GPS 31.5 34.5")])
+  const comment = seg(0xfe, ascii("secret comment"))
+  const dht = seg(0xc4, [0x10, ...new Array(16).fill(0), 0])
+  const scan2 = [...seg(0xda, [1, 1, 0, 1, 63, 0]), 0x78, 0xff, 0x00, 0x9a]
+  const trailing = ascii("<script>alert(1)</script>")
+  const app0 = seg(0xe0, [...ascii("JFIF"), 0, 1, 1, 0, 0, 1, 0, 1, 0, 0])
+  const input = new Uint8Array([0xff, 0xd8, ...app0, ...sof, ...scan1, ...exif, ...comment, ...dht, ...scan2, 0xff, 0xd9, ...trailing])
+  const out = stripJpeg(input)!
+  expect(out).not.toBeNull()
+  expect([...out]).toEqual([0xff, 0xd8, ...app0, ...sof, ...scan1, ...dht, ...scan2, 0xff, 0xd9])
+  const text = new TextDecoder("latin1").decode(out)
+  for (const word of ["Exif", "GPS", "secret", "script"]) expect(text).not.toContain(word)
+
+  // A JFXX thumbnail rides in APP0 too: only a plain JFIF header stays.
+  const jfxx = seg(0xe0, [...ascii("JFXX"), 0, 0x10, ...new Array(20).fill(0x99)])
+  const withThumb = new Uint8Array([0xff, 0xd8, ...jfxx, ...sof, ...scan2, 0xff, 0xd9])
+  expect([...stripJpeg(withThumb)!]).toEqual([0xff, 0xd8, ...sof, ...scan2, 0xff, 0xd9])
+
+  // A frame header after a scan, or a photo that never ends, is not one we walk.
+  expect(
+    stripJpeg(
+      new Uint8Array([0xff, 0xd8, ...sof, ...scan1, ...seg(0xc0, [8, 0x7f, 0xff, 0x7f, 0xff, 1, 1, 0x11, 0]), ...scan2, 0xff, 0xd9]),
+    ),
+  ).toBeNull()
+  expect(stripJpeg(new Uint8Array([0xff, 0xd8, ...sof, ...scan1]))).toBeNull()
+})

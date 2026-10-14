@@ -116,7 +116,9 @@ test("the release runs 14.2's steps in their order", () => {
   const source = real["release.yml"]
   const check = "      - name: Release check\n        run: npm run release:check\n"
   const migrate =
-    "      - name: Migrations (expand only; scripts/rollback-check.mjs refuses a rollback across anything else)\n        id: migrate\n        run: npx wrangler d1 migrations apply DB --remote\n"
+    "      - name: Migrations (expand only; scripts/rollback-check.mjs refuses a rollback across anything else)\n        id: migrate\n" +
+    "        env:\n          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}\n          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}\n" +
+    "        run: npx wrangler d1 migrations apply DB --remote\n"
   assert.ok(source.includes(check) && source.includes(migrate))
   // The migrations moved ahead of the release check.
   fails(
@@ -389,4 +391,22 @@ test("staging recovery migrates its isolated target and requires its own private
     ["DRILL_PRIVATE_KEY:e.DRILL_PRIVATE_KEY", "DRILL_PRIVATE_KEY:undefined"],
   ])
     fails(withChange("staging.yml", from, to), "must migrate the separate drill database")
+})
+
+test("a Cloudflare token is given only to the steps that call wrangler, never to a job, so no install or build script can read it", () => {
+  // The repository is public and its dependencies' install scripts run in `npm ci`: a token in the job's env is in theirs.
+  for (const name of ["staging.yml", "release.yml", "rollback.yml"]) {
+    const w = parse(real[name])
+    for (const [id, job] of Object.entries(w.jobs ?? {}))
+      for (const key of Object.keys(job.env ?? {}))
+        assert.ok(!/CLOUDFLARE_API_TOKEN|CLOUDFLARE_ACCOUNT_ID/.test(key), `${name} job ${id} gives ${key} to every step`)
+  }
+  fails(
+    withChange(
+      "staging.yml",
+      "      - run: npm ci\n",
+      "      - run: npm ci\n        env:\n          CLOUDFLARE_API_TOKEN: ${{ secrets.STAGING_CLOUDFLARE_API_TOKEN }}\n",
+    ),
+    "gives a Cloudflare token to a step that doesn't call wrangler",
+  )
 })
