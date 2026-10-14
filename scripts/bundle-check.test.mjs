@@ -85,3 +85,10 @@ test("immutable assets must be hashed while HTML and non-asset paths may revalid
   writeFileSync(join(d, "client/index.html"), "<html></html>")
   assert.deepEqual(bundleProblems(d, records), ["client/assets/unhashed.js: unhashed file in immutable asset namespace"])
 })
+
+test("the map's terrain tiles are versioned by name instead of hashed", () => {
+  const d = dist("x", "y")
+  writeFileSync(join(d, "client/assets/terrain-1.8.152.105.png"), "x")
+  writeFileSync(join(d, "client/assets/terrain.png"), "x")
+  assert.deepEqual(bundleProblems(d, records), ["client/assets/terrain.png: unhashed file in immutable asset namespace"])
+})

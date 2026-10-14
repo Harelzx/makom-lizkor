@@ -1,4 +1,4 @@
-# Writes the map's terrain into public/terrain/<version>/: the Terrarium elevation tiles (Mapzen / AWS Open Data) over
+# Writes the map's terrain into public/assets/terrain-<version>.<z>.<x>.<y>.png (flat names, see src/shared/tiles.ts): the Terrarium elevation tiles (Mapzen / AWS Open Data) over
 # the camera's bounds, zoom 0 to 8, as static files, so the relief no longer depends on AWS answering. Re-runnable:
 #   python3 tools/tiles-terrain.py
 # 34 tiles, about 3 MB. The relief is shaded from coarse tiles on purpose (style.ts, maxzoom 8): past that the western
@@ -14,7 +14,7 @@ VERSION = re.search(r'TERRAIN_VERSION = "([^"]+)"', SHARED).group(1)
 WEST, SOUTH, EAST, NORTH = (float(v) for v in re.search(r"TILE_BOUNDS = \[([^\]]+)\]", SHARED).group(1).split(","))
 MAXZOOM = int(re.search(r"TERRAIN_MAXZOOM = (\d+)", SHARED).group(1))
 URL = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"
-OUT = os.path.join(REPO, "public", "terrain", VERSION)
+OUT = os.path.join(REPO, "public", "assets")
 
 
 def tile(lon, lat, z):
@@ -33,10 +33,10 @@ for z in range(MAXZOOM + 1):
             with urllib.request.urlopen(URL.format(z=z, x=x, y=y), timeout=30) as r:
                 data = r.read()
             assert data[:8] == b"\x89PNG\r\n\x1a\n", f"{z}/{x}/{y} is not a PNG"
-            path = os.path.join(OUT, str(z), str(x), f"{y}.png")
-            os.makedirs(os.path.dirname(path), exist_ok=True)
+            path = os.path.join(OUT, f"terrain-{VERSION}.{z}.{x}.{y}.png")
+            os.makedirs(OUT, exist_ok=True)
             with open(path, "wb") as f:
                 f.write(data)
             count += 1
             size += len(data)
-print(f"public/terrain/{VERSION}: {count} tiles, {size / 1e6:.1f} MB")
+print(f"public/assets/terrain-{VERSION}.*: {count} tiles, {size / 1e6:.1f} MB")

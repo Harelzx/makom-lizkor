@@ -62,7 +62,7 @@ async function archive(tiles: [id: number, data: Uint8Array][]) {
 }
 
 const TILE = new TextEncoder().encode("a vector tile's bytes")
-const url = (path: string) => `http://local/tiles/${BASEMAP_ARCHIVE}/${path}`
+const url = (path: string) => `http://local/assets/${BASEMAP_ARCHIVE}.${path.replaceAll("/", ".")}`
 
 describe("the basemap's tiles", () => {
   beforeAll(async () => {
@@ -100,7 +100,7 @@ describe("the basemap's tiles", () => {
   })
 
   it("refuse another archive's name and tiles that cannot exist", async () => {
-    expect((await call("http://local/tiles/israel-openmaptiles-19700101/0/0/0.pbf")).status).toBe(404)
+    expect((await call("http://local/assets/israel-openmaptiles-19700101.0.0.0.pbf")).status).toBe(404)
     expect((await call(url("1/2/0.pbf"))).status).toBe(400)
     expect((await call(url("27/0/0.pbf"))).status).toBe(400)
     expect((await call(url("01/0/0.pbf"))).status).toBe(400)
@@ -130,7 +130,7 @@ describe("the basemap's tiles", () => {
       expect(res.status).toBe(200)
       expect(new Uint8Array(await res.arrayBuffer())).toEqual(TILE)
       expect(res.headers.get("Set-Cookie")).toBeNull()
-      expect(asked).toEqual([`https://upstream.example/tiles/${BASEMAP_ARCHIVE}/0/0/0.pbf`])
+      expect(asked).toEqual([`https://upstream.example/assets/${BASEMAP_ARCHIVE}.0.0.0.pbf`])
       // A site that doesn't serve tiles yet answers with its page, which is relayed as no tile at all.
       const page = new Response("<!doctype html>", { headers: { "Content-Type": "text/html" } })
       globalThis.fetch = (async () => page) as typeof fetch

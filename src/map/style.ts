@@ -1,6 +1,6 @@
 import type { Map as MLMap, StyleSpecification } from "maplibre-gl"
 import { MAP_FONT_FILES } from "@/lib/fonts"
-import { BASEMAP_ARCHIVE, BASEMAP_MAXZOOM, TERRAIN_MAXZOOM, TERRAIN_VERSION, TILE_BOUNDS } from "@/shared/tiles"
+import { BASEMAP_ARCHIVE, BASEMAP_MAXZOOM, TERRAIN_MAXZOOM, TERRAIN_VERSION, TILE_BOUNDS, basemapTile, terrainTile } from "@/shared/tiles"
 
 /**
  * Communities are drawn as our own markers; the basemap's label for the same place would double them. Their names
@@ -64,7 +64,7 @@ export function buildStyle(p: Palette, labels = true): StyleSpecification {
     sources: {
       openmaptiles: {
         type: "vector",
-        tiles: [`${origin}/tiles/${BASEMAP_ARCHIVE}/{z}/{x}/{y}.pbf`],
+        tiles: [origin + basemapTile(BASEMAP_ARCHIVE, "{z}", "{x}", "{y}")],
         bounds: TILE_BOUNDS,
         minzoom: 0,
         maxzoom: BASEMAP_MAXZOOM,
@@ -73,7 +73,7 @@ export function buildStyle(p: Palette, labels = true): StyleSpecification {
       },
       dem: {
         type: "raster-dem",
-        tiles: [`${origin}/terrain/${TERRAIN_VERSION}/{z}/{x}/{y}.png`],
+        tiles: [origin + terrainTile(TERRAIN_VERSION, "{z}", "{x}", "{y}")],
         bounds: TILE_BOUNDS,
         tileSize: 256,
         encoding: "terrarium",

@@ -94,7 +94,7 @@ export function createApp(deps: Deps) {
     await next()
   })
   // Tiles come by the hundred as the map moves, so they have a cap of their own, far above any visit's.
-  app.use("/tiles/*", requestCap("TILE_LIMIT", "tile:"))
+  app.use("/assets/*", requestCap("TILE_LIMIT", "tile:"))
 
   app.get("/api/v1/health", (c) => c.json({ ok: true }))
   app.route("/api/v1/submissions", submissions)
@@ -109,7 +109,7 @@ export function createApp(deps: Deps) {
   app.route("/api/ops", ops)
   app.route("/api/csp-report", csp)
   app.route("/__dev", dev)
-  app.route("/tiles", tiles)
+  app.route("/assets", tiles)
   app.route("/", share)
 
   // A contribution's share image, only while it is the place's current one (worker/lib/og.ts).
@@ -152,7 +152,7 @@ export function createApp(deps: Deps) {
     })
   })
 
-  // Only /api/*, /__dev/*, /media/*, /place/* and /tiles/* reach the Worker, so anything unmatched here is an API mistake, not a page.
+  // Only /api/*, /__dev/*, /media/*, /place/* and /assets/*.pbf reach the Worker, so anything unmatched here is an API mistake, not a page.
   app.notFound((c) => problem(c, 404, "not_found"))
   // One JSON line with the route and the error's name only: never a body, a token, an address or a header.
   app.onError((err, c) => {

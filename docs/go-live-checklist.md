@@ -83,7 +83,7 @@
 ## טכני
 
 - [x] **שרת:** הוחלט על Cloudflare Workers עם D1 ו־R2 (מפרט הארכיטקטורה). נתוני ה־EXIF נמחקים בשרת.
-- [ ] **אריחי המפה:** הוחלט (13.10): מפת הבסיס היא קובץ PMTiles של ישראל ב־R2 (`TILES`), שה־Worker מגיש אריח אחר אריח, והטופוגרפיה קבצים סטטיים ב־`public/terrain/`. אין יותר תלות ב־OpenFreeMap או ב־AWS, וה־CSP לא מתיר אותם. נשאר, לפי הסדר:
+- [ ] **אריחי המפה:** הוחלט (13.10): מפת הבסיס היא קובץ PMTiles של ישראל ב־R2 (`TILES`), שה־Worker מגיש אריח אחר אריח, והטופוגרפיה קבצים סטטיים ב־`public/assets/`. שניהם תחת `/assets/` בשמות שטוחים, כי Access בייצור פותח לציבור רק נתיבים ברשימה (25, כולם תפוסים), ו־`/assets/*` כבר בה. אין יותר תלות ב־OpenFreeMap או ב־AWS, וה־CSP לא מתיר אותם. נשאר, לפי הסדר:
   - ליצור את הדליים `makom-tiles` ו־`makom-staging-tiles` באיחוד האירופי (`npx wrangler r2 bucket create <name> --jurisdiction eu`).
   - לבנות את הקובץ על ה־Mac (`node tools/tiles-basemap.mjs`, צריך Java 21 ורשת) ולהעלות לשני הדליים (`node tools/tiles-basemap.mjs --upload`).
   - רק אחר כך לפרוס: עד שהקובץ בדלי, למפה אין רקע.
