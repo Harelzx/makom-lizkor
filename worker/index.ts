@@ -90,8 +90,9 @@ export function createApp(deps: Deps) {
   // Public reads stay fresh, but an address cannot consume unlimited database/OG work. Static assets bypass this.
   const readCap = requestCap("READ_LIMIT", "read:")
   app.use("*", async (c, next) => {
+    // HEAD too: the router answers it with the GET handler, so it does the same reads and rendering.
     if (
-      c.req.method === "GET" &&
+      (c.req.method === "GET" || c.req.method === "HEAD") &&
       (/^\/media\//.test(c.req.path) ||
         /^\/place\//.test(c.req.path) ||
         /^\/api\/v1\/(version|feed|tributes|contact|submissions)(\/|$)/.test(c.req.path))

@@ -91,7 +91,7 @@ The only route is `#/place/<id>`, kept in sync with `selectedId`. The share butt
 
 ### Persistence (`src/lib/storage.ts`)
 
-Persistence uses an `idb-keyval` store named `makom-lizkor-v2`/`v1`, with the keys `local` (the visitor's places) and `tributes` (anemones left at each place). Uploaded photos are downscaled and re-encoded, which strips EXIF data, then stored as data URLs. Only a confirmed submission gets a local tracking copy; unsuccessful or interrupted sends are not persisted or retried automatically. The accepted proposal's photo is uploaded separately after the submission is accepted (`src/lib/api.ts:uploadPhoto`); the server re-encodes it and controls publication. Optional email, tracking, corrections, withdrawal and moderation are implemented. Do not describe uploaded contributions as browser-only.
+Persistence uses an `idb-keyval` store named `makom-lizkor-v2`/`v1`, with the keys `local` (the visitor's places) and `tributes` (anemones left at each place). Uploaded photos are downscaled and re-encoded, which strips EXIF data, then stored as data URLs. Only a confirmed submission gets a local tracking copy; unsuccessful or interrupted sends are not persisted or retried automatically. The accepted proposal's photo is uploaded separately after the submission is accepted (`src/lib/api.ts:uploadPhoto`); the server strips its metadata (every segment, between scans too), re-encodes the sizes it serves (640, 960) and controls publication. Optional email, tracking, corrections, withdrawal and moderation are implemented. Do not describe uploaded contributions as browser-only.
 
 ### Map (`src/map/`)
 

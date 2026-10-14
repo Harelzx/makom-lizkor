@@ -31,7 +31,7 @@ export const BLANK_COLUMNS: Record<string, null | 0> = {
   // A curated revision's own fields (phase 7); its photos and sources are rows of their own, deleted with it.
   curated: null,
 }
-const BLANK_REVISION = Object.entries(BLANK_COLUMNS)
+export const BLANK_REVISION = Object.entries(BLANK_COLUMNS)
   .map(([c, v]) => `${c} = ${v === null ? "NULL" : v}`)
   .join(", ")
 
@@ -158,10 +158,12 @@ export async function runRetention(env: OpEnv, now: Date): Promise<{ id: string;
       (
         await db
           .prepare(
+            // The replay check's hash was taken over the whole request, email and explanation included, so it goes with
+            // them (a fixed value: the column can't be empty, and a replay this late is refused as a different request).
             `UPDATE reports SET relationship = NULL, explanation = NULL, email = NULL, explanation_hash = NULL, reporter_key = NULL,
-               handling_note = NULL
+               handling_note = NULL, body_hash = 'purged'
              WHERE purge_after <= ?1 AND (relationship IS NOT NULL OR explanation IS NOT NULL OR email IS NOT NULL
-               OR explanation_hash IS NOT NULL OR reporter_key IS NOT NULL OR handling_note IS NOT NULL)`,
+               OR explanation_hash IS NOT NULL OR reporter_key IS NOT NULL OR handling_note IS NOT NULL OR body_hash != 'purged')`,
           )
           .bind(at)
           .run()

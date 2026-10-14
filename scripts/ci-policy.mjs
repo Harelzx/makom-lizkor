@@ -52,6 +52,13 @@ export function policyProblems(workflows) {
       // So are its export keys (L-RET A2, a104): no other workflow may give them to a deploy.
       if (name !== STAGING && /STAGING_EXPORT_PUBLIC_KEYS/.test(body))
         say(`job ${id} names STAGING_EXPORT_PUBLIC_KEYS, which only staging.yml may`)
+      // A Cloudflare token reaches only the steps that call wrangler: in a job's env it would be in every step's,
+      // `npm ci` included, where any dependency's install script runs (the repository is public).
+      const cloudflare = (env) => Object.entries(env ?? {}).some(([k, v]) => /CLOUDFLARE_(API_TOKEN|ACCOUNT_ID)/.test(`${k} ${v}`))
+      if (cloudflare(job.env)) say(`job ${id} gives a Cloudflare token to every step; give it to the wrangler steps alone`)
+      for (const step of job.steps ?? [])
+        if (cloudflare(step.env) && !/\bwrangler\b/.test(String(step.run ?? "")))
+          say(`job ${id} gives a Cloudflare token to a step that doesn't call wrangler`)
       // GitHub runs a step with no shell named as `bash -e {0}`, without pipefail: a failure before a pipe would pass.
       for (const step of job.steps ?? [])
         if (typeof step.run === "string" && hidesFailure(step.run) && !pipefail(step, job, w))

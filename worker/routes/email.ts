@@ -33,7 +33,9 @@ email.post(
     let mail: "sent" | "earlier" | "failed" | "stopped" = r.mailState === "due" ? "failed" : r.mailState
     const attempt = r.mail ? await claimTrackingMail(c.env.DB, r.mail.contactId, now) : null
     if (r.mail && attempt) {
-      const link = `${new URL(c.req.url).origin}/#/track/${r.mail.placeId}/${r.mail.emailToken}`
+      // The configured address outside development, as every other mail's link: never the host this request came to.
+      const origin = c.env.ENVIRONMENT === "development" ? new URL(c.req.url).origin : c.env.PUBLIC_ORIGIN || ""
+      const link = `${origin}/#/track/${r.mail.placeId}/${r.mail.emailToken}`
       const sendMail = c.get("sendMail")
       const sent = await Promise.resolve()
         .then(() => sendMail(c.env, trackingMail(r.mail!.to, link)))

@@ -24,6 +24,8 @@ export type LogFields = {
    * labels can themselves identify someone), nor anything of the page. */
   directive?: string
   source?: CspSource
+  /** The site's own script file an error in a visitor's browser came from, by name without its hash (map-canvas). */
+  chunk?: string
   found?: Counts
   counts?: Counts
 }
@@ -70,6 +72,7 @@ const FIELDS: Record<string, (v: unknown) => boolean> = {
   path: (v) => typeof v === "string" && /^\/[a-z0-9/:*_.-]*$/.test(v),
   directive: (v) => (CSP_DIRECTIVES as readonly unknown[]).includes(v),
   source: (v) => (CSP_SOURCES as readonly unknown[]).includes(v),
+  chunk: (v) => typeof v === "string" && /^[a-z][a-z0-9-]{0,39}$/.test(v),
   found: (v) => isCounts(v),
   counts: (v) => isCounts(v),
   // The names of fields log() dropped: names from this list only, never what they held.

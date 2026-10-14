@@ -22,10 +22,10 @@ jobs:
       allowed: ${{ steps.check.outputs.allowed }}
       sha: ${{ steps.check.outputs.sha }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
       - id: check
@@ -47,10 +47,10 @@ jobs:
       contents: read
       actions: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           ref: ${{ needs.verify.outputs.sha }}
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
       - env:
@@ -58,7 +58,7 @@ jobs:
           TARGET_SHA: ${{ needs.verify.outputs.sha }}
           CI_NEEDS: ${{ toJSON(needs) }}
         run: node scripts/ci-evidence.mjs full
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ci-full-${{ needs.verify.outputs.sha }}
           path: ci-evidence/full/receipt.json
