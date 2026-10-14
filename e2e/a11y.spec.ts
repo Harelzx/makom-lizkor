@@ -25,6 +25,43 @@ test.describe("desktop", () => {
     await audit(page)
   })
 
+  test("without WebGL the site still opens: the film, the list and a card, and it says the map is missing", async ({ page }) => {
+    // Hardware acceleration off or an old graphics driver: MapLibre can't draw, and once took the whole page down with
+    // it, leaving a blank dark screen (the weekly Firefox run, whose CI browser has no WebGL2).
+    await page.addInitScript(() => {
+      const original = HTMLCanvasElement.prototype.getContext
+      HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, type: string, ...rest: unknown[]) {
+        return /webgl/.test(type) ? null : original.call(this, type as "2d", ...(rest as []))
+      } as typeof original
+    })
+    const errors: string[] = []
+    page.on("pageerror", (e) => errors.push(e.message))
+    await day(page)
+    await expect(page.getByText("המפה לא נטענה בדפדפן הזה. כל המקומות זמינים ברשימה.")).toBeVisible()
+    await page
+      .locator("#places")
+      .getByRole("button", { name: /אתר ההנצחה לנרצחי פסטיבל נובה/ })
+      .first()
+      .click()
+    await expect(page.getByRole("heading", { name: "אתר ההנצחה לנרצחי פסטיבל נובה" })).toBeVisible()
+    expect(errors).toEqual([])
+    // the card's own entrance, as in the gallery's check below: contrast is measured on the settled card
+    await page.waitForTimeout(1500)
+    await audit(page)
+    // adding a place offers no map to mark on, and the device's location fills the point without one
+    await page.getByRole("button", { name: "כל המקומות" }).click()
+    await page.context().grantPermissions(["geolocation"])
+    await page.context().setGeolocation({ latitude: 31.39, longitude: 34.47 })
+    await page.getByRole("button", { name: "הוספת מקום", exact: true }).click()
+    const dialog = page.getByRole("dialog", { name: /איפה המקום/ })
+    await expect(dialog).toBeVisible()
+    await expect(dialog.getByRole("button", { name: "סימון על המפה" })).toHaveCount(0)
+    await dialog.getByRole("button", { name: "המיקום הנוכחי שלי" }).click()
+    await expect(dialog.getByText("המיקום נמצא.", { exact: true })).toBeVisible()
+    await expect(dialog.getByRole("button", { name: "בדיקת הנקודה במפה" })).toHaveCount(0)
+    expect(errors).toEqual([])
+  })
+
   test("a place with a gallery", async ({ page }) => {
     await page.goto("/#/place/nova-memorial-reim")
     await expect(page.getByRole("heading", { name: "אתר ההנצחה לנרצחי פסטיבל נובה" })).toBeVisible()
