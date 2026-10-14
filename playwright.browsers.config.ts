@@ -18,11 +18,7 @@ export default defineConfig({
       name: "webkit",
       dependencies: ["seed"],
       testMatch: /a11y\.spec\.ts$/,
-      // CI's runner has no GPU: WebKit draws the map in software at about 1.5 frames a second, and the entrances and
-      // the night switch's colour transition were measured mid-way (the sound choice at opacity 0, the search text
-      // halfway to night). These checks are of the settled page, which reduced motion gives at once; the site honours
-      // it everywhere, and the motion itself is checked in Chromium.
-      use: { ...devices["Desktop Safari"], viewport: { width: 1280, height: 900 }, reducedMotion: "reduce" },
+      use: { ...devices["Desktop Safari"], viewport: { width: 1280, height: 900 } },
     },
     {
       name: "webkit-phone",
