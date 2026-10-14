@@ -1,7 +1,9 @@
 import { RETENTION } from "@/config"
 import type { Element } from "@/shared/contract"
 import { ulid } from "../lib/ids"
-import { runOp, type OpEnv, type OpOutcome } from "./ops"
+import { runOp, WATCH_FIRST_LOOK_MS, type OpEnv, type OpOutcome } from "./ops"
+import { erasePhotos } from "./photos"
+import { BLANK_REVISION } from "./retention"
 import { revisionKeys } from "./curated"
 import { REAL, type Durations } from "../lib/durations"
 import { notesCeiling } from "./reports"
@@ -382,4 +384,94 @@ export async function attention(db: D1Database, cursor: Cursor | null) {
     .bind(cursor?.at ?? null, cursor?.id ?? null, PAGE + 1)
     .all<Record<string, unknown>>()
   return nextOf(results, "created_at")
+}
+
+/**
+ * A deletion someone asked for (the notices' early deletion; the right to delete): the place's content, its photos and
+ * sources, and the sender's details go at once, as the automatic erasure takes them, whatever the place's state. It is
+ * recorded in the ledger as a removal, so no restore from an earlier backup brings it back (spec 8.2), and goes ahead
+ * even if the ledger can't take it now (repaired later). A tombstone stays. Asked again, it is already done.
+ */
+export async function eraseOnRequest(
+  env: OpEnv,
+  i: { placeId: string; expectedRev: number; actor: string },
+  now: Date,
+): Promise<OpOutcome | "not_found"> {
+  const db = env.db
+  const place = await db.prepare("SELECT status, rev FROM places WHERE id = ?").bind(i.placeId).first<{ status: string; rev: number }>()
+  if (!place) return "not_found"
+  if (place.status === "erased" || place.status === "withdrawn") return "ok"
+  const at = now.toISOString()
+  const shown = place.status === "published" || place.status === "hidden"
+  const happened = "EXISTS (SELECT 1 FROM places WHERE id = ?1 AND last_transition_id = ?2)"
+  const { outcome } = await runOp(
+    env,
+    {
+      placeId: i.placeId,
+      kind: "erase",
+      actor: "moderator",
+      expectedRev: i.expectedRev,
+      removal: true,
+      public: shown,
+      onIntentFailure: "proceed",
+      statements: (tid) => [
+        db
+          .prepare(
+            `UPDATE places SET status = 'erased', erased_reason = 'on_request', rev = rev + 1, last_transition_id = ?2, status_changed_at = ?3,
+               published_revision_id = NULL, submit_body_hash = NULL
+             WHERE id = ?1 AND rev = ?4`,
+          )
+          .bind(i.placeId, tid, at, i.expectedRev),
+        db.prepare(`UPDATE revisions SET ${BLANK_REVISION} WHERE place_id = ?1 AND ${happened}`).bind(i.placeId, tid),
+        db
+          .prepare(`DELETE FROM revision_photos WHERE revision_id IN (SELECT id FROM revisions WHERE place_id = ?1) AND ${happened}`)
+          .bind(i.placeId, tid),
+        db.prepare(`DELETE FROM place_sources WHERE place_id = ?1 AND ${happened}`).bind(i.placeId, tid),
+        db.prepare(`DELETE FROM contacts WHERE place_id = ?1 AND ${happened}`).bind(i.placeId, tid),
+        db
+          .prepare(
+            `INSERT INTO media_checks (place_id, due_at) SELECT ?1, ?3 WHERE ${happened}
+             ON CONFLICT (place_id) DO UPDATE SET due_at = MIN(due_at, excluded.due_at)`,
+          )
+          .bind(i.placeId, tid, new Date(now.getTime() + WATCH_FIRST_LOOK_MS).toISOString()),
+        db
+          .prepare(`UPDATE feed_state SET n = n + 1, changed_at = ?3 WHERE id = 1 AND ?4 = 1 AND ${happened}`)
+          .bind(i.placeId, tid, at, shown ? 1 : 0),
+        db
+          .prepare(
+            `INSERT INTO audit_log (id, at, actor, action, entity_id, fields) SELECT ?3, ?4, ?5, 'erase', ?1, 'status' WHERE ${happened}`,
+          )
+          .bind(i.placeId, tid, `a_${ulid(now.getTime())}`, at, i.actor),
+      ],
+    },
+    now,
+  )
+  if (outcome !== "ok") return outcome
+  // Its files go now; one that can't be deleted now (or a late write) is the photo watch's.
+  await erasePhotos(env.media, i.placeId).catch(() => undefined)
+  return "ok"
+}
+
+/**
+ * A removal request's contact and text purged on request, at once: what the retention job does at its date, done now,
+ * the request closed. Only that it existed and how it was handled stays.
+ */
+export async function purgeReport(db: D1Database, ticket: string, actor: string, now: Date): Promise<boolean> {
+  const at = now.toISOString()
+  const [changed] = await db.batch([
+    db
+      .prepare(
+        `UPDATE reports SET relationship = NULL, explanation = NULL, email = NULL, explanation_hash = NULL, reporter_key = NULL,
+           handling_note = NULL, body_hash = 'purged', status = 'closed', closed_at = COALESCE(closed_at, ?2), backstop_at = NULL,
+           purge_after = MIN(purge_after, ?2)
+         WHERE id = ?1`,
+      )
+      .bind(ticket, at),
+    db
+      .prepare(
+        "INSERT INTO audit_log (id, at, actor, action, entity_id, fields) SELECT ?, ?, ?, 'purge_report', ?, 'contact' WHERE changes() = 1",
+      )
+      .bind(`a_${ulid(now.getTime())}`, at, actor, ticket),
+  ])
+  return changed.meta.changes === 1
 }

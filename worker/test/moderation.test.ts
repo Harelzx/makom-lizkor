@@ -4,7 +4,7 @@ import type { Element } from "@/shared/contract"
 import type { LedgerEntry } from "../lib/ledger"
 import { call, purges } from "./app"
 import { admin } from "./helpers"
-import { decide, feed, queued, rev, revise, send, upload } from "./submission-helpers"
+import { decide, feed, objects, queued, rev, revise, send, upload } from "./submission-helpers"
 
 let day = 0
 const today = () => new Date(Date.UTC(2027, 0, 1 + day, 9, 0, 0)).toISOString()
@@ -397,5 +397,81 @@ describe("review findings: a whole place hidden can still be corrected (F4-R3)",
     const [sup] = (await view(s.id)).suppressions
     expect((await lift(s.id, sup.id, restoreBody({ basisCode: "content_corrected", materialAbsent: true }))).status).toBe(200)
     expect(await name(s.id)).toBe("ספסל דמו מתוקן")
+  })
+})
+
+describe("a deletion someone asked for (the notices' early deletion; privacy law)", () => {
+  it("erases a published place's content, photo and sender's details at once, recorded as a removal no restore undoes", async () => {
+    const s = await send("ספסל דמו למחיקה", { story_he: "סיפור שהמשפחה ביקשה למחוק.", email: `erase${Date.now()}@example.test` })
+    expect((await upload(s.id, s.trackingToken)).status).toBeLessThan(300)
+    expect((await decide(s.id, await queued(s.id), "approve")).status).toBe(200)
+    expect((await objects(s.id)).some((k) => k.startsWith("public/"))).toBe(true)
+    const { rev } = await view(s.id)
+    purges.splice(0)
+    const res = await admin(`/api/admin/places/${s.id}/erase`, {
+      method: "POST",
+      body: JSON.stringify({ expectedRev: rev, confirm: true }),
+    })
+    expect(res.status).toBe(200)
+    const place = await env.DB.prepare("SELECT status, erased_reason, published_revision_id FROM places WHERE id = ?").bind(s.id).first()
+    expect(place).toEqual({ status: "erased", erased_reason: "on_request", published_revision_id: null })
+    const revs = await env.DB.prepare("SELECT name_he, story_he, photo_key FROM revisions WHERE place_id = ?").bind(s.id).all()
+    expect(revs.results.every((r) => r.name_he === null && r.story_he === null && r.photo_key === null)).toBe(true)
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM contacts WHERE place_id = ?").bind(s.id).first<number>("n")).toBe(0)
+    expect((await feed()).some((p) => p.id === s.id)).toBe(false)
+    expect(await objects(s.id)).toEqual([])
+    expect(purges.flat()).toContain(`place:${s.id}`)
+    const { objects: keys } = await env.LEDGER.list({ prefix: `ledger/${s.id}/` })
+    const all = await Promise.all(keys.map(async (o) => (await env.LEDGER.get(o.key))!.json<LedgerEntry>()))
+    expect(all.find((e) => e.kind === "erase" && e.phase === "commit")).toMatchObject({
+      actor: "moderator",
+      removal: true,
+      status: "erased",
+    })
+    const audit = await env.DB.prepare("SELECT actor, action FROM audit_log WHERE entity_id = ? AND action = 'erase'").bind(s.id).first()
+    expect(audit).toEqual({ actor: "dev@example.test", action: "erase" })
+    // Asked again: already done, nothing more.
+    expect(
+      (await admin(`/api/admin/places/${s.id}/erase`, { method: "POST", body: JSON.stringify({ expectedRev: rev, confirm: true }) }))
+        .status,
+    ).toBe(200)
+  })
+
+  it("needs the place's current rev and an explicit confirmation", async () => {
+    const s = await published()
+    const { rev } = await view(s.id)
+    const erase = (body: unknown) => admin(`/api/admin/places/${s.id}/erase`, { method: "POST", body: JSON.stringify(body) })
+    expect((await erase({ expectedRev: rev })).status).toBe(400)
+    expect((await erase({ expectedRev: rev - 1, confirm: true })).status).toBe(409)
+    expect(await env.DB.prepare("SELECT status FROM places WHERE id = ?").bind(s.id).first<string>("status")).toBe("published")
+    expect(
+      (
+        await admin(`/api/admin/places/p_00000000000000000000000000/erase`, {
+          method: "POST",
+          body: JSON.stringify({ expectedRev: 1, confirm: true }),
+        })
+      ).status,
+    ).toBe(404)
+  })
+
+  it("purges a removal request's contact and text at once, keeping only that it was handled", async () => {
+    const s = await published()
+    const { ticket } = await familyReport(s.id)
+    expect((await admin(`/api/admin/reports/${ticket}/purge`, { method: "POST", body: "{}" })).status).toBe(200)
+    const r = await env.DB.prepare("SELECT * FROM reports WHERE id = ?").bind(ticket).first()
+    expect(r).toMatchObject({
+      email: null,
+      explanation: null,
+      relationship: null,
+      explanation_hash: null,
+      reporter_key: null,
+      body_hash: "purged",
+      status: "closed",
+    })
+    expect(
+      await env.DB.prepare("SELECT actor FROM audit_log WHERE entity_id = ? AND action = 'purge_report'")
+        .bind(ticket)
+        .first<string>("actor"),
+    ).toBe("dev@example.test")
   })
 })

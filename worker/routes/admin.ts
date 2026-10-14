@@ -3,7 +3,19 @@ import { zValidator } from "@hono/zod-validator"
 import { Hono, type Context } from "hono"
 import { z } from "zod"
 import { ELEMENTS, text } from "@/shared/contract"
-import { attention, BASIS_CODES, lift, listReports, parseCursor, placeView, readContact, setReportStatus, suppress } from "../db/moderation"
+import {
+  attention,
+  BASIS_CODES,
+  eraseOnRequest,
+  lift,
+  listReports,
+  parseCursor,
+  placeView,
+  purgeReport,
+  readContact,
+  setReportStatus,
+  suppress,
+} from "../db/moderation"
 import { runOp } from "../db/ops"
 import { photosBefore, preparePhoto } from "../db/photos"
 import { curatedKeyStatements, prepareCuratedPhotos, revisionKeys, storeCurated } from "../db/curated"
@@ -303,6 +315,23 @@ const Suppression = z
     reportId: z.string().max(64).optional(),
   })
   .strict()
+
+// A deletion someone asked for: confirmed explicitly, against the place as the moderator saw it.
+const Erase = z.object({ expectedRev: z.number().int(), confirm: z.literal(true) }).strict()
+admin.post("/places/:id/erase", zValidator("json", Erase, invalid), async (c) => {
+  const { expectedRev } = c.req.valid("json")
+  const outcome = await eraseOnRequest(
+    opEnv(c),
+    { placeId: c.req.param("id"), expectedRev, actor: c.get("actor") },
+    clock(c.req.raw, c.env),
+  )
+  return outcomeOf(c, outcome)
+})
+
+admin.post("/reports/:id/purge", async (c) => {
+  if (!(await purgeReport(c.env.DB, c.req.param("id"), c.get("actor"), clock(c.req.raw, c.env)))) return problem(c, 404, "not_found")
+  return c.json({ ok: true })
+})
 
 admin.post("/suppressions", zValidator("json", Suppression, invalid), async (c) => {
   const body = c.req.valid("json")
