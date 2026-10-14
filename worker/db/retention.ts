@@ -31,7 +31,7 @@ export const BLANK_COLUMNS: Record<string, null | 0> = {
   // A curated revision's own fields (phase 7); its photos and sources are rows of their own, deleted with it.
   curated: null,
 }
-const BLANK_REVISION = Object.entries(BLANK_COLUMNS)
+export const BLANK_REVISION = Object.entries(BLANK_COLUMNS)
   .map(([c, v]) => `${c} = ${v === null ? "NULL" : v}`)
   .join(", ")
 
