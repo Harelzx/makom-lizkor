@@ -1,7 +1,10 @@
 import { env } from "cloudflare:workers"
 import { beforeEach, expect, it, vi } from "vitest"
 import { claimMailBudget } from "../lib/mail-budget"
-import { alertOperations, pruneCounters, recordRequest, requestErrorRates } from "../lib/metrics"
+import { alertFailures, alertOperations, pruneCounters, recordFailure, recordRequest, requestErrorRates } from "../lib/metrics"
+import { createApp } from "../index"
+import { runJobs } from "../jobs"
+import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test"
 import { EXPORT_TABLES } from "../db/exports"
 import { admin } from "./helpers"
 import { call } from "./app"
@@ -11,7 +14,7 @@ beforeEach(async () => {
   await env.DB.batch([
     env.DB.prepare("DELETE FROM request_metrics"),
     env.DB.prepare("DELETE FROM mail_budget"),
-    env.DB.prepare("DELETE FROM job_alerts WHERE job = 'operations'"),
+    env.DB.prepare("DELETE FROM job_alerts WHERE job IN ('operations', 'failures')"),
   ])
 })
 
@@ -75,4 +78,88 @@ it("alerts only with aggregate counts, once per day after acceptance, and prunes
   expect(
     await env.DB.prepare("SELECT COUNT(*) AS n FROM mail_budget WHERE day = ?").bind(now.toISOString().slice(0, 10)).first<number>("n"),
   ).toBe(1)
+})
+
+it("counts every server error and every failed job part, unsampled, apart from the sampled estimate", async () => {
+  // A rare 500 (a broken submission) would be missed by a 1-in-32 sample, and the sampled alert needs about a thousand
+  // requests an hour before it can fire. Failures are counted whole, under their own codes.
+  const failures: string[] = []
+  const app = createApp({
+    verifyTurnstile: async () => ({ success: true }),
+    sendMail: async () => true,
+    purge: async () => true,
+    observeRequest: async () => {},
+    observeFailure: async (_e, what) => void failures.push(what),
+  })
+  app.get("/api/v1/boom", () => {
+    throw new TypeError("boom")
+  })
+  for (let i = 0; i < 3; i++) {
+    const ctx = createExecutionContext()
+    expect((await app.fetch(new Request("http://local/api/v1/boom"), env, ctx)).status).toBe(500)
+    await waitOnExecutionContext(ctx)
+  }
+  const ok = createExecutionContext()
+  expect((await app.fetch(new Request("http://local/api/v1/version"), env, ok)).status).toBe(200)
+  await waitOnExecutionContext(ok)
+  expect(failures).toEqual(["http_500", "http_500", "http_500"])
+
+  // Recorded under err_*, which the sampled estimate's denominator and error rate never count.
+  await recordRequest(env, 200, 30)
+  await recordFailure(env, "http_500")
+  await recordFailure(env, "http_500")
+  await recordFailure(env, "job_export")
+  await recordFailure(env, "not a code")
+  expect(await requestErrorRates(env)).toEqual({ windowHours: 24, requests: 1, byCode: {}, sampleEvery: 32 })
+  const rows = (await env.DB.prepare("SELECT code, samples FROM request_metrics ORDER BY code").all()).results
+  expect(rows).toEqual([
+    { code: "err_http_500", samples: 2 },
+    { code: "err_job_export", samples: 1 },
+    { code: "http_200", samples: 1 },
+  ])
+})
+
+it("records a scheduled part that throws as a failure, without stopping the others", async () => {
+  const now = new Date()
+  const broken = { ...env, EXPORT_PUBLIC_KEYS: undefined, EXPORTS: undefined } as unknown as Env
+  await runJobs(broken, { sendMail: async () => true, purge: async () => true }, undefined, now)
+  const codes = (await env.DB.prepare("SELECT code FROM request_metrics WHERE code GLOB 'err_job_*'").all<{ code: string }>()).results
+  expect(codes.length).toBeGreaterThan(0)
+  expect(codes.every((r) => /^err_job_[a-z_]+$/.test(r.code))).toBe(true)
+})
+
+it("tells the moderators of server errors and failed jobs at once, with counts only, at most every six hours", async () => {
+  const now = new Date()
+  const send = vi.fn<(e: Env, m: { to: string; subject: string; text: string }) => Promise<boolean>>(async () => true)
+  await alertFailures(env, send, now)
+  expect(send).not.toHaveBeenCalled()
+  await recordFailure(env, "http_500", now)
+  await recordFailure(env, "http_503", now)
+  await recordFailure(env, "job_export", now)
+  await alertFailures(env, send, now)
+  expect(send).toHaveBeenCalledTimes(1)
+  const mail = send.mock.calls[0][1]
+  expect(mail.subject).toBe("מקום לזכור - תקלות בשרת")
+  expect(mail.text).toContain("שגיאות שרת (500): 1")
+  expect(mail.text).toContain("שגיאות שרת (503): 1")
+  expect(mail.text).toContain("export: 1")
+  expect(mail.text).not.toMatch(/@|token|body/)
+  await recordFailure(env, "http_500", new Date(now.getTime() + 60_000))
+  await alertFailures(env, send, new Date(now.getTime() + 5 * 3600_000))
+  expect(send).toHaveBeenCalledTimes(1)
+  await alertFailures(env, send, new Date(now.getTime() + 6 * 3600_000 + 60_000))
+  expect(send).toHaveBeenCalledTimes(2)
+})
+
+it("tells of errors in visitors' browsers only once there are three in six hours: one alone may be an old browser or an extension", async () => {
+  const now = new Date()
+  const send = vi.fn<(e: Env, m: { to: string; subject: string; text: string }) => Promise<boolean>>(async () => true)
+  await recordFailure(env, "client_error", now)
+  await recordFailure(env, "client_error", now)
+  await alertFailures(env, send, now)
+  expect(send).not.toHaveBeenCalled()
+  await recordFailure(env, "client_error", now)
+  await alertFailures(env, send, now)
+  expect(send).toHaveBeenCalledTimes(1)
+  expect(send.mock.calls[0][1].text).toContain("שגיאות בדפדפן של מבקרים: 3")
 })
