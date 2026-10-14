@@ -32,11 +32,11 @@ jobs:
     outputs:
       allowed: ${{ steps.check.outputs.allowed }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
       - id: check
@@ -71,12 +71,12 @@ jobs:
       # owner key stays offline; only the synthetic staging drill key is a staging secret.
       STAGING_EXPORT_PUBLIC_KEYS: ${{ vars.STAGING_EXPORT_PUBLIC_KEYS }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
       - name: The commit checked out is the one CI passed
         run: test "$(git rev-parse HEAD)" = "$SHA"
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: npm
@@ -141,7 +141,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/receipt"
           node scripts/staging-receipt.mjs "$RUNNER_TEMP/edge.json" > "$RUNNER_TEMP/receipt/receipt.json"
       # Last, so it exists only if every step before it passed; release.yml reads it (scripts/staging-evidence.mjs).
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: staging-receipt-${{ github.event.workflow_run.head_sha }}
           path: ${{ runner.temp }}/receipt/receipt.json
