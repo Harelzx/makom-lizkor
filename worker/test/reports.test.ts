@@ -258,6 +258,27 @@ describe("what is kept, and for how long", () => {
 })
 
 describe("review findings", () => {
+  it("refuses a sixth request in a day from one visitor, before the browser check, so one address can't flood the moderators' mail", async () => {
+    // Each accepted request mails every moderator, and its reminders every six hours; a family asks about a few places
+    // at most. The count is the keyed hash already kept for the spam signal, never the address. The per-minute cap is
+    // set aside here, so what refuses is the day's.
+    const e = { ...env, REPORT_LIMIT: { limit: async () => ({ success: true }) } } as unknown as Env
+    const id = await published()
+    const address = "203.0.113.77"
+    for (let i = 0; i < REPORT_GUARDS.intakePerDay; i++)
+      expect((await report({ placeId: id, explanation: `${EXPLANATION} ${i}` }, { address, at: minutesLater(i), e })).status).toBe(202)
+    const refused = await report({ placeId: id, explanation: `${EXPLANATION} נוסף` }, { address, at: minutesLater(10), token: "fail", e })
+    expect(refused.status).toBe(429)
+    expect((await refused.json<{ code: string }>()).code).toBe("daily_limit")
+    expect(refused.headers.get("Retry-After")).toBe("3600")
+    // Another visitor is not held up, and the first one may ask again the next day.
+    expect(
+      (await report({ placeId: id, explanation: `${EXPLANATION} אחר` }, { address: "203.0.113.78", at: minutesLater(11), e })).status,
+    ).toBe(202)
+    const tomorrow = new Date(today().getTime() + 25 * 3600_000).toISOString()
+    expect((await report({ placeId: id, explanation: `${EXPLANATION} מחר` }, { address, at: tomorrow, e })).status).toBe(202)
+  })
+
   it("a request about a place hidden whole is accepted for a person to review, never acted on automatically (F4-R4)", async () => {
     const id = await published()
     expect((await (await report({ placeId: id, elements: ["whole"] })).json<{ outcome: string }>()).outcome).toBe("hidden_for_review")
@@ -276,4 +297,31 @@ it("a request a safeguard holds back writes nothing to the ledger: a routine ref
   const second = await report({ placeId: id, elements: ["story_he"], explanation: "גם הסיפור צריך לרדת, הוא פוגע במשפחה שלנו מאוד." })
   expect((await second.json<{ outcome: string }>()).outcome).toBe("received")
   expect((await env.LEDGER.list({ prefix: `ledger/${id}/` })).objects.length).toBe(before)
+})
+
+it("sends a new request's first alert before older requests' reminders, so a new family request never waits behind them", async () => {
+  const { deliverAlerts, startAlertRound } = await import("../db/reports")
+  await env.DB.prepare("UPDATE reports SET status = 'closed'").run()
+  const id = await published()
+  const old = await (
+    await report({ placeId: id, explanation: `${EXPLANATION} ישנה` }, { address: "198.51.100.40" })
+  ).json<{ ticket: string }>()
+  // Its first round went; six hours later its reminder is due.
+  const later = new Date(today().getTime() + 7 * 3600_000)
+  await startAlertRound(env.DB, env, old.ticket, later)
+  const fresh = await (
+    await report({ placeId: id, explanation: `${EXPLANATION} חדשה` }, { address: "198.51.100.41", at: later.toISOString() })
+  ).json<{ ticket: string }>()
+  await env.DB.prepare("UPDATE report_alerts SET state = 'pending', tries = 0, claimed_at = NULL WHERE report_id = ?")
+    .bind(fresh.ticket)
+    .run()
+  // Room for one mail only (the day's budget nearly spent): it goes to the new request.
+  const sent: boolean[] = []
+  let left = 1
+  await deliverAlerts(env.DB, env, async (_e, m) => (sent.push(!/תזכורת/.test(m.subject + m.text)), left-- > 0), later, "http://local")
+  expect(sent[0]).toBe(true)
+  const first = await env.DB.prepare(
+    "SELECT report_id FROM report_alerts WHERE state = 'sent' ORDER BY sent_at DESC LIMIT 1",
+  ).first<string>("report_id")
+  expect(first).toBe(fresh.ticket)
 })
