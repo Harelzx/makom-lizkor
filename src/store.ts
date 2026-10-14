@@ -76,6 +76,8 @@ interface State {
   verifying: string | null
   searchOpen: boolean
   picking: boolean
+  /** This browser can't draw the map (no WebGL2): everything that needs the map hides, the rest goes on without it. */
+  mapMissing: boolean
   draft: { lat: number; lng: number } | null
   journeyIndex: number
   journeyPlaying: boolean
@@ -98,6 +100,7 @@ interface State {
   setVerifying: (token: string | null) => void
   setSearchOpen: (v: boolean) => void
   setPicking: (v: boolean) => void
+  setMapMissing: () => void
   setDraft: (p: { lat: number; lng: number } | null) => void
   setRemote: (v: string, places: Place[], live?: boolean) => void
   /** Both keep the change in memory and say whether it was also saved on the device; they never throw. */
@@ -174,6 +177,7 @@ export const useStore = create<State>((set, get) => ({
   verifying: null,
   searchOpen: false,
   picking: false,
+  mapMissing: false,
   draft: null,
   journeyIndex: -1,
   journeyPlaying: false,
@@ -214,6 +218,7 @@ export const useStore = create<State>((set, get) => ({
   setVerifying: (verifying) => set({ verifying, searchOpen: false }),
   setSearchOpen: (searchOpen) => set({ searchOpen }),
   setPicking: (picking) => set({ picking }),
+  setMapMissing: () => set({ mapMissing: true, picking: false }),
   setDraft: (draft) => set({ draft }),
   setRemote: (feedVersion, remote, live = true) =>
     set((s) => {

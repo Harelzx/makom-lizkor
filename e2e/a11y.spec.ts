@@ -48,6 +48,18 @@ test.describe("desktop", () => {
     // the card's own entrance, as in the gallery's check below: contrast is measured on the settled card
     await page.waitForTimeout(1500)
     await audit(page)
+    // adding a place offers no map to mark on, and the device's location fills the point without one
+    await page.getByRole("button", { name: "כל המקומות" }).click()
+    await page.context().grantPermissions(["geolocation"])
+    await page.context().setGeolocation({ latitude: 31.39, longitude: 34.47 })
+    await page.getByRole("button", { name: "הוספת מקום", exact: true }).click()
+    const dialog = page.getByRole("dialog", { name: /איפה המקום/ })
+    await expect(dialog).toBeVisible()
+    await expect(dialog.getByRole("button", { name: "סימון על המפה" })).toHaveCount(0)
+    await dialog.getByRole("button", { name: "המיקום הנוכחי שלי" }).click()
+    await expect(dialog.getByText("המיקום נמצא.", { exact: true })).toBeVisible()
+    await expect(dialog.getByRole("button", { name: "בדיקת הנקודה במפה" })).toHaveCount(0)
+    expect(errors).toEqual([])
   })
 
   test("a place with a gallery", async ({ page }) => {
