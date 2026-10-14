@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   plan:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     permissions:
       contents: read
@@ -40,7 +40,7 @@ jobs:
   static:
     needs: plan
     if: needs.plan.outputs.mode != 'docs'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
@@ -60,7 +60,7 @@ jobs:
       - run: npm run build
       - run: node scripts/bundle-check.mjs
   worker:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     needs: plan
     if: needs.plan.outputs.mode != 'docs'
     timeout-minutes: 12
@@ -75,7 +75,7 @@ jobs:
   client:
     needs: plan
     if: needs.plan.outputs.mode != 'docs'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@v5
@@ -88,7 +88,7 @@ jobs:
   core:
     needs: [plan, static, worker, client]
     if: needs.plan.outputs.mode == 'preview'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 50
     steps:
       - uses: actions/checkout@v5
@@ -118,7 +118,7 @@ jobs:
   webkit:
     needs: [plan, static, worker, client]
     if: needs.plan.outputs.mode != 'docs'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v5
@@ -146,7 +146,7 @@ jobs:
   dev:
     needs: [plan, static, worker, client]
     if: needs.plan.outputs.dev == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
@@ -180,7 +180,7 @@ jobs:
   ready:
     if: always()
     needs: [plan, static, worker, client, core, webkit, dev, regression]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v5
