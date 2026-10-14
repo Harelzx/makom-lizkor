@@ -2,9 +2,9 @@
 
 A single view of what is done, what is open and who can close it. Built from Git, GitHub (PRs, runs, annotations), `src/config.ts`, `wrangler.jsonc`, `agent-handoff.md` and `checklist-closeout-20261013.md`, and checked against the live site. `go-live-checklist.md` and `launch-decisions.md` are historical planning (both carry banners saying so): their unchecked boxes are **not** reopened here.
 
-## Where we are (14.10, 16:00 UTC)
+## Where we are (14.10, 19:45 UTC)
 
-- Production: release `2bc0ad8` (version `c7103280`, tag `release-2bc0ad8d6fbb`), 100% since 15:38 UTC on `https://makom-lizkor.makom-staging.workers.dev`. It adds the shorter share preview (PR #19) and the dependency bumps (Dependabot #4-#8) to 309bc8e. Evidence: `agent-evidence/release-share-20261014/`.
+- Production: release `467730c` (version `617fcaae`, tag `release-467730c45ff7`), 100% since 19:42 UTC on `https://makom-lizkor.makom-staging.workers.dev`, schema 23. It adds to 2bc0ad8 the error alerts, security hardening, deletion on request, the abuse caps, the privacy texts and the pinned CI actions (PRs #22-#29). Evidence: `agent-evidence/release-hardening-20261014/`.
 - Main equals production.
 - Content: 90 curated records (68 memorials, 22 communities), 32 photo entries.
 
@@ -32,7 +32,14 @@ A single view of what is done, what is open and who can close it. Built from Git
 - [x] **Access API comparison works (14.10).** A read-only token in the owner's Keychain (`makom-production-access-read`) with `Access: Apps and Policies Read` and the separate `Access: Policies Read`; without the second, policies answer 1010. Wrangler's login still can't read Access and is only the fallback.
 - [x] **Owner key backup** off this computer, in Apple Passwords with iCloud sync; owner confirmed it opens on the iPhone (14.10).
 - [x] **Dependabot #1-#3 and #8 merged** (setup-node 7, upload-artifact 7, download-artifact 8, maplibre-gl 6.13); main CI, staging and regression green. Dependabot stays weekly (owner, 14.10).
-- [x] **Production releases by the agent:** a narrow rule in the untracked `web/.claude/settings.local.json` (owner-approved 14.10) lets a session write release kits under `agent-evidence/release-*` and run their `release.sh`. Every gate stays in the kit: same-SHA CI/staging/regression, main unmoved, no runtime drift or secrets in the package, no pending migration, one deploy attempt, Access probe before/after, live checks.
+- [x] **Release 467730c (14.10, 19:42 UTC).** Same-SHA CI 38622086043, staging 38624805924 (attempt 2: the first stopped on a network `fetch failed` in `purge_freshness`) and regression 38624806001; Time Travel bookmark of DB before the change (`00000189-00000000-00005104-7aebb71c2112bd7779e51e9015669af9`); 0023 applied to DB and DRILL_DB, nothing pending after; one deploy attempt; Access apps, policies and 14 anonymous paths identical before and after; 26 live checks. Rollback: redeploy `c7103280` (0023 only adds a table the old code ignores).
+- [x] **Errors reach the owner (PR #22).** Every 5xx, every failed job part and browser errors (`client-error` reports, at most 3 per page) are counted unsampled; the daily job mails the moderators at most every 6 hours, browser errors from 3 in 6 hours.
+- [x] **Security hardening (PR #23).** Cloudflare tokens only on CI steps that call wrangler (enforced by `ci-policy.mjs`); JPEG metadata stripped through every scan, APP0 kept only as JFIF; Access tokens must carry `exp` and `iat`; same-origin check on the admin's contact route; email links from `PUBLIC_ORIGIN`.
+- [x] **Abuse caps (PRs #24, #29).** Removal requests 5 a day per sender, submissions 10 a day per sender (migration 0023, rows pruned after 48 h); both refused with 429 `daily_limit` and a Hebrew message.
+- [x] **Deletion on request (PR #26).** The admin can erase a place's content (ledgered, a restore does not bring it back) and purge a removal request's details; the body hash is purged with its text, in the job and on restore. Procedure in `operations-runbook.md`.
+- [x] **Privacy texts match the code (PR #25), contact form audited (PR #28).** The contact form has its notice and a «פרטיות» link; it passes the automated audit and the keyboard check.
+- [x] **Actions pinned to commit SHAs, Dependabot cooldown 7 days (PR #27).**
+- [x] **Production releases by the agent:** a narrow rule in the untracked `web/.claude/settings.local.json` (owner-approved 14.10) lets a session write release kits under `agent-evidence/release-*` and run their `release.sh`. Every gate stays in the kit: same-SHA CI/staging/regression, main unmoved, no runtime drift or secrets in the package, the expected migration only (bookmark first), one deploy attempt, Access probe before/after, live checks.
 
 ## Open - Harel only
 
@@ -45,6 +52,7 @@ A single view of what is done, what is open and who can close it. Built from Git
 ## Open - agent
 
 - [ ] **Weekly security scan** on its own schedule (Mondays 07:17 UTC): confirm the run of 19.10. A manual run on 26.04 passed on 14.10.
+- [ ] **Dependabot #30-#36**: one at a time; TypeScript 7 is a major version.
 - [ ] **CI token is broader than needed.** The owner pasted its 26 permissions on 14.10 (Zero Trust, DNS, Zone and many unused services among them); staging needs only Workers Scripts, D1, Account Settings and User Details. Replace it with a narrow token when the owner chooses (deferred by the owner, 14.10).
 - [ ] **`launch/tiles-check/`** (6 screenshots, 14.10 10:38): keep as tiles-release evidence or delete.
 
@@ -56,7 +64,7 @@ A single view of what is done, what is open and who can close it. Built from Git
 
 ## Known and deferred (not blockers)
 
-- `/api/ops` reports `errors.status=unavailable`: production error-rate telemetry is not connected.
+- Error rates in `/api/ops` are sampled (1 in 32 requests); failures themselves are counted unsampled (above).
 - 14 high audit entries in developer tooling (braces, Sharp); no deployed path. Do not force-downgrade the Cloudflare toolchain.
 - `C-CACHE-TEST-1` historical failure, undiagnosed; recurrence stops the dependent deploy.
 - No field Core Web Vitals; lab only (LCP 1.2 s, CLS 0.009).
