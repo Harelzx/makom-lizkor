@@ -13,7 +13,7 @@
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
     // A place's share page (/place/<id>) is the site's page with the place's preview tags, written by the Worker.
-    "run_worker_first": ["/api/*", "/__dev/*", "/media/*", "/place/*", "/tiles/*"],
+    "run_worker_first": ["/api/*", "/__dev/*", "/media/*", "/place/*", "/assets/*.pbf"],
   },
   "d1_databases": [
     {

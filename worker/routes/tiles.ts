@@ -41,11 +41,11 @@ const asStored: DecompressFunc = async (buf) => buf
 const Z = /^(?:[0-9]|1[0-9]|2[0-6])$/
 const N = /^(?:0|[1-9][0-9]{0,7})$/
 
-tiles.get("/:archive/:z/:x/:file{[0-9]+\\.pbf}", async (c) => {
-  const { archive, z, x, file } = c.req.param()
+// <archive>.<z>.<x>.<y>.pbf under /assets/ (basemapTile in src/shared/tiles.ts): one flat name, which Access lets through.
+tiles.get("/:file{[a-z0-9-]+\\.[0-9]+\\.[0-9]+\\.[0-9]+\\.pbf}", async (c) => {
+  const [archive, z, x, y] = c.req.param("file").split(".")
   // Only the archive this version names: an old address would otherwise keep reading an archive no one maintains.
   if (archive !== BASEMAP_ARCHIVE) return problem(c, 404, "not_found")
-  const y = file.slice(0, -4)
   if (!Z.test(z) || !N.test(x) || !N.test(y)) return problem(c, 400, "invalid_input")
   const [zn, xn, yn] = [Number(z), Number(x), Number(y)]
   if (xn >= 2 ** zn || yn >= 2 ** zn) return problem(c, 400, "invalid_input")
