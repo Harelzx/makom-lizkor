@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   plan:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     permissions:
       contents: read
@@ -32,7 +32,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/ci-evidence.mjs plan
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ci-plan
           path: ci-plan.json
@@ -40,7 +40,7 @@ jobs:
   static:
     needs: plan
     if: needs.plan.outputs.mode != 'docs'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
@@ -60,7 +60,7 @@ jobs:
       - run: npm run build
       - run: node scripts/bundle-check.mjs
   worker:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     needs: plan
     if: needs.plan.outputs.mode != 'docs'
     timeout-minutes: 12
@@ -75,7 +75,7 @@ jobs:
   client:
     needs: plan
     if: needs.plan.outputs.mode != 'docs'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@v5
@@ -88,7 +88,7 @@ jobs:
   core:
     needs: [plan, static, worker, client]
     if: needs.plan.outputs.mode == 'preview'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 50
     steps:
       - uses: actions/checkout@v5
@@ -103,14 +103,14 @@ jobs:
           CI_GROUPS: ${{ needs.plan.outputs.groups }}
         run: node scripts/ci-browser.mjs run core
       - if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: browser-core
           path: ci-results/
           retention-days: 7
           if-no-files-found: error
       - if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: traces-core
           path: test-results/
@@ -118,7 +118,7 @@ jobs:
   webkit:
     needs: [plan, static, worker, client]
     if: needs.plan.outputs.mode != 'docs'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v5
@@ -131,14 +131,14 @@ jobs:
         timeout-minutes: 10
       - run: node scripts/ci-browser.mjs run webkit
       - if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: browser-webkit
           path: ci-results/
           retention-days: 7
           if-no-files-found: error
       - if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: traces-webkit
           path: test-results/
@@ -146,7 +146,7 @@ jobs:
   dev:
     needs: [plan, static, worker, client]
     if: needs.plan.outputs.dev == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
@@ -159,14 +159,14 @@ jobs:
         timeout-minutes: 10
       - run: node scripts/ci-browser.mjs run dev
       - if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: browser-dev
           path: ci-results/
           retention-days: 7
           if-no-files-found: error
       - if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: traces-dev
           path: test-results/
@@ -180,7 +180,7 @@ jobs:
   ready:
     if: always()
     needs: [plan, static, worker, client, core, webkit, dev, regression]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v5
@@ -193,14 +193,14 @@ jobs:
       - env:
           CI_NEEDS: ${{ toJSON(needs) }}
         run: node scripts/ci-evidence.mjs ready
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ci-ready-${{ github.sha }}
           path: ci-evidence/ready/receipt.json
           retention-days: 90
           if-no-files-found: error
       - if: needs.plan.outputs.mode == 'full'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ci-full-${{ github.sha }}
           path: ci-evidence/full/receipt.json

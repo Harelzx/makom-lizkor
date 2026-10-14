@@ -13,7 +13,7 @@ concurrency:
 jobs:
   verify:
     if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     permissions:
       contents: read
@@ -41,7 +41,7 @@ jobs:
   record:
     if: always() && needs.verify.outputs.allowed == 'true'
     needs: [verify, regression]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     permissions:
       contents: read
@@ -58,7 +58,7 @@ jobs:
           TARGET_SHA: ${{ needs.verify.outputs.sha }}
           CI_NEEDS: ${{ toJSON(needs) }}
         run: node scripts/ci-evidence.mjs full
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ci-full-${{ needs.verify.outputs.sha }}
           path: ci-evidence/full/receipt.json

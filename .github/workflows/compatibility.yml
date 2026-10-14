@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   changed:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     permissions:
       contents: read
@@ -29,7 +29,7 @@ jobs:
   browsers:
     needs: changed
     if: needs.changed.outputs.run == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 50
     steps:
       - uses: actions/checkout@v5
@@ -42,14 +42,14 @@ jobs:
         timeout-minutes: 10
       - run: node scripts/ci-browser.mjs run compatibility
       - if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: browser-compatibility
           path: ci-results/
           retention-days: 7
           if-no-files-found: error
       - if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: traces-compatibility
           path: test-results/

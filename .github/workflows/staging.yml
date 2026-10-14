@@ -24,7 +24,7 @@ concurrency:
 jobs:
   verify:
     if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     permissions:
       contents: read
@@ -47,7 +47,7 @@ jobs:
     # Only a push to main that CI passed: never a pull request's run, never a failed one.
     if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && needs.verify.outputs.allowed == 'true'
     needs: verify
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     env:
       SHA: ${{ github.event.workflow_run.head_sha }}
@@ -135,7 +135,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/receipt"
           node scripts/staging-receipt.mjs "$RUNNER_TEMP/edge.json" > "$RUNNER_TEMP/receipt/receipt.json"
       # Last, so it exists only if every step before it passed; release.yml reads it (scripts/staging-evidence.mjs).
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: staging-receipt-${{ github.event.workflow_run.head_sha }}
           path: ${{ runner.temp }}/receipt/receipt.json

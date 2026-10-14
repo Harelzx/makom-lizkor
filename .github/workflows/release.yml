@@ -30,7 +30,7 @@ concurrency:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
       actions: read
@@ -94,7 +94,7 @@ jobs:
 
   release:
     needs: verify
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     environment: production
     permissions:
       contents: write
@@ -126,7 +126,7 @@ jobs:
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/attempt"
           node -e 'console.log(JSON.stringify({ release: process.env.RELEASE, sha: process.env.SHA }))' > "$RUNNER_TEMP/attempt/attempt.json"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           # One per attempt, a rerun's included; kept as long as a private repository allows (a52).
           name: release-attempt-${{ inputs.release }}-${{ github.run_attempt }}
@@ -144,7 +144,7 @@ jobs:
         run: |
           set -euo pipefail
           npx wrangler d1 time-travel info DB | tee "$RUNNER_TEMP/bookmark.txt"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: bookmark-${{ inputs.release }}
           path: ${{ runner.temp }}/bookmark.txt
