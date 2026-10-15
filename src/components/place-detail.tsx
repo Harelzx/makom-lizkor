@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { KindIcon } from "@/components/kind-icon"
 import { Tribute } from "@/components/tribute"
-import { PhotoGallery } from "@/components/photo-figure"
+import { CreditName, PhotoGallery } from "@/components/photo-figure"
 import { SafetyNote, useFocusOnOpen } from "@/components/kit"
 import { ReportRequest } from "@/components/report"
 import { KINDS } from "@/data/taxonomy"
@@ -122,7 +122,7 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
           />
           {(local ? local.photoCredit : place.contributedPhoto?.credit) && (
             <figcaption className="px-1 pt-2 text-caption text-ink-2">
-              צילום: <bdi>{local ? local.photoCredit : place.contributedPhoto?.credit}</bdi>
+              צילום: <CreditName name={(local ? local.photoCredit : place.contributedPhoto?.credit)!} />
             </figcaption>
           )}
         </figure>
