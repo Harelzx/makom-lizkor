@@ -582,10 +582,12 @@
   color: var(--anemone);
 }
 
+/* The dot is the community's point on the map, so it is the marker's only box; the name hangs beside it like a flower's
+   label. Centering dot and name together moved every dot east by half its name, kilometres at the envelope's zoom. */
 .mk-community {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+  position: relative;
+  display: grid;
+  place-items: center;
   transform: scale(calc(0.7 + var(--s) * 0.3));
   opacity: 0;
   transition: opacity 0.9s ease;
@@ -602,12 +604,47 @@
   border: 2px solid var(--ink-1);
 }
 .mk-community-name {
+  position: absolute;
+  inset-inline-start: 100%;
+  top: 50%;
+  translate: 0 -50%;
+  margin-inline-start: 6px;
+  white-space: nowrap;
   font-weight: 800;
   font-size: var(--text-label);
   color: var(--ink-1);
   -webkit-text-stroke: 3px var(--surface);
   paint-order: stroke fill;
   transition: opacity 1.2s ease;
+}
+/* Where the reading side is taken (declutterNames), the name goes to the dot's other side, then below or above it.
+   Crowded out by other names it waits for a closer zoom, unless its community is chosen, hovered or in focus. */
+.mk-community[data-name="end"] .mk-community-name {
+  inset-inline-start: auto;
+  inset-inline-end: 100%;
+  margin-inline: 0 6px;
+}
+.mk-community[data-name="below"] .mk-community-name,
+.mk-community[data-name="above"] .mk-community-name {
+  inset-inline-start: auto;
+  left: 50%;
+  margin: 0;
+}
+.mk-community[data-name="below"] .mk-community-name {
+  top: calc(100% + 2px);
+  translate: -50% 0;
+}
+.mk-community[data-name="above"] .mk-community-name {
+  top: auto;
+  bottom: calc(100% + 2px);
+  translate: -50% 0;
+}
+.mk-community[data-name="none"]:not(.is-selected, .is-hovered, :hover, :focus-visible) .mk-community-name {
+  opacity: 0;
+}
+/* A name that could only sit over flowers rises above them, readable on its halo. */
+.maplibregl-marker.mk:has(.mk-community[data-over]) {
+  z-index: 2;
 }
 /* The communities' names come in with the other place names once the sun is up (fadeInLabels): until then the map is
    wordless, and on a phone the names sat right under the sunrise's line. */
