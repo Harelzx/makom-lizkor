@@ -1,4 +1,5 @@
 import { expect, test } from "./fixtures"
+import { openItem } from "./admin"
 import { ownAddress } from "./publish"
 import { fileURLToPath } from "node:url"
 
@@ -57,7 +58,7 @@ test(
     await mod.goto("/admin/")
     await mod.getByText("מצב המערכת", { exact: true }).click()
     await expect(mod.getByText(/ממתינות לבדיקה:/)).toBeVisible()
-    const item = mod.getByRole("article", { name })
+    const item = await openItem(mod, name)
     await expect(item.getByRole("img", { name: "שדה כלניות בזריחה" })).toBeVisible()
     await item.getByRole("button", { name: "אישור" }).click()
     await expect(item).toHaveCount(0)

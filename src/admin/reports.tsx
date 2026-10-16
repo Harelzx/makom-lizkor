@@ -1,18 +1,16 @@
 import { useCallback, useEffect, useState } from "react"
-import { AnimatePresence, motion } from "motion/react"
-import { CircleCheck, EyeOff, FileWarning, Mail, RotateCcw, Search, ShieldAlert, Trash2 } from "lucide-react"
+import { ChevronDown, CircleCheck, Ellipsis, EyeOff, Mail, RotateCcw, Search, ShieldAlert, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { BASIS_LABEL, ELEMENT_LABEL, REQUESTER_LABEL } from "@/data/reports"
 import { ELEMENTS, type Element } from "@/shared/contract"
-import { ease } from "@/lib/motion"
 import { cn } from "@/lib/utils"
 import { createPager, type Page, type PagerState } from "./pager"
-import { Alert, Empty, Loading, Section, block, card, check, meta, select } from "./ui"
+import { Alert, ago, block, check, detailBar, detailBarInner, detailBody, detailLabel, meta, select } from "./ui"
 
-interface Report {
+export interface Report {
   id: string
   place_id: string
   origin: "contribution" | "curated"
@@ -41,7 +39,7 @@ interface PlaceView {
   rev: number
   suppressions: Suppression[]
 }
-interface Attention {
+export interface Attention {
   id: string
   place_id: string
   kind: string
@@ -54,7 +52,7 @@ const PROBLEM: Record<Attention["problem"], string> = {
   media_failed: "העברת קובץ לא הושלמה",
   purge_abandoned: "ניקוי המטמון בקצה לא הצליח; העותק יפוג תוך דקה",
 }
-const when = (iso: string) => new Date(iso).toLocaleString("he-IL", { dateStyle: "short", timeStyle: "short" })
+export const when = (iso: string) => new Date(iso).toLocaleString("he-IL", { dateStyle: "short", timeStyle: "short" })
 
 async function send(url: string, body: unknown): Promise<string> {
   try {
@@ -309,14 +307,36 @@ async function fetchPage<T>(path: string, key: "items" | "ops", cursor: string |
 }
 
 /** A paged list as React state; its refresh and more are stable, so they can be effect dependencies. */
-function usePaged<T>(path: string, key: "items" | "ops") {
+export function usePaged<T>(path: string, key: "items" | "ops") {
   const [state, setState] = useState<PagerState<T>>({ items: null, next: null, error: "", failed: null, busy: false })
   const [pager] = useState(() => createPager<T>((cursor) => fetchPage<T>(path, key, cursor), setState))
   return { ...state, ...pager }
 }
 
-/** One request: what was asked, what is hidden now, and what a moderator can do about it. */
-function ReportCard({ report, reload, fail }: { report: Report; reload: () => Promise<void>; fail: (error: string) => void }) {
+/** A request whose item was taken down as a precaution and still waits on a decision: the urgent ones. */
+export const urgent = (r: Report) => r.outcome === "hidden_for_review" && r.status !== "closed"
+export const reportName = (r: Report) => r.place_name ?? r.place_id
+export const reportMeta = (r: Report) =>
+  meta([
+    `מבקשים להסיר: ${(JSON.parse(r.elements) as Element[]).map((e) => ELEMENT_LABEL[e]).join(", ")}`,
+    r.status === "in_review" && "בטיפול",
+    r.status === "closed" && "סגור",
+  ])
+export const receivedAt = (r: Report) => ago(r.received_at)
+export { PROBLEM }
+
+/** One request in the detail column: what was asked, what is hidden now, and what a moderator can do about it. */
+export function ReportDetail({
+  report,
+  reload,
+  fail,
+  error,
+}: {
+  report: Report
+  reload: () => Promise<void>
+  fail: (error: string) => void
+  error: string
+}) {
   const [place, setPlace] = useState<PlaceView | null>(null)
   const [contact, setContact] = useState<string | null>(null)
   const [lifting, setLifting] = useState<string | null>(null)
@@ -342,142 +362,172 @@ function ReportCard({ report, reload, fail }: { report: Report; reload: () => Pr
   }
   const elements = (JSON.parse(report.elements) as Element[]).map((e) => ELEMENT_LABEL[e]).join(", ")
   const hidden = report.outcome === "hidden_for_review"
+  const forget = !!(report.has_contact || report.explanation || report.relationship)
   return (
-    <>
-      {/* The dot is the datum: crimson when something was taken down as a precaution and waits on a decision. */}
-      <p className="flex items-center gap-2 text-caption text-ink-3">
-        <span
-          aria-hidden
-          className={cn(
-            "size-2 shrink-0 rounded-full",
-            report.status === "closed" ? "border border-line-strong" : hidden ? "bg-brand" : "bg-ink-3",
-          )}
-        />
-        {meta([
-          when(report.received_at),
-          hidden ? "הוסתר באופן זהיר" : "לא הוסתר אוטומטית",
-          report.origin === "curated" && "מקום של האתר עצמו",
-          report.status === "in_review" && "בטיפול",
-          report.status === "closed" && "סגור",
-        ])}
-      </p>
-      <h3 className="mt-1 text-title-3 text-ink-1">{report.place_name ?? report.place_id}</h3>
-      <p className="mt-1 text-caption text-ink-2">
-        {meta([`מבקשים להסיר: ${elements}`, REQUESTER_LABEL[report.requester_type], report.relationship])}
-      </p>
-      {report.explanation && (
-        <p className="reading-copy mt-4 border-s-2 border-line-strong ps-4 text-body whitespace-pre-line text-ink-1">
-          {report.explanation}
+    <article aria-label={`בקשה על ${reportName(report)}`} className="flex flex-1 flex-col">
+      <div className={detailBody}>
+        <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-caption text-ink-2">
+          <span className={cn("font-medium", hidden && report.status !== "closed" ? "text-brand" : "text-ink-2")}>
+            {hidden ? "הוסתר באופן זהיר" : "לא הוסתר אוטומטית"}
+            {report.status === "in_review" && " · בטיפול"}
+            {report.status === "closed" && " · סגור"}
+          </span>
+          <span>התקבלה {ago(report.received_at)}</span>
+          {report.origin === "curated" && <span>מקום של האתר עצמו</span>}
         </p>
-      )}
-      {report.handling_note && <p className="mt-3 text-body text-ink-2">טיפול: {report.handling_note}</p>}
-      {!!report.has_contact &&
-        (contact ? (
-          <p className="mt-3 flex items-center gap-2 text-caption text-ink-1">
-            <Mail aria-hidden className="size-3.5 shrink-0 text-ink-2" />
-            <span dir="ltr">{contact}</span>
-          </p>
-        ) : (
-          <Button
-            variant="ghost"
-            className="pressable -ms-3 mt-2"
-            onClick={async () => {
-              const res = await fetch(`/api/admin/reports/${report.id}/contact`).catch(() => null)
-              if (res?.ok) setContact(((await res.json()) as { email: string }).email)
-            }}
-          >
-            <Mail aria-hidden />
-            הצגת כתובת המבקש
-          </Button>
-        ))}
-      {place && (
-        <div className={block}>
-          <p className="text-headline text-ink-1">{place.status === "hidden" ? "המקום מוסתר כולו" : "מוסתר כרגע"}</p>
-          {place.suppressions.length === 0 && (
-            <p className="mt-2 flex items-center gap-2 text-body text-ink-2">
-              <CircleCheck aria-hidden className="size-4 shrink-0 text-hope" />
-              שום דבר לא מוסתר.
-            </p>
-          )}
-          {!!place.suppressions.length && (
-            <ul className="mt-2 divide-y divide-line">
-              {place.suppressions.map((s) => (
-                <li key={s.id} className="py-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="flex items-center gap-2 text-label text-ink-1">
-                      <EyeOff aria-hidden className="size-4 shrink-0 text-ink-2" />
-                      {ELEMENT_LABEL[s.field]} · {s.kind === "precautionary" ? "הסתרה זהירה" : "הסתרה ידנית"} · {when(s.created_at)}
-                    </p>
-                    {lifting !== s.id && (
-                      <Button variant="ghost" className="pressable" onClick={() => setLifting(s.id)}>
-                        <RotateCcw aria-hidden />
-                        החזרה עם בסיס מתועד
-                      </Button>
-                    )}
-                  </div>
-                  {lifting === s.id && <LiftForm place={place} sup={s} done={after} />}
-                </li>
-              ))}
-            </ul>
-          )}
-          <HideForm place={place} reportId={report.id} done={after} />
-          <EraseForm place={place} done={after} />
-        </div>
-      )}
-      <div className={cn(block, "flex flex-col gap-4")}>
-        {report.status !== "closed" ? (
+        <h2 className="mt-2 text-title-2 text-ink-1">{reportName(report)}</h2>
+        <p className="mt-2 text-body text-ink-2">מבקשים להסיר: {elements}</p>
+
+        {report.explanation && (
           <>
-            <Field>
-              <FieldLabel htmlFor={`handle-${report.id}`}>מה נעשה</FieldLabel>
-              <Textarea id={`handle-${report.id}`} value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} />
-              <FieldDescription>התזכורות נעצרות רק כשמתועד טיפול. צפייה בבקשה לא מספיקה.</FieldDescription>
-            </Field>
-            <div className="flex flex-wrap gap-2">
-              {report.status === "open" && (
+            <h3 className={detailLabel}>במילים שלהם</h3>
+            <p className="reading-copy border-s-[3px] border-line-strong ps-4 text-body-lg whitespace-pre-line text-ink-1">
+              {report.explanation}
+            </p>
+          </>
+        )}
+        <p className="mt-3 text-caption text-ink-2">{meta([REQUESTER_LABEL[report.requester_type], report.relationship])}</p>
+        {report.handling_note && <p className="mt-3 text-body text-ink-2">טיפול: {report.handling_note}</p>}
+        {!!report.has_contact &&
+          (contact ? (
+            <p className="mt-3 flex items-center gap-2 text-caption text-ink-1">
+              <Mail aria-hidden className="size-3.5 shrink-0 text-ink-2" />
+              <span dir="ltr">{contact}</span>
+            </p>
+          ) : (
+            <Button
+              variant="ghost"
+              className="pressable -ms-3 mt-2"
+              onClick={async () => {
+                const res = await fetch(`/api/admin/reports/${report.id}/contact`).catch(() => null)
+                if (res?.ok) setContact(((await res.json()) as { email: string }).email)
+              }}
+            >
+              <Mail aria-hidden />
+              הצגת כתובת המבקש
+            </Button>
+          ))}
+
+        {place && (
+          <>
+            <h3 className={detailLabel}>{place.status === "hidden" ? "המקום מוסתר כולו" : "מוסתר כרגע"}</h3>
+            {place.suppressions.length === 0 ? (
+              <p className="flex items-center gap-2 border-y border-line py-4 text-body text-ink-2">
+                <CircleCheck aria-hidden className="size-4 shrink-0 text-hope" />
+                שום דבר לא מוסתר.
+              </p>
+            ) : (
+              <ul className="divide-y divide-line border-y border-line">
+                {place.suppressions.map((s) => (
+                  <li key={s.id} className="py-3">
+                    <div className="flex min-h-11 flex-wrap items-center justify-between gap-2">
+                      <p className="text-body text-ink-1">
+                        <span className="font-medium">{ELEMENT_LABEL[s.field]}</span>
+                        <span className="block text-caption text-ink-2">
+                          {s.kind === "precautionary" ? "הסתרה זהירה" : "הסתרה ידנית"} מאז {ago(s.created_at)}
+                        </span>
+                      </p>
+                      {lifting !== s.id && (
+                        <Button variant="outline" className="pressable" onClick={() => setLifting(s.id)}>
+                          <RotateCcw aria-hidden />
+                          החזרה עם בסיס מתועד
+                        </Button>
+                      )}
+                    </div>
+                    {lifting === s.id && <LiftForm place={place} sup={s} done={after} />}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
+        )}
+
+        {(place || forget) && (
+          // The rarer actions wait behind one disclosure, so the request reads first.
+          <details className="group mt-8 rounded-2xl border border-line">
+            <summary className="pressable flex min-h-12 cursor-pointer list-none items-center justify-between gap-2 rounded-2xl px-4 text-label text-ink-1 outline-none focus-visible:ring-3 focus-visible:ring-ring/30 [&::-webkit-details-marker]:hidden">
+              <span className="flex items-center gap-2">
+                <Ellipsis aria-hidden className="size-4 text-ink-2" />
+                פעולות נוספות
+              </span>
+              <ChevronDown
+                aria-hidden
+                className="size-4 text-ink-3 transition-transform duration-300 group-open:rotate-180 motion-reduce:transition-none"
+              />
+            </summary>
+            <div className="border-t border-line px-4 pb-4">
+              {place && <HideForm place={place} reportId={report.id} done={after} />}
+              {place && <EraseForm place={place} done={after} />}
+              {forget && (
                 <Button
-                  className="pressable"
-                  disabled={!note.trim()}
-                  onClick={async () => after(await send(`/api/admin/reports/${report.id}/handle`, { note: note.trim() }))}
+                  variant="ghost"
+                  className="pressable -ms-3 mt-3 flex text-destructive dark:text-brand"
+                  onClick={async () => {
+                    // The requester asked to be forgotten: their address and words go now, not at the request's date.
+                    if (!confirm("למחוק עכשיו את פרטי המבקש ואת נוסח הבקשה? אי אפשר לבטל, והבקשה תיסגר.")) return
+                    await after(await send(`/api/admin/reports/${report.id}/purge`, {}))
+                  }}
                 >
-                  תיעוד טיפול
+                  <Trash2 aria-hidden />
+                  מחיקת פרטי המבקש והנוסח עכשיו
                 </Button>
               )}
-              <Button
-                variant="outline"
-                className="pressable"
-                disabled={!note.trim()}
-                onClick={async () => after(await send(`/api/admin/reports/${report.id}/close`, { note: note.trim() }))}
-              >
-                סגירת הבקשה
-              </Button>
             </div>
-          </>
-        ) : (
-          <Button
-            variant="ghost"
-            className="pressable self-start"
-            onClick={async () => after(await send(`/api/admin/reports/${report.id}/reopen`, {}))}
-          >
-            <RotateCcw aria-hidden />
-            פתיחה מחדש
-          </Button>
-        )}
-        {(report.has_contact || report.explanation || report.relationship) && (
-          <Button
-            variant="ghost"
-            className="pressable -ms-3 self-start text-destructive dark:text-brand"
-            onClick={async () => {
-              // The requester asked to be forgotten: their address and words go now, not at the request's date.
-              if (!confirm("למחוק עכשיו את פרטי המבקש ואת נוסח הבקשה? אי אפשר לבטל, והבקשה תיסגר.")) return
-              await after(await send(`/api/admin/reports/${report.id}/purge`, {}))
-            }}
-          >
-            <Trash2 aria-hidden />
-            מחיקת פרטי המבקש והנוסח עכשיו
-          </Button>
+          </details>
         )}
       </div>
-    </>
+
+      <div className={detailBar}>
+        <div className={cn(detailBarInner, "flex-col items-stretch")}>
+          {error && <Alert>{error}</Alert>}
+          {report.status !== "closed" ? (
+            <>
+              <Field>
+                <FieldLabel htmlFor={`handle-${report.id}`} className="sr-only">
+                  מה נעשה
+                </FieldLabel>
+                <Textarea
+                  id={`handle-${report.id}`}
+                  value={note}
+                  placeholder="מה נעשה? התזכורות נעצרות רק כשמתועד טיפול."
+                  onChange={(e) => setNote(e.target.value)}
+                  maxLength={500}
+                  className="min-h-11"
+                />
+              </Field>
+              <div className="flex flex-wrap gap-2">
+                {report.status === "open" && (
+                  <Button
+                    className="pressable"
+                    disabled={!note.trim()}
+                    onClick={async () => after(await send(`/api/admin/reports/${report.id}/handle`, { note: note.trim() }))}
+                  >
+                    תיעוד טיפול
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  className="pressable"
+                  disabled={!note.trim()}
+                  onClick={async () => after(await send(`/api/admin/reports/${report.id}/close`, { note: note.trim() }))}
+                >
+                  סגירת הבקשה
+                </Button>
+              </div>
+            </>
+          ) : (
+            <Button
+              variant="outline"
+              className="pressable self-start"
+              onClick={async () => after(await send(`/api/admin/reports/${report.id}/reopen`, {}))}
+            >
+              <RotateCcw aria-hidden />
+              פתיחה מחדש
+            </Button>
+          )}
+        </div>
+      </div>
+    </article>
   )
 }
 
@@ -485,7 +535,7 @@ function ReportCard({ report, reload, fail }: { report: Report; reload: () => Pr
  * A place reached by its link or id, for a request that came by mail or phone rather than through the form: hide what
  * was asked, or delete the place on request.
  */
-function PlaceLookup() {
+export function PlaceLookup() {
   const [input, setInput] = useState("")
   const [place, setPlace] = useState<PlaceView | null>(null)
   const [message, setMessage] = useState("")
@@ -502,7 +552,7 @@ function PlaceLookup() {
     setPlace((await res.json()) as PlaceView)
   }
   return (
-    <div className={card}>
+    <div>
       <form
         className="flex flex-wrap items-start gap-3"
         onSubmit={(e) => {
@@ -548,122 +598,5 @@ function PlaceLookup() {
         </div>
       )}
     </div>
-  )
-}
-
-/** How many requests and operations wait, as read so far, for the page's header. */
-export interface ReportCounts {
-  reports: number | null
-  moreReports: boolean
-  attention: number | null
-  moreAttention: boolean
-}
-
-/** Requests to remove or correct, newest first, and the operations that need a person's eye. */
-export function Reports({ onCounts }: { onCounts?: (counts: ReportCounts) => void }) {
-  const reports = usePaged<Report>("/api/admin/reports", "items")
-  const attention = usePaged<Attention>("/api/admin/attention", "ops")
-  // A decision's own failure, from a card; each list keeps its own.
-  const [error, setError] = useState("")
-  const { refresh: refreshReports } = reports
-  const { refresh: refreshAttention } = attention
-  const load = useCallback(async () => {
-    await Promise.all([refreshReports(), refreshAttention()])
-  }, [refreshReports, refreshAttention])
-  useEffect(() => {
-    void load()
-  }, [load])
-  const open = reports.items ? reports.items.filter((r) => r.status !== "closed").length : null
-  useEffect(
-    () =>
-      onCounts?.({
-        reports: open,
-        moreReports: !!reports.next,
-        attention: attention.items ? attention.items.length : null,
-        moreAttention: !!attention.next,
-      }),
-    [open, reports.next, attention.items, attention.next, onCounts],
-  )
-  const loading = reports.items === null && !reports.error
-  return (
-    <Section
-      id="reports"
-      title="בקשות להסרה או לתיקון"
-      lead="החדשות ראשונות. לכל בקשה: מה ביקשו, מה מוסתר עכשיו, ומה אפשר לעשות."
-      count={open === null ? null : `${open}${reports.next ? "+" : ""}`}
-      busy={loading}
-    >
-      <PlaceLookup />
-      {error && <Alert className="mt-5">{error}</Alert>}
-      {attention.error && (
-        // Whatever was already shown stays: a moment without the server is not an empty list.
-        <Alert className="mt-5">הפעולות שדורשות תשומת לב לא נטענו. {attention.error}</Alert>
-      )}
-      {attention.failed === "refresh" && (
-        <Button variant="ghost" className="pressable mt-2" disabled={attention.busy} onClick={() => void attention.refresh()}>
-          <RotateCcw aria-hidden />
-          לנסות שוב לטעון את הפעולות
-        </Button>
-      )}
-      {!!attention.items?.length && (
-        <div className={cn(card, "mt-5")}>
-          <p className="flex items-center gap-2 text-headline text-ink-1">
-            <FileWarning aria-hidden className="size-5 shrink-0 text-dawn" />
-            פעולות שנעצרו באמצע
-          </p>
-          <ul aria-label="דורש תשומת לב" className="mt-3 divide-y divide-line">
-            {attention.items.map((a) => (
-              <li key={a.id} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-3 text-body text-ink-1">
-                <span>{PROBLEM[a.problem]}</span>
-                <span className="text-caption text-ink-3" dir="ltr">
-                  {a.place_id}
-                </span>
-              </li>
-            ))}
-          </ul>
-          {attention.next && (
-            <Button variant="ghost" className="pressable -ms-3 mt-2" disabled={attention.busy} onClick={() => void attention.more()}>
-              פעולות נוספות שדורשות תשומת לב
-            </Button>
-          )}
-        </div>
-      )}
-      {reports.error && <Alert className="mt-5">הבקשות לא נטענו. {reports.error}</Alert>}
-      {reports.failed === "refresh" && (
-        <Button variant="ghost" className="pressable mt-2" disabled={reports.busy} onClick={() => void reports.refresh()}>
-          <RotateCcw aria-hidden />
-          לנסות שוב לטעון את הבקשות
-        </Button>
-      )}
-      <div className="mt-5">
-        {loading && <Loading rows={1} />}
-        {reports.items?.length === 0 && (
-          <Empty icon={<CircleCheck className="size-5" />} title="אין בקשות פתוחות.">
-            אף אחד לא ביקש להסיר או לתקן דבר.
-          </Empty>
-        )}
-        <div className="grid gap-4">
-          <AnimatePresence initial={false}>
-            {reports.items?.map((r, i) => (
-              <motion.article
-                key={r.id}
-                aria-label={`בקשה על ${r.place_name ?? r.place_id}`}
-                className={card}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0, transition: { duration: 0.38, ease, delay: Math.min(i, 8) * 0.04 } }}
-                exit={{ opacity: 0, transition: { duration: 0.2, ease } }}
-              >
-                <ReportCard report={r} reload={load} fail={setError} />
-              </motion.article>
-            ))}
-          </AnimatePresence>
-        </div>
-      </div>
-      {reports.next && (
-        <Button variant="outline" className="pressable mt-5" disabled={reports.busy} onClick={() => void reports.more()}>
-          בקשות ישנות יותר
-        </Button>
-      )}
-    </Section>
   )
 }

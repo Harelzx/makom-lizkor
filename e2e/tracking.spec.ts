@@ -1,4 +1,5 @@
 import { expect, test, type Browser, type BrowserContextOptions, type Page } from "./fixtures"
+import { openItem } from "./admin"
 import { from, ownAddress } from "./publish"
 
 // The opening isn't what this file tests, and its sunrise took about 8 s on every page that went through it. A visitor
@@ -103,7 +104,7 @@ test("a moderator returns a place with a note, the sender corrects it, and it co
   await modCtx.request.post("/__dev/login", { data: { email: "dev@example.test" } })
   const mod = await modCtx.newPage()
   await mod.goto("/admin/")
-  const item = mod.getByRole("article", { name })
+  const item = await openItem(mod, name)
   await item.getByRole("button", { name: "החזרה לתיקון" }).click()
   await item.getByLabel("הערה למגיש").fill("נא לציין את שם היישוב")
   await item.getByRole("button", { name: "שליחת ההחזרה" }).click()
@@ -121,7 +122,7 @@ test("a moderator returns a place with a note, the sender corrects it, and it co
   await expect(view.getByText("ממתינה לבדיקה")).toBeVisible()
 
   await mod.reload()
-  const corrected = mod.getByRole("article", { name: `${name} מתוקן` })
+  const corrected = await openItem(mod, `${name} מתוקן`)
   await expect(corrected).toBeVisible()
   await expect(corrected.getByText("בארי", { exact: false })).toBeVisible()
 })
@@ -134,7 +135,7 @@ test("a correction whose answer was lost is found saved, not reported as unsent"
   await modCtx.request.post("/__dev/login", { data: { email: "dev@example.test" } })
   const mod = await modCtx.newPage()
   await mod.goto("/admin/")
-  const item = mod.getByRole("article", { name })
+  const item = await openItem(mod, name)
   await item.getByRole("button", { name: "החזרה לתיקון" }).click()
   await item.getByLabel("הערה למגיש").fill("נא לציין את שם היישוב")
   await item.getByRole("button", { name: "שליחת ההחזרה" }).click()
@@ -180,7 +181,7 @@ async function returnedAndFixing(browser: Browser, name: string) {
   await modCtx.request.post("/__dev/login", { data: { email: "dev@example.test" } })
   const mod = await modCtx.newPage()
   await mod.goto("/admin/")
-  const item = mod.getByRole("article", { name })
+  const item = await openItem(mod, name)
   await item.getByRole("button", { name: "החזרה לתיקון" }).click()
   await item.getByLabel("הערה למגיש").fill("נא לציין את שם היישוב")
   await item.getByRole("button", { name: "שליחת ההחזרה" }).click()
