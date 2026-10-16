@@ -80,15 +80,28 @@ for (const width of [320, 390, 1280])
     await page.setViewportSize({ width, height: 844 })
     await day(page)
     const credit = page.locator(".maplibregl-ctrl-bottom-right .maplibregl-ctrl-attrib")
-    await expect(credit.getByRole("link", { name: "OpenStreetMap", exact: true })).toBeVisible()
-    await expect(credit).toBeInViewport({ ratio: 1 })
-    const box = await credit.boundingBox()
+    const osm = credit.getByRole("link", { name: "© OpenStreetMap contributors", exact: true })
     if (width < 768) {
+      // A phone's credit folds to its (i) five seconds after the map appears (OpenStreetMap's guidelines allow it), and
+      // a tap opens the whole credit again, links and all.
+      await expect(credit).toHaveClass(/maplibregl-compact(?!-show)/)
+      await expect(credit).not.toHaveClass(/maplibregl-compact-show/, DAY)
+      await expect(osm).toBeHidden()
+      const button = credit.locator('summary[aria-label="קרדיטים למפה"]')
+      await expect(button).toBeInViewport({ ratio: 1 })
+      const box = await credit.boundingBox()
       const bar = await page.locator("[data-sheet-grip]").locator("..").boundingBox()
       expect(bar!.y - (box!.y + box!.height)).toBeGreaterThanOrEqual(0)
       expect(bar!.y - (box!.y + box!.height)).toBeLessThan(20)
       expect(box!.x + box!.width).toBeGreaterThan(width - 25)
+      await button.click()
+      await expect(osm).toBeVisible()
+      await expect(credit.getByRole("link", { name: "Terrain: Mapzen", exact: true })).toBeVisible()
+      await expect(credit).toBeInViewport({ ratio: 1 })
     } else {
+      // A wide map has room for the whole line, so it never folds.
+      await expect(osm).toBeVisible()
+      await expect(credit).toBeInViewport({ ratio: 1 })
       await page.getByRole("button", { name: "כיווץ הרשימה, כדי לראות יותר מהמפה", exact: true }).click()
       await expect
         .poll(async () => {
@@ -98,6 +111,7 @@ for (const width of [320, 390, 1280])
         .toBeGreaterThan(width - 25)
     }
   })
+
 test("contact reports repeated failures, confirmed success and erases fields on close", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.route("**/api/v1/contact", async (r) => {

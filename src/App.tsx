@@ -4,7 +4,6 @@ import { Toaster } from "@/components/ui/sonner"
 import { placeIdShape, useStore } from "@/store"
 import { Intro } from "@/components/intro"
 import { Celebration } from "@/components/celebration"
-import { MORNING, NIGHT } from "@/map/palette"
 
 // The opening paints from the first, small bundle. The map engine and the panels stream in behind it,
 // and the dialogs load the first time someone opens them.
@@ -175,21 +174,15 @@ export default function App() {
   }, [phase])
 
   const nightSurface = phase === "intro" || light === "night"
-  // An opaque viewport edge gives Safari a real surface to extend beneath its own controls.
-  // WebGL pixels alone are not a CSS background; keep the boot fallback and day surface in the map's land palette.
+  // The page's own surface, in the map's land palette: what shows before the map paints, and what Safari falls back to.
   const viewportColor = nightSurface ? "#0b1120" : "#e5eedb"
-  // Until the day begins the opening's night fills the screen; the sunrise ends on the day's own edges.
-  // The bottom is the sheet's --surface (white, or ink-900 at night) on a phone, where the sheet always meets the edge.
-  const dayPalette = light === "night" ? NIGHT : MORNING
-  const edges =
-    phase !== "day"
-      ? { top: "#0b1120", bottom: "#0b1120" }
-      : { top: dayPalette.horizon, bottom: picking ? dayPalette.land : light === "night" ? "#131a2c" : "#ffffff" }
+  // On a phone the folded sheet always meets the bottom edge, in its --surface (white, or ink-900 at night).
+  const sheetEdge = phase === "day" && !picking && !addOpen ? (light === "night" ? "#131a2c" : "#ffffff") : null
 
   // The interface wears the night palette during the opening and whenever night is chosen.
   useEffect(() => {
     document.documentElement.classList.toggle("dark", nightSurface)
-    // Safari also samples page backgrounds behind its own controls; keep the page surface aligned with the map mode.
+    // Safari blends its controls with the page's background where it finds no edge of its own to extend.
     document.documentElement.style.backgroundColor = viewportColor
     document.body.style.backgroundColor = viewportColor
     document.documentElement.style.colorScheme = nightSurface ? "dark" : "light"
@@ -198,27 +191,24 @@ export default function App() {
   }, [nightSurface, viewportColor])
 
   return (
-    <main className="fixed inset-0" style={{ backgroundColor: viewportColor }}>
-      {/* Safari tints the space under its own controls from what sits at the screen's edges (WebKit's
-          LocalFrameView::fixedContainerEdges). A viewport-sized layer like this main keeps whatever color was sampled
-          first, the opening's night, so two thin edge surfaces stand in as ordinary candidates. Each matches what the
-          eye meets there: the map's horizon at the top, the sheet (or, while a point is reviewed, the land) at the bottom.
-          Safari samples again only when a fixed layer is added or removed, never when a color changes, so each is
-          remounted under a new key with its color. They stay below dialogs and never intercept map gestures. */}
-      <div
-        key={`top-${edges.top}`}
-        aria-hidden="true"
-        data-viewport-edge="top"
-        className="pointer-events-none fixed inset-x-0 top-0 z-[49] h-[12px] md:hidden"
-        style={{ backgroundColor: edges.top }}
-      />
-      <div
-        key={`bottom-${edges.bottom}`}
-        aria-hidden="true"
-        data-viewport-edge="bottom"
-        className="pointer-events-none fixed inset-x-0 bottom-0 z-[49] h-[12px] md:hidden"
-        style={{ backgroundColor: edges.bottom }}
-      />
+    // Safari (26 and later) decides what to show under its status bar and toolbar from the fixed layers at the screen's
+    // edges (WebKit's LocalFrameView::fixedContainerEdges): a fixed layer at least 90% as wide as the screen, with a
+    // background, is extended under the bar as a solid band; with none, Safari shows the page itself under its soft edge.
+    // So nothing fixed and wide touches the top, and this main has no background of its own (a screen-sized fixed layer
+    // also keeps the first color it was given): the map runs under the clock, as in a native map. WebGL is never sampled.
+    <main className="fixed inset-0">
+      {/* The bottom edge is the sheet, a fixed surface Safari extends under its toolbar. Safari samples again only when a
+          fixed layer is added or removed, never when a color changes, so a thin edge in the sheet's color is remounted
+          under a new key with each color. Without the sheet (a point being placed, the add form) the map shows there too. */}
+      {sheetEdge && (
+        <div
+          key={`bottom-${sheetEdge}`}
+          aria-hidden="true"
+          data-viewport-edge="bottom"
+          className="pointer-events-none fixed inset-x-0 bottom-0 z-[49] h-[12px] md:hidden"
+          style={{ backgroundColor: sheetEdge }}
+        />
+      )}
       {/* The map's flowers come first in the tab order, about ninety of them; this lets a keyboard go straight to the list.
           A button rather than a link, because the address belongs to the router. */}
       {phase === "day" && (

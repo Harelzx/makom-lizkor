@@ -4,10 +4,24 @@ import * as maplibregl from "maplibre-gl"
 import "maplibre-gl/dist/maplibre-gl.css"
 import { allPlaces, useStore } from "@/store"
 import { FlowerSprite } from "./flower-sprite"
-import { createMap, destroyMap, flyToPlace, getMap, returnToDawn, setLabels, setOwnLabels, shiftLight, startOrbit } from "./controller"
+import {
+  createMap,
+  destroyMap,
+  flyToPlace,
+  foldCredit,
+  getMap,
+  returnToDawn,
+  setLabels,
+  setOwnLabels,
+  shiftLight,
+  startOrbit,
+} from "./controller"
 import type { Place } from "@/types"
 import { cn } from "@/lib/utils"
 import { placeNames, type Box } from "./declutter"
+
+// OpenStreetMap's guidelines let an interactive map's credit fold away automatically after five seconds.
+const CREDIT_FOLD_MS = 5000
 
 const boxOf = (el: Element): Box => {
   const r = el.getBoundingClientRect()
@@ -108,6 +122,13 @@ export function MapCanvas() {
     container.current?.classList.toggle("is-opening", phase !== "day")
     container.current?.classList.toggle("has-sheet", phase === "day" && !picking && !addOpen)
   }, [phase, picking, addOpen])
+
+  // On a phone the credit is shown in full when the map first appears, then folds to its (i) once five seconds are up.
+  useEffect(() => {
+    if (!ready) return
+    const fold = window.setTimeout(foldCredit, CREDIT_FOLD_MS)
+    return () => clearTimeout(fold)
+  }, [ready])
 
   // The opening played again: the morning turns back into the blue hour.
   const lastPhase = useRef(phase)

@@ -367,6 +367,25 @@
 .maplibregl-ctrl-attrib a {
   color: var(--foreground) !important;
 }
+/* Folded on a phone, the credit is a quiet round (i) in the corner of the map; a tap opens it again. */
+.maplibregl-ctrl-attrib.maplibregl-compact {
+  min-height: 24px;
+  border-radius: 999px;
+}
+.maplibregl-ctrl-attrib.maplibregl-compact:not(.maplibregl-compact-show) {
+  width: 24px;
+  padding: 0;
+  box-shadow: var(--shadow-chip);
+}
+.maplibregl-ctrl-attrib.maplibregl-compact-show {
+  border-radius: 12px;
+}
+.maplibregl-ctrl-attrib.maplibregl-compact::after {
+  opacity: 0.6;
+}
+.dark .maplibregl-ctrl-attrib.maplibregl-compact::after {
+  filter: invert(1);
+}
 .maplibregl-ctrl-group {
   background: var(--surface) !important;
   border: 1px solid var(--line);
@@ -392,7 +411,7 @@
   }
   /* Match the measured action bar, including safe area and enlarged text, instead of 23% of the screen. */
   main .has-sheet .maplibregl-ctrl-bottom-right {
-    bottom: calc(var(--map-peek, 88px) + 2px);
+    bottom: calc(var(--map-peek, 84px) + 2px);
     transition: bottom 0.6s var(--ease-out-soft);
   }
   /* No sheet during the opening, so the credit rests at the bottom instead of floating mid-screen. */
