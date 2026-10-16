@@ -176,10 +176,11 @@ await page.addInitScript(
         const end = a.effect?.getComputedTiming().endTime ?? Infinity
         try {
           if (Number.isFinite(end) && t >= end) {
-            // played to its end, so it finishes as it would have (and its animationend reaches React)
+            // played to its end, so it finishes as it would have (and its animationend reaches React). Not play() at the
+            // end: play() rewinds a finished animation to 0, and it played again on the real clock, a delay and all (the
+            // line under the name vanished for three frames at 36.7 s, held at its first keyframe until it was over).
             done.add(a)
-            a.currentTime = end
-            play.call(a)
+            a.finish()
           } else {
             a.pause()
             a.currentTime = t
