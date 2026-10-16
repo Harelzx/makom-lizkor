@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { Toaster } from "@/components/ui/sonner"
 import { placeIdShape, useStore } from "@/store"
+import { MORNING, NIGHT } from "@/map/palette"
 import { Intro } from "@/components/intro"
 import { Celebration } from "@/components/celebration"
 
@@ -176,8 +177,10 @@ export default function App() {
   const nightSurface = phase === "intro" || light === "night"
   // The page's own surface, in the map's land palette: what shows before the map paints, and what Safari falls back to.
   const viewportColor = nightSurface ? "#0b1120" : "#e5eedb"
-  // On a phone the folded sheet always meets the bottom edge, in its --surface (white, or ink-900 at night).
-  const sheetEdge = phase === "day" && !picking && !addOpen ? (light === "night" ? "#131a2c" : "#ffffff") : null
+  // On a phone the folded sheet always meets the bottom edge, in its --surface (white, or ink-900 at night). While a
+  // point is placed the map is there instead, so the edge takes its land; the add form brings its own edge.
+  const dayPalette = light === "night" ? NIGHT : MORNING
+  const sheetEdge = phase !== "day" ? null : picking ? dayPalette.land : addOpen ? null : light === "night" ? "#131a2c" : "#ffffff"
 
   // The interface wears the night palette during the opening and whenever night is chosen.
   useEffect(() => {
@@ -199,7 +202,8 @@ export default function App() {
     <main className="fixed inset-0">
       {/* The bottom edge is the sheet, a fixed surface Safari extends under its toolbar. Safari samples again only when a
           fixed layer is added or removed, never when a color changes, so a thin edge in the sheet's color is remounted
-          under a new key with each color. Without the sheet (a point being placed, the add form) the map shows there too. */}
+          under a new key with each color. The bottom always gets a chosen color: left without one, it would fall to this
+          screen-sized main, which keeps whatever color was sampled before (the sheet's white over a placed point). */}
       {sheetEdge && (
         <div
           key={`bottom-${sheetEdge}`}
