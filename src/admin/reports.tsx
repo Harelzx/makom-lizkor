@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useState } from "react"
+import { AnimatePresence, motion } from "motion/react"
+import { CircleCheck, EyeOff, FileWarning, Mail, RotateCcw, Search, ShieldAlert, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { BASIS_LABEL, ELEMENT_LABEL, REQUESTER_LABEL } from "@/data/reports"
 import { ELEMENTS, type Element } from "@/shared/contract"
+import { ease } from "@/lib/motion"
+import { cn } from "@/lib/utils"
 import { createPager, type Page, type PagerState } from "./pager"
+import { Alert, Empty, Loading, Section, block, card, check, meta, select } from "./ui"
 
 interface Report {
   id: string
@@ -92,7 +97,7 @@ function LiftForm({ place, sup, done }: { place: PlaceView; sup: Suppression; do
   const id = `lift-${sup.id}`
   return (
     <form
-      className="mt-2 flex flex-col gap-3 rounded-xl border border-line p-3"
+      className="mt-3 flex flex-col gap-4 rounded-2xl border border-line p-4 sm:p-5"
       onSubmit={async (e) => {
         e.preventDefault()
         done(
@@ -115,12 +120,7 @@ function LiftForm({ place, sup, done }: { place: PlaceView; sup: Suppression; do
     >
       <Field>
         <FieldLabel htmlFor={`${id}-code`}>בסיס ההחזרה</FieldLabel>
-        <select
-          id={`${id}-code`}
-          className="rounded-lg border border-line bg-surface p-2 text-ink-1"
-          value={code}
-          onChange={(e) => setCode(e.target.value as keyof typeof BASIS_LABEL)}
-        >
+        <select id={`${id}-code`} className={select} value={code} onChange={(e) => setCode(e.target.value as keyof typeof BASIS_LABEL)}>
           {Object.entries(BASIS_LABEL).map(([k, label]) => (
             <option key={k} value={k}>
               {label}
@@ -140,7 +140,7 @@ function LiftForm({ place, sup, done }: { place: PlaceView; sup: Suppression; do
         </Field>
       )}
       {code === "legal_advice" && (
-        <div className="flex gap-2">
+        <div className="grid gap-4 sm:grid-cols-2">
           <Field>
             <FieldLabel htmlFor={`${id}-adviser`}>שם היועץ</FieldLabel>
             <Input id={`${id}-adviser`} value={extra.adviserName} onChange={set("adviserName")} maxLength={120} />
@@ -159,13 +159,13 @@ function LiftForm({ place, sup, done }: { place: PlaceView; sup: Suppression; do
         </Field>
       )}
       {code === "content_corrected" && (
-        <label className="flex items-center gap-2 text-label text-ink-1">
-          <input type="checkbox" checked={absent} onChange={(e) => setAbsent(e.target.checked)} />
+        <label className="flex items-start gap-3 text-label text-ink-1">
+          <input type="checkbox" className={cn(check, "mt-0.5")} checked={absent} onChange={(e) => setAbsent(e.target.checked)} />
           בדקתי שהחומר שבמחלוקת איננו בגרסה החדשה
         </label>
       )}
       {/* Required by the server whenever the hide came from a family's request; a verified request of theirs can be it. */}
-      <div className="flex flex-col gap-2">
+      <div className="grid gap-4">
         <Field>
           <FieldLabel htmlFor={`${id}-contact`}>הפנייה למשפחה או לגוף שהקים את האנדרטה</FieldLabel>
           <Textarea id={`${id}-contact`} value={extra.contactNote} onChange={set("contactNote")} maxLength={500} />
@@ -176,15 +176,18 @@ function LiftForm({ place, sup, done }: { place: PlaceView; sup: Suppression; do
           <Input id={`${id}-contact-date`} type="date" value={extra.contactDate} onChange={set("contactDate")} />
         </Field>
       </div>
-      <label className="flex items-center gap-2 text-label text-ink-1">
-        <input type="checkbox" checked={affirmative} onChange={(e) => setAffirmative(e.target.checked)} />
-        יש בסיס חיובי ומתועד להחזרה
-      </label>
-      <label className="flex items-center gap-2 text-label text-ink-1">
-        <input type="checkbox" checked={notSilence} onChange={(e) => setNotSilence(e.target.checked)} />
-        הבסיס אינו היעדר תגובה, ואינו מחלוקת בין בני משפחה
-      </label>
+      <div className="flex flex-col gap-3 border-t border-line pt-4">
+        <label className="flex items-start gap-3 text-label text-ink-1">
+          <input type="checkbox" className={cn(check, "mt-0.5")} checked={affirmative} onChange={(e) => setAffirmative(e.target.checked)} />
+          יש בסיס חיובי ומתועד להחזרה
+        </label>
+        <label className="flex items-start gap-3 text-label text-ink-1">
+          <input type="checkbox" className={cn(check, "mt-0.5")} checked={notSilence} onChange={(e) => setNotSilence(e.target.checked)} />
+          הבסיס אינו היעדר תגובה, ואינו מחלוקת בין בני משפחה
+        </label>
+      </div>
       <Button type="submit" className="pressable self-start" disabled={!note.trim()}>
+        <RotateCcw aria-hidden />
         החזרת {ELEMENT_LABEL[sup.field]}
       </Button>
     </form>
@@ -202,26 +205,33 @@ function EraseForm({ place, done }: { place: PlaceView; done: (error: string) =>
   if (place.status === "erased" || place.status === "withdrawn") return null
   if (!open)
     return (
-      <Button variant="ghost" className="pressable mt-2 self-start text-destructive" onClick={() => setOpen(true)}>
+      <Button variant="ghost" className="pressable mt-3 self-start text-destructive dark:text-brand" onClick={() => setOpen(true)}>
+        <Trash2 aria-hidden />
         מחיקת המקום לפי בקשה
       </Button>
     )
   return (
     <form
-      className="mt-2 flex flex-col gap-2 rounded-xl border border-line p-3"
+      className="mt-3 flex flex-col gap-4 rounded-2xl border border-destructive/40 p-4 sm:p-5"
       onSubmit={async (e) => {
         e.preventDefault()
         done(await send(`/api/admin/places/${place.id}/erase`, { expectedRev: place.rev, confirm: true }))
       }}
     >
-      <p className="text-body text-ink-1">
+      <p className="flex items-start gap-2.5 text-body text-ink-1">
+        <ShieldAlert aria-hidden className="mt-1 size-4 shrink-0 text-destructive dark:text-brand" />
         המחיקה סופית: התוכן, התמונות, המקורות ופרטי השולח נמחקים מיד, וגם שחזור מגיבוי לא יחזיר אותם. נשאר רק רישום שהמקום נמחק.
       </p>
-      <label className="flex items-center gap-2 text-label text-ink-1">
-        <input type="checkbox" checked={sure} onChange={(e) => setSure(e.target.checked)} />
+      <label className="flex items-start gap-3 text-label text-ink-1">
+        <input
+          type="checkbox"
+          className={cn(check, "mt-0.5 accent-destructive")}
+          checked={sure}
+          onChange={(e) => setSure(e.target.checked)}
+        />
         ביקשו למחוק את המקום, ואני מבין או מבינה שאי אפשר לבטל את המחיקה
       </label>
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <Button type="submit" variant="destructive" className="pressable" disabled={!sure}>
           מחיקה סופית
         </Button>
@@ -239,7 +249,7 @@ function HideForm({ place, reportId, done }: { place: PlaceView; reportId?: stri
   const id = `hide-${place.id}-${reportId ?? "manual"}`
   return (
     <form
-      className="mt-2 flex flex-col gap-2"
+      className="mt-4 flex flex-col gap-4"
       onSubmit={async (e) => {
         e.preventDefault()
         done(
@@ -253,12 +263,13 @@ function HideForm({ place, reportId, done }: { place: PlaceView; reportId?: stri
         )
       }}
     >
-      <fieldset className="flex flex-wrap gap-3">
-        <legend className="text-caption text-ink-2">מה להסתיר</legend>
+      <fieldset className="flex flex-wrap gap-x-5 gap-y-3">
+        <legend className="mb-3 text-label text-ink-1">מה להסתיר</legend>
         {ELEMENTS.map((el) => (
-          <label key={el} className="flex items-center gap-1 text-label text-ink-1">
+          <label key={el} className="flex items-center gap-2 text-label text-ink-1">
             <input
               type="checkbox"
+              className={check}
               checked={fields.includes(el)}
               onChange={(e) => setFields(e.target.checked ? [...fields, el] : fields.filter((f) => f !== el))}
             />
@@ -271,6 +282,7 @@ function HideForm({ place, reportId, done }: { place: PlaceView; reportId?: stri
         <Input id={`${id}-reason`} value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} />
       </Field>
       <Button type="submit" variant="outline" className="pressable self-start" disabled={!fields.length || !reason.trim()}>
+        <EyeOff aria-hidden />
         הסתרה עכשיו
       </Button>
     </form>
@@ -329,65 +341,90 @@ function ReportCard({ report, reload, fail }: { report: Report; reload: () => Pr
     await Promise.all([loadPlace(), reload()])
   }
   const elements = (JSON.parse(report.elements) as Element[]).map((e) => ELEMENT_LABEL[e]).join(", ")
+  const hidden = report.outcome === "hidden_for_review"
   return (
-    <article aria-label={`בקשה על ${report.place_name ?? report.place_id}`} className="rounded-2xl border border-line p-4">
-      <p className="text-caption text-ink-2">
-        {[
+    <>
+      {/* The dot is the datum: crimson when something was taken down as a precaution and waits on a decision. */}
+      <p className="flex items-center gap-2 text-caption text-ink-3">
+        <span
+          aria-hidden
+          className={cn(
+            "size-2 shrink-0 rounded-full",
+            report.status === "closed" ? "border border-line-strong" : hidden ? "bg-brand" : "bg-ink-3",
+          )}
+        />
+        {meta([
           when(report.received_at),
-          report.outcome === "hidden_for_review" ? "הוסתר באופן זהיר" : "לא הוסתר אוטומטית",
+          hidden ? "הוסתר באופן זהיר" : "לא הוסתר אוטומטית",
           report.origin === "curated" && "מקום של האתר עצמו",
           report.status === "in_review" && "בטיפול",
           report.status === "closed" && "סגור",
-        ]
-          .filter(Boolean)
-          .join(" · ")}
+        ])}
       </p>
-      <h3 className="text-headline text-ink-1">{report.place_name ?? report.place_id}</h3>
-      <p className="text-caption text-ink-2">
-        {[`מבקשים להסיר: ${elements}`, REQUESTER_LABEL[report.requester_type], report.relationship].filter(Boolean).join(" · ")}
+      <h3 className="mt-1 text-title-3 text-ink-1">{report.place_name ?? report.place_id}</h3>
+      <p className="mt-1 text-caption text-ink-2">
+        {meta([`מבקשים להסיר: ${elements}`, REQUESTER_LABEL[report.requester_type], report.relationship])}
       </p>
-      {report.explanation && <p className="mt-2 whitespace-pre-line text-ink-1">{report.explanation}</p>}
-      {report.handling_note && <p className="mt-1 text-body text-ink-2">טיפול: {report.handling_note}</p>}
+      {report.explanation && (
+        <p className="reading-copy mt-4 border-s-2 border-line-strong ps-4 text-body whitespace-pre-line text-ink-1">
+          {report.explanation}
+        </p>
+      )}
+      {report.handling_note && <p className="mt-3 text-body text-ink-2">טיפול: {report.handling_note}</p>}
       {!!report.has_contact &&
         (contact ? (
-          <p className="mt-1 text-caption text-ink-1" dir="ltr">
-            {contact}
+          <p className="mt-3 flex items-center gap-2 text-caption text-ink-1">
+            <Mail aria-hidden className="size-3.5 shrink-0 text-ink-2" />
+            <span dir="ltr">{contact}</span>
           </p>
         ) : (
           <Button
             variant="ghost"
-            className="pressable mt-1"
+            className="pressable -ms-3 mt-2"
             onClick={async () => {
               const res = await fetch(`/api/admin/reports/${report.id}/contact`).catch(() => null)
               if (res?.ok) setContact(((await res.json()) as { email: string }).email)
             }}
           >
+            <Mail aria-hidden />
             הצגת כתובת המבקש
           </Button>
         ))}
       {place && (
-        <div className="mt-3 border-t border-line pt-3">
-          <p className="text-caption text-ink-2">{place.status === "hidden" ? "המקום מוסתר כולו" : "מוסתר כרגע"}</p>
-          {place.suppressions.length === 0 && <p className="text-caption text-ink-2">שום דבר לא מוסתר.</p>}
-          {place.suppressions.map((s) => (
-            <div key={s.id} className="mt-1">
-              <p className="text-label text-ink-1">
-                {ELEMENT_LABEL[s.field]} · {s.kind === "precautionary" ? "הסתרה זהירה" : "הסתרה ידנית"} · {when(s.created_at)}
-              </p>
-              {lifting === s.id ? (
-                <LiftForm place={place} sup={s} done={after} />
-              ) : (
-                <Button variant="ghost" className="pressable" onClick={() => setLifting(s.id)}>
-                  החזרה עם בסיס מתועד
-                </Button>
-              )}
-            </div>
-          ))}
+        <div className={block}>
+          <p className="text-headline text-ink-1">{place.status === "hidden" ? "המקום מוסתר כולו" : "מוסתר כרגע"}</p>
+          {place.suppressions.length === 0 && (
+            <p className="mt-2 flex items-center gap-2 text-body text-ink-2">
+              <CircleCheck aria-hidden className="size-4 shrink-0 text-hope" />
+              שום דבר לא מוסתר.
+            </p>
+          )}
+          {!!place.suppressions.length && (
+            <ul className="mt-2 divide-y divide-line">
+              {place.suppressions.map((s) => (
+                <li key={s.id} className="py-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="flex items-center gap-2 text-label text-ink-1">
+                      <EyeOff aria-hidden className="size-4 shrink-0 text-ink-2" />
+                      {ELEMENT_LABEL[s.field]} · {s.kind === "precautionary" ? "הסתרה זהירה" : "הסתרה ידנית"} · {when(s.created_at)}
+                    </p>
+                    {lifting !== s.id && (
+                      <Button variant="ghost" className="pressable" onClick={() => setLifting(s.id)}>
+                        <RotateCcw aria-hidden />
+                        החזרה עם בסיס מתועד
+                      </Button>
+                    )}
+                  </div>
+                  {lifting === s.id && <LiftForm place={place} sup={s} done={after} />}
+                </li>
+              ))}
+            </ul>
+          )}
           <HideForm place={place} reportId={report.id} done={after} />
           <EraseForm place={place} done={after} />
         </div>
       )}
-      <div className="mt-3 flex flex-col gap-2 border-t border-line pt-3">
+      <div className={cn(block, "flex flex-col gap-4")}>
         {report.status !== "closed" ? (
           <>
             <Field>
@@ -395,7 +432,7 @@ function ReportCard({ report, reload, fail }: { report: Report; reload: () => Pr
               <Textarea id={`handle-${report.id}`} value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} />
               <FieldDescription>התזכורות נעצרות רק כשמתועד טיפול. צפייה בבקשה לא מספיקה.</FieldDescription>
             </Field>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               {report.status === "open" && (
                 <Button
                   className="pressable"
@@ -421,24 +458,26 @@ function ReportCard({ report, reload, fail }: { report: Report; reload: () => Pr
             className="pressable self-start"
             onClick={async () => after(await send(`/api/admin/reports/${report.id}/reopen`, {}))}
           >
+            <RotateCcw aria-hidden />
             פתיחה מחדש
           </Button>
         )}
         {(report.has_contact || report.explanation || report.relationship) && (
           <Button
             variant="ghost"
-            className="pressable self-start text-destructive"
+            className="pressable -ms-3 self-start text-destructive dark:text-brand"
             onClick={async () => {
               // The requester asked to be forgotten: their address and words go now, not at the request's date.
               if (!confirm("למחוק עכשיו את פרטי המבקש ואת נוסח הבקשה? אי אפשר לבטל, והבקשה תיסגר.")) return
               await after(await send(`/api/admin/reports/${report.id}/purge`, {}))
             }}
           >
+            <Trash2 aria-hidden />
             מחיקת פרטי המבקש והנוסח עכשיו
           </Button>
         )}
       </div>
-    </article>
+    </>
   )
 }
 
@@ -463,9 +502,9 @@ function PlaceLookup() {
     setPlace((await res.json()) as PlaceView)
   }
   return (
-    <div className="mt-4 rounded-2xl border border-line p-4">
+    <div className={card}>
       <form
-        className="flex flex-wrap items-end gap-2"
+        className="flex flex-wrap items-start gap-3"
         onSubmit={(e) => {
           e.preventDefault()
           void load(idOf(input))
@@ -476,19 +515,21 @@ function PlaceLookup() {
           <Input id="place-lookup" dir="ltr" value={input} onChange={(e) => setInput(e.target.value)} />
           <FieldDescription>לבקשה שהגיעה במייל או בטלפון: הדביקו את קישור השיתוף של המקום.</FieldDescription>
         </Field>
-        <Button type="submit" variant="outline" className="pressable" disabled={!idOf(input)}>
+        {/* Level with the input, past the label above it. */}
+        <Button type="submit" variant="outline" className="pressable sm:mt-8" disabled={!idOf(input)}>
+          <Search aria-hidden />
           פתיחה
         </Button>
       </form>
       {message && (
-        <p role="status" className="mt-2 text-label text-ink-2">
+        <p role="status" className="mt-4 text-body text-ink-2">
           {message}
         </p>
       )}
       {place && (
-        <div className="mt-3 border-t border-line pt-3">
+        <div className={block}>
           <p className="text-caption text-ink-2">
-            {place.id} · {place.status}
+            <span dir="ltr">{place.id}</span> · {place.status}
           </p>
           <HideForm
             place={place}
@@ -510,8 +551,16 @@ function PlaceLookup() {
   )
 }
 
+/** How many requests and operations wait, as read so far, for the page's header. */
+export interface ReportCounts {
+  reports: number | null
+  moreReports: boolean
+  attention: number | null
+  moreAttention: boolean
+}
+
 /** Requests to remove or correct, newest first, and the operations that need a person's eye. */
-export function Reports() {
+export function Reports({ onCounts }: { onCounts?: (counts: ReportCounts) => void }) {
   const reports = usePaged<Report>("/api/admin/reports", "items")
   const attention = usePaged<Attention>("/api/admin/attention", "ops")
   // A decision's own failure, from a card; each list keeps its own.
@@ -524,63 +573,97 @@ export function Reports() {
   useEffect(() => {
     void load()
   }, [load])
+  const open = reports.items ? reports.items.filter((r) => r.status !== "closed").length : null
+  useEffect(
+    () =>
+      onCounts?.({
+        reports: open,
+        moreReports: !!reports.next,
+        attention: attention.items ? attention.items.length : null,
+        moreAttention: !!attention.next,
+      }),
+    [open, reports.next, attention.items, attention.next, onCounts],
+  )
+  const loading = reports.items === null && !reports.error
   return (
-    <section id="reports" aria-labelledby="reports-title">
-      <h2 id="reports-title" className="text-title-2 text-ink-1">
-        בקשות להסרה או לתיקון
-      </h2>
+    <Section
+      id="reports"
+      title="בקשות להסרה או לתיקון"
+      lead="החדשות ראשונות. לכל בקשה: מה ביקשו, מה מוסתר עכשיו, ומה אפשר לעשות."
+      count={open === null ? null : `${open}${reports.next ? "+" : ""}`}
+      busy={loading}
+    >
       <PlaceLookup />
-      {error && (
-        <p role="alert" className="mt-3 text-label text-destructive">
-          {error}
-        </p>
-      )}
+      {error && <Alert className="mt-5">{error}</Alert>}
       {attention.error && (
         // Whatever was already shown stays: a moment without the server is not an empty list.
-        <p role="alert" className="mt-3 text-label text-destructive">
-          הפעולות שדורשות תשומת לב לא נטענו. {attention.error}
-        </p>
+        <Alert className="mt-5">הפעולות שדורשות תשומת לב לא נטענו. {attention.error}</Alert>
       )}
       {attention.failed === "refresh" && (
-        <Button variant="ghost" className="pressable mt-1" disabled={attention.busy} onClick={() => void attention.refresh()}>
+        <Button variant="ghost" className="pressable mt-2" disabled={attention.busy} onClick={() => void attention.refresh()}>
+          <RotateCcw aria-hidden />
           לנסות שוב לטעון את הפעולות
         </Button>
       )}
       {!!attention.items?.length && (
-        <ul aria-label="דורש תשומת לב" className="mt-3 flex flex-col gap-1">
-          {attention.items.map((a) => (
-            <li key={a.id} className="text-caption text-ink-1">
-              {PROBLEM[a.problem]} · {a.place_id}
-            </li>
-          ))}
-        </ul>
+        <div className={cn(card, "mt-5")}>
+          <p className="flex items-center gap-2 text-headline text-ink-1">
+            <FileWarning aria-hidden className="size-5 shrink-0 text-dawn" />
+            פעולות שנעצרו באמצע
+          </p>
+          <ul aria-label="דורש תשומת לב" className="mt-3 divide-y divide-line">
+            {attention.items.map((a) => (
+              <li key={a.id} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-3 text-body text-ink-1">
+                <span>{PROBLEM[a.problem]}</span>
+                <span className="text-caption text-ink-3" dir="ltr">
+                  {a.place_id}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {attention.next && (
+            <Button variant="ghost" className="pressable -ms-3 mt-2" disabled={attention.busy} onClick={() => void attention.more()}>
+              פעולות נוספות שדורשות תשומת לב
+            </Button>
+          )}
+        </div>
       )}
-      {attention.next && (
-        <Button variant="ghost" className="pressable mt-1" disabled={attention.busy} onClick={() => void attention.more()}>
-          פעולות נוספות שדורשות תשומת לב
-        </Button>
-      )}
-      {reports.error && (
-        <p role="alert" className="mt-3 text-label text-destructive">
-          הבקשות לא נטענו. {reports.error}
-        </p>
-      )}
+      {reports.error && <Alert className="mt-5">הבקשות לא נטענו. {reports.error}</Alert>}
       {reports.failed === "refresh" && (
-        <Button variant="ghost" className="pressable mt-1" disabled={reports.busy} onClick={() => void reports.refresh()}>
+        <Button variant="ghost" className="pressable mt-2" disabled={reports.busy} onClick={() => void reports.refresh()}>
+          <RotateCcw aria-hidden />
           לנסות שוב לטעון את הבקשות
         </Button>
       )}
-      {reports.items?.length === 0 && <p className="mt-4 text-ink-2">אין בקשות פתוחות.</p>}
-      <div className="mt-4 grid gap-4">
-        {reports.items?.map((r) => (
-          <ReportCard key={r.id} report={r} reload={load} fail={setError} />
-        ))}
+      <div className="mt-5">
+        {loading && <Loading rows={1} />}
+        {reports.items?.length === 0 && (
+          <Empty icon={<CircleCheck className="size-5" />} title="אין בקשות פתוחות.">
+            אף אחד לא ביקש להסיר או לתקן דבר.
+          </Empty>
+        )}
+        <div className="grid gap-4">
+          <AnimatePresence initial={false}>
+            {reports.items?.map((r, i) => (
+              <motion.article
+                key={r.id}
+                aria-label={`בקשה על ${r.place_name ?? r.place_id}`}
+                className={card}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0, transition: { duration: 0.38, ease, delay: Math.min(i, 8) * 0.04 } }}
+                exit={{ opacity: 0, transition: { duration: 0.2, ease } }}
+              >
+                <ReportCard report={r} reload={load} fail={setError} />
+              </motion.article>
+            ))}
+          </AnimatePresence>
+        </div>
       </div>
       {reports.next && (
-        <Button variant="outline" className="pressable mt-4" disabled={reports.busy} onClick={() => void reports.more()}>
+        <Button variant="outline" className="pressable mt-5" disabled={reports.busy} onClick={() => void reports.more()}>
           בקשות ישנות יותר
         </Button>
       )}
-    </section>
+    </Section>
   )
 }

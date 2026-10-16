@@ -1,6 +1,9 @@
 import { useRef, useState } from "react"
+import { ChevronDown, CircleCheck, FileJson, LoaderCircle, Upload } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { cn } from "@/lib/utils"
+import { Alert, Section, block, card } from "./ui"
 import { importCurated } from "../../scripts/curated-import.mjs"
 import { MAX_PACKET_BYTES, readImportPacket } from "./import-packet"
 
@@ -51,52 +54,66 @@ export function CuratedImport() {
       setBusy(false)
     }
   }
+  const done = !busy && message.startsWith("היבוא הושלם")
   return (
-    <section className="flex flex-col gap-4 rounded-3xl border border-line bg-surface p-5" aria-labelledby="curated-import-title">
-      <h2 id="curated-import-title" className="text-title font-bold">
-        יבוא מקומות האתר
-      </h2>
-      <p className="text-body text-ink-2">
-        בחרו קובץ יבוא עם המקורות, התמונות והרישיונות. הפרסום משתמש במסלול האישור הרגיל. מקומות שכבר קיימים לא ייערכו.
-      </p>
-      <label htmlFor="curated-import-file" className="text-label font-medium">
-        קובץ יבוא JSON
-      </label>
-      <Input
-        id="curated-import-file"
-        type="file"
-        accept="application/json,.json"
-        disabled={busy}
-        onChange={(e) => void choose(e.target.files?.[0])}
-      />
-      {packet && (
-        <>
-          <p className="text-body">
-            מוכנים לפרסום: {packet.places.length} מקומות ו־{packet.photoCount} תמונות.
+    <Section id="import" title="יבוא מקומות האתר" lead="מקומות שהאתר עצמו מביא, מקובץ שהוכן מראש עם המקורות, התמונות והרישיונות.">
+      <div className={cn(card, "flex flex-col gap-4")}>
+        <p className="reading-copy text-body text-ink-2">
+          בחרו קובץ יבוא עם המקורות, התמונות והרישיונות. הפרסום משתמש במסלול האישור הרגיל. מקומות שכבר קיימים לא ייערכו.
+        </p>
+        <div className="flex flex-col gap-2">
+          <label htmlFor="curated-import-file" className="text-label font-medium text-ink-1">
+            קובץ יבוא JSON
+          </label>
+          <Input
+            id="curated-import-file"
+            type="file"
+            accept="application/json,.json"
+            disabled={busy}
+            className="h-auto cursor-pointer py-2 file:me-3 file:h-8 file:cursor-pointer file:rounded-full file:bg-surface-2 file:px-4 file:text-label file:text-ink-1"
+            onChange={(e) => void choose(e.target.files?.[0])}
+          />
+        </div>
+        {packet && (
+          <div className={cn(block, "mt-1 flex flex-col gap-4")}>
+            <p className="flex items-center gap-2 text-body text-ink-1">
+              <FileJson aria-hidden className="size-4 shrink-0 text-ink-2" />
+              מוכנים לפרסום: {packet.places.length} מקומות ו־{packet.photoCount} תמונות.
+            </p>
+            <details className="group rounded-2xl border border-line">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-label text-ink-1 [&::-webkit-details-marker]:hidden">
+                הצגת רשימת המקומות
+                <ChevronDown
+                  aria-hidden
+                  className="size-4 text-ink-3 transition-transform duration-300 group-open:rotate-180 motion-reduce:transition-none"
+                />
+              </summary>
+              <ul className="max-h-64 divide-y divide-line overflow-auto border-t border-line px-4 text-body">
+                {packet.places.map((p) => (
+                  <li key={p.id} className="py-2">
+                    {p.name_he}
+                  </li>
+                ))}
+              </ul>
+            </details>
+            <Button className="pressable self-start" disabled={busy} onClick={() => void publish()}>
+              {busy ? <LoaderCircle aria-hidden className="animate-spin" /> : <Upload aria-hidden />}
+              פרסום המקומות שנבחרו
+            </Button>
+          </div>
+        )}
+        {message && (
+          <p role="status" className={cn("flex items-start gap-2.5 text-body", done ? "text-ink-1" : "text-ink-2")}>
+            {done ? (
+              <CircleCheck aria-hidden className="mt-1 size-4 shrink-0 text-hope" />
+            ) : (
+              <LoaderCircle aria-hidden className="mt-1 size-4 shrink-0 animate-spin" />
+            )}
+            {message}
           </p>
-          <details className="rounded-2xl border border-line p-3">
-            <summary className="cursor-pointer text-label">הצגת רשימת המקומות</summary>
-            <ul className="mt-3 max-h-64 overflow-auto text-body">
-              {packet.places.map((p) => (
-                <li key={p.id}>{p.name_he}</li>
-              ))}
-            </ul>
-          </details>
-          <Button disabled={busy} onClick={() => void publish()}>
-            פרסום המקומות שנבחרו
-          </Button>
-        </>
-      )}
-      {message && (
-        <p role="status" className="text-body">
-          {message}
-        </p>
-      )}
-      {error && (
-        <p role="alert" className="text-body text-destructive">
-          {error}
-        </p>
-      )}
-    </section>
+        )}
+        {error && <Alert>{error}</Alert>}
+      </div>
+    </Section>
   )
 }

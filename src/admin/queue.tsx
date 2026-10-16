@@ -1,9 +1,14 @@
 import { useCallback, useEffect, useState } from "react"
+import { AnimatePresence, motion } from "motion/react"
+import { Check, CornerUpLeft, Inbox, LoaderCircle, MapPin, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Textarea } from "@/components/ui/textarea"
 import { KINDS } from "@/data/taxonomy"
+import { ease, spring } from "@/lib/motion"
+import { cn } from "@/lib/utils"
 import type { Kind } from "@/types"
+import { Alert, Empty, Loading, Section, block, card, meta } from "./ui"
 
 interface Item {
   id: string
@@ -60,22 +65,30 @@ function Decision({
 }) {
   const [returning, setReturning] = useState(false)
   const [note, setNote] = useState("")
+  // Which button was pressed, so the wait shows on it rather than on the whole card.
+  const [pressed, setPressed] = useState<Action | null>(null)
+  const run = (action: Action, text?: string) => {
+    setPressed(action)
+    void decide(item, action, text)
+  }
+  const waiting = (action: Action) => busy && pressed === action
   if (returning)
     return (
       <form
-        className="mt-4 flex flex-col gap-3 border-t border-line pt-4"
+        className={cn(block, "flex flex-col gap-4")}
         onSubmit={(e) => {
           e.preventDefault()
-          if (note.trim()) void decide(item, "return", note.trim())
+          if (note.trim()) run("return", note.trim())
         }}
       >
         <Field>
           <FieldLabel htmlFor={`note-${item.id}`}>הערה למגיש</FieldLabel>
-          <Textarea id={`note-${item.id}`} value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} required />
+          <Textarea id={`note-${item.id}`} value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} required autoFocus />
           <FieldDescription>מה צריך לתקן. ההערה מוצגת למי ששלח את ההצעה, בקישור המעקב שלו.</FieldDescription>
         </Field>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button type="submit" className="pressable" disabled={busy || !note.trim()}>
+            {waiting("return") ? <LoaderCircle aria-hidden className="animate-spin" /> : <CornerUpLeft aria-hidden />}
             שליחת ההחזרה
           </Button>
           <Button type="button" variant="ghost" className="pressable" onClick={() => setReturning(false)}>
@@ -85,22 +98,99 @@ function Decision({
       </form>
     )
   return (
-    <div className="mt-4 flex flex-wrap gap-2 border-t border-line pt-4">
-      <Button className="pressable" disabled={busy} onClick={() => decide(item, "approve")}>
+    <div className={cn(block, "flex flex-wrap items-center gap-2")}>
+      <Button className="pressable min-w-28" disabled={busy} onClick={() => run("approve")}>
+        {waiting("approve") ? <LoaderCircle aria-hidden className="animate-spin" /> : <Check aria-hidden />}
         אישור
       </Button>
       <Button className="pressable" variant="outline" disabled={busy} onClick={() => setReturning(true)}>
+        <CornerUpLeft aria-hidden />
         החזרה לתיקון
       </Button>
-      <Button className="pressable" variant="ghost" disabled={busy} onClick={() => decide(item, "reject")}>
+      <Button className="pressable ms-auto text-ink-2" variant="ghost" disabled={busy} onClick={() => run("reject")}>
+        {waiting("reject") ? <LoaderCircle aria-hidden className="animate-spin" /> : <X aria-hidden />}
         דחייה
       </Button>
     </div>
   )
 }
 
+/** One submission as it would be published, laid out to be read top to bottom before deciding. */
+function Submission({
+  item,
+  busy,
+  decide,
+}: {
+  item: Item
+  busy: boolean
+  decide: (item: Item, action: Action, note?: string) => Promise<void>
+}) {
+  return (
+    <>
+      {!!item.correction && (
+        <p className="mb-2 flex items-center gap-2 text-label text-ink-1">
+          <span aria-hidden className="size-2 shrink-0 rounded-full bg-dawn" />
+          {item.hidden ? "תיקון למקום שמוסתר כרגע: אישור לא יחזיר אותו לאתר" : "תיקון למקום שכבר מופיע באתר"}
+        </p>
+      )}
+      <p className="text-caption text-ink-3">
+        {meta([KINDS[item.kind].label, item.place_he, item.in_memory_of && `לזכר ${item.in_memory_of}`])}
+      </p>
+      <h3 className="mt-1 text-title-3 text-ink-1">{item.name_he}</h3>
+      {/* The point that would be published, to check against a map before approving. */}
+      <p className="mt-2 flex items-center gap-1.5 text-caption text-ink-2">
+        <MapPin aria-hidden className="size-3.5 shrink-0" />
+        <a
+          className="tabular-nums underline decoration-line-strong underline-offset-4 hover:text-ink-1 hover:decoration-current"
+          dir="ltr"
+          href={`https://www.openstreetmap.org/?mlat=${item.lat}&mlon=${item.lng}#map=17/${item.lat}/${item.lng}`}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {item.lat.toFixed(5)}, {item.lng.toFixed(5)}
+        </a>
+        {item.location_precision === "approximate" && <span>(משוער)</span>}
+      </p>
+      {/* Shown as text, never as a link: the moderator reads where it goes before anyone can follow it. */}
+      {item.link_url && (
+        <p className="mt-1 text-caption break-all text-ink-2" dir="ltr">
+          {item.link_url}
+        </p>
+      )}
+      {/* Private property: what the visitor will be told, read before it is approved (the access note is published). */}
+      {!!item.on_private_property && (
+        <div className="mt-4 border-s-2 border-dawn ps-4">
+          <p className="text-label font-bold text-ink-1">
+            {item.location_permission ? "במקום פרטי, במיקום מדויק באישור הבעלים" : "במקום פרטי, בלי אישור הבעלים: יוצג מיקום משוער"}
+          </p>
+          {item.access_note_he && (
+            <p className="mt-1 text-body whitespace-pre-line text-ink-1">
+              <span className="text-ink-2">איך מגיעים (יפורסם): </span>
+              {item.access_note_he}
+            </p>
+          )}
+        </div>
+      )}
+      {item.photo_url && (
+        <figure className="mt-4">
+          <img
+            src={item.photo_url}
+            alt={item.photo_alt ?? ""}
+            className="max-h-72 rounded-2xl border border-line bg-surface-2 object-contain"
+          />
+          <figcaption className="mt-2 text-caption text-ink-2">
+            {meta([item.photo_alt, item.photo_credit && `צילום: ${item.photo_credit}`])}
+          </figcaption>
+        </figure>
+      )}
+      {item.story_he && <p className="reading-copy mt-4 text-body-lg whitespace-pre-line text-ink-1">{item.story_he}</p>}
+      <Decision item={item} busy={busy} decide={decide} />
+    </>
+  )
+}
+
 /** The moderation queue: read a submission, approve or reject it. Moderators never edit what a contributor wrote. */
-export function Queue() {
+export function Queue({ onCount }: { onCount?: (n: number | null) => void }) {
   const [items, setItems] = useState<Item[] | null>(null)
   const [error, setError] = useState("")
   const [busy, setBusy] = useState<string | null>(null)
@@ -120,6 +210,8 @@ export function Queue() {
       live = false
     }
   }, [])
+  // The page's header counts what waits here.
+  useEffect(() => onCount?.(items ? items.length : null), [items, onCount])
 
   const decide = async (item: Item, action: Action, note?: string) => {
     setBusy(item.id)
@@ -139,76 +231,41 @@ export function Queue() {
     await load()
   }
 
+  const loading = items === null && !error
   return (
-    <section aria-labelledby="queue-title">
-      <div>
-        <h2 id="queue-title" className="text-title-2 text-ink-1">
-          הצעות שממתינות לבדיקה
-        </h2>
-        {error && (
-          <p role="alert" className="mt-3 text-label text-destructive">
-            {error}
-          </p>
-        )}
-        {items?.length === 0 && <p className="mt-6 text-ink-2">אין הצעות ממתינות.</p>}
-        <div className="mt-6 grid gap-4">
-          {items?.map((item) => (
-            <article key={item.id} aria-label={item.name_he} className="rounded-2xl border border-line p-4">
-              {!!item.correction && (
-                <p className="text-caption text-ink-2">
-                  {item.hidden ? "תיקון למקום שמוסתר כרגע: אישור לא יחזיר אותו לאתר" : "תיקון למקום שכבר מופיע באתר"}
-                </p>
-              )}
-              <h2 className="text-title-3 text-ink-1">{item.name_he}</h2>
-              <p className="text-caption text-ink-2">
-                {[KINDS[item.kind].label, item.place_he, item.in_memory_of && `לזכר ${item.in_memory_of}`].filter(Boolean).join(" · ")}
-              </p>
-              {/* The point that would be published, to check against a map before approving. */}
-              <p className="text-caption text-ink-2 tabular-nums" dir="ltr">
-                <a
-                  className="underline underline-offset-2"
-                  href={`https://www.openstreetmap.org/?mlat=${item.lat}&mlon=${item.lng}#map=17/${item.lat}/${item.lng}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  {item.lat.toFixed(5)}, {item.lng.toFixed(5)}
-                </a>
-                {item.location_precision === "approximate" && " (משוער)"}
-              </p>
-              {/* Private property: what the visitor will be told, read before it is approved (the access note is published). */}
-              {!!item.on_private_property && (
-                <div className="mt-2 rounded-xl border border-line p-3">
-                  <p className="text-caption font-bold text-ink-1">
-                    {item.location_permission ? "במקום פרטי, במיקום מדויק באישור הבעלים" : "במקום פרטי, בלי אישור הבעלים: יוצג מיקום משוער"}
-                  </p>
-                  {item.access_note_he && (
-                    <p className="mt-1 text-body whitespace-pre-line text-ink-1">
-                      <span className="text-ink-2">איך מגיעים (יפורסם): </span>
-                      {item.access_note_he}
-                    </p>
-                  )}
-                </div>
-              )}
-              {/* Shown as text, never as a link: the moderator reads where it goes before anyone can follow it. */}
-              {item.link_url && (
-                <p className="text-caption break-all text-ink-2" dir="ltr">
-                  {item.link_url}
-                </p>
-              )}
-              {item.photo_url && (
-                <figure className="mt-2">
-                  <img src={item.photo_url} alt={item.photo_alt ?? ""} className="max-h-64 rounded-xl object-contain" />
-                  <figcaption className="text-caption text-ink-2">
-                    {[item.photo_alt, item.photo_credit && `צילום: ${item.photo_credit}`].filter(Boolean).join(" · ")}
-                  </figcaption>
-                </figure>
-              )}
-              {item.story_he && <p className="mt-2 whitespace-pre-line text-ink-1">{item.story_he}</p>}
-              <Decision item={item} busy={busy === item.id} decide={decide} />
-            </article>
+    <Section
+      id="queue"
+      title="הצעות שממתינות לבדיקה"
+      lead="מה שאנשים שלחו, בדיוק כפי שיפורסם. בודקים את המיקום במפה, קוראים, ומחליטים."
+      count={items ? String(items.length) : null}
+      busy={loading}
+    >
+      {error && <Alert className="mb-5">{error}</Alert>}
+      {loading && <Loading />}
+      {items?.length === 0 && (
+        <Empty icon={<Inbox className="size-5" />} title="אין הצעות ממתינות.">
+          הצעה חדשה תופיע כאן ברגע שתגיע.
+        </Empty>
+      )}
+      <div className="grid gap-4">
+        <AnimatePresence initial={false}>
+          {items?.map((item, i) => (
+            // A decided submission fades out of the list, and the ones after it close the gap.
+            <motion.article
+              key={item.id}
+              layout="position"
+              aria-label={item.name_he}
+              className={card}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0, transition: { duration: 0.38, ease, delay: Math.min(i, 8) * 0.04 } }}
+              exit={{ opacity: 0, scale: 0.98, transition: { duration: 0.2, ease } }}
+              transition={spring.soft}
+            >
+              <Submission item={item} busy={busy === item.id} decide={decide} />
+            </motion.article>
           ))}
-        </div>
+        </AnimatePresence>
       </div>
-    </section>
+    </Section>
   )
 }
