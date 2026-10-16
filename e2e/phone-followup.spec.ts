@@ -244,7 +244,7 @@ for (const width of [320, 390])
       }
       await page.getByRole("button", { name: "מעבר למצב לילה", exact: true }).click()
       await expect.poll(surface).toEqual(["rgb(11, 17, 32)", "rgb(11, 17, 32)", "rgb(11, 17, 32)", "dark", "#0b1120"])
-      await edges("rgb(107, 71, 99)", "rgb(19, 26, 44)")
+      await edges("rgb(23, 26, 47)", "rgb(19, 26, 44)")
       await expect(page.locator('[data-viewport-edge="top"][data-before]')).toHaveCount(0)
       await page.getByRole("button", { name: "מעבר לאור בוקר", exact: true }).click()
       await expect.poll(surface).toEqual(["rgb(229, 238, 219)", "rgb(229, 238, 219)", "rgb(229, 238, 219)", "light", "#e5eedb"])
