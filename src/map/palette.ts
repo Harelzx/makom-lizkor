@@ -25,7 +25,9 @@ export interface Palette {
   fog: string
 }
 
-// Night: the ink scale (see --p-ink-* in index.css), with a rose-violet line of first light.
+// Night: the ink scale (see --p-ink-* in index.css). The horizon sits halfway between the sky and the fog: the opening's
+// tilted camera puts it across the top of the screen, and a rose-violet horizon there read as a band laid over the map.
+// The first light comes up from the horizon in FIRST_LIGHT instead.
 export const NIGHT: Palette = {
   land: "#18213a",
   farmland: "#1a2440",
@@ -45,7 +47,7 @@ export const NIGHT: Palette = {
   hillHighlight: "#3a4566",
   hillAccent: "#0f1526",
   sky: "#070b19",
-  horizon: "#6b4763",
+  horizon: "#171a2f",
   fog: "#262844",
 }
 
