@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client"
 import { MotionConfig } from "motion/react"
 import { ArrowUpLeft } from "lucide-react"
 import "@/index.css"
-import { Anemone } from "@/components/anemone"
+import { AnemoneMark } from "@/components/anemone"
 import { cn } from "@/lib/utils"
 import { Queue } from "./queue"
 import { Reports, type ReportCounts } from "./reports"
@@ -54,7 +54,7 @@ function Admin() {
         <header className="sticky top-0 z-20 border-b border-line bg-glass">
           <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
             <div className="flex items-center gap-2.5">
-              <Anemone size={28} />
+              <AnemoneMark size={28} />
               <span className="text-headline text-ink-1">מקום לזכור</span>
               <span className="text-label text-ink-3">ניהול</span>
             </div>

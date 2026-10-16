@@ -80,6 +80,12 @@
   --brand-strong: var(--p-anemone-600);
   --brand-soft: var(--p-anemone-50);
   --brand-ink: #ffffff;
+  /* the primary action: ink, not red, so the map's anemones stay the strongest red on the screen; a step lighter than
+     the text's ink so it reads as a button, not a hole; only its mark is red */
+  --action: var(--p-ink-700);
+  --action-strong: var(--p-ink-800);
+  --action-ink: #ffffff;
+  --action-mark: var(--p-anemone-400);
   --hope: var(--p-field-500);
   --hope-soft: var(--p-field-50);
   --hope-ink: var(--p-field-700);
@@ -108,6 +114,11 @@
   --brand: var(--p-anemone-400);
   --brand-strong: var(--p-anemone-500);
   --brand-soft: color-mix(in oklab, var(--p-anemone-400) 14%, transparent);
+  /* at night the action turns over: pale on the dark map */
+  --action: var(--p-ink-50);
+  --action-strong: var(--p-ink-100);
+  --action-ink: var(--p-ink-900);
+  --action-mark: var(--p-anemone-600);
   --hope: var(--p-field-300);
   --hope-soft: color-mix(in oklab, var(--p-field-300) 12%, transparent);
   --hope-ink: var(--p-field-200);
@@ -194,6 +205,10 @@
   --color-brand-strong: var(--brand-strong);
   --color-brand-soft: var(--brand-soft);
   --color-brand-ink: var(--brand-ink);
+  --color-action: var(--action);
+  --color-action-strong: var(--action-strong);
+  --color-action-ink: var(--action-ink);
+  --color-action-mark: var(--action-mark);
   --color-hope: var(--hope);
   --color-hope-soft: var(--hope-soft);
   --color-hope-ink: var(--hope-ink);

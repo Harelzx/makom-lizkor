@@ -6,7 +6,7 @@ import { ChevronUpIcon, InfoIcon, MoonIcon, PlusIcon, SearchIcon, SunIcon } from
 import { Button } from "@/components/ui/button"
 import { Kbd } from "@/components/ui/kbd"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { Anemone } from "@/components/anemone"
+import { AnemoneMark } from "@/components/anemone"
 import { Explorer } from "@/components/explorer"
 import { useStore } from "@/store"
 import { cn } from "@/lib/utils"
@@ -30,7 +30,7 @@ export function Wordmark({ className, compact }: { className?: string; compact?:
   return (
     <a href="#/" className={cn("group flex items-center gap-2.5 whitespace-nowrap", className)} aria-label="מקום לזכור, חזרה למפה">
       <span className="transition-transform duration-500 ease-[var(--ease-spring)] group-hover:rotate-[24deg]">
-        <Anemone size={compact ? 22 : 30} />
+        <AnemoneMark size={compact ? 24 : 32} />
       </span>
       <span
         className={cn("font-display leading-none font-black text-ink-1", compact ? "text-[16px] min-[360px]:text-[18px]" : "text-title-2")}
@@ -112,7 +112,7 @@ function Actions({ compact }: { compact?: boolean }) {
         <InfoIcon />
       </Button>
       {!compact && (
-        <Button variant="brand" className="h-11 rounded-full px-5" onClick={() => setAddOpen(true)}>
+        <Button variant="action" className="h-11 rounded-full px-5" onClick={() => setAddOpen(true)}>
           <PlusIcon data-icon="inline-start" />
           הוספת מקום
         </Button>
@@ -283,7 +283,7 @@ export function Shell() {
         animate={{ opacity: 1, y: 0 }}
         className="fixed inset-x-[12px] top-[max(12px,env(safe-area-inset-top))] z-40 flex flex-wrap items-center justify-between gap-2"
       >
-        {/* The flower is round, so it sits concentric in the pill's cap ((46 - 22) / 2 = 12px). The last letter is
+        {/* The flower is round, so it sits concentric in the pill's cap ((48 - 24) / 2 = 12px). The last letter is
             square against a curve that turns away from it, so that end needs more room to look as far from the edge. */}
         <div className="rounded-full bg-surface py-3 ps-3 pe-5 shadow-chip ring-1 ring-line">
           <Wordmark compact />
@@ -348,7 +348,7 @@ export function Shell() {
                     {!folded ? "חזרה למפה" : selectedId ? "לסיפור ולפרטי הביקור" : "הצגת המקומות"}
                   </Button>
                   <Button
-                    variant="brand"
+                    variant="action"
                     className="h-11 min-w-fit flex-1 rounded-full px-4 py-1 leading-tight whitespace-normal"
                     onClick={() => setAddOpen(true)}
                   >

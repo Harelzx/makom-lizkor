@@ -21,6 +21,9 @@ const buttonVariants = cva(
         // The project's own: the anemone action, and round controls that float over the map.
         brand:
           "bg-brand font-bold text-brand-ink shadow-brand hover:bg-brand-strong active:translate-y-0 active:scale-[0.97] dark:bg-brand-strong dark:hover:bg-brand-strong/90",
+        // The primary action in ink, its mark in the anemone's red (docs/design-system.md, «צבע»).
+        action:
+          "bg-action font-bold text-action-ink shadow-chip hover:bg-action-strong active:translate-y-0 active:scale-[0.97] [&_svg]:text-action-mark",
         float:
           "bg-surface text-ink-1 shadow-chip ring-1 ring-line hover:bg-surface-2 active:translate-y-0 active:scale-[0.96]",
       },
