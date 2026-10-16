@@ -14,3 +14,14 @@ export function displayTextFields<T>(value: T, prose = false): T {
     ) as T
   return value
 }
+
+const HEBREW = /[֐-׿]/
+/**
+ * A name given in two scripts, "Israel Parker (ישראל פרקר)", as its two spellings. In one isolate the Hebrew lands inside
+ * the Latin name whenever the line breaks between its words; apart, each keeps its own direction.
+ */
+export function nameParts(name: string): [string] | [string, string] {
+  const m = name.match(/^(.+?)\s*\(([^()]+)\)$/)
+  if (!m || HEBREW.test(m[1]) === HEBREW.test(m[2])) return [name]
+  return [m[1], m[2]]
+}
