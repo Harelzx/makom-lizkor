@@ -3,6 +3,19 @@ import { cn } from "@/lib/utils"
 import { Img } from "@/components/kit"
 import type { Photo } from "@/types"
 import { photoSrcSet, PHOTO_SIZES } from "@/lib/responsive-photo"
+import { nameParts } from "@/lib/display-text"
+
+/** A credited name, each of its spellings in its own direction. */
+export function CreditName({ name }: { name: string }) {
+  const [first, second] = nameParts(name)
+  return second ? (
+    <>
+      <bdi>{first}</bdi> (<bdi>{second}</bdi>)
+    </>
+  ) : (
+    <bdi>{first}</bdi>
+  )
+}
 
 function Credit({ photo }: { photo: Photo }) {
   return (
@@ -12,7 +25,7 @@ function Credit({ photo }: { photo: Photo }) {
         צילום
       </a>
       {/* Latin names and the license sit in their own direction, so parentheses and "4.0" don't flip in the Hebrew line. */}:{" "}
-      <bdi>{photo.author}</bdi>,{" "}
+      <CreditName name={photo.author} />,{" "}
       <a href={photo.license_url} target="_blank" rel="noopener" className="underline underline-offset-2">
         <bdi dir="ltr">{photo.license}</bdi>
       </a>

@@ -7,6 +7,32 @@ import { FlowerSprite } from "./flower-sprite"
 import { createMap, destroyMap, flyToPlace, getMap, returnToDawn, setLabels, setOwnLabels, shiftLight, startOrbit } from "./controller"
 import type { Place } from "@/types"
 import { cn } from "@/lib/utils"
+import { placeNames, type Box } from "./declutter"
+
+const boxOf = (el: Element): Box => {
+  const r = el.getBoundingClientRect()
+  return { x: r.x, y: r.y, w: r.width, h: r.height }
+}
+
+/** Sets each community name's side from what is on screen now: all the reading first, then the writing. */
+function declutterNames(root: HTMLElement) {
+  const communities = [...root.querySelectorAll<HTMLElement>(".mk-community")]
+  if (!communities.length) return
+  const flowers = [...root.querySelectorAll(".mk-flower .mk-bloom")].map(boxOf)
+  const names = communities.map((c, i) => {
+    const dot = boxOf(c.querySelector(".mk-community-dot")!)
+    const name = c.querySelector(".mk-community-name")!.getBoundingClientRect()
+    return { id: String(i), dot, w: name.width, h: name.height }
+  })
+  // The gap scales with the marker, as the dot does (6px beside a 9px dot).
+  const gap = (names[0].dot.w / 9) * 6
+  const sides = placeNames(names, flowers, boxOf(root), gap)
+  communities.forEach((c, i) => {
+    const { side, over } = sides.get(String(i))!
+    c.dataset.name = side
+    c.toggleAttribute("data-over", over)
+  })
+}
 
 /** Marker scale follows zoom, so a field of flowers at country scale becomes single blooms up close. */
 function scaleFor(zoom: number) {
@@ -52,6 +78,14 @@ export function MapCanvas() {
     }
     setScale()
     map.on("zoom", setScale)
+    // Names are placed once the camera rests and the markers have finished scaling (0.35s), never mid-move.
+    let settle = 0
+    const declutter = () => {
+      clearTimeout(settle)
+      settle = window.setTimeout(() => container.current && declutterNames(container.current), 400)
+    }
+    map.on("moveend", declutter)
+    map.on("resize", declutter)
     map.on("load", () => {
       setReady(true)
       if (useStore.getState().phase === "intro") {
@@ -63,7 +97,10 @@ export function MapCanvas() {
       const s = useStore.getState()
       if (s.picking) s.setDraft({ lat: e.lngLat.lat, lng: e.lngLat.lng })
     })
-    return () => destroyMap()
+    return () => {
+      clearTimeout(settle)
+      destroyMap()
+    }
   }, [])
 
   // MapLibre owns this element's classes, so the opening flag is toggled rather than rendered.
@@ -118,6 +155,14 @@ export function MapCanvas() {
       })
     } else draftMarker.current.setLngLat([draft.lng, draft.lat])
   }, [draft, picking])
+
+  // New markers (the feed arriving, a place added) take their room as soon as they are on the map.
+  useEffect(() => {
+    if (!ready || !container.current) return
+    const root = container.current
+    const t = window.setTimeout(() => declutterNames(root), 400)
+    return () => clearTimeout(t)
+  }, [ready, places])
 
   // Bloom order: the flowers open outward from the heart of the envelope.
   const order = useMemo(() => {
