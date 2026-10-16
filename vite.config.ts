@@ -42,7 +42,13 @@ export default defineConfig({
       },
     },
   },
-  server: { port: checkoutPorts(import.meta.dirname).dev, strictPort: true },
+  // Other sessions' worktrees live under .claude/worktrees; without this, a change there (index.html, tsconfig)
+  // full-reloads this checkout's page and kills a film render or an e2e run midway.
+  server: {
+    port: checkoutPorts(import.meta.dirname).dev,
+    strictPort: true,
+    watch: { ignored: ["**/.claude/worktrees/**"] },
+  },
   optimizeDeps: { exclude: ["maplibre-gl"] },
   worker: { format: "es" },
 })
