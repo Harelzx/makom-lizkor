@@ -43,11 +43,13 @@ export default defineConfig({
     },
   },
   // Other sessions' worktrees live under .claude/worktrees; without this, a change there (index.html, tsconfig)
-  // full-reloads this checkout's page and kills a film render or an e2e run midway.
+  // full-reloads this checkout's page and kills a film render or an e2e run midway. Only this checkout's own
+  // .claude/worktrees: a worktree's own path runs through the main checkout's, and "**/.claude/worktrees/**"
+  // would ignore every file of a dev server running inside one (no HMR at all).
   server: {
     port: checkoutPorts(import.meta.dirname).dev,
     strictPort: true,
-    watch: { ignored: ["**/.claude/worktrees/**"] },
+    watch: { ignored: [resolve(import.meta.dirname, ".claude/worktrees/**")] },
   },
   optimizeDeps: { exclude: ["maplibre-gl"] },
   worker: { format: "es" },
