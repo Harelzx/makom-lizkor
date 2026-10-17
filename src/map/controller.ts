@@ -73,10 +73,10 @@ function build(container: HTMLElement, labels: boolean) {
   })
   if (import.meta.env.DEV) (window as unknown as { __map: maplibregl.Map }).__map = map
   map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "bottom-left")
-  // Narrow maps (up to 640px) get MapLibre's compact credit: shown in full first, then folded to an (i) that opens it
-  // again. OpenStreetMap's guidelines allow that fold on map interaction or after five seconds (foldCredit), and the
-  // full list stays in About. A wide map has room for the whole line, so it never folds there.
-  map.addControl(new maplibregl.AttributionControl({}), "bottom-right")
+  // The credit is compact at every width: shown in full when the map appears, then folded to an (i) that opens it again.
+  // OpenStreetMap's guidelines allow that fold on map interaction or after five seconds (foldCredit), but not a credit
+  // folded from the start, and the full list stays in About. The map appears with the opening, so by day it's an (i).
+  map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right")
   return map
 }
 
