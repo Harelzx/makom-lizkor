@@ -1,4 +1,5 @@
 import { expect, test, type Browser, type BrowserContextOptions, type Page } from "./fixtures"
+import { openItem } from "./admin"
 import { ownAddress } from "./publish"
 
 // The opening isn't what this file tests, and its sunrise took about 8 s on every page that went through it. A visitor
@@ -85,7 +86,7 @@ test(
     await modCtx.request.post("/__dev/login", { data: { email: "dev@example.test" } })
     const mod = await modCtx.newPage()
     await mod.goto("/admin/")
-    const item = mod.getByRole("article", { name })
+    const item = await openItem(mod, name)
     await item.getByRole("button", { name: "אישור" }).click()
     await expect(item).toHaveCount(0)
 
@@ -150,7 +151,7 @@ test("approval while the receipt is open resolves its device id to the public ca
   await moderator.request.post("/__dev/login", { data: { email: "dev@example.test" } })
   const mod = await moderator.newPage()
   await mod.goto("/admin/")
-  const item = mod.getByRole("article", { name })
+  const item = await openItem(mod, name)
   await item.getByRole("button", { name: "אישור", exact: true }).click()
   await expect(item).toHaveCount(0)
   await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")))

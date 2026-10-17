@@ -1,7 +1,6 @@
 import type { ReactNode } from "react"
 import { CircleAlert } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { Skeleton } from "@/components/ui/skeleton"
 
 /**
  * The admin page's own pieces, on the site's tokens. A card is a white surface lifted off the canvas; inside it,
@@ -15,6 +14,22 @@ export const check = "size-[1.125rem] shrink-0 accent-brand"
 /** The site's input look for a native select, which shadcn doesn't style. */
 export const select =
   "h-11 w-full rounded-3xl border border-transparent bg-input/50 px-3 text-body text-ink-1 outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
+
+/** When something arrived, as a person says it, counted in Israel's calendar days whatever the browser's zone. */
+export function ago(iso: string) {
+  const zone = { timeZone: "Asia/Jerusalem" }
+  const day = (d: Date) => Date.parse(d.toLocaleDateString("en-CA", zone))
+  const at = new Date(iso)
+  const days = Math.round((day(new Date()) - day(at)) / 86_400_000)
+  const time = at.toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit", ...zone })
+  return days <= 0 ? `היום, ${time}` : days === 1 ? `אתמול, ${time}` : days === 2 ? "לפני יומיים" : `לפני ${days} ימים`
+}
+
+/** The detail column: one item set for reading, its decisions in a bar that stays at the bottom while it scrolls. */
+export const detailBody = "mx-auto w-full max-w-3xl flex-1 px-4 pt-6 pb-10 sm:px-8 lg:px-12 lg:pt-11"
+export const detailLabel = "mt-8 mb-2.5 text-label font-semibold text-ink-2"
+export const detailBar = "sticky bottom-0 z-10 border-t border-line bg-glass pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+export const detailBarInner = "mx-auto flex w-full max-w-3xl flex-wrap items-center gap-2.5 px-4 sm:px-8 lg:px-12"
 
 /** A part of the page: its title, what it is for, and how many things wait in it. */
 export function Section({
@@ -66,39 +81,6 @@ export function Alert({ children, className }: { children: ReactNode; className?
       <CircleAlert aria-hidden className="mt-1 size-4 shrink-0" />
       <span>{children}</span>
     </p>
-  )
-}
-
-/** While a list loads: the shape of what is coming, so the page doesn't jump when it arrives. */
-export function Loading({ rows = 2 }: { rows?: number }) {
-  return (
-    <div aria-hidden className="grid gap-4">
-      {Array.from({ length: rows }, (_, i) => (
-        <div key={i} className={card}>
-          <Skeleton className="h-3.5 w-40 rounded-full bg-surface-3" />
-          <Skeleton className="mt-3 h-6 w-64 max-w-full rounded-full bg-surface-3" />
-          <Skeleton className="mt-4 h-3.5 w-full rounded-full bg-surface-3" />
-          <Skeleton className="mt-2 h-3.5 w-4/5 rounded-full bg-surface-3" />
-          <div className="mt-6 flex gap-2 border-t border-line pt-5">
-            <Skeleton className="h-11 w-24 rounded-full bg-surface-3" />
-            <Skeleton className="h-11 w-28 rounded-full bg-surface-3" />
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-/** Nothing waiting: a calm answer rather than a blank space. */
-export function Empty({ icon, title, children }: { icon: ReactNode; title: string; children?: ReactNode }) {
-  return (
-    <div className="flex flex-col items-center gap-3 rounded-3xl border border-dashed border-line-strong px-6 py-12 text-center">
-      <span aria-hidden className="grid size-12 place-items-center rounded-full border border-line bg-surface text-ink-2 shadow-chip">
-        {icon}
-      </span>
-      <p className="text-headline text-ink-1">{title}</p>
-      {children && <p className="reading-copy text-body text-ink-2">{children}</p>}
-    </div>
   )
 }
 
