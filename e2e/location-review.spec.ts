@@ -9,9 +9,18 @@ for (const textSize of [100, 200])
     { tag: "@phone" },
     async ({ page }) => {
       await page.setViewportSize({ width: 390, height: 844 })
+      // Large text is the reader's setting, so the page opens with it. Switched on under an open sheet, Linux WebKit kept
+      // hit-testing the sheet's list at its old height until the next render, and a tap on the bar landed in the list.
+      if (textSize === 200)
+        await page.addInitScript(() =>
+          document.addEventListener("DOMContentLoaded", () => {
+            const style = document.createElement("style")
+            style.textContent = "html { font-size: 200% !important; }"
+            document.head.append(style)
+          }),
+        )
       await page.goto("/#/place/car-wall-tkuma")
       await expect(page.getByRole("heading", { name: "קיר המכוניות ליד תקומה", exact: true })).toBeVisible({ timeout: 20000 })
-      if (textSize === 200) await page.addStyleTag({ content: "html { font-size: 200% !important; }" })
       const writes: string[] = []
       page.on("request", (request) => {
         if (request.method() !== "GET" && new URL(request.url()).pathname.startsWith("/api/v1/submissions")) writes.push(request.method())
