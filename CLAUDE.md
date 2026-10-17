@@ -76,7 +76,7 @@ A single Zustand store holds everything: the places from the feed, the visitor's
 
 - `intro` (the 06:29 opening) → `dawn` (the sunrise is playing) → `day` (the site itself). `components/intro.tsx` drives this sequence: it sets `dawn`, awaits `shiftLight("first")` and then `shiftLight("morning")` (7 s in all, `SUNRISE`), fades the place names in near its end (`fadeInLabels`), then sets `day`.
 - `App.tsx` toggles `.dark` on `<html>`, and the `theme-color` meta, from `phase` and `light`. The interface is dark during the intro and in night mode. On iPhone Safari (26+) what shows under the status bar and toolbar comes from fixed layers at the screen's edges, so `main` has no background and nothing fixed and full-width touches the top: the map runs under the clock. The only edge layer is a thin bottom strip in the sheet's color, remounted per color (`docs/design-system.md`, «הטלפון»).
-- `INTRO_SEEN` in localStorage makes return visits skip straight to the name. A `#/place/<id>` link skips the intro entirely: `linkedPlaceId()` resolves the place before the first render.
+- `INTRO_SEEN` in localStorage makes return visits start in the day (`introSeen()` in the store), the map already on the envelope's overview; About's «replay» plays the opening again. A `#/place/<id>` link skips the intro entirely: `linkedPlaceId()` resolves the place before the first render.
 
 ### Routing (`useHashRoute` in `App.tsx`)
 

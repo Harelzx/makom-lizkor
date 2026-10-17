@@ -75,10 +75,10 @@ export function MapCanvas() {
   )
   useEffect(() => setOwnLabels(communityNames), [communityNames])
 
-  // Create the map once, at 06:29.
+  // Create the map once: at 06:29 for the opening, or already in the day.
   useEffect(() => {
-    const { phase, light } = useStore.getState()
-    const map = createMap(container.current!, phase === "day" ? light : "night", phase !== "intro")
+    const { phase, light, selectedId } = useStore.getState()
+    const map = createMap(container.current!, phase === "day" ? light : "night", phase !== "intro", phase === "day" && !selectedId)
     // No map in this browser: the site goes on without it, and says so once the day begins.
     if (!map) return useStore.getState().setMapMissing()
     // The marker scale lives in a CSS variable on the container. Writing it restyles every marker,

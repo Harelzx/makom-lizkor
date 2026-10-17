@@ -157,20 +157,21 @@ for (const [date, years] of [
   })
 }
 
-test("a returning visitor goes to the morning without the film's line", async ({ page }) => {
+test("a returning visitor comes straight back to the day", async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem("makom-lizkor:v2-seen", "1"))
+  // Watched from the page's first script: neither the name's gate nor the film's line ever shows, not even for a frame.
+  await page.addInitScript(() => {
+    const w = window as unknown as { __opening: boolean }
+    w.__opening = false
+    const look = () => {
+      const text = document.body?.innerText.replace(/\s+/g, " ") ?? ""
+      if (text.includes("אל הבוקר") || /עברו מאז\. ?ובכל אחד מהם/.test(text)) w.__opening = true
+      requestAnimationFrame(look)
+    }
+    requestAnimationFrame(look)
+  })
   await page.goto("/")
-  // Straight to the name, as on every visit after the first; the line belongs to the film, which played once.
-  await page.getByRole("button", { name: "אל הבוקר" }).click()
-  // Watched from inside the page through the whole sunrise: the line never comes, not even for a frame.
-  const seen = await page.evaluate(
-    () =>
-      new Promise<boolean>((done) => {
-        const found = () => /עברו מאז\. ?ובכל אחד מהם/.test(document.body.innerText.replace(/\s+/g, " "))
-        const t0 = performance.now()
-        const tick = () => (found() ? done(true) : performance.now() - t0 > 9000 ? done(false) : requestAnimationFrame(tick))
-        tick()
-      }),
-  )
-  expect(seen).toBe(false)
+  await expect(page.locator("#places")).toBeVisible({ timeout: 10000 })
+  await expect(page.locator('[aria-labelledby="intro-title"]')).toHaveCount(0)
+  expect(await page.evaluate(() => (window as unknown as { __opening: boolean }).__opening)).toBe(false)
 })

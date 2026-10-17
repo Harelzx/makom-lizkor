@@ -97,8 +97,8 @@ test("after one visit, the approved places are there with no connection, from th
 
   // Now the server can't be reached at all.
   await page.route("**/api/**", (r) => r.abort())
+  // Back again after the morning, so straight to the day.
   await page.reload()
-  await page.getByRole("button", { name: "דילוג", exact: true }).click()
   await expect(page.getByRole("button", { name: /^חיפוש מקום/ })).toBeVisible(DAY)
   mark("reloaded with no connection, day reached")
   await page.getByRole("button", { name: /^חיפוש מקום/ }).click()

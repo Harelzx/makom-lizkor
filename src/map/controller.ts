@@ -31,10 +31,12 @@ export const ISRAEL: [[number, number], [number, number]] = [
  * off, an old graphics driver, a locked-down machine); the opening, the list and every card work without the map, so a
  * missing map must never take the page down with it.
  */
-export function createMap(container: HTMLElement, light: "night" | "morning", labels = true) {
+export function createMap(container: HTMLElement, light: "night" | "morning", labels = true, overview = false) {
   current = light === "night" ? NIGHT : MORNING
   try {
     map = build(container, labels)
+    // A visitor who starts in the day, with no place to fly to, starts where the sunrise would have left them.
+    if (overview) map.jumpTo(envelopeCamera())
     if (ownLabels.length) setOwnLabels(ownLabels)
   } catch (error) {
     console.warn(error)
@@ -251,15 +253,22 @@ export function screenPoints(points: [number, number][]) {
   return points.map((p) => map!.project(p))
 }
 
-export function flyToEnvelope(duration = 4200) {
-  if (!map) return
+/** The overview of the envelope, framed around the sheet (phones) or the side panel. */
+function envelopeCamera() {
   const mobile = isMobile()
-  map.flyTo({
+  return {
     center: ENVELOPE.center,
     zoom: mobile ? 9.6 : ENVELOPE.zoom,
     pitch: mobile ? 50 : 55,
     bearing: 0,
     padding: mobile ? { top: 60, bottom: window.innerHeight * 0.3, left: 0, right: 0 } : { top: 40, bottom: 40, left: 40, right: 460 },
+  }
+}
+
+export function flyToEnvelope(duration = 4200) {
+  if (!map) return
+  map.flyTo({
+    ...envelopeCamera(),
     duration: reducedMotion() ? 0 : duration,
     curve: 1.2,
     essential: false,
