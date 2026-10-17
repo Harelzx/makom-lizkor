@@ -23,12 +23,34 @@ for (const textSize of [100, 200])
         const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)
         const sheet = document.getElementById("places")!
         const area = sheet.children[2] as HTMLElement
-        const rect = (e: Element) => { const q = e.getBoundingClientRect(); return [q.top, q.bottom, q.left, q.right].map(Math.round) }
-        return { button: rect(b), at: at?.outerHTML.slice(0, 120), sheet: rect(sheet), sheetTransform: getComputedStyle(sheet).transform, kids: [...sheet.children].map((k) => [k.tagName, k.className.toString().slice(0, 30), rect(k)]), areaScroll: area.scrollTop, docScroll: [document.documentElement.scrollTop, document.scrollingElement?.scrollTop, innerHeight, visualViewport?.offsetTop, visualViewport?.height] }
+        const rect = (e: Element) => {
+          const q = e.getBoundingClientRect()
+          return [q.top, q.bottom, q.left, q.right].map(Math.round)
+        }
+        return {
+          button: rect(b),
+          at: at?.outerHTML.slice(0, 120),
+          sheet: rect(sheet),
+          sheetTransform: getComputedStyle(sheet).transform,
+          kids: [...sheet.children].map((k) => [k.tagName, k.className.toString().slice(0, 30), rect(k)]),
+          areaScroll: area.scrollTop,
+          docScroll: [
+            document.documentElement.scrollTop,
+            document.scrollingElement?.scrollTop,
+            innerHeight,
+            visualViewport?.offsetTop,
+            visualViewport?.height,
+          ],
+        }
       })
       console.log("DIAG " + JSON.stringify(diag))
       await test.info().attach("diag", { body: JSON.stringify(diag, null, 1), contentType: "application/json" })
-      await page.getByRole("button", { name: "הוספת מקום", exact: true }).click({ timeout: 8000 }).catch((e) => { throw new Error("DIAG " + JSON.stringify(diag) + " " + e.message.slice(0, 200)) })
+      await page
+        .getByRole("button", { name: "הוספת מקום", exact: true })
+        .click({ timeout: 8000 })
+        .catch((e) => {
+          throw new Error("DIAG " + JSON.stringify(diag) + " " + e.message.slice(0, 200))
+        })
       const form = page.getByRole("dialog")
       await form.getByRole("button", { name: "המיקום הנוכחי שלי", exact: true }).click()
       const review = page.getByRole("region", { name: "בחירת נקודה על המפה", exact: true })
