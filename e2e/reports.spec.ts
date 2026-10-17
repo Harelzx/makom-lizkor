@@ -176,7 +176,13 @@ async function requestForm(
   await page.goto(`/#/place/${id}`)
   await expect(page.getByRole("heading", { name: heading })).toBeVisible(DAY)
   await page.getByRole("button", { name: "בקשת הסרה או תיקון" }).click()
-  return { ctx, page, form: page.getByRole("region", { name: "בקשת הסרה או תיקון" }) }
+  return { ctx, page, form: page.getByRole("dialog", { name: "בקשת הסרה או תיקון" }) }
+}
+
+/** A kept request, or its answer, waits in the card's row; the window opens when the visitor asks for it. */
+async function reopen(page: Page) {
+  await page.getByRole("button", { name: "בקשת הסרה או תיקון" }).click()
+  return page.getByRole("dialog", { name: "בקשת הסרה או תיקון" })
 }
 
 /** The requests the server holds about a place, as the moderators' list has them. */
@@ -325,7 +331,7 @@ test("a request the server stored but answered with an error comes back after a 
 
   await page.reload()
   await expect(page.getByRole("heading", { name })).toBeVisible(DAY)
-  const back = page.getByRole("region", { name: "בקשת הסרה או תיקון" })
+  const back = await reopen(page)
   await expect(back.getByRole("alert")).toHaveText(/עוד לא אושרה כמתקבלת/, DAY)
   await expect(back.getByLabel("מה לבדוק, ולמה")).toHaveValue(why)
   await expect(back.getByLabel("מה לבדוק, ולמה")).toBeDisabled()
@@ -340,7 +346,7 @@ test("a request the server stored but answered with an error comes back after a 
   await page.reload()
   await expect(page.getByRole("heading", { name })).toBeVisible(DAY)
   await expect(page.getByRole("button", { name: "בקשת הסרה או תיקון" })).toBeVisible()
-  await expect(page.getByRole("region", { name: "בקשת הסרה או תיקון" })).toHaveCount(0)
+  await expect(page.getByRole("dialog", { name: "בקשת הסרה או תיקון" })).toHaveCount(0)
   await ctx.close()
 })
 
@@ -365,9 +371,9 @@ test("a request whose fate is unknown stays with its own place: another place's 
 
   await page.evaluate((p) => (location.hash = `#/place/${p}`), other)
   await expect(page.getByRole("heading", { name: two })).toBeVisible()
-  await expect(page.getByRole("region", { name: "בקשת הסרה או תיקון" })).toHaveCount(0)
+  await expect(page.getByRole("dialog", { name: "בקשת הסרה או תיקון" })).toHaveCount(0)
   await page.getByRole("button", { name: "בקשת הסרה או תיקון" }).click()
-  const second = page.getByRole("region", { name: "בקשת הסרה או תיקון" })
+  const second = page.getByRole("dialog", { name: "בקשת הסרה או תיקון" })
   await expect(second.getByLabel("מה לבדוק, ולמה")).toHaveValue("")
   await expect(second.getByLabel("מה לבדוק, ולמה")).toBeEnabled()
   await expect(second.getByRole("alert")).toHaveCount(0)
@@ -376,7 +382,7 @@ test("a request whose fate is unknown stays with its own place: another place's 
   await expect(page.getByRole("heading", { name: one })).toBeVisible()
   // The other card is gone (it animates out), so only this one's form is on the page.
   await expect(page.getByRole("heading", { name: two })).toHaveCount(0)
-  const first = page.getByRole("region", { name: "בקשת הסרה או תיקון" })
+  const first = await reopen(page)
   await expect(first.getByLabel("מה לבדוק, ולמה")).toHaveValue(why)
   await expect(first.getByLabel("מה לבדוק, ולמה")).toBeDisabled()
   await first.getByRole("button", { name: "שליחה שוב" }).click()
@@ -423,7 +429,7 @@ test("a browser that keeps nothing still holds the request in the open page: ano
   await page.goto(`/#/place/${id}`)
   await expect(page.getByRole("heading", { name: one })).toBeVisible(DAY)
   await page.getByRole("button", { name: "בקשת הסרה או תיקון" }).click()
-  const form = page.getByRole("region", { name: "בקשת הסרה או תיקון" })
+  const form = page.getByRole("dialog", { name: "בקשת הסרה או תיקון" })
   const sent = recordReports(page, async (route, headers) => {
     await route.fetch({ headers })
     await route.abort("failed")
@@ -443,7 +449,7 @@ test("a browser that keeps nothing still holds the request in the open page: ano
   await expect(page.getByRole("heading", { name: one })).toHaveCount(0)
   await page.evaluate((p) => (location.hash = `#/place/${p}`), id)
   await expect(page.getByRole("heading", { name: one })).toBeVisible()
-  const back = page.getByRole("region", { name: "בקשת הסרה או תיקון" })
+  const back = await reopen(page)
   await expect(back.getByLabel("מה לבדוק, ולמה")).toHaveValue(why)
   await expect(back.getByLabel("מה לבדוק, ולמה")).toBeDisabled()
   await back.getByRole("button", { name: "שליחה שוב" }).click()
@@ -537,11 +543,14 @@ test("a card closed and opened while its request is out finds that same request,
   // The report request, and only it, took the extended deadline.
   expect(await page.evaluate(() => (window as unknown as { __extendedDeadlines: number[] }).__extendedDeadlines)).toEqual([60_000])
 
+  // The window is modal: the card closes only once it has.
+  await page.keyboard.press("Escape")
+  await expect(form).toBeHidden()
   await page.evaluate(() => (location.hash = "#/"))
   await expect(page.getByRole("heading", { name })).toHaveCount(0)
   await page.evaluate((p) => (location.hash = `#/place/${p}`), id)
   await expect(page.getByRole("heading", { name })).toBeVisible()
-  const again = page.getByRole("region", { name: "בקשת הסרה או תיקון" })
+  const again = await reopen(page)
   await expect(again.getByLabel("מה לבדוק, ולמה")).toHaveValue(why)
   // The three locked controls are read together, in one round trip: the request is out only until the client's own
   // 10 s timeout (src/lib/api.ts), and on a slow runner each separate check cost seconds of it (CI 37615772991). All
@@ -636,6 +645,9 @@ test("an answer that comes while the card is closed is there when it opens again
   await form.getByLabel("מה לבדוק, ולמה").fill("השם של המקום כתוב באיות אחר מזה שבשלט. כדאי לבדוק.")
   await form.getByRole("button", { name: "שליחת הבקשה" }).click()
   await expect.poll(() => sent.length).toBe(1)
+  // The window is modal: the card closes only once it has.
+  await page.keyboard.press("Escape")
+  await expect(form).toBeHidden()
   await page.evaluate(() => (location.hash = "#/"))
   await expect(page.getByRole("heading", { name })).toHaveCount(0)
   const answered = page.waitForResponse((r) => r.url().endsWith("/api/v1/reports"))
@@ -643,7 +655,7 @@ test("an answer that comes while the card is closed is there when it opens again
   await answered
   await page.evaluate((p) => (location.hash = `#/place/${p}`), id)
   await expect(page.getByRole("heading", { name })).toBeVisible()
-  await expect(page.getByRole("region", { name: "בקשת הסרה או תיקון" }).getByRole("status")).toHaveText(RECEIVED)
+  await expect((await reopen(page)).getByRole("status")).toHaveText(RECEIVED)
   expect(sent).toHaveLength(1)
   expect(await casesAbout(browser, id)).toBe(1)
   await ctx.close()
@@ -675,7 +687,7 @@ test("a card open over a store that couldn't be read takes up its request once t
   await refuse(page, false)
   await box.getByRole("button", { name: "לבדוק שוב" }).click()
   // The card, open all along, now shows the request it couldn't read: not a new form.
-  const card = page.getByRole("region", { name: "בקשת הסרה או תיקון" })
+  const card = await reopen(page)
   await expect(card.getByLabel("מה לבדוק, ולמה")).toHaveValue(why)
   await expect(card.getByLabel("מה לבדוק, ולמה")).toBeDisabled()
   await card.getByRole("button", { name: "שליחה שוב" }).click()
@@ -715,7 +727,7 @@ test("a first try refused before anything was stored, whose copy the browser won
   await refuse(page, false)
   await page.reload()
   await expect(page.getByRole("heading", { name })).toBeVisible(DAY)
-  const back = page.getByRole("region", { name: "בקשת הסרה או תיקון" })
+  const back = await reopen(page)
   await expect(back.getByLabel("מה לבדוק, ולמה")).toHaveValue(why)
   await back.getByRole("button", { name: "שליחה שוב" }).click()
   await expect(back.getByRole("status")).toHaveText(RECEIVED, DAY)

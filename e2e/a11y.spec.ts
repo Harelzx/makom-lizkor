@@ -73,7 +73,7 @@ test.describe("desktop", () => {
     await page.goto("/#/place/nova-memorial-reim")
     await expect(page.getByRole("heading", { name: "אתר ההנצחה לנרצחי פסטיבל נובה" })).toBeVisible()
     await page.getByRole("button", { name: "בקשת הסרה או תיקון" }).click()
-    const form = page.getByRole("region", { name: "בקשת הסרה או תיקון" })
+    const form = page.getByRole("dialog", { name: "בקשת הסרה או תיקון" })
     await form.getByRole("checkbox", { name: "הסיפור" }).check()
     await form.getByRole("radio", { name: /^אחר/ }).check()
     // Worded apart from the reports spec's requests: the same explanation twice in a day is a spam signal.

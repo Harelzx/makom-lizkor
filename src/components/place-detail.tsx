@@ -265,7 +265,7 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
 
       <Separator />
 
-      <footer className="flex flex-col gap-1 text-caption text-ink-3">
+      <footer className="flex flex-col gap-3 text-caption text-ink-3">
         {/* on the sheet, a card raised off it like the list's groups */}
         <Disclosure summary="פרטי המיקום והמקורות" className="border-0 bg-raised shadow-chip ring-1 ring-line" bodyClassName="text-caption">
           <p className="pb-2 tabular-nums" dir="ltr" style={{ textAlign: "right" }}>
