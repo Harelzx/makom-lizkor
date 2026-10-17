@@ -162,8 +162,10 @@ for (const width of [320, 390])
       await expect.poll(async () => (await sheet.boundingBox())!.width).toBe(width)
       await expect(sheet.locator("[data-sheet-grip]")).toBeInViewport()
       const sheetBox = await sheet.boundingBox()
-      // Folded, it is a grabber and one row of actions: no more of the map than that.
-      expect(844 - sheetBox!.y).toBeLessThanOrEqual(96)
+      // Folded, it is a grabber, a line of what it holds and one row of actions: no more of the map than that.
+      expect(844 - sheetBox!.y).toBeLessThanOrEqual(124)
+      await expect(sheet.locator("[data-sheet-summary]")).toContainText("מקומות לזכור")
+      await expect(sheet.locator("[data-sheet-summary]")).toBeInViewport()
       await expect(page.getByRole("heading", { name: "מקומות לזכור", exact: true })).toHaveCount(0)
       const open = sheet.getByRole("button", { name: "הצגת המקומות", exact: true })
       await wholeButton(open)
