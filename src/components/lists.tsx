@@ -7,7 +7,7 @@ import { Anemone } from "@/components/anemone"
 import { KindIcon } from "@/components/kind-icon"
 import { RevivalStrip } from "@/components/revival-strip"
 import { KINDS } from "@/data/taxonomy"
-import { GroupLabel, Img, StatusText } from "@/components/kit"
+import { Img, StatusText } from "@/components/kit"
 import { stagger, ease, spring } from "@/lib/motion"
 import { allPlaces, matches, sitesNear, useStore } from "@/store"
 import type { Place } from "@/types"
@@ -16,21 +16,36 @@ import { Button } from "@/components/ui/button"
 import { useVisits, visitKey } from "@/lib/visit-list"
 import { groupPlaces } from "@/lib/regions"
 
+/** A card raised off the sheet's material (or the panel), holding a group of rows. */
+const CARD = "overflow-hidden rounded-2xl bg-raised shadow-chip ring-1 ring-line"
+
+function Count({ n }: { n: number }) {
+  return <span className="min-w-7 rounded-full bg-fill px-2 py-0.5 text-center text-caption text-ink-2 tabular-nums">{n}</span>
+}
+
 function Row({ place, i, children }: { place: Place; i: number; children: React.ReactNode }) {
   const select = useStore((s) => s.select)
   const hover = useStore((s) => s.hover)
   const hovered = useStore((s) => s.hoveredId === place.id)
   return (
-    <motion.li initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ ...stagger(i), duration: 0.22, ease }}>
+    <motion.li
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ ...stagger(i), duration: 0.22, ease }}
+      // a hairline between rows, from where the text starts, as in the system's grouped lists
+      className="relative not-first:before:absolute not-first:before:start-(--rule) not-first:before:end-0 not-first:before:top-0 not-first:before:h-px not-first:before:bg-line"
+    >
       <button
         onClick={() => select(place.id)}
         onMouseEnter={() => hover(place.id)}
         onMouseLeave={() => hover(null)}
         onFocus={() => hover(place.id)}
         onBlur={() => hover(null)}
+        // The highlight follows a pointer that hovers. On a touch screen a tap leaves the browser's hover on the row,
+        // which read as a row picked out from the rest; a press shows instead, while the finger is down.
         className={cn(
-          "pressable flex w-full items-start gap-3 rounded-2xl px-3 py-2.5 text-start outline-none hover:bg-surface-2 focus-visible:bg-surface-2 focus-visible:ring-2 focus-visible:ring-ring",
-          hovered && "bg-surface-2",
+          "flex w-full items-start gap-3 px-4 py-3 text-start outline-none focus-visible:bg-fill focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset active:bg-fill-2 [@media(hover:hover)]:hover:bg-fill",
+          hovered && "[@media(hover:hover)]:bg-fill",
         )}
       >
         {children}
@@ -99,29 +114,39 @@ export function PlacesList() {
     )
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-3">
       {groups.map((g) => (
-        <Collapsible.Root key={g.id} open={searching || active === g.id} onOpenChange={(open) => setOpened(open ? g.id : "")}>
+        // Each region is one card, open or closed: its heading and its places inside one edge.
+        <Collapsible.Root
+          key={g.id}
+          open={searching || active === g.id}
+          onOpenChange={(open) => setOpened(open ? g.id : "")}
+          className={CARD}
+        >
           {searching ? (
-            <GroupLabel id={`g-${g.id}`} count={g.items.length}>
-              {g.title}
-            </GroupLabel>
+            <h3 id={`g-${g.id}`} className="flex min-h-12 items-center gap-3 px-4 py-3 text-headline text-ink-1">
+              <span className="min-w-0 flex-1">{g.title}</span>
+              <Count n={g.items.length} />
+            </h3>
           ) : (
             <h3>
               <Collapsible.Trigger asChild>
-                <button className="flex min-h-12 w-full items-center gap-3 rounded-xl border border-line bg-surface-2 px-3 py-3 text-start text-label text-ink-2 outline-none hover:bg-surface-3 focus-visible:ring-2 focus-visible:ring-ring">
+                <button className="pressable flex min-h-12 w-full items-center gap-3 px-4 py-3 text-start text-headline text-ink-1 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset active:bg-fill-2 [@media(hover:hover)]:hover:bg-fill">
                   <span className="min-w-0 flex-1">{g.title}</span>
-                  <span className="text-caption tabular-nums">{g.items.length}</span>
+                  <Count n={g.items.length} />
                   <ChevronDownIcon
                     aria-hidden="true"
-                    className={cn("size-4 shrink-0 transition-transform motion-reduce:transition-none", active === g.id && "rotate-180")}
+                    className={cn(
+                      "size-4 shrink-0 text-ink-2 transition-transform motion-reduce:transition-none",
+                      active === g.id && "rotate-180",
+                    )}
                   />
                 </button>
               </Collapsible.Trigger>
             </h3>
           )}
           <Collapsible.Content>
-            <ul aria-label={g.title} className="mt-2 flex flex-col gap-1">
+            <ul aria-label={g.title} className="flex flex-col border-t border-line [--rule:76px]">
               {g.items.map((p, i) => (
                 <Row key={p.id} place={p} i={i}>
                   {p.local?.photo || p.contributedPhoto ? (
@@ -136,7 +161,7 @@ export function PlacesList() {
                       <Img src={p.photos[0].thumb_url} alt="" className="size-full object-cover" />
                     </motion.span>
                   ) : (
-                    <span className="grid size-12 shrink-0 place-items-center rounded-xl bg-surface-2 text-ink-3">
+                    <span className="grid size-12 shrink-0 place-items-center rounded-xl bg-fill text-ink-2">
                       {p.local ? <Anemone size={26} variant="pale" /> : <KindIcon kind={p.kind} className="size-5" />}
                     </span>
                   )}
@@ -167,7 +192,7 @@ export function CommunitiesList() {
     <div className="flex flex-col gap-3">
       <RevivalStrip />
       <p className="px-3 pt-1 text-body text-pretty text-ink-2">לכל קהילה שני סיפורים: מי שהיא איבדה, ואיך היא חוזרת.</p>
-      <ul className="flex flex-col">
+      <ul className={cn(CARD, "flex flex-col [--rule:16px]")}>
         {communities.map((c, i) => {
           const n = sitesNear(c, all).length
           return (

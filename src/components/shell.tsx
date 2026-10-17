@@ -364,7 +364,7 @@ export function Shell() {
                 <div className="flex flex-wrap items-center gap-2 px-4">
                   <Button
                     variant="secondary"
-                    className="h-11 min-w-fit flex-1 rounded-full px-4 py-1 leading-tight whitespace-normal"
+                    className="h-11 min-w-fit flex-1 rounded-full bg-fill px-4 py-1 leading-tight whitespace-normal hover:bg-fill-2"
                     aria-expanded={!folded}
                     onClick={() => setSnap(folded ? SNAPS[2] : peek)}
                   >
