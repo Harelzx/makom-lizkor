@@ -1,7 +1,20 @@
-import { useEffect, useRef, useState, type ReactNode } from "react"
+import { useEffect, useRef, useState, type ReactNode, type Ref } from "react"
+import { ChevronDownIcon } from "lucide-react"
 import { RETURN_LABEL } from "@/data/taxonomy"
 import type { Revival } from "@/types"
 import { cn } from "@/lib/utils"
+
+/** A card raised off the sheet's material (or the panel), holding a group of rows. */
+export const CARD = "overflow-hidden rounded-2xl bg-raised shadow-chip ring-1 ring-line"
+/** A row in a card: a hairline above it, from where the text starts (`--rule` on the list), as in the system's grouped lists. */
+export const RULED =
+  "relative not-first:before:absolute not-first:before:start-(--rule) not-first:before:end-0 not-first:before:top-0 not-first:before:h-px not-first:before:bg-line"
+/**
+ * A row's press. The highlight follows a pointer that hovers: on a touch screen a tap leaves the browser's hover on the
+ * row, which read as a row picked out from the rest, so there it shows only while the finger is down.
+ */
+export const PRESS =
+  "outline-none focus-visible:bg-fill focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset active:bg-fill-2 [@media(hover:hover)]:hover:bg-fill"
 
 /** An image that waits on a quiet tile and fades in once decoded, so nothing pops. */
 export function Img({ className, onLoad, placeholder, style, ...props }: React.ComponentProps<"img"> & { placeholder?: string }) {
@@ -136,4 +149,71 @@ export function useFocusOnOpen<T extends HTMLElement>() {
     ref.current?.focus({ preventScroll: true })
   }, [])
   return ref
+}
+
+/**
+ * A box that opens in place. Closed, it is one row, as tall as its line needs: a box padded around a row that was
+ * itself padded stood twice the height of its one line. The whole row is the target, and a chevron, not the browser's
+ * triangle, says whether it is open.
+ */
+export function Disclosure({
+  summary,
+  children,
+  className,
+  bodyClassName,
+  ref,
+}: {
+  summary: ReactNode
+  children: ReactNode
+  className?: string
+  bodyClassName?: string
+  ref?: Ref<HTMLDetailsElement>
+}) {
+  return (
+    <details ref={ref} className={cn("group/disclosure rounded-2xl border border-line", className)}>
+      <summary className="pressable flex min-h-12 cursor-pointer list-none items-center gap-3 rounded-2xl px-4 py-3 text-label text-ink-1 outline-none focus-visible:ring-3 focus-visible:ring-ring/30 [&::-webkit-details-marker]:hidden">
+        {summary}
+        <ChevronDownIcon
+          aria-hidden="true"
+          className="ms-auto size-4 shrink-0 text-ink-2 transition-transform group-open/disclosure:rotate-180 motion-reduce:transition-none"
+        />
+      </summary>
+      <div className={cn("px-4 pb-4 text-body text-ink-2", bodyClassName)}>{children}</div>
+    </details>
+  )
+}
+
+/**
+ * A choice between a few views or kinds: one track, a thumb on the chosen one. Two pills side by side, one filled and one
+ * bare or outlined, read as a button and a label. Each option stays a button with aria-pressed.
+ */
+export function Segmented<T extends string>({
+  value,
+  options,
+  onChange,
+  label,
+}: {
+  value: T
+  options: readonly (readonly [T, ReactNode])[]
+  onChange: (value: T) => void
+  label?: string
+}) {
+  return (
+    <div className="flex gap-1 rounded-full bg-fill p-1" role="group" aria-label={label}>
+      {options.map(([id, content]) => (
+        <button
+          key={id}
+          type="button"
+          aria-pressed={value === id}
+          onClick={() => onChange(id)}
+          className={cn(
+            "pressable flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-1 text-label leading-tight whitespace-normal text-ink-2 transition-colors outline-none hover:text-ink-1 focus-visible:ring-3 focus-visible:ring-ring/30 disabled:opacity-50 motion-reduce:transition-none",
+            "aria-pressed:bg-thumb aria-pressed:font-semibold aria-pressed:text-ink-1 aria-pressed:shadow-chip",
+          )}
+        >
+          {content}
+        </button>
+      ))}
+    </div>
+  )
 }

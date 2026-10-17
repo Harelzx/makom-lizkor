@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { parseManualPoint, type ManualPointResult } from "@/lib/manual-point"
+import { Disclosure } from "@/components/kit"
 
 export function PointCoordinates({
   point,
@@ -43,12 +44,9 @@ export function PointCoordinates({
   }
 
   return (
-    <details ref={details} className="rounded-2xl border border-border bg-surface p-4">
-      <summary className="min-h-11 cursor-pointer rounded-lg py-2 text-label font-semibold focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring">
-        הזנת נקודה במקלדת
-      </summary>
+    <Disclosure ref={details} summary="הזנת נקודה במקלדת" bodyClassName="text-ink-1">
       <div
-        className="mt-4 flex flex-col gap-4"
+        className="flex flex-col gap-4"
         onKeyDown={(event) => {
           if (event.key !== "Enter" || event.nativeEvent.isComposing || !(event.target instanceof HTMLInputElement)) return
           event.preventDefault()
@@ -107,6 +105,6 @@ export function PointCoordinates({
           שמירת הנקודה
         </Button>
       </div>
-    </details>
+    </Disclosure>
   )
 }

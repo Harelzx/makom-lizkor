@@ -24,6 +24,7 @@ import { refusedHere, savedHere } from "@/lib/correction"
 import { FINAL, settleOwnCopy } from "@/lib/own-copy"
 import { CURRENT_SUBMISSION_NOTICE } from "@/shared/contract"
 import { useStore } from "@/store"
+import { Disclosure } from "@/components/kit"
 
 /** What each state means to the person who sent the place. */
 const STATUS: Record<string, string> = {
@@ -88,13 +89,12 @@ function Correction({ draft, onSend }: { draft: Draft; onSend: (d: Draft) => Pro
         <FieldLabel htmlFor="fix-link">קישור לאתר הנצחה (לא חובה)</FieldLabel>
         <Input id="fix-link" dir="ltr" maxLength={300} {...field("link_url")} />
       </Field>
-      <details className="rounded-2xl border border-line px-4 py-3 text-body text-ink-2">
-        <summary className="pressable cursor-pointer text-label text-ink-1">הודעת הפרטיות ותנאי השליחה</summary>
+      <Disclosure summary="הודעת הפרטיות ותנאי השליחה">
         <div
-          className="mt-2 flex flex-col gap-2 [&_a]:text-ink-1 [&_a]:underline [&_a]:underline-offset-2"
+          className="flex flex-col gap-2 [&_a]:text-ink-1 [&_a]:underline [&_a]:underline-offset-2"
           dangerouslySetInnerHTML={{ __html: noticeHtml(CURRENT_SUBMISSION_NOTICE) }}
         />
-      </details>
+      </Disclosure>
       <Field orientation="horizontal">
         <Checkbox id="fix-consent" checked={agreed} onCheckedChange={(v) => setAgreed(v === true)} />
         <FieldLabel htmlFor="fix-consent" className="leading-snug font-normal">

@@ -7,7 +7,7 @@ import { Separator } from "@/components/ui/separator"
 import { KindIcon } from "@/components/kind-icon"
 import { Tribute } from "@/components/tribute"
 import { CreditName, PhotoGallery } from "@/components/photo-figure"
-import { SafetyNote, useFocusOnOpen } from "@/components/kit"
+import { CARD, Disclosure, PRESS, RULED, SafetyNote, useFocusOnOpen } from "@/components/kit"
 import { ReportRequest } from "@/components/report"
 import { KINDS } from "@/data/taxonomy"
 import { allPlaces, useStore } from "@/store"
@@ -16,6 +16,7 @@ import { LocalRemoval } from "@/components/local-removal"
 import { spring } from "@/lib/motion"
 import type { LocalFields, Place } from "@/types"
 import { photoSrcSet, PHOTO_SIZES } from "@/lib/responsive-photo"
+import { cn } from "@/lib/utils"
 
 /** Where the visitor's own place stands with the server. An older place sent before states existed counts as sent. */
 const sendState = (l: LocalFields) => l.send ?? (l.remoteId ? "sent" : "local")
@@ -163,7 +164,7 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
       <p className="reading-copy text-body-lg whitespace-pre-line text-ink-1">{local?.story || place.summary_he}</p>
 
       {place.precision === "approx" && (
-        <p className="rounded-xl bg-surface-2 p-3 text-body text-ink-2">המיקום משוער: הוא מצביע על האזור, לא על הנקודה המדויקת.</p>
+        <p className="rounded-xl bg-fill p-3 text-body text-ink-2">המיקום משוער: הוא מצביע על האזור, לא על הנקודה המדויקת.</p>
       )}
       {place.accessNote && (
         <p className="text-body text-ink-1">
@@ -176,13 +177,13 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
         {/* A family's place on private property shown approximately leads nobody to it: no navigation (spec 4). */}
         {!(inPrivate && place.precision === "approx") && (
           <div className="flex flex-wrap gap-2" aria-label="ניווט למקום">
-            <Button variant="ghost" className="min-h-11 rounded-full px-3 text-label text-ink-1 hover:bg-surface-2" asChild>
+            <Button variant="fill" className="min-h-11 rounded-full px-4" asChild>
               <a href={`https://waze.com/ul?ll=${place.lat},${place.lng}&navigate=yes`} target="_blank" rel="noopener">
                 <NavigationIcon data-icon="inline-start" />
                 ניווט ב־Waze
               </a>
             </Button>
-            <Button variant="ghost" className="min-h-11 rounded-full px-3 text-label text-ink-1 hover:bg-surface-2" asChild>
+            <Button variant="fill" className="min-h-11 rounded-full px-4" asChild>
               <a href={`https://www.google.com/maps/search/?api=1&query=${place.lat},${place.lng}`} target="_blank" rel="noopener">
                 Google Maps
               </a>
@@ -190,14 +191,14 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
           </div>
         )}
         <div className="flex flex-wrap gap-2" aria-label="שיתוף ושמירה">
-          <Button variant="outline" className="min-h-11 rounded-full px-4" onClick={share}>
+          <Button variant="fill" className="min-h-11 rounded-full px-4" onClick={share}>
             {copied ? <CheckIcon data-icon="inline-start" /> : <Share2Icon data-icon="inline-start" />}
             {local ? "העתקת קישור מקומי" : "שיתוף"}
           </Button>
           {!local && (
             <Button
-              variant={isSaved ? "secondary" : "outline"}
-              className="min-h-11 self-start rounded-full px-4"
+              variant="fill"
+              className="min-h-11 self-start rounded-full px-4 aria-pressed:bg-fill-2"
               aria-pressed={isSaved}
               disabled={!visits.ready || visits.busy}
               onClick={async () => {
@@ -220,7 +221,7 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
 
       <Tribute placeId={place.id} />
       {next && (
-        <section className="rounded-2xl bg-surface-2 p-4" aria-label="מקום נוסף לגלות">
+        <section className="rounded-2xl bg-raised p-4 shadow-chip ring-1 ring-line" aria-label="מקום נוסף לגלות">
           <p className="text-caption text-ink-2">מקום נוסף לגלות</p>
           <button
             className="pressable mt-1 flex min-h-11 w-full items-center justify-between gap-3 text-start text-body font-semibold text-ink-1"
@@ -237,18 +238,21 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
         </section>
       )}
       {place.links.length > 0 && (
-        <section className="flex flex-col gap-1" aria-labelledby={`links-${place.id}`}>
+        <section className="flex flex-col gap-2" aria-labelledby={`links-${place.id}`}>
           <h3 id={`links-${place.id}`} className="px-2 text-label text-ink-2">
             לקריאה נוספת
           </h3>
-          <ul className="flex flex-col">
+          <ul className={cn(CARD, "flex flex-col [--rule:16px]")}>
             {place.links.map((l) => (
-              <li key={l.url}>
+              <li key={l.url} className={RULED}>
                 <a
                   href={l.url}
                   target="_blank"
                   rel="noopener"
-                  className="pressable flex items-center justify-between gap-3 rounded-xl px-2 py-2.5 text-body font-medium text-ink-1 hover:bg-surface-2"
+                  className={cn(
+                    "pressable flex min-h-12 items-center justify-between gap-3 px-4 py-3 text-body font-medium text-ink-1",
+                    PRESS,
+                  )}
                 >
                   {l.label_he}
                   <ExternalLinkIcon className="size-3.5 shrink-0 text-ink-3" />
@@ -262,8 +266,8 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
       <Separator />
 
       <footer className="flex flex-col gap-1 text-caption text-ink-3">
-        <details className="rounded-xl border border-line px-3 py-1">
-          <summary className="pressable min-h-11 cursor-pointer py-3 text-label text-ink-2">פרטי המיקום והמקורות</summary>
+        {/* on the sheet, a card raised off it like the list's groups */}
+        <Disclosure summary="פרטי המיקום והמקורות" className="border-0 bg-raised shadow-chip ring-1 ring-line" bodyClassName="text-caption">
           <p className="pb-2 tabular-nums" dir="ltr" style={{ textAlign: "right" }}>
             {place.lat.toFixed(5)}, {place.lng.toFixed(5)}
           </p>
@@ -277,7 +281,7 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
               SOURCE[place.coord_source]
             )}
           </p>
-        </details>
+        </Disclosure>
         {ownReceipt && ownCopy ? (
           <div className="flex flex-wrap items-center justify-between gap-2">
             {/* A place sent for review is on the server too; deleting this copy doesn't withdraw it, the tracking view does. */}

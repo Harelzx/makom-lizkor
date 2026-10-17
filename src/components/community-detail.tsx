@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button"
 import { Anemone } from "@/components/anemone"
 import { PhotoGallery } from "@/components/photo-figure"
 import { KINDS, formatMonth } from "@/data/taxonomy"
-import { SectionTitle, StatusText, useFocusOnOpen } from "@/components/kit"
+import { CARD, PRESS, RULED, SectionTitle, StatusText, useFocusOnOpen } from "@/components/kit"
+import { cn } from "@/lib/utils"
 import { ease, spring } from "@/lib/motion"
 import { allPlaces, sitesNear, useStore } from "@/store"
 import type { Place } from "@/types"
@@ -120,11 +121,11 @@ export function CommunityDetail({ place, onBack, ref }: { place: Place; onBack: 
           זיכרון
         </h3>
         {sites.length ? (
-          <ul className="flex flex-col">
+          <ul className={cn(CARD, "flex flex-col [--rule:16px]")}>
             {sites.map((s) => (
-              <li key={s.id}>
+              <li key={s.id} className={RULED}>
                 <button
-                  className="pressable flex w-full items-center justify-between gap-3 rounded-xl px-2 py-2.5 text-start hover:bg-surface-2"
+                  className={cn("pressable flex min-h-12 w-full items-center justify-between gap-3 px-4 py-3 text-start", PRESS)}
                   onClick={() => select(s.id)}
                 >
                   <span className="text-body font-medium text-ink-1">{s.name_he}</span>

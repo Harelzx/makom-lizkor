@@ -14,6 +14,7 @@ import { discard, dismiss, entry, heldFor, hydrate, latestFor, readFailed, resen
 import { freeze } from "@/lib/report-outbox"
 import { CURRENT_REPORT_NOTICE, REQUESTER_TYPES, type Element, type ReportInput } from "@/shared/contract"
 import type { Place } from "@/types"
+import { Disclosure, Segmented } from "@/components/kit"
 
 const NOTICE_HTML = noticeHtml(CURRENT_REPORT_NOTICE)
 
@@ -146,24 +147,14 @@ export function ReportRequest({ place }: { place: Place }) {
               {!kept && (
                 <FieldSet>
                   <FieldLegend variant="label">איך נוכל לעזור?</FieldLegend>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button
-                      variant={intent === "correction" ? "secondary" : "outline"}
-                      className="min-h-11 rounded-xl"
-                      aria-pressed={intent === "correction"}
-                      onClick={() => setIntent("correction")}
-                    >
-                      תיקון מידע
-                    </Button>
-                    <Button
-                      variant={intent === "removal" ? "secondary" : "outline"}
-                      className="min-h-11 rounded-xl"
-                      aria-pressed={intent === "removal"}
-                      onClick={() => setIntent("removal")}
-                    >
-                      בקשת הסרה
-                    </Button>
-                  </div>
+                  <Segmented
+                    value={intent}
+                    onChange={setIntent}
+                    options={[
+                      ["correction", "תיקון מידע"],
+                      ["removal", "בקשת הסרה"],
+                    ]}
+                  />
                 </FieldSet>
               )}
 
@@ -237,13 +228,12 @@ export function ReportRequest({ place }: { place: Place }) {
                 <FieldDescription>רק כדי שנוכל לעדכן אתכם או לשאול שאלה. המייל לא יתפרסם.</FieldDescription>
               </Field>
               {/* The notice sits beside the form it is about, as the privacy law asks. */}
-              <details className="group rounded-2xl border border-line px-4 py-3 text-body text-ink-2">
-                <summary className="pressable cursor-pointer text-label text-ink-1 marker:text-ink-3">הודעת הפרטיות</summary>
+              <Disclosure summary="הודעת הפרטיות">
                 <div
-                  className="mt-2 flex flex-col gap-2 [&_a]:text-ink-1 [&_a]:underline [&_a]:underline-offset-2"
+                  className="flex flex-col gap-2 [&_a]:text-ink-1 [&_a]:underline [&_a]:underline-offset-2"
                   dangerouslySetInnerHTML={{ __html: NOTICE_HTML }}
                 />
-              </details>
+              </Disclosure>
             </FieldGroup>
           </fieldset>
           <AnimatePresence>

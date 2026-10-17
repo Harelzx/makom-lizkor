@@ -26,6 +26,8 @@ const buttonVariants = cva(
           "bg-action font-bold text-action-ink shadow-chip hover:bg-action-strong active:translate-y-0 active:scale-[0.97] [&_svg]:text-action-mark",
         float:
           "bg-surface text-ink-1 shadow-chip ring-1 ring-line hover:bg-surface-2 active:translate-y-0 active:scale-[0.96]",
+        // A control set into the sheet's material: a veil of ink, the same open or folded (docs/design-system.md).
+        fill: "bg-fill text-ink-1 hover:bg-fill-2",
       },
       size: {
         default:
