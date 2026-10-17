@@ -165,6 +165,26 @@ export function Shell() {
   const [scrolled, setScrolled] = useState(false)
   const headerRef = useRef<HTMLDivElement>(null)
   const { ref: scrollRef, onScroll: onPanelScroll } = usePanelScroll()
+  // Whether the visitor is reading down the raised sheet (see the actions below).
+  const [calm, setCalm] = useState(false)
+  const lastTop = useRef(0)
+  // A keyboard moving through the sheet keeps its actions: Tab scrolls the list too, and they'd step out of its reach.
+  const byKey = useRef(false)
+  useEffect(() => {
+    const key = () => (byKey.current = true)
+    const pointer = () => (byKey.current = false)
+    window.addEventListener("keydown", key, true)
+    window.addEventListener("pointerdown", pointer, true)
+    window.addEventListener("wheel", pointer, { capture: true, passive: true })
+    window.addEventListener("touchstart", pointer, { capture: true, passive: true })
+    return () => {
+      window.removeEventListener("keydown", key, true)
+      window.removeEventListener("pointerdown", pointer, true)
+      window.removeEventListener("wheel", pointer, true)
+      window.removeEventListener("touchstart", pointer, true)
+    }
+  }, [])
+  const reading = calm && !folded
   const [heights, setHeights] = useState({ open: window.innerHeight - 32, closed: 0 })
 
   // Measure the actions, including the phone's safe area. A percentage peek wastes space on tall phones.
@@ -367,23 +387,37 @@ export function Shell() {
                     {!chosenName && placeCount > 0 && <p className="shrink-0 text-caption text-ink-2">{placeCount} מקומות</p>}
                   </div>
                 )}
-                <div className="flex flex-wrap items-center gap-2 px-4">
-                  <Button
-                    variant="fill"
-                    className="h-11 min-w-fit flex-1 rounded-full px-4 py-1 leading-tight whitespace-normal"
-                    aria-expanded={!folded}
-                    onClick={() => setSnap(folded ? SNAPS[2] : peek)}
-                  >
-                    {!folded ? "חזרה למפה" : selectedId ? "לסיפור ולפרטי הביקור" : "הצגת המקומות"}
-                  </Button>
-                  <Button
-                    variant="action"
-                    className="h-11 min-w-fit flex-1 rounded-full px-4 py-1 leading-tight whitespace-normal"
-                    onClick={() => setAddOpen(true)}
-                  >
-                    <PlusIcon className="size-4" />
-                    הוספת מקום
-                  </Button>
+                {/* Reading, the actions step aside: scrolled down into a story they fold away and give the text their row,
+                    and they come back with a scroll up, near the top, or when the keyboard reaches them. The grabber stays,
+                    so the sheet can still be pulled. */}
+                <div
+                  data-sheet-actions
+                  onFocusCapture={() => setCalm(false)}
+                  className={cn(
+                    "grid transition-[grid-template-rows,opacity] duration-300 ease-out motion-reduce:transition-none",
+                    reading ? "grid-rows-[0fr] opacity-0" : "grid-rows-[1fr] opacity-100",
+                  )}
+                >
+                  <div className={cn("min-h-0", reading && "overflow-hidden")} inert={reading}>
+                    <div className="flex flex-wrap items-center gap-2 px-4">
+                      <Button
+                        variant="fill"
+                        className="h-11 min-w-fit flex-1 rounded-full px-4 py-1 leading-tight whitespace-normal"
+                        aria-expanded={!folded}
+                        onClick={() => setSnap(folded ? SNAPS[2] : peek)}
+                      >
+                        {!folded ? "חזרה למפה" : selectedId ? "לסיפור ולפרטי הביקור" : "הצגת המקומות"}
+                      </Button>
+                      <Button
+                        variant="action"
+                        className="h-11 min-w-fit flex-1 rounded-full px-4 py-1 leading-tight whitespace-normal"
+                        onClick={() => setAddOpen(true)}
+                      >
+                        <PlusIcon className="size-4" />
+                        הוספת מקום
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -391,7 +425,15 @@ export function Shell() {
                 a scroll that reached the top went on to fold the sheet, or close it, under a finger that meant to read. */}
             <div
               ref={scrollRef}
-              onScroll={onPanelScroll}
+              onScroll={(e) => {
+                onPanelScroll(e)
+                const top = e.currentTarget.scrollTop
+                const step = top - lastTop.current
+                lastTop.current = top
+                if (top < 56 || byKey.current) setCalm(false)
+                else if (step > 6) setCalm(true)
+                else if (step < -6) setCalm(false)
+              }}
               data-vaul-no-drag
               inert={folded}
               aria-hidden={folded}
