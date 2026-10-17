@@ -34,7 +34,7 @@ test("after the add dialog closes, the page still answers taps", async ({ page }
   await expect(page.getByRole("dialog")).toBeVisible()
 })
 
-test("a tap on a flower lifts the sheet to that place's story", async ({ page }) => {
+test("a tap on a flower flies to the place, then lifts the sheet to its story", async ({ page }) => {
   // A flower wholly on screen and on top where it is tapped (a neighbour or the sheet can cover one).
   const flower = page.locator(".mk-flower").filter({ visible: true })
   let point: { x: number; y: number } | null = null
@@ -56,6 +56,9 @@ test("a tap on a flower lifts the sheet to that place's story", async ({ page })
   const folded = (await sheet.boundingBox())!.y
   await page.mouse.click(point!.x, point!.y)
   await expect(page).toHaveURL(/#\/place\//)
+  // The camera flies to the place first (2.8s); the story rises only once it has landed.
+  await page.waitForTimeout(800)
+  expect((await sheet.boundingBox())!.y).toBeGreaterThan(folded - 20)
   // lifted, every time: the lift used to be lost now and then, leaving the story folded away under the map
   await expect.poll(async () => (await sheet.boundingBox())!.y).toBeLessThan(folded - 300)
 })

@@ -229,6 +229,23 @@ export function flyToPlace(lng: number, lat: number, opts: { zoom?: number; pitc
   })
 }
 
+/**
+ * Resolves once the camera is still: after the flight that is starting now (a selection flies once its render has
+ * committed, so this looks two frames on), or at once when nothing is moving. Capped, so a lost moveend never holds it.
+ */
+export async function landed(cap = 4000): Promise<void> {
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
+  const m = map
+  if (!m || !m.isMoving()) return
+  await new Promise<void>((done) => {
+    const t = setTimeout(done, cap)
+    m.once("moveend", () => {
+      clearTimeout(t)
+      done()
+    })
+  })
+}
+
 /** Back to 06:29 for the opening played again: night, no names, low over Be'eri, drifting. */
 export function returnToDawn() {
   if (!map) return
