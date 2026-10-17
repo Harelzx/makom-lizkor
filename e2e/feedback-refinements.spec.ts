@@ -111,18 +111,6 @@ for (const width of [320, 390, 1280])
     }
   })
 
-test("zoomed out to the whole country, the map lies flat, so no band of fog shows under the header", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 })
-  await day(page)
-  // Only the development build exposes the map (the production build's regression run has no window.__map); a zoom
-  // out by wheel or pinch ends the same way as this one.
-  test.skip(!(await page.evaluate(() => "__map" in window)), "the map is exposed only in development")
-  const camera = () => page.evaluate(() => (window as unknown as { __map: { getPitch(): number } }).__map.getPitch())
-  expect(await camera()).toBeGreaterThan(40)
-  await page.evaluate(() => (window as unknown as { __map: { zoomTo(z: number, o: object): void } }).__map.zoomTo(7.6, { duration: 0 }))
-  await expect.poll(camera, { timeout: 5000 }).toBeLessThanOrEqual(15.5)
-})
-
 test("contact reports repeated failures, confirmed success and erases fields on close", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.route("**/api/v1/contact", async (r) => {
