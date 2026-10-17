@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react"
 import { AnimatePresence, motion } from "motion/react"
 import { ArrowRight, CircleCheck, House, Keyboard, MoonStar, RotateCcw, Sun } from "lucide-react"
 import { Anemone } from "@/components/anemone"
@@ -41,6 +41,18 @@ const DONE: Record<Action, string> = {
   return: "ההצעה הוחזרה למגיש לתיקון",
   reject: "ההצעה נדחתה",
 }
+
+// Wide enough for the list and the item side by side (Tailwind's lg). Below it the item is a layer over the list, and the
+// overview sits under the list instead of in a layer nobody opened.
+const wideQuery = matchMedia("(min-width: 64rem)")
+const useWide = () =>
+  useSyncExternalStore(
+    (change) => {
+      wideQuery.addEventListener("change", change)
+      return () => wideQuery.removeEventListener("change", change)
+    },
+    () => wideQuery.matches,
+  )
 
 const today = new Date().toLocaleDateString("he-IL", { weekday: "long", day: "numeric", month: "long", timeZone: "Asia/Jerusalem" })
 const count = (n: number, one: string, many: string) => (n === 1 ? one : `${n} ${many}`)
@@ -230,6 +242,7 @@ export function Inbox() {
   const [keysOpen, setKeysOpen] = useState(false)
   const [dark, setDark] = useState(isDark)
   const detail = useRef<HTMLDivElement>(null)
+  const wide = useWide()
 
   const { refresh: refreshReports } = reports
   const { refresh: refreshAttention } = attention
@@ -352,12 +365,22 @@ export function Inbox() {
   const showReports = filter !== "proposals"
   const showProposals = filter !== "reports"
 
+  const overview = (
+    <Overview
+      loaded={loaded}
+      reports={open}
+      proposals={proposals.length}
+      attention={ops.length}
+      start={order.length ? () => select(order[0]) : null}
+    />
+  )
+
   return (
     <div className="grid h-full lg:grid-cols-[24rem_minmax(0,1fr)]">
       <h1 className="sr-only">ניהול · מקום לזכור</h1>
 
       {/* The list */}
-      <div className="flex h-full min-h-0 flex-col border-line bg-surface-2 lg:border-e dark:bg-canvas">
+      <div className="flex h-full flex-col border-line bg-surface-2 max-lg:overflow-y-auto lg:min-h-0 lg:border-e dark:bg-canvas">
         <div className="px-4 pt-4 sm:px-5">
           <div className="flex items-center justify-between gap-2">
             <a href="/" className="pressable flex items-center gap-2 rounded-lg py-1 text-label text-ink-2 hover:text-ink-1">
@@ -365,7 +388,16 @@ export function Inbox() {
               מקום לזכור · ניהול
             </a>
             <div className="flex items-center">
-              <Button variant="ghost" size="icon-lg" className="pressable text-ink-2" aria-label="סקירה" onClick={() => select(null)}>
+              <Button
+                variant="ghost"
+                size="icon-lg"
+                className="pressable text-ink-2"
+                aria-label="סקירה"
+                onClick={() => {
+                  select(null)
+                  if (!wide) document.getElementById("overview")?.scrollIntoView({ block: "start" })
+                }}
+              >
                 <House />
               </Button>
               <Button
@@ -420,7 +452,7 @@ export function Inbox() {
           </div>
         </div>
 
-        <nav aria-label="מה ממתין" className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-4 sm:px-3">
+        <nav aria-label="מה ממתין" className="px-2 pb-4 sm:px-3 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain">
           <div className="flex flex-col gap-2 px-2 pt-2 empty:hidden">
             {queueError && <Alert>{queueError}</Alert>}
             {attention.error && (
@@ -551,6 +583,12 @@ export function Inbox() {
           )}
         </nav>
 
+        {!wide && (
+          <div id="overview" className="border-t border-line bg-surface">
+            {overview}
+          </div>
+        )}
+
         <p className="hidden border-t border-line px-5 py-3 text-caption text-ink-3 pointer-fine:block">
           <kbd className="inline-grid h-5 min-w-5 place-items-center rounded-md border border-current px-1 font-sans">?</kbd> לקיצורי מקלדת
         </p>
@@ -584,13 +622,7 @@ export function Inbox() {
             ) : proposal ? (
               <ProposalDetail item={proposal} busy={busy === proposal.id} decide={decide} />
             ) : (
-              <Overview
-                loaded={loaded}
-                reports={open}
-                proposals={proposals.length}
-                attention={ops.length}
-                start={order.length ? () => select(order[0]) : null}
-              />
+              wide && overview
             )}
           </motion.div>
         </AnimatePresence>
