@@ -1,13 +1,21 @@
 import { useEffect, useState } from "react"
 import { motion } from "motion/react"
-import { ArrowRightIcon, CheckIcon, ExternalLinkIcon, NavigationIcon, Share2Icon, BookmarkIcon } from "lucide-react"
+import {
+  ArrowRightIcon,
+  BookmarkIcon,
+  CheckIcon,
+  ChevronLeftIcon,
+  ExternalLinkIcon,
+  MapIcon,
+  NavigationIcon,
+  Share2Icon,
+} from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
-import { Separator } from "@/components/ui/separator"
 import { KindIcon } from "@/components/kind-icon"
 import { Tribute } from "@/components/tribute"
 import { CreditName, PhotoGallery } from "@/components/photo-figure"
-import { CARD, Disclosure, PRESS, RULED, SafetyNote, useFocusOnOpen } from "@/components/kit"
+import { Disclosure, PRESS, SafetyNote, useFocusOnOpen } from "@/components/kit"
 import { ReportRequest } from "@/components/report"
 import { KINDS } from "@/data/taxonomy"
 import { allPlaces, useStore } from "@/store"
@@ -161,6 +169,61 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
         </p>
       )}
 
+      {/* What a visitor does with a place, in one row under its name, as in the system's map cards: going there, sending
+          it, keeping it. Each the same size, an icon over a short word; the full name is the accessible one. */}
+      <div className="flex gap-2" role="group" aria-label="פעולות למקום">
+        {/* A family's place on private property shown approximately leads nobody to it: no navigation (spec 4). */}
+        {!(inPrivate && place.precision === "approx") && (
+          <>
+            <a
+              href={`https://waze.com/ul?ll=${place.lat},${place.lng}&navigate=yes`}
+              target="_blank"
+              rel="noopener"
+              aria-label="ניווט ב־Waze"
+              className={ACTION}
+            >
+              <NavigationIcon className="size-5" aria-hidden="true" />
+              Waze
+            </a>
+            <a
+              href={`https://www.google.com/maps/search/?api=1&query=${place.lat},${place.lng}`}
+              target="_blank"
+              rel="noopener"
+              aria-label="Google Maps"
+              className={ACTION}
+            >
+              <MapIcon className="size-5" aria-hidden="true" />
+              גוגל מפות
+            </a>
+          </>
+        )}
+        <button type="button" aria-label={local ? "העתקת קישור מקומי" : "שיתוף"} className={ACTION} onClick={share}>
+          {copied ? <CheckIcon className="size-5" aria-hidden="true" /> : <Share2Icon className="size-5" aria-hidden="true" />}
+          {copied ? "הועתק" : "שיתוף"}
+        </button>
+        {!local && (
+          <button
+            type="button"
+            aria-label={isSaved ? "שמור לביקור" : "שמירה לביקור"}
+            aria-pressed={isSaved}
+            disabled={!visits.ready || visits.busy}
+            className={cn(ACTION, "disabled:opacity-50 aria-pressed:bg-fill-2")}
+            onClick={async () => {
+              const ok = await visits.toggle(visitKey(place))
+              toast(
+                ok ? (useVisits.getState().ids.includes(visitKey(place)) ? "נשמר לביקור" : "הוסר מהשמורים") : "לא הצלחנו לשמור במכשיר",
+                {
+                  description: ok ? "רשימת הביקורים נשמרת במכשיר הזה בלבד." : "הרשימה לא השתנתה. אפשר לנסות שוב או לשתף את הקישור.",
+                },
+              )
+            }}
+          >
+            <BookmarkIcon className="size-5" fill={isSaved ? "currentColor" : "none"} aria-hidden="true" />
+            {isSaved ? "נשמר" : "שמירה"}
+          </button>
+        )}
+      </div>
+
       <p className="reading-copy text-body-lg whitespace-pre-line text-ink-1">{local?.story || place.summary_he}</p>
 
       {place.precision === "approx" && (
@@ -173,101 +236,38 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
         </p>
       )}
 
-      <section className="action-section" aria-label="פעולות למקום">
-        {/* A family's place on private property shown approximately leads nobody to it: no navigation (spec 4). */}
-        {!(inPrivate && place.precision === "approx") && (
-          <div className="flex flex-wrap gap-2" aria-label="ניווט למקום">
-            <Button variant="fill" className="min-h-11 rounded-full px-4" asChild>
-              <a href={`https://waze.com/ul?ll=${place.lat},${place.lng}&navigate=yes`} target="_blank" rel="noopener">
-                <NavigationIcon data-icon="inline-start" />
-                ניווט ב־Waze
-              </a>
-            </Button>
-            <Button variant="fill" className="min-h-11 rounded-full px-4" asChild>
-              <a href={`https://www.google.com/maps/search/?api=1&query=${place.lat},${place.lng}`} target="_blank" rel="noopener">
-                Google Maps
-              </a>
-            </Button>
-          </div>
-        )}
-        <div className="flex flex-wrap gap-2" aria-label="שיתוף ושמירה">
-          <Button variant="fill" className="min-h-11 rounded-full px-4" onClick={share}>
-            {copied ? <CheckIcon data-icon="inline-start" /> : <Share2Icon data-icon="inline-start" />}
-            {local ? "העתקת קישור מקומי" : "שיתוף"}
-          </Button>
-          {!local && (
-            <Button
-              variant="fill"
-              className="min-h-11 self-start rounded-full px-4 aria-pressed:bg-fill-2"
-              aria-pressed={isSaved}
-              disabled={!visits.ready || visits.busy}
-              onClick={async () => {
-                const ok = await visits.toggle(visitKey(place))
-                toast(
-                  ok ? (useVisits.getState().ids.includes(visitKey(place)) ? "נשמר לביקור" : "הוסר מהשמורים") : "לא הצלחנו לשמור במכשיר",
-                  {
-                    description: ok ? "רשימת הביקורים נשמרת במכשיר הזה בלבד." : "הרשימה לא השתנתה. אפשר לנסות שוב או לשתף את הקישור.",
-                  },
-                )
-              }}
-            >
-              <BookmarkIcon className="size-4" fill={isSaved ? "currentColor" : "none"} />
-              {isSaved ? "שמור לביקור" : "שמירה לביקור"}
-            </Button>
-          )}
-        </div>
-      </section>
       {place.region === "envelope" && <SafetyNote lead="המקום קרוב לגבול עזה." />}
 
       <Tribute placeId={place.id} />
-      {next && (
-        <section className="rounded-2xl bg-raised p-4 shadow-chip ring-1 ring-line" aria-label="מקום נוסף לגלות">
-          <p className="text-caption text-ink-2">מקום נוסף לגלות</p>
-          <button
-            className="pressable mt-1 flex min-h-11 w-full items-center justify-between gap-3 text-start text-body font-semibold text-ink-1"
-            onClick={() => useStore.getState().select(next.id)}
-          >
-            <span>
-              {next.name_he}
-              <span className="block text-caption font-normal text-ink-2">
+      {/* The rest, quietly: one list of rows under a hairline, not a pile of cards. */}
+      <section aria-label="עוד על המקום" className="flex flex-col divide-y divide-line border-y border-line text-ink-1">
+        {next && (
+          <button className={cn(ROW, "justify-between")} onClick={() => useStore.getState().select(next.id)}>
+            <span className="flex min-w-0 flex-col">
+              <span className="text-caption text-ink-2">מקום נוסף לגלות</span>
+              <span className="text-body font-semibold">{next.name_he}</span>
+              <span className="text-caption text-ink-2">
                 {KINDS[next.kind].label} · {next.place_he}
               </span>
             </span>
-            <ArrowRightIcon className="size-4 rotate-180" />
+            <ChevronLeftIcon className="size-4 shrink-0 text-ink-2" aria-hidden="true" />
           </button>
-        </section>
-      )}
-      {place.links.length > 0 && (
-        <section className="flex flex-col gap-2" aria-labelledby={`links-${place.id}`}>
-          <h3 id={`links-${place.id}`} className="px-2 text-label text-ink-2">
-            לקריאה נוספת
-          </h3>
-          <ul className={cn(CARD, "flex flex-col [--rule:16px]")}>
-            {place.links.map((l) => (
-              <li key={l.url} className={RULED}>
-                <a
-                  href={l.url}
-                  target="_blank"
-                  rel="noopener"
-                  className={cn(
-                    "pressable flex min-h-12 items-center justify-between gap-3 px-4 py-3 text-body font-medium text-ink-1",
-                    PRESS,
-                  )}
-                >
-                  {l.label_he}
-                  <ExternalLinkIcon className="size-3.5 shrink-0 text-ink-3" />
-                </a>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      <Separator />
-
-      <footer className="flex flex-col gap-3 text-caption text-ink-3">
-        {/* on the sheet, a card raised off it like the list's groups */}
-        <Disclosure summary="פרטי המיקום והמקורות" className="border-0 bg-raised shadow-chip ring-1 ring-line" bodyClassName="text-caption">
+        )}
+        {place.links.map((l, i) => (
+          <a key={l.url} href={l.url} target="_blank" rel="noopener" className={cn(ROW, "justify-between")}>
+            <span className="flex min-w-0 flex-col">
+              {i === 0 && <span className="text-caption text-ink-2">לקריאה נוספת</span>}
+              <span className="text-body font-medium">{l.label_he}</span>
+            </span>
+            <ExternalLinkIcon className="size-4 shrink-0 text-ink-3" aria-hidden="true" />
+          </a>
+        ))}
+        <Disclosure
+          summary="פרטי המיקום והמקורות"
+          className="rounded-none border-0"
+          summaryClassName="px-1"
+          bodyClassName="px-1 text-caption text-ink-3"
+        >
           <p className="pb-2 tabular-nums" dir="ltr" style={{ textAlign: "right" }}>
             {place.lat.toFixed(5)}, {place.lng.toFixed(5)}
           </p>
@@ -282,6 +282,10 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
             )}
           </p>
         </Disclosure>
+        {/* A removal or a correction goes to a person through the request form (spec 6); places on this device only are the visitor's own. */}
+        {!local && <ReportRequest key={place.id} place={place} />}
+      </section>
+      <footer className="flex flex-col gap-3 text-caption text-ink-3">
         {ownReceipt && ownCopy ? (
           <div className="flex flex-wrap items-center justify-between gap-2">
             {/* A place sent for review is on the server too; deleting this copy doesn't withdraw it, the tracking view does. */}
@@ -299,10 +303,13 @@ export function PlaceDetail({ place, onBack, ref }: { place: Place; onBack: () =
             <LocalRemoval place={ownCopy} />
           </div>
         ) : null}
-
-        {/* A removal or a correction goes to a person through the request form (spec 6); places on this device only are the visitor's own. */}
-        {!local && <ReportRequest key={place.id} place={place} />}
       </footer>
     </motion.article>
   )
 }
+
+/** One of the card's actions: an icon over a short word, all four the same width. */
+const ACTION =
+  "pressable flex min-h-16 min-w-0 flex-1 basis-0 flex-col items-center justify-center gap-1 rounded-2xl bg-fill px-1 py-2 text-caption font-medium whitespace-nowrap text-ink-1 outline-none focus-visible:ring-3 focus-visible:ring-ring/30 active:bg-fill-2 [@media(hover:hover)]:hover:bg-fill-2"
+/** A row of the list at the card's end. */
+const ROW = cn("pressable flex min-h-14 w-full items-center gap-3 px-1 py-3 text-start", PRESS)

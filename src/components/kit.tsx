@@ -161,17 +161,24 @@ export function Disclosure({
   children,
   className,
   bodyClassName,
+  summaryClassName,
   ref,
 }: {
   summary: ReactNode
   children: ReactNode
   className?: string
   bodyClassName?: string
+  summaryClassName?: string
   ref?: Ref<HTMLDetailsElement>
 }) {
   return (
     <details ref={ref} className={cn("group/disclosure rounded-2xl border border-line", className)}>
-      <summary className="pressable flex min-h-12 cursor-pointer list-none items-center gap-3 rounded-2xl px-4 py-3 text-label text-ink-1 outline-none focus-visible:ring-3 focus-visible:ring-ring/30 [&::-webkit-details-marker]:hidden">
+      <summary
+        className={cn(
+          "pressable flex min-h-12 cursor-pointer list-none items-center gap-3 rounded-2xl px-4 py-3 text-label text-ink-1 outline-none focus-visible:ring-3 focus-visible:ring-ring/30 [&::-webkit-details-marker]:hidden",
+          summaryClassName,
+        )}
+      >
         {summary}
         <ChevronDownIcon
           aria-hidden="true"
