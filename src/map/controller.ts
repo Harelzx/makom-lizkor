@@ -77,7 +77,25 @@ function build(container: HTMLElement, labels: boolean) {
   // OpenStreetMap's guidelines allow that fold on map interaction or after five seconds (foldCredit), but not a credit
   // folded from the start, and the full list stays in About. The map appears with the opening, so by day it's an (i).
   map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right")
+  map.on("zoomend", settleTilt)
   return map
+}
+
+// By day the tilt follows the zoom, as in the map apps: flat over the whole country, tilted only close to the places. A
+// camera tilted 50° over the whole country looked past the map's far edge, and a flat band of fog sat under the header.
+const FLAT = { zoom: 8, pitch: 15 }
+const TILTED = { zoom: 10, pitch: 70 }
+const tiltFor = (zoom: number) => {
+  const t = Math.min(1, Math.max(0, (zoom - FLAT.zoom) / (TILTED.zoom - FLAT.zoom)))
+  return FLAT.pitch + t * (TILTED.pitch - FLAT.pitch)
+}
+/** When a zoom ends further out than its tilt allows, the camera eases down to the tilt for that zoom. Every flight lands
+ *  where its own tilt is allowed (the envelope, a place, the tour), so this only ever answers a zoom out by hand; the
+ *  opening's low camera is left alone. */
+function settleTilt() {
+  if (!map || map.getContainer().classList.contains("is-opening")) return
+  const pitch = tiltFor(map.getZoom())
+  if (map.getPitch() > pitch + 0.5) map.easeTo({ pitch, duration: reducedMotion() ? 0 : 700, essential: false })
 }
 
 /** Folds a compact credit to its (i), as a drag would. Does nothing where the credit is shown in full. */
