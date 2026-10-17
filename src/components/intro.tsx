@@ -1,7 +1,7 @@
 import { Fragment, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
 import { AnimatePresence, motion } from "motion/react"
 import { Volume2, VolumeX } from "lucide-react"
-import { INTRO_SEEN, useStore } from "@/store"
+import { INTRO_SEEN, introSeen, useStore } from "@/store"
 import { Button } from "@/components/ui/button"
 import { Anemone } from "@/components/anemone"
 import { Atmosphere } from "@/components/atmosphere"
@@ -106,14 +106,6 @@ const HOLD_MS = [
  */
 const SCORE_START = FREEZE + 1.5
 const SCORE_AT = HOLD_MS.reduce((at, ms, i) => [...at, at[i] + ms / 1000], [-SCORE_START])
-
-const seen = () => {
-  try {
-    return localStorage.getItem(INTRO_SEEN) === "1"
-  } catch {
-    return false
-  }
-}
 
 /** Words rise from behind an unseen baseline and come into focus, one after another. */
 function Reveal({ text, delay = 0 }: { text: string; delay?: number }) {
@@ -519,8 +511,8 @@ export function Intro() {
   // How many places the map holds, once the feed has said; until then the line goes without a number.
   const count = useStore((s) => s.remote.filter((p) => p.kind !== "community").length)
   const replay = useStore((s) => s.introRun > 0)
-  // Returning visitors, and anyone who asked for less motion, go straight to the name.
-  const [quick] = useState(() => reducedMotion() || seen())
+  // Anyone who asked for less motion goes straight to the name. (Returning visitors start in the day: see the store.)
+  const [quick] = useState(() => reducedMotion() || introSeen())
   const [stage, setStage] = useState(quick ? NAME : MOMENT)
   // the film runs once the visitor has chosen how to watch it
   const [started, setStarted] = useState(quick)

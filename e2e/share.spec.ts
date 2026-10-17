@@ -121,8 +121,8 @@ test("one of the site's own places hidden whole stays off an offline reload, and
   }
   // The server's own feed lists it again: the note gives way, and the place is found.
   await page.unroute("**/api/v1/{version,feed}*")
+  // This browser has been to the morning (the skip above), so it comes straight back to the day.
   await page.reload()
-  await page.getByRole("button", { name: "דילוג", exact: true }).click()
   await page.getByRole("button", { name: /^חיפוש מקום/ }).click({ timeout: 20_000 })
   await page.getByRole("dialog").getByRole("combobox").fill(name)
   await expect(page.getByRole("option", { name: new RegExp(name) }).first()).toBeVisible(DAY)

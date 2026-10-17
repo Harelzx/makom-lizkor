@@ -15,6 +15,14 @@ export const INTRO_SEEN = "makom-lizkor:v2-seen"
 /** A shared link to a place lands on that place: the opening is for those who come in through the front door. */
 // A tracking link (#/track/<id>/<token>) is opened for its status, so it skips the opening too.
 const linkedToPlace = () => typeof location !== "undefined" && /^#\/(place|track|verify)\/[^/]+/.test(location.hash)
+/** Whether this browser has been to the morning before. */
+export const introSeen = () => {
+  try {
+    return localStorage.getItem(INTRO_SEEN) === "1"
+  } catch {
+    return false
+  }
+}
 /** A link's id, or null when its escapes are broken: a mistyped link opens the site, not an empty page. */
 const decoded = (part: string) => {
   try {
@@ -158,7 +166,9 @@ function visibleSelection(remote: Place[], local: Place[], id: string | null) {
 
 export const useStore = create<State>((set, get) => ({
   // A share link to a place that isn't there skips the opening all the same: it came through a link, not the front door.
-  phase: linkedToPlace() || sharedPath ? "day" : "intro",
+  // Someone who has been to the morning before comes back to it: the opening is the first visit's, and About plays it
+  // again for anyone who asks.
+  phase: linkedToPlace() || sharedPath || introSeen() ? "day" : "intro",
   light: "morning",
   remote: [],
   feedVersion: null,

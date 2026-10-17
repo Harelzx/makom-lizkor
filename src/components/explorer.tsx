@@ -11,6 +11,7 @@ import { flyToEnvelope } from "@/map/controller"
 import { ease } from "@/lib/motion"
 import { Button } from "@/components/ui/button"
 import { useVisits } from "@/lib/visit-list"
+import { cn } from "@/lib/utils"
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "places", label: "מקומות" },
@@ -85,10 +86,10 @@ export function Explorer() {
                 {tab === "places" ? "מקומות לזכור" : TABS.find((t) => t.id === tab)?.label}
               </h2>
               <details className="relative">
-                <summary className="pressable flex min-h-11 cursor-pointer list-none items-center gap-1 rounded-full px-2 text-label text-ink-2">
-                  עוד על האזור <ChevronDownIcon className="size-4" />
+                <summary className="pressable flex min-h-11 cursor-pointer list-none items-center gap-1 rounded-full bg-fill ps-4 pe-3 text-label text-ink-1 hover:bg-fill-2">
+                  עוד על האזור <ChevronDownIcon className="size-4 text-ink-2" />
                 </summary>
-                <div className="absolute end-0 top-full z-10 flex w-44 flex-col items-stretch gap-1 rounded-2xl bg-surface p-2 shadow-panel ring-1 ring-line">
+                <div className="absolute end-0 top-full z-10 mt-1 flex w-44 flex-col items-stretch gap-1 rounded-2xl bg-raised p-2 shadow-panel ring-1 ring-line">
                   {TABS.map((t) => (
                     <Button
                       key={t.id}
@@ -109,24 +110,29 @@ export function Explorer() {
               </details>
             </div>
             {tab === "places" ? (
-              <div className="flex items-center gap-2" aria-label="תצוגת המקומות">
-                <Button
-                  variant={visits.filter === "all" ? "secondary" : "ghost"}
-                  className="h-11 rounded-full"
-                  aria-pressed={visits.filter === "all"}
-                  onClick={() => visits.setFilter("all")}
-                >
-                  כל המפה
-                </Button>
-                <Button
-                  variant={visits.filter === "saved" ? "secondary" : "ghost"}
-                  className="h-11 rounded-full"
-                  aria-pressed={visits.filter === "saved"}
-                  onClick={() => visits.setFilter("saved")}
-                >
-                  <BookmarkIcon className="size-4" />
-                  שמורים לביקור
-                </Button>
+              // One track, one thumb on the chosen view: two pills side by side, one filled and one bare, read as a button
+              // and a label.
+              <div className="flex gap-1 rounded-full bg-fill p-1" role="group" aria-label="תצוגת המקומות">
+                {(
+                  [
+                    ["all", "כל המפה"],
+                    ["saved", "שמורים לביקור"],
+                  ] as const
+                ).map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    aria-pressed={visits.filter === id}
+                    onClick={() => visits.setFilter(id)}
+                    className={cn(
+                      "pressable flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-1 text-label leading-tight whitespace-normal text-ink-2 transition-colors outline-none hover:text-ink-1 focus-visible:ring-3 focus-visible:ring-ring/30 motion-reduce:transition-none",
+                      "aria-pressed:bg-thumb aria-pressed:font-semibold aria-pressed:text-ink-1 aria-pressed:shadow-chip",
+                    )}
+                  >
+                    {id === "saved" && <BookmarkIcon className="size-4 shrink-0" aria-hidden="true" />}
+                    {label}
+                  </button>
+                ))}
               </div>
             ) : (
               <Button variant="ghost" className="h-11 justify-start rounded-full" onClick={() => setTab("places")}>
@@ -138,7 +144,7 @@ export function Explorer() {
             )}
 
             {tab !== "journey" && (
-              <InputGroup className="h-11 rounded-2xl border-transparent bg-surface-2 text-body">
+              <InputGroup className="h-11 rounded-full border-transparent bg-fill text-body">
                 <InputGroupInput
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}

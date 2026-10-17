@@ -106,8 +106,8 @@ test("a refusal leaves no stored place and a closed form forgets its values", as
   await expect(page.getByRole("heading", { name: "ההצעה לא התקבלה", exact: true })).toBeVisible(DAY)
   expect(await stored(page)).toEqual([])
   await page.getByRole("button", { name: "סגירה ללא שמירה", exact: true }).click()
+  // Back again after the morning, so straight to the day.
   await page.reload()
-  await page.getByRole("button", { name: "דילוג", exact: true }).click()
   await expect(page.getByRole("button", { name: /^חיפוש מקום/ })).toBeVisible(DAY)
   expect(posts).toBe(1)
   expect(await stored(page)).toEqual([])
@@ -179,8 +179,8 @@ for (const delivery of ["cancelled-before-close", "accepted-response-lost"] as c
       const next = await context.newPage()
       // The cached feed is still current: syncing reads the version but correctly skips downloading it again.
       const sync = next.waitForResponse((r) => r.url().endsWith("/api/v1/version") && r.ok())
+      // This browser has been to the morning, so the new tab opens in the day.
       await next.goto("/")
-      await next.getByRole("button", { name: "דילוג", exact: true }).click()
       await expect(next.getByRole("button", { name: /^חיפוש מקום/ })).toBeVisible(DAY)
       await sync
       expect(await stored(next)).toEqual([])
@@ -226,7 +226,8 @@ test("two tabs retain only confirmed tracking copies and keep each other's accep
       await r.abort("failed")
     })
     await tab.goto("/")
-    await tab.getByRole("button", { name: "דילוג", exact: true }).click()
+    // One browser: once the first tab has been to the morning, the second opens in the day.
+    if (tab === tabs[0]) await tab.getByRole("button", { name: "דילוג", exact: true }).click()
     await expect(tab.getByRole("button", { name: /^חיפוש מקום/ })).toBeVisible(DAY)
   }
   for (const [i, tab] of tabs.entries()) {
