@@ -2,6 +2,7 @@ import * as maplibregl from "maplibre-gl"
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url"
 import { FIRST_LIGHT, MORNING, NIGHT, type Palette } from "./palette"
 import { applyPalette, buildStyle, OWN_LABEL_LAYERS, ownLabelsFilter } from "./style"
+import { tiltFor } from "./tilt"
 
 // MapLibre's own relative worker lookup doesn't survive a production build.
 maplibregl.setWorkerUrl(workerUrl)
@@ -77,7 +78,17 @@ function build(container: HTMLElement, labels: boolean) {
   // OpenStreetMap's guidelines allow that fold on map interaction or after five seconds (foldCredit), but not a credit
   // folded from the start, and the full list stays in About. The map appears with the opening, so by day it's an (i).
   map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right")
+  map.on("zoomend", settleTilt)
   return map
+}
+
+/** When a zoom ends further out than its tilt allows, the camera eases down to the tilt for that zoom. Every flight lands
+ *  where its own tilt is allowed (the envelope, a place, the tour), so this only ever answers a zoom out by hand; the
+ *  opening's low camera is left alone. */
+function settleTilt() {
+  if (!map || map.getContainer().classList.contains("is-opening")) return
+  const pitch = tiltFor(map.getZoom())
+  if (map.getPitch() > pitch + 0.5) map.easeTo({ pitch, duration: reducedMotion() ? 0 : 700, essential: false })
 }
 
 /** Folds a compact credit to its (i), as a drag would. Does nothing where the credit is shown in full. */

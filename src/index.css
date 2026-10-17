@@ -92,6 +92,8 @@
   --dawn: var(--p-sun-300);
   --dawn-soft: var(--p-sun-50);
   --glass: rgb(255 255 255 / 0.96);
+  /* the phone's sheet over the map: a surface the map shows through, blurred, as in the system's own map sheets */
+  --material: rgb(255 255 255 / 0.78);
   /* the opening's newspaper clippings: newsprint and its ink, the same by night and by day */
   --clipping: #f2ede2;
   --clipping-ink: #15181f;
@@ -125,6 +127,7 @@
   --dawn: var(--p-sun-300);
   --dawn-soft: color-mix(in oklab, var(--p-sun-300) 12%, transparent);
   --glass: rgb(19 26 44 / 0.96);
+  --material: rgb(19 26 44 / 0.8);
   --shadow-color: 228 60% 3%;
 }
 
@@ -220,6 +223,7 @@
   --color-clipping-mourning: var(--clipping-mourning);
   --color-dawn-soft: var(--dawn-soft);
   --color-glass: var(--glass);
+  --color-material: var(--material);
   --color-anemone: var(--brand);
   --color-sage: var(--hope);
 

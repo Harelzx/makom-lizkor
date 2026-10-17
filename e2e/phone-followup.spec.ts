@@ -157,7 +157,8 @@ for (const width of [320, 390])
       await day(page)
       const sheet = page.locator("#places")
       // Folded or raised, the sheet is one surface that meets the screen's edge, with a grabber: it reads as something to pull.
-      await expect(sheet).toHaveCSS("background-color", "rgb(255, 255, 255)")
+      // It is a material the map shows through, blurred, so the map reads as going on below it.
+      await expect(sheet).toHaveCSS("background-color", "rgba(255, 255, 255, 0.78)")
       await expect.poll(async () => (await sheet.boundingBox())!.width).toBe(width)
       await expect(sheet.locator("[data-sheet-grip]")).toBeInViewport()
       const sheetBox = await sheet.boundingBox()
@@ -190,13 +191,13 @@ for (const width of [320, 390])
       await sheet.getByRole("button", { name: "חזרה למפה", exact: true }).click()
       await expect(sheet.getByRole("button", { name: "הצגת המקומות", exact: true })).toBeInViewport()
       await open.click()
-      await expect(sheet).toHaveCSS("background-color", "rgb(255, 255, 255)")
+      await expect(sheet).toHaveCSS("background-color", "rgba(255, 255, 255, 0.78)")
       await expect(sheet.getByRole("heading", { name: "מקומות לזכור", exact: true })).toBeInViewport()
       await expect(sheet.getByRole("button", { name: "שמורים לביקור", exact: true })).toBeInViewport()
       await audit(page)
       await sheet.getByRole("button", { name: "חזרה למפה", exact: true }).click()
       await expect(sheet.getByRole("heading", { name: "מקומות לזכור", exact: true })).toHaveCount(0)
-      await expect(sheet).toHaveCSS("background-color", "rgb(255, 255, 255)")
+      await expect(sheet).toHaveCSS("background-color", "rgba(255, 255, 255, 0.78)")
       // Safari owns its controls' dimensions. Nothing fixed paints the top edge, so the map runs under the status bar;
       // the page surface behind is the map's land, and the bottom edge is the sheet.
       const surface = () =>

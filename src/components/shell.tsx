@@ -317,7 +317,8 @@ export function Shell() {
             style={{ paddingBottom: typeof snap === "number" ? `${(1 - snap) * 100}dvh` : `calc(100dvh - ${peek})` }}
             // One surface from the screen's edge, folded or raised: a sheet that comes out of the edge reads as one to
             // pull, where a floating card read as a toolbar. Safari's bar then floats over the sheet, not over a strip of map.
-            className="fixed inset-x-0 bottom-0 z-30 flex h-dvh flex-col rounded-t-[28px] bg-surface shadow-panel ring-1 ring-line outline-none"
+            // The map shows through it, blurred, as under the system's own map sheets, so the map reads as going on below.
+            className="fixed inset-x-0 bottom-0 z-30 flex h-dvh flex-col rounded-t-[28px] bg-material shadow-panel ring-1 ring-line backdrop-blur-2xl backdrop-saturate-150 outline-none"
           >
             <Drawer.Title className="sr-only">מקומות וקהילות</Drawer.Title>
             {/* Folded, the sheet is a grabber and one row of actions, as in the system's own sheets: the surface rising out
