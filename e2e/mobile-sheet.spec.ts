@@ -59,3 +59,10 @@ test("a tap on a flower lifts the sheet to that place's story", async ({ page })
   // lifted, every time: the lift used to be lost now and then, leaving the story folded away under the map
   await expect.poll(async () => (await sheet.boundingBox())!.y).toBeLessThan(folded - 300)
 })
+
+test("after a tap ends the opening, the keyboard's skip button stays out of sight", async ({ page }) => {
+  // The opening was skipped by a tap (beforeEach): the focus is not handed to the skip button, which would show over the name.
+  const skip = page.getByRole("button", { name: "דילוג לרשימת המקומות", exact: true })
+  await expect(skip).not.toBeFocused()
+  await expect(skip).not.toBeInViewport()
+})

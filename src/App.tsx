@@ -117,16 +117,28 @@ export default function App() {
   if (addOpen && !addLoaded) setAddLoaded(true)
   useHashRoute()
 
-  // When the opening ends, the button that ended it is gone and the focus with it. The focus goes to the skip button,
-  // the page's first stop, so a keyboard carries on from the top rather than from where the opening was; it shows
-  // only to a keyboard (focus-visible), and a page that opens straight at a place is left alone.
+  // When the opening ends, the button that ended it is gone and the focus with it. For a keyboard the focus goes to the
+  // skip button, the page's first stop, so it carries on from the top rather than from where the opening was. Only for a
+  // keyboard: Safari on a phone shows a focus moved by script after a tap, and the button sat over the name. A page that
+  // opens straight at a place is left alone.
   const skipRef = useRef<HTMLButtonElement>(null)
   const prevPhase = useRef(phase)
+  const byKeyboard = useRef(false)
+  useEffect(() => {
+    const key = () => (byKeyboard.current = true)
+    const pointer = () => (byKeyboard.current = false)
+    window.addEventListener("keydown", key, true)
+    window.addEventListener("pointerdown", pointer, true)
+    return () => {
+      window.removeEventListener("keydown", key, true)
+      window.removeEventListener("pointerdown", pointer, true)
+    }
+  }, [])
   useEffect(() => {
     const at = document.activeElement
     // focus already lost, or still on the opening as it fades out
     const lost = !at || at === document.body || !!at.closest('[aria-labelledby="intro-title"]')
-    if (prevPhase.current !== "day" && phase === "day" && lost) skipRef.current?.focus({ preventScroll: true })
+    if (prevPhase.current !== "day" && phase === "day" && lost && byKeyboard.current) skipRef.current?.focus({ preventScroll: true })
     prevPhase.current = phase
   }, [phase])
 
