@@ -14,7 +14,7 @@ import { discard, dismiss, entry, heldFor, hydrate, latestFor, readFailed, resen
 import { freeze } from "@/lib/report-outbox"
 import { CURRENT_REPORT_NOTICE, REQUESTER_TYPES, type Element, type ReportInput } from "@/shared/contract"
 import type { Place } from "@/types"
-import { CARD, Disclosure, PRESS, Segmented } from "@/components/kit"
+import { Disclosure, PRESS, Segmented } from "@/components/kit"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { ChevronLeftIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -122,13 +122,13 @@ export function ReportRequest({ place }: { place: Place }) {
 
   return (
     <>
-      {/* A row of its own, like the card's other rows: a small underlined link at the very bottom went unseen. */}
+      {/* A row of the card's closing list: a small underlined link at the very bottom went unseen. */}
       <button
         type="button"
         aria-label="בקשת הסרה או תיקון"
         aria-describedby={`${uid}-entry`}
         onClick={() => setOpened(true)}
-        className={cn(CARD, "pressable flex min-h-14 w-full items-center gap-3 px-4 py-3 text-start", PRESS)}
+        className={cn("pressable flex min-h-14 w-full items-center gap-3 px-1 py-3 text-start", PRESS)}
       >
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="text-label text-ink-1">בקשת הסרה או תיקון</span>

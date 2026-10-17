@@ -92,10 +92,15 @@ for (const width of [320, 390])
     // Reading down the story, the sheet's actions step aside; a scroll back up brings them.
     const back = page.getByRole("button", { name: "חזרה למפה", exact: true })
     const actions = page.locator("[data-sheet-actions]")
+    // Read down in steps, as a finger scrolls; then a little back up.
+    const list = page.locator("#places [data-vaul-no-drag]")
+    const scrollBy = async (dy: number) => {
+      await list.evaluate((e, dy) => (e.scrollTop += dy), dy)
+      await page.evaluate(() => new Promise(requestAnimationFrame))
+    }
+    for (let i = 0; i < 5; i++) await scrollBy(120)
     await expect.poll(() => actions.evaluate((e) => e.getBoundingClientRect().height)).toBeLessThan(2)
-    const list = (await page.locator("#places [data-vaul-no-drag]").boundingBox())!
-    await page.mouse.move(list.x + list.width / 2, list.y + list.height / 2)
-    await page.mouse.wheel(0, -120)
+    await scrollBy(-60)
     await expect.poll(() => actions.evaluate((e) => e.getBoundingClientRect().height)).toBeGreaterThan(40)
     await back.click()
     await page.getByRole("button", { name: "הוספת מקום", exact: true }).click()
