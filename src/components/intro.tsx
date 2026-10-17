@@ -743,7 +743,9 @@ export function Intro() {
                 />
               )}
               {inIntro && stage === NAME && <Name key="name" quick={quick} count={count} cta={cta} onMorning={toMorning} />}
-              {phase === "dawn" && (
+              {/* The line belongs to the film: a returning visitor, who comes straight to the name, goes to the morning
+                  without it. */}
+              {phase === "dawn" && !quick && (
                 <motion.p
                   key="dawn"
                   className="col-start-1 row-start-1 max-w-2xl text-statement text-balance text-white [text-shadow:0_2px_28px_color-mix(in_oklab,var(--p-ink-950)_70%,transparent),0_1px_3px_color-mix(in_oklab,var(--p-ink-950)_55%,transparent)]"

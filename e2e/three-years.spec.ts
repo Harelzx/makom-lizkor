@@ -156,3 +156,21 @@ for (const [date, years] of [
     await expect(page.getByText(new RegExp(`^${years} · [\\d,]+ ימים · לא נשכח$`))).toBeVisible(DAY_COMES)
   })
 }
+
+test("a returning visitor goes to the morning without the film's line", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("makom-lizkor:v2-seen", "1"))
+  await page.goto("/")
+  // Straight to the name, as on every visit after the first; the line belongs to the film, which played once.
+  await page.getByRole("button", { name: "אל הבוקר" }).click()
+  // Watched from inside the page through the whole sunrise: the line never comes, not even for a frame.
+  const seen = await page.evaluate(
+    () =>
+      new Promise<boolean>((done) => {
+        const found = () => /עברו מאז\. ?ובכל אחד מהם/.test(document.body.innerText.replace(/\s+/g, " "))
+        const t0 = performance.now()
+        const tick = () => (found() ? done(true) : performance.now() - t0 > 9000 ? done(false) : requestAnimationFrame(tick))
+        tick()
+      }),
+  )
+  expect(seen).toBe(false)
+})

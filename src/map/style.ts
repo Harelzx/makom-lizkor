@@ -8,6 +8,7 @@ import { BASEMAP_ARCHIVE, BASEMAP_MAXZOOM, TERRAIN_MAXZOOM, TERRAIN_VERSION, TIL
  */
 export const ownLabelsFilter = (names: string[]) => ["!", ["in", ["get", "name:he"], ["literal", names]]]
 export const OWN_LABEL_LAYERS = ["place-small", "place-town"]
+import { outsideGaza } from "./gaza"
 import { type Palette } from "./palette"
 
 /** Map labels are drawn with the site's own typeface through MapLibre's `font-faces`. */
@@ -220,7 +221,7 @@ export function buildStyle(p: Palette, labels = true): StyleSpecification {
         type: "symbol",
         source: "openmaptiles",
         "source-layer": "transportation_name",
-        filter: line,
+        filter: ["all", line, outsideGaza as never],
         minzoom: 13,
         layout: {
           visibility,
@@ -241,6 +242,7 @@ export function buildStyle(p: Palette, labels = true): StyleSpecification {
           "all",
           pt,
           ["match", ["get", "class"], ["village", "hamlet", "suburb", "neighbourhood"], true, false],
+          outsideGaza as never,
           ownLabelsFilter([]) as never,
         ],
         minzoom: 11,
@@ -258,7 +260,7 @@ export function buildStyle(p: Palette, labels = true): StyleSpecification {
         type: "symbol",
         source: "openmaptiles",
         "source-layer": "place",
-        filter: ["all", pt, ["match", ["get", "class"], ["town", "city"], true, false], ownLabelsFilter([]) as never],
+        filter: ["all", pt, ["match", ["get", "class"], ["town", "city"], true, false], outsideGaza as never, ownLabelsFilter([]) as never],
         minzoom: 6.5,
         layout: {
           visibility,

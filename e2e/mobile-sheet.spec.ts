@@ -33,3 +33,29 @@ test("after the add dialog closes, the page still answers taps", async ({ page }
   await page.locator('header button[aria-label="על הפרויקט"]').click({ timeout: 3000 })
   await expect(page.getByRole("dialog")).toBeVisible()
 })
+
+test("a tap on a flower lifts the sheet to that place's story", async ({ page }) => {
+  // A flower wholly on screen and on top where it is tapped (a neighbour or the sheet can cover one).
+  const flower = page.locator(".mk-flower").filter({ visible: true })
+  let point: { x: number; y: number } | null = null
+  await expect
+    .poll(async () => {
+      point = await flower.evaluateAll((all) => {
+        for (const f of all) {
+          const r = f.getBoundingClientRect(),
+            x = r.x + r.width / 2,
+            y = r.y + r.height / 2
+          if (y > 80 && y < 680 && x > 10 && x < 380 && document.elementFromPoint(x, y)?.closest(".mk-flower") === f) return { x, y }
+        }
+        return null
+      })
+      return point
+    })
+    .not.toBeNull()
+  const sheet = page.locator("#places")
+  const folded = (await sheet.boundingBox())!.y
+  await page.mouse.click(point!.x, point!.y)
+  await expect(page).toHaveURL(/#\/place\//)
+  // lifted, every time: the lift used to be lost now and then, leaving the story folded away under the map
+  await expect.poll(async () => (await sheet.boundingBox())!.y).toBeLessThan(folded - 300)
+})

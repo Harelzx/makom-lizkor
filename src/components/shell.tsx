@@ -8,7 +8,7 @@ import { Kbd } from "@/components/ui/kbd"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { AnemoneMark } from "@/components/anemone"
 import { Explorer } from "@/components/explorer"
-import { useStore } from "@/store"
+import { allPlaces, useStore } from "@/store"
 import { cn } from "@/lib/utils"
 import { ease, spring } from "@/lib/motion"
 import { daysHe, since, yearsHe } from "@/lib/since"
@@ -153,6 +153,13 @@ export function Shell() {
   const [snap, setSnap] = useState<number | string | null>(() => (mobile && (selectedId || tab === "journey") ? SNAPS[2] : SNAPS[0]))
   const [peek, setPeek] = useState(SNAPS[0] as string)
   const folded = typeof snap !== "number"
+  // Folded, the sheet still says what it holds: the places, or the one chosen on the map.
+  const placeCount = useStore((s) => allPlaces(s).filter((p) => p.kind !== "community").length)
+  const chosenName = useStore((s) => (s.selectedId ? (allPlaces(s).find((p) => p.id === s.selectedId)?.name_he ?? null) : null))
+  const foldedNow = useRef(folded)
+  useEffect(() => {
+    foldedNow.current = folded
+  }, [folded])
   const gripFrom = useRef(0)
   const [collapsed, setCollapsed] = useState(false)
   const [scrolled, setScrolled] = useState(false)
@@ -165,8 +172,9 @@ export function Shell() {
     if (!bar) return
     const measure = () => {
       const height = Math.ceil(bar.getBoundingClientRect().height)
-      // Presence briefly measures zero while a dialog removes the sheet. Never turn that into an offscreen snap.
-      if (height <= 0) return
+      // Presence briefly measures zero while a dialog removes the sheet. Never turn that into an offscreen snap. Raised,
+      // the bar drops its folded line, so only a folded bar is the peek.
+      if (height <= 0 || !foldedNow.current) return
       const next = `${height}px`
       document.documentElement.style.setProperty("--map-peek", next)
       setPeek(next)
@@ -189,13 +197,18 @@ export function Shell() {
   }, [mobile, phase])
 
   // Choosing a place opens the panel again if it was folded away; on phones it lifts the sheet so the story is readable.
-  // Adjusted while rendering, so the panel never paints a frame in its old state first.
-  const [seen, setSeen] = useState({ selectedId, tab, mobile })
-  if (seen.selectedId !== selectedId || seen.tab !== tab || seen.mobile !== mobile) {
-    setSeen({ selectedId, tab, mobile })
-    if (selectedId && selectedId !== seen.selectedId) setCollapsed(false)
-    if (mobile && (selectedId || tab === "journey")) setSnap(SNAPS[2])
-  }
+  // Taken from the store as the choice is made, in the same event, so the panel never paints a frame in its old state.
+  // Adjusted while rendering, the lift was sometimes lost on a phone: a tap on a flower chose the place and left the sheet
+  // folded, as React threw that render away and its update with it.
+  useEffect(
+    () =>
+      useStore.subscribe((s, was) => {
+        if (s.selectedId === was.selectedId && s.tab === was.tab) return
+        if (s.selectedId && s.selectedId !== was.selectedId) setCollapsed(false)
+        if (window.matchMedia("(max-width: 767px)").matches && (s.selectedId || s.tab === "journey")) setSnap(SNAPS[2])
+      }),
+    [],
+  )
 
   if (phase !== "day") return null
 
@@ -321,8 +334,9 @@ export function Shell() {
             className="fixed inset-x-0 bottom-0 z-30 flex h-dvh flex-col rounded-t-[28px] bg-material shadow-panel ring-1 ring-line backdrop-blur-2xl backdrop-saturate-150 outline-none"
           >
             <Drawer.Title className="sr-only">מקומות וקהילות</Drawer.Title>
-            {/* Folded, the sheet is a grabber and one row of actions, as in the system's own sheets: the surface rising out
-                of the screen's edge, with its grabber, is what says it can be pulled, so it needs no written instruction. */}
+            {/* Folded, the sheet is a grabber, a line of what it holds and one row of actions, as in the system's own sheets:
+                the surface rising out of the screen's edge, with its grabber, is what says it can be pulled, so it needs no
+                written instruction. */}
             <div ref={measureMobileBar} className="flow-root shrink-0 pb-[max(12px,env(safe-area-inset-bottom))]">
               <div className="flow-root" data-sheet-surface>
                 {/* A tap on the grabber steps through the heights, as in the system's sheets; a pull is Vaul's and never
@@ -339,6 +353,14 @@ export function Shell() {
                 >
                   <span className="h-[5px] w-9 rounded-full bg-ink-3/60" />
                 </div>
+                {/* What the sheet holds, in one line: as in the system's map sheets, a folded sheet shows content, not only
+                    actions. Raised, the list has its own heading. */}
+                {folded && (
+                  <div data-sheet-summary className="flex items-baseline justify-between gap-3 px-5 pb-2.5">
+                    <p className="truncate text-headline text-ink-1">{chosenName ?? "מקומות לזכור"}</p>
+                    {!chosenName && placeCount > 0 && <p className="shrink-0 text-caption text-ink-2">{placeCount} מקומות</p>}
+                  </div>
+                )}
                 <div className="flex flex-wrap items-center gap-2 px-4">
                   <Button
                     variant="secondary"
