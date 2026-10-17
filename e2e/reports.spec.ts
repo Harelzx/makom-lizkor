@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext, type Browser, type BrowserContext, type Page, type Route } from "./fixtures"
+import { openItem } from "./admin"
 import { published } from "./publish"
 
 /** The place as the public feed has it now. */
@@ -34,7 +35,7 @@ test(
     await ctx.request.post("/__dev/login", { data: { email: "dev@example.test" } })
     const mod = await ctx.newPage()
     await mod.goto("/admin/")
-    const card = mod.getByRole("article", { name: `בקשה על ${name}` })
+    const card = await openItem(mod, `בקשה על ${name}`)
     await expect(card).toBeVisible()
     await expect(card.getByText("הוסתר באופן זהיר", { exact: false })).toBeVisible()
 
@@ -103,10 +104,10 @@ test("the moderators' page reaches older requests and operations a page at a tim
     })
   })
   await mod.goto("/admin/")
-  await expect(mod.getByRole("article", { name: "בקשה על ספסל דמו חדש" })).toBeVisible()
-  await expect(mod.getByRole("article", { name: "בקשה על ספסל דמו ישן" })).toHaveCount(0)
+  await expect(mod.getByRole("button", { name: "בקשה על ספסל דמו חדש", exact: true })).toBeVisible()
+  await expect(mod.getByRole("button", { name: "בקשה על ספסל דמו ישן", exact: true })).toHaveCount(0)
   await mod.getByRole("button", { name: "בקשות ישנות יותר" }).click()
-  await expect(mod.getByRole("article", { name: "בקשה על ספסל דמו ישן" })).toBeVisible()
+  await expect(await openItem(mod, "בקשה על ספסל דמו ישן")).toBeVisible()
   await expect(mod.getByRole("button", { name: "בקשות ישנות יותר" })).toHaveCount(0)
 
   const attention = mod.getByRole("list", { name: "דורש תשומת לב" })

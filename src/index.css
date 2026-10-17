@@ -148,6 +148,8 @@
 @theme inline {
   --font-sans: "Heebo Variable", "Heebo", system-ui, sans-serif;
   --font-display: "Heebo Variable", "Heebo", system-ui, sans-serif;
+  /* the moderators' page only (src/admin/main.tsx); the site itself stays in Heebo */
+  --font-admin: "IBM Plex Sans Hebrew", "Heebo Variable", system-ui, sans-serif;
   --font-heading: var(--font-display);
 
   /* Type scale. Each step carries its own line height and weight; Hebrew is never letter-spaced. */
