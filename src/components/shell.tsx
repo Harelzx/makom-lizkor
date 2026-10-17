@@ -205,7 +205,13 @@ export function Shell() {
       useStore.subscribe((s, was) => {
         if (s.selectedId === was.selectedId && s.tab === was.tab) return
         if (s.selectedId && s.selectedId !== was.selectedId) setCollapsed(false)
-        if (window.matchMedia("(max-width: 767px)").matches && (s.selectedId || s.tab === "journey")) setSnap(SNAPS[2])
+        if (!window.matchMedia("(max-width: 767px)").matches || !(s.selectedId || s.tab === "journey")) return
+        // A flower tapped on the map: the camera flies to it first, and the story rises once it has landed, so the
+        // place is seen arriving before the sheet covers half of it. From the list the sheet is already up.
+        if (foldedNow.current && s.selectedId && s.selectedId !== was.selectedId) {
+          const id = s.selectedId
+          void import("@/map/controller").then((m) => m.landed()).then(() => useStore.getState().selectedId === id && setSnap(SNAPS[2]))
+        } else setSnap(SNAPS[2])
       }),
     [],
   )
