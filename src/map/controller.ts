@@ -73,8 +73,16 @@ function build(container: HTMLElement, labels: boolean) {
   })
   if (import.meta.env.DEV) (window as unknown as { __map: maplibregl.Map }).__map = map
   map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "bottom-left")
-  map.addControl(new maplibregl.AttributionControl({ compact: false }), "bottom-right")
+  // Narrow maps (up to 640px) get MapLibre's compact credit: shown in full first, then folded to an (i) that opens it
+  // again. OpenStreetMap's guidelines allow that fold on map interaction or after five seconds (foldCredit), and the
+  // full list stays in About. A wide map has room for the whole line, so it never folds there.
+  map.addControl(new maplibregl.AttributionControl({}), "bottom-right")
   return map
+}
+
+/** Folds a compact credit to its (i), as a drag would. Does nothing where the credit is shown in full. */
+export function foldCredit() {
+  map?.getContainer().querySelector(".maplibregl-ctrl-attrib.maplibregl-compact")?.classList.remove("maplibregl-compact-show")
 }
 
 export function destroyMap() {

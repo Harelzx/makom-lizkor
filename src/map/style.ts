@@ -69,7 +69,7 @@ export function buildStyle(p: Palette, labels = true): StyleSpecification {
         minzoom: 0,
         maxzoom: BASEMAP_MAXZOOM,
         attribution:
-          '<a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">© OpenMapTiles</a> Data from <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
+          '<a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">© OpenMapTiles</a> <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a>',
       },
       dem: {
         type: "raster-dem",
@@ -80,7 +80,7 @@ export function buildStyle(p: Palette, labels = true): StyleSpecification {
         // The western Negev is flat: relief shading from coarse tiles reads the same and costs a fraction.
         maxzoom: TERRAIN_MAXZOOM,
         attribution:
-          '<a href="https://github.com/tilezen/joerd/blob/master/docs/attribution.md" target="_blank" rel="noopener">Terrain: Mapzen / AWS Open Data</a>',
+          '<a href="https://github.com/tilezen/joerd/blob/master/docs/attribution.md" target="_blank" rel="noopener">Terrain: Mapzen</a>',
       },
     },
     sky: {

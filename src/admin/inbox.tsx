@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react"
 import { AnimatePresence, motion } from "motion/react"
 import { ArrowRight, CircleCheck, House, Keyboard, MoonStar, RotateCcw, Sun } from "lucide-react"
-import { Anemone } from "@/components/anemone"
+import { AnemoneMark } from "@/components/anemone"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -383,8 +383,11 @@ export function Inbox() {
       <div className="flex h-full flex-col border-line bg-surface-2 max-lg:overflow-y-auto lg:min-h-0 lg:border-e dark:bg-canvas">
         <div className="px-4 pt-4 sm:px-5">
           <div className="flex items-center justify-between gap-2">
-            <a href="/" className="pressable flex items-center gap-2 rounded-lg py-1 text-label text-ink-2 hover:text-ink-1">
-              <Anemone size={22} />
+            <a
+              href="/"
+              className="pressable flex items-center gap-2 rounded-lg py-1 text-label text-ink-2 [--mark-ground:var(--surface-2)] hover:text-ink-1 dark:[--mark-ground:var(--canvas)]"
+            >
+              <AnemoneMark size={22} />
               מקום לזכור · ניהול
             </a>
             <div className="flex items-center">

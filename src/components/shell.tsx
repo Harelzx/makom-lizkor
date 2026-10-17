@@ -6,7 +6,7 @@ import { ChevronUpIcon, InfoIcon, MoonIcon, PlusIcon, SearchIcon, SunIcon } from
 import { Button } from "@/components/ui/button"
 import { Kbd } from "@/components/ui/kbd"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { Anemone } from "@/components/anemone"
+import { AnemoneMark } from "@/components/anemone"
 import { Explorer } from "@/components/explorer"
 import { useStore } from "@/store"
 import { cn } from "@/lib/utils"
@@ -30,7 +30,7 @@ export function Wordmark({ className, compact }: { className?: string; compact?:
   return (
     <a href="#/" className={cn("group flex items-center gap-2.5 whitespace-nowrap", className)} aria-label="מקום לזכור, חזרה למפה">
       <span className="transition-transform duration-500 ease-[var(--ease-spring)] group-hover:rotate-[24deg]">
-        <Anemone size={compact ? 22 : 30} />
+        <AnemoneMark size={compact ? 24 : 32} />
       </span>
       <span
         className={cn("font-display leading-none font-black text-ink-1", compact ? "text-[16px] min-[360px]:text-[18px]" : "text-title-2")}
@@ -112,7 +112,7 @@ function Actions({ compact }: { compact?: boolean }) {
         <InfoIcon />
       </Button>
       {!compact && (
-        <Button variant="brand" className="h-11 rounded-full px-5" onClick={() => setAddOpen(true)}>
+        <Button variant="action" className="h-11 rounded-full px-5" onClick={() => setAddOpen(true)}>
           <PlusIcon data-icon="inline-start" />
           הוספת מקום
         </Button>
@@ -140,7 +140,7 @@ function usePanelScroll() {
   return { ref, onScroll }
 }
 
-const SNAPS = ["88px", 0.6, 0.88]
+const SNAPS = ["84px", 0.6, 0.88]
 
 export function Shell() {
   const mobile = useIsMobile()
@@ -151,8 +151,9 @@ export function Shell() {
   const picking = useStore((s) => s.picking)
   const addOpen = useStore((s) => s.addOpen)
   const [snap, setSnap] = useState<number | string | null>(() => (mobile && (selectedId || tab === "journey") ? SNAPS[2] : SNAPS[0]))
-  const [peek, setPeek] = useState("88px")
+  const [peek, setPeek] = useState(SNAPS[0] as string)
   const folded = typeof snap !== "number"
+  const gripFrom = useRef(0)
   const [collapsed, setCollapsed] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   const headerRef = useRef<HTMLDivElement>(null)
@@ -282,7 +283,9 @@ export function Shell() {
         animate={{ opacity: 1, y: 0 }}
         className="fixed inset-x-[12px] top-[max(12px,env(safe-area-inset-top))] z-40 flex flex-wrap items-center justify-between gap-2"
       >
-        <div className="rounded-full bg-surface px-2.5 py-3 shadow-chip ring-1 ring-line">
+        {/* The flower is round, so it sits concentric in the pill's cap ((48 - 24) / 2 = 12px). The last letter is
+            square against a curve that turns away from it, so that end needs more room to look as far from the edge. */}
+        <div className="rounded-full bg-surface py-3 ps-3 pe-5 shadow-chip ring-1 ring-line">
           <Wordmark compact />
         </div>
         <Actions compact />
@@ -317,26 +320,36 @@ export function Shell() {
             className="fixed inset-x-0 bottom-0 z-30 flex h-dvh flex-col rounded-t-[28px] bg-surface shadow-panel ring-1 ring-line outline-none"
           >
             <Drawer.Title className="sr-only">מקומות וקהילות</Drawer.Title>
+            {/* Folded, the sheet is a grabber and one row of actions, as in the system's own sheets: the surface rising out
+                of the screen's edge, with its grabber, is what says it can be pulled, so it needs no written instruction. */}
             <div ref={measureMobileBar} className="flow-root shrink-0 pb-[max(12px,env(safe-area-inset-bottom))]">
               <div className="flow-root" data-sheet-surface>
-                <div data-sheet-grip className="flex min-h-10 shrink-0 flex-col items-center justify-center gap-1 px-3 py-1.5 select-none">
-                  <span className="h-1.5 w-12 rounded-full bg-ink-3" aria-hidden="true" />
-                  <span className="text-center text-caption font-medium text-ink-2">
-                    {folded ? "משכו למעלה להצגת המקומות" : "משכו למטה לחזרה למפה"}
-                  </span>
+                {/* A tap on the grabber steps through the heights, as in the system's sheets; a pull is Vaul's and never
+                    counts as a tap. It is a shortcut for touch: keyboards and screen readers have the button below. */}
+                <div
+                  data-sheet-grip
+                  aria-hidden="true"
+                  className="flex h-7 shrink-0 cursor-grab items-center justify-center select-none"
+                  onPointerDown={(e) => (gripFrom.current = e.clientY)}
+                  onClick={(e) => {
+                    if (Math.abs(e.clientY - gripFrom.current) > 6) return
+                    setSnap(folded ? SNAPS[1] : snap === SNAPS[1] ? SNAPS[2] : peek)
+                  }}
+                >
+                  <span className="h-[5px] w-9 rounded-full bg-ink-3/60" />
                 </div>
-                <div className="flex flex-wrap items-center justify-between gap-2 px-3">
+                <div className="flex flex-wrap items-center gap-2 px-4">
                   <Button
                     variant="secondary"
-                    className="h-11 min-w-fit flex-1 rounded-full px-3 py-1 leading-tight whitespace-normal"
+                    className="h-11 min-w-fit flex-1 rounded-full px-4 py-1 leading-tight whitespace-normal"
                     aria-expanded={!folded}
                     onClick={() => setSnap(folded ? SNAPS[2] : peek)}
                   >
                     {!folded ? "חזרה למפה" : selectedId ? "לסיפור ולפרטי הביקור" : "הצגת המקומות"}
                   </Button>
                   <Button
-                    variant="brand"
-                    className="h-11 min-w-fit flex-1 rounded-full px-3 py-1 leading-tight whitespace-normal"
+                    variant="action"
+                    className="h-11 min-w-fit flex-1 rounded-full px-4 py-1 leading-tight whitespace-normal"
                     onClick={() => setAddOpen(true)}
                   >
                     <PlusIcon className="size-4" />

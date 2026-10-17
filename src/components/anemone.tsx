@@ -170,3 +170,25 @@ export function Anemone({ state = "open", size = 32, delay = 0, className, varia
     </motion.svg>
   )
 }
+
+/**
+ * The site's mark: the same anemone drawn as a line in the ink of the text, with only its heart in red. The full
+ * crimson is kept for the flowers on the map, the places themselves, so the name never outshouts them.
+ * Each ring is filled with the surface behind it (--mark-ground, the surface unless set), so the front tepals hide the
+ * lines of the back ones.
+ */
+export function AnemoneMark({ size = 24, className }: { size?: number; className?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="-58 -58 116 116" aria-hidden="true" className={cn("text-ink-1", className)}>
+      <g fill="var(--mark-ground, var(--surface))" stroke="currentColor" strokeWidth="6.5" strokeLinejoin="round">
+        {[30, 150, 270].map((a) => (
+          <path key={a} d={TEPAL} transform={`rotate(${a})`} />
+        ))}
+        {[90, 210, 330].map((a) => (
+          <path key={a} d={TEPAL} transform={`rotate(${a}) scale(0.93)`} />
+        ))}
+      </g>
+      <circle r="15" className="fill-brand" />
+    </svg>
+  )
+}

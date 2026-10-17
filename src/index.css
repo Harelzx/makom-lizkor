@@ -80,6 +80,12 @@
   --brand-strong: var(--p-anemone-600);
   --brand-soft: var(--p-anemone-50);
   --brand-ink: #ffffff;
+  /* the primary action: ink, not red, so the map's anemones stay the strongest red on the screen; a step lighter than
+     the text's ink so it reads as a button, not a hole; only its mark is red */
+  --action: var(--p-ink-700);
+  --action-strong: var(--p-ink-800);
+  --action-ink: #ffffff;
+  --action-mark: var(--p-anemone-400);
   --hope: var(--p-field-500);
   --hope-soft: var(--p-field-50);
   --hope-ink: var(--p-field-700);
@@ -108,6 +114,11 @@
   --brand: var(--p-anemone-400);
   --brand-strong: var(--p-anemone-500);
   --brand-soft: color-mix(in oklab, var(--p-anemone-400) 14%, transparent);
+  /* at night the action turns over: pale on the dark map */
+  --action: var(--p-ink-50);
+  --action-strong: var(--p-ink-100);
+  --action-ink: var(--p-ink-900);
+  --action-mark: var(--p-anemone-600);
   --hope: var(--p-field-300);
   --hope-soft: color-mix(in oklab, var(--p-field-300) 12%, transparent);
   --hope-ink: var(--p-field-200);
@@ -196,6 +207,10 @@
   --color-brand-strong: var(--brand-strong);
   --color-brand-soft: var(--brand-soft);
   --color-brand-ink: var(--brand-ink);
+  --color-action: var(--action);
+  --color-action-strong: var(--action-strong);
+  --color-action-ink: var(--action-ink);
+  --color-action-mark: var(--action-mark);
   --color-hope: var(--hope);
   --color-hope-soft: var(--hope-soft);
   --color-hope-ink: var(--hope-ink);
@@ -369,6 +384,25 @@
 .maplibregl-ctrl-attrib a {
   color: var(--foreground) !important;
 }
+/* Folded on a phone, the credit is a quiet round (i) in the corner of the map; a tap opens it again. */
+.maplibregl-ctrl-attrib.maplibregl-compact {
+  min-height: 24px;
+  border-radius: 999px;
+}
+.maplibregl-ctrl-attrib.maplibregl-compact:not(.maplibregl-compact-show) {
+  width: 24px;
+  padding: 0;
+  box-shadow: var(--shadow-chip);
+}
+.maplibregl-ctrl-attrib.maplibregl-compact-show {
+  border-radius: 12px;
+}
+.maplibregl-ctrl-attrib.maplibregl-compact::after {
+  opacity: 0.6;
+}
+.dark .maplibregl-ctrl-attrib.maplibregl-compact::after {
+  filter: invert(1);
+}
 .maplibregl-ctrl-group {
   background: var(--surface) !important;
   border: 1px solid var(--line);
@@ -394,7 +428,7 @@
   }
   /* Match the measured action bar, including safe area and enlarged text, instead of 23% of the screen. */
   main .has-sheet .maplibregl-ctrl-bottom-right {
-    bottom: calc(var(--map-peek, 88px) + 2px);
+    bottom: calc(var(--map-peek, 84px) + 2px);
     transition: bottom 0.6s var(--ease-out-soft);
   }
   /* No sheet during the opening, so the credit rests at the bottom instead of floating mid-screen. */

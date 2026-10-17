@@ -46,7 +46,7 @@ A single view of what is done, what is open and who can close it. Built from Git
 
 ## Open - Harel only
 
-- [ ] **iPhone Safari** (the iOS simulator on this Mac cannot render any page, 15.10, so only a real iPhone can answer): do the top/bottom edges match the map and sheet (no dark frame)? Does the folded sheet read as draggable? Both were rejected on c937da2; the fix live since 799119e is unproven on a real device.
+- [ ] **iPhone Safari** (the iOS simulator on this Mac cannot render any page, 15.10, so only a real iPhone can answer): do the top/bottom edges match the map and sheet (no dark frame)? Does the folded sheet read as draggable? Both were rejected on c937da2; the fix live since 799119e is unproven on a real device. On 17.10 Harel's 26c8cfd screenshot showed the top as a solid peach band (the old top strip's color) under the clock. The mobile-polish round (17.10) removes every fixed full-width layer at the top, so Safari should show the map itself there; the folded sheet is now a grabber and one row. Unproven on a real iPhone until Harel's screenshot of that build.
 - [ ] **iPhone at 200% text size:** add-a-place keeps all fields while picking a point.
 - [ ] **Android phone** pass (map, list, add place, GPS).
 - [ ] **Domain**: deliberately deferred. Decide only when ready; it triggers share-preview and mail checks again.
