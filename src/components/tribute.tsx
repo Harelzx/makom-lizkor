@@ -38,7 +38,7 @@ export function Tribute({ placeId }: { placeId: string }) {
           setBurst((b) => b + 1)
           navigator.vibrate?.(12)
         }}
-        className="pressable group relative flex h-12 shrink-0 items-center gap-2.5 rounded-full bg-surface ps-2 pe-5 text-label font-bold text-ink-1 ring-1 ring-line-strong hover:ring-brand/50"
+        className="pressable group relative flex h-12 shrink-0 items-center gap-2.5 rounded-full bg-raised ps-2 pe-5 text-label font-bold text-ink-1 ring-1 ring-line-strong hover:ring-brand/50"
       >
         <span className="relative grid size-9 place-items-center">
           <Anemone state="open" size={30} />

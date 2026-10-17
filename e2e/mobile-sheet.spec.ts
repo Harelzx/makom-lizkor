@@ -66,3 +66,30 @@ test("after a tap ends the opening, the keyboard's skip button stays out of sigh
   await expect(skip).not.toBeFocused()
   await expect(skip).not.toBeInViewport()
 })
+
+test("the sheet moves only by its top: a pull on the list scrolls it, a pull on the grip folds it", async ({ page }) => {
+  const sheet = page.locator("#places")
+  const pull = async (x: number, fromY: number, toY: number) => {
+    await page.mouse.move(x, fromY)
+    await page.mouse.down()
+    for (let step = 1; step <= 20; step++) {
+      await page.mouse.move(x, fromY + ((toY - fromY) * step) / 20)
+      await page.waitForTimeout(35)
+    }
+    await page.mouse.up()
+  }
+  await sheet.getByRole("button", { name: "הצגת המקומות", exact: true }).click()
+  await expect(sheet.getByRole("heading", { name: "מקומות לזכור", exact: true })).toBeInViewport()
+  // Vaul ignores a drag for 500ms after the sheet reaches its highest snap.
+  await page.waitForTimeout(700)
+  const raised = (await sheet.boundingBox())!.y
+  // Down from the list, at the list's top: before, this went on to fold the sheet under a finger that meant to read.
+  const list = (await sheet.locator("[data-vaul-no-drag]").boundingBox())!
+  await pull(195, list.y + 120, list.y + 520)
+  await page.waitForTimeout(600)
+  expect(Math.abs((await sheet.boundingBox())!.y - raised)).toBeLessThan(2)
+  // Its top still moves it.
+  const grip = (await sheet.locator("[data-sheet-grip]").boundingBox())!
+  await pull(grip.x + grip.width / 2, grip.y + grip.height / 2, Math.min(820, grip.y + 600))
+  await expect.poll(async () => (await sheet.boundingBox())!.y).toBeGreaterThan(raised + 300)
+})

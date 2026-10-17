@@ -29,6 +29,7 @@ import { ease, spring } from "@/lib/motion"
 import { cn } from "@/lib/utils"
 import { CURRENT_SUBMISSION_NOTICE, type SubmissionInput } from "@/shared/contract"
 import type { Kind, Place } from "@/types"
+import { Disclosure } from "@/components/kit"
 
 type Step = 0 | 1 | 2
 
@@ -724,11 +725,8 @@ export function AddPlace() {
                                 )}
                               </FieldGroup>
                             )}
-                            <details className="rounded-2xl border border-line p-4">
-                              <summary className="pressable min-h-11 cursor-pointer py-2 text-label text-ink-2">
-                                ההצעות שלי וייבוא / ייצוא
-                              </summary>
-                              <div className="mt-2 flex flex-col gap-2">
+                            <Disclosure summary="ההצעות שלי וייבוא / ייצוא">
+                              <div className="flex flex-col gap-2">
                                 <p className="text-label text-ink-1">המקומות שהוספתם</p>
                                 <p className="text-caption text-ink-2">
                                   {local.length === 0
@@ -774,7 +772,7 @@ export function AddPlace() {
                                   </Button>
                                 </div>
                               </div>
-                            </details>
+                            </Disclosure>
                           </FieldGroup>
                         )}
 
@@ -1069,13 +1067,12 @@ export function AddPlace() {
                               {errorFor("family")}
                             </Field>
                             {/* The notice sits beside the form it is about, as the privacy law asks, and before the box that says it was read. */}
-                            <details className="group rounded-2xl border border-line px-4 py-3 text-body text-ink-2">
-                              <summary className="pressable cursor-pointer text-label text-ink-1 marker:text-ink-3">הודעת הפרטיות</summary>
+                            <Disclosure summary="הודעת הפרטיות">
                               <div
-                                className="mt-2 flex flex-col gap-2 [&_a]:text-ink-1 [&_a]:underline [&_a]:underline-offset-2"
+                                className="flex flex-col gap-2 [&_a]:text-ink-1 [&_a]:underline [&_a]:underline-offset-2"
                                 dangerouslySetInnerHTML={{ __html: NOTICE_HTML }}
                               />
-                            </details>
+                            </Disclosure>
                             <Field orientation="horizontal">
                               <Checkbox id={`${uid}-consent`} checked={consent} onCheckedChange={(v) => setConsent(v === true)} />
                               <FieldLabel htmlFor={`${uid}-consent`} className="leading-snug font-normal">

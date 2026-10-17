@@ -7,7 +7,7 @@ import { Anemone } from "@/components/anemone"
 import { KindIcon } from "@/components/kind-icon"
 import { RevivalStrip } from "@/components/revival-strip"
 import { KINDS } from "@/data/taxonomy"
-import { Img, StatusText } from "@/components/kit"
+import { CARD, Img, PRESS, RULED, StatusText } from "@/components/kit"
 import { stagger, ease, spring } from "@/lib/motion"
 import { allPlaces, matches, sitesNear, useStore } from "@/store"
 import type { Place } from "@/types"
@@ -15,9 +15,6 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { useVisits, visitKey } from "@/lib/visit-list"
 import { groupPlaces } from "@/lib/regions"
-
-/** A card raised off the sheet's material (or the panel), holding a group of rows. */
-const CARD = "overflow-hidden rounded-2xl bg-raised shadow-chip ring-1 ring-line"
 
 function Count({ n }: { n: number }) {
   return <span className="min-w-7 rounded-full bg-fill px-2 py-0.5 text-center text-caption text-ink-2 tabular-nums">{n}</span>
@@ -32,8 +29,7 @@ function Row({ place, i, children }: { place: Place; i: number; children: React.
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ ...stagger(i), duration: 0.22, ease }}
-      // a hairline between rows, from where the text starts, as in the system's grouped lists
-      className="relative not-first:before:absolute not-first:before:start-(--rule) not-first:before:end-0 not-first:before:top-0 not-first:before:h-px not-first:before:bg-line"
+      className={RULED}
     >
       <button
         onClick={() => select(place.id)}
@@ -43,10 +39,7 @@ function Row({ place, i, children }: { place: Place; i: number; children: React.
         onBlur={() => hover(null)}
         // The highlight follows a pointer that hovers. On a touch screen a tap leaves the browser's hover on the row,
         // which read as a row picked out from the rest; a press shows instead, while the finger is down.
-        className={cn(
-          "flex w-full items-start gap-3 px-4 py-3 text-start outline-none focus-visible:bg-fill focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset active:bg-fill-2 [@media(hover:hover)]:hover:bg-fill",
-          hovered && "[@media(hover:hover)]:bg-fill",
-        )}
+        className={cn("flex w-full items-start gap-3 px-4 py-3 text-start", PRESS, hovered && "[@media(hover:hover)]:bg-fill")}
       >
         {children}
       </button>
@@ -92,7 +85,7 @@ export function PlacesList() {
           </EmptyDescription>
           <div className="mt-3 flex flex-wrap justify-center gap-2">
             <Button
-              variant="outline"
+              variant="fill"
               className="h-11 rounded-full"
               onClick={() => {
                 useStore.getState().setQuery("")
@@ -131,7 +124,9 @@ export function PlacesList() {
           ) : (
             <h3>
               <Collapsible.Trigger asChild>
-                <button className="pressable flex min-h-12 w-full items-center gap-3 px-4 py-3 text-start text-headline text-ink-1 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset active:bg-fill-2 [@media(hover:hover)]:hover:bg-fill">
+                <button
+                  className={cn("pressable flex min-h-12 w-full items-center gap-3 px-4 py-3 text-start text-headline text-ink-1", PRESS)}
+                >
                   <span className="min-w-0 flex-1">{g.title}</span>
                   <Count n={g.items.length} />
                   <ChevronDownIcon

@@ -363,8 +363,8 @@ export function Shell() {
                 )}
                 <div className="flex flex-wrap items-center gap-2 px-4">
                   <Button
-                    variant="secondary"
-                    className="h-11 min-w-fit flex-1 rounded-full bg-fill px-4 py-1 leading-tight whitespace-normal hover:bg-fill-2"
+                    variant="fill"
+                    className="h-11 min-w-fit flex-1 rounded-full px-4 py-1 leading-tight whitespace-normal"
                     aria-expanded={!folded}
                     onClick={() => setSnap(folded ? SNAPS[2] : peek)}
                   >
@@ -381,9 +381,12 @@ export function Shell() {
                 </div>
               </div>
             </div>
+            {/* The sheet moves only by its top: the grabber, the line of what it holds and the actions. Pulled from the list,
+                a scroll that reached the top went on to fold the sheet, or close it, under a finger that meant to read. */}
             <div
               ref={scrollRef}
               onScroll={onPanelScroll}
+              data-vaul-no-drag
               inert={folded}
               aria-hidden={folded}
               className={cn(

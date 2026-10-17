@@ -11,7 +11,7 @@ import { flyToEnvelope } from "@/map/controller"
 import { ease } from "@/lib/motion"
 import { Button } from "@/components/ui/button"
 import { useVisits } from "@/lib/visit-list"
-import { cn } from "@/lib/utils"
+import { Segmented } from "@/components/kit"
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "places", label: "מקומות" },
@@ -110,30 +110,21 @@ export function Explorer() {
               </details>
             </div>
             {tab === "places" ? (
-              // One track, one thumb on the chosen view: two pills side by side, one filled and one bare, read as a button
-              // and a label.
-              <div className="flex gap-1 rounded-full bg-fill p-1" role="group" aria-label="תצוגת המקומות">
-                {(
+              <Segmented
+                label="תצוגת המקומות"
+                value={visits.filter}
+                onChange={visits.setFilter}
+                options={[
+                  ["all", "כל המפה"],
                   [
-                    ["all", "כל המפה"],
-                    ["saved", "שמורים לביקור"],
-                  ] as const
-                ).map(([id, label]) => (
-                  <button
-                    key={id}
-                    type="button"
-                    aria-pressed={visits.filter === id}
-                    onClick={() => visits.setFilter(id)}
-                    className={cn(
-                      "pressable flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-1 text-label leading-tight whitespace-normal text-ink-2 transition-colors outline-none hover:text-ink-1 focus-visible:ring-3 focus-visible:ring-ring/30 motion-reduce:transition-none",
-                      "aria-pressed:bg-thumb aria-pressed:font-semibold aria-pressed:text-ink-1 aria-pressed:shadow-chip",
-                    )}
-                  >
-                    {id === "saved" && <BookmarkIcon className="size-4 shrink-0" aria-hidden="true" />}
-                    {label}
-                  </button>
-                ))}
-              </div>
+                    "saved",
+                    <>
+                      <BookmarkIcon className="size-4 shrink-0" aria-hidden="true" />
+                      שמורים לביקור
+                    </>,
+                  ],
+                ]}
+              />
             ) : (
               <Button variant="ghost" className="h-11 justify-start rounded-full" onClick={() => setTab("places")}>
                 חזרה למקומות

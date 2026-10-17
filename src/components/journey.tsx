@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button"
 import { KINDS } from "@/data/taxonomy"
 import { journeyStops, useStore } from "@/store"
 import { flyToEnvelope, getMap, isMobile, reducedMotion } from "@/map/controller"
-import { Img, SafetyNote } from "@/components/kit"
+import { CARD, Img, PRESS, RULED, SafetyNote } from "@/components/kit"
+import { cn } from "@/lib/utils"
 import { photoSrcSet, PHOTO_SIZES } from "@/lib/responsive-photo"
 
 const DWELL = 9000
@@ -70,14 +71,14 @@ export function Journey() {
             יציאה למסע
           </Button>
         </div>
-        <ol className="flex flex-col">
+        <ol className={cn(CARD, "flex flex-col [--rule:56px]")}>
           {stops.map((s, i) => (
-            <li key={s.id}>
+            <li key={s.id} className={RULED}>
               <button
                 onClick={() => setJourney(i, false)}
-                className="pressable flex w-full items-center gap-3 rounded-xl px-2 py-2 text-start hover:bg-surface-2"
+                className={cn("pressable flex min-h-12 w-full items-center gap-3 px-4 py-2.5 text-start", PRESS)}
               >
-                <span className="grid size-7 shrink-0 place-items-center rounded-full bg-surface-2 text-caption font-bold text-ink-2 tabular-nums">
+                <span className="grid size-7 shrink-0 place-items-center rounded-full bg-fill text-caption font-bold text-ink-2 tabular-nums">
                   {i + 1}
                 </span>
                 <span className="truncate text-body font-medium text-ink-1">{s.name_he}</span>
@@ -139,7 +140,7 @@ export function Journey() {
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-5">
         <div className="flex items-center gap-2">
           <Button
-            variant="secondary"
+            variant="fill"
             size="icon-lg"
             className="rounded-full"
             aria-label="העצירה הקודמת"
@@ -158,7 +159,7 @@ export function Journey() {
             {playing ? <PauseIcon /> : <PlayIcon className="rtl:-scale-x-100" />}
           </Button>
           <Button
-            variant="secondary"
+            variant="fill"
             size="icon-lg"
             className="rounded-full"
             aria-label="העצירה הבאה"
