@@ -128,3 +128,11 @@ test("staging drill is isolated; optional commissioning doesn't create productio
   r.env.staging.d1_databases.push(structuredClone(drill))
   assert.ok(stagingBlockers(r).some((x) => x.includes("distinct, real staging recovery")))
 })
+
+test("staging names no routes of its own and never inherits production's domain", () => {
+  const r = real()
+  delete r.env.staging.routes
+  assert.ok(stagingBlockers(r).some((x) => x.includes("routes to []")))
+  r.env.staging.routes = [{ pattern: "makomlizkor.org", custom_domain: true }]
+  assert.ok(stagingBlockers(r).some((x) => x.includes("routes to []")))
+})
