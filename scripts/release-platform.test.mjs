@@ -18,10 +18,12 @@ const ready = (over = {}) => ({
 test("closed side doors, our own log lines only, no tracing and EU buckets pass", () => {
   assert.deepEqual(platformBlockers(ready()), [])
 })
-test("the workers.dev address or version preview URLs left open block (spec 11: no bypass of Access)", () => {
+test("version preview URLs left open, or workers.dev left to the default, block (spec 11: no bypass of Access)", () => {
   assert.equal(platformBlockers(ready({ workers_dev: undefined })).length, 1)
-  assert.equal(platformBlockers(ready({ workers_dev: true })).length, 1)
   assert.equal(platformBlockers(ready({ preview_urls: undefined })).length, 1)
+})
+test("the workers.dev address on passes: the Worker's own Access covers it, checked live at each release", () => {
+  assert.deepEqual(platformBlockers(ready({ workers_dev: true })), [])
 })
 test("the platform's own request logs or tracing block: they would hold what our log lines leave out", () => {
   assert.equal(platformBlockers(ready({ observability: { logs: { enabled: true } } })).length, 1)

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { call } from "./app"
+import { OLD_HOST } from "../lib/old-host"
 import { withSite } from "./helpers"
 import { decide, queued, rev, revise, send, upload } from "./submission-helpers"
 import { seedCurated } from "./curated-helpers"
@@ -161,5 +162,37 @@ describe("a place's share page", () => {
     const bare = await (await call(`http://evil.test/place/${id}`, {}, { ...prod, PUBLIC_ORIGIN: "" })).text()
     expect(bare).not.toContain("evil.test")
     expect(meta(bare, "og:url")).toBeUndefined()
+  })
+
+  it("replaces the site page's own address and canonical with the place's, rather than adding a second of each", async () => {
+    const { id } = await send("ספסל דמו כתובת אחת")
+    await decide(id, await queued(id), "approve")
+    const withHome: Env = {
+      ...withSite,
+      ENVIRONMENT: "production",
+      PUBLIC_ORIGIN: "https://makom.example",
+      ASSETS: {
+        fetch: async () =>
+          new Response(
+            '<!doctype html><html><head><title>x</title><meta property="og:image" content="https://makom.example/og.png" /><meta property="og:url" content="https://makom.example/" /><link rel="canonical" href="https://makom.example/" /></head><body></body></html>',
+            { headers: { "Content-Type": "text/html" } },
+          ),
+      } as unknown as Fetcher,
+    }
+    const html = await (await call(`https://makom.example/place/${id}`, {}, withHome)).text()
+    expect(html.match(/property="og:url"/g)).toHaveLength(1)
+    expect(html.match(/rel="canonical"/g)).toHaveLength(1)
+    expect(meta(html, "og:url")).toBe(`https://makom.example/place/${id}`)
+    expect(html).toContain(`<link rel="canonical" href="https://makom.example/place/${id}"`)
+  })
+
+  it("sends a place's link on the old workers.dev address to the same place on the site's own domain", async () => {
+    const prod = { ...withSite, ENVIRONMENT: "production", PUBLIC_ORIGIN: "https://makom.example" }
+    const res = await call(`https://${OLD_HOST}/place/nova-memorial-reim?x=1`, { redirect: "manual" }, prod)
+    expect(res.status).toBe(301)
+    expect(res.headers.get("Location")).toBe("https://makom.example/place/nova-memorial-reim?x=1")
+    // Without a domain configured there is nowhere to send it, so the old address keeps serving the page.
+    const stay = await call(`https://${OLD_HOST}/place/nova-memorial-reim`, { redirect: "manual" }, { ...prod, PUBLIC_ORIGIN: "" })
+    expect(stay.status).not.toBe(301)
   })
 })

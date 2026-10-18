@@ -90,6 +90,8 @@ async function sharePage(c: Context<AppEnv>, id: string | null) {
     .on('meta[property="og:title"]', content(plainDashes(place.name_he)))
     .on('meta[property="og:description"]', content(words))
     .on('meta[property="og:image"]', origin ? content(image) : {})
+    // The site's page names the home page as its address; a place's page names its own, appended below.
+    .on('meta[property="og:url"], link[rel="canonical"]', { element: (el) => void el.remove() })
     .on("head", {
       element: (head) => {
         if (url) {

@@ -1,6 +1,6 @@
 // A bounded external read-only check. No cookies, credentials, retries, writes or private response bodies.
 import { pathToFileURL } from "node:url"
-export const PUBLIC_ORIGIN = "https://makom-lizkor.makom-staging.workers.dev"
+export const PUBLIC_ORIGIN = "https://makomlizkor.org"
 async function bytes(response, max) {
   if (!response.body) throw new Error("missing_body")
   const reader = response.body.getReader()
