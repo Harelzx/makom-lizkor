@@ -42,6 +42,9 @@ export type Deps = {
 }
 export type AppEnv = { Bindings: Env; Variables: Deps }
 
+// The address production served from before it had a domain of its own.
+export const OLD_HOST = "makom-lizkor.makom-staging.workers.dev"
+
 export function createApp(deps: Deps) {
   const app = new Hono<AppEnv>()
   app.use("*", async (c, next) => {
@@ -84,6 +87,16 @@ export function createApp(deps: Deps) {
   // with a wrong value fails its own checks at once.
   app.use("*", async (c, next) => {
     durations(c.env)
+    await next()
+  })
+
+  // The site moved to its own domain on 18 October 2026. Links to a place shared before then name the old workers.dev
+  // address, which still serves the Worker, so they are sent on to the same place there; the site's own code moves
+  // anyone who lands on the old home page (src/main.tsx). Only that one old host: an unknown one is answered as before.
+  app.use("/place/*", async (c, next) => {
+    const url = new URL(c.req.url)
+    if (url.host === OLD_HOST && c.env.PUBLIC_ORIGIN?.startsWith("https://") && c.env.PUBLIC_ORIGIN !== url.origin)
+      return c.redirect(c.env.PUBLIC_ORIGIN + url.pathname + url.search, 301)
     await next()
   })
 
