@@ -8,7 +8,7 @@ const raw = {
   preview_urls: false,
   vars: {
     ENVIRONMENT: "production",
-    PUBLIC_ORIGIN: `https://${T.host}`,
+    PUBLIC_ORIGIN: `https://${T.domain}`,
     ACCESS_AUD: T.aud,
     ACCESS_TEAM_DOMAIN: "makom-staging.cloudflareaccess.com",
     MODERATORS: T.owner,
@@ -21,7 +21,7 @@ function fixture(phase = "protected") {
     aud: T.aud,
     type: "self_hosted",
     domain: T.host,
-    self_hosted_domains: [T.host],
+    self_hosted_domains: [T.host, T.domain],
     destinations: accessDestinations(phase),
     session_duration: "1h",
     options_preflight_bypass: false,
@@ -112,4 +112,15 @@ test("rejects broad public patterns, missing Worker coverage and policy expansio
   session.app.result.session_duration = "24h"
   sync(session)
   assert(check(session).length)
+})
+test("the domain is a public destination with the very same paths as the workers.dev address", () => {
+  const [old, domain, worker] = accessDestinations("public")
+  assert.equal(old.uri, T.host)
+  assert.equal(domain.uri, T.domain)
+  assert.deepEqual(domain.overrides, old.overrides)
+  assert.deepEqual(worker, { type: "worker", worker_id: T.worker })
+  const s = fixture("public")
+  s.app.result.destinations = s.app.result.destinations.filter((d) => d.uri !== T.domain)
+  sync(s)
+  assert.notDeepEqual(check(s, "public"), [])
 })

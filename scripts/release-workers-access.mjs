@@ -4,6 +4,8 @@
 import { isDeepStrictEqual } from "node:util"
 export const WORKERS_ACCESS = Object.freeze({
   host: "makom-lizkor.makom-staging.workers.dev",
+  // The site's own domain since 18 October 2026: a second public destination with the same public paths.
+  domain: "makomlizkor.org",
   app: "181c702f-44a3-4906-8c87-41999f7ab289",
   worker: "56bbe4d76b0e41c3bd44e8bc604a6f31",
   aud: "caaf96997451ebbdaa85e6bcf0aec39d94b58a3848bc4314a3bdb1274148f81e",
@@ -41,14 +43,12 @@ export const PUBLIC_PATHS = Object.freeze([
 export function accessDestinations(phase = "protected") {
   if (!["protected", "public"].includes(phase)) throw new Error("Unknown Access phase")
   if (PUBLIC_PATHS.length > 25) throw new Error("Access supports at most 25 overrides per destination")
-  return [
-    {
-      type: "public",
-      uri: WORKERS_ACCESS.host,
-      ...(phase === "public" ? { overrides: PUBLIC_PATHS.map((path_pattern) => ({ path_pattern, behavior: "public" })) } : {}),
-    },
-    { type: "worker", worker_id: WORKERS_ACCESS.worker },
-  ]
+  const host = (uri) => ({
+    type: "public",
+    uri,
+    ...(phase === "public" ? { overrides: PUBLIC_PATHS.map((path_pattern) => ({ path_pattern, behavior: "public" })) } : {}),
+  })
+  return [host(WORKERS_ACCESS.host), host(WORKERS_ACCESS.domain), { type: "worker", worker_id: WORKERS_ACCESS.worker }]
 }
 
 export function workersAccessProblems(raw, snapshot, { phase = "protected", now = Date.now() } = {}) {
@@ -58,7 +58,7 @@ export function workersAccessProblems(raw, snapshot, { phase = "protected", now 
     raw.name !== "makom-lizkor" ||
     raw.vars?.ENVIRONMENT !== "production" ||
     raw.workers_dev !== true ||
-    raw.vars?.PUBLIC_ORIGIN !== `https://${WORKERS_ACCESS.host}` ||
+    raw.vars?.PUBLIC_ORIGIN !== `https://${WORKERS_ACCESS.domain}` ||
     raw.vars?.ACCESS_AUD !== WORKERS_ACCESS.aud ||
     raw.vars?.ACCESS_TEAM_DOMAIN !== "makom-staging.cloudflareaccess.com" ||
     raw.vars?.MODERATORS !== WORKERS_ACCESS.owner
@@ -79,7 +79,7 @@ export function workersAccessProblems(raw, snapshot, { phase = "protected", now 
     a.aud !== WORKERS_ACCESS.aud ||
     a.type !== "self_hosted" ||
     a.domain !== WORKERS_ACCESS.host ||
-    !isDeepStrictEqual(a.self_hosted_domains, [WORKERS_ACCESS.host])
+    !isDeepStrictEqual(a.self_hosted_domains, [WORKERS_ACCESS.host, WORKERS_ACCESS.domain])
   )
     out.push("Access application identity mismatch")
   if (!isDeepStrictEqual(a.destinations, accessDestinations(phase)))
@@ -116,7 +116,9 @@ export function workersAccessProblems(raw, snapshot, { phase = "protected", now 
       if (
         hosts.some((h) => {
           const host = h.split("/")[0].toLowerCase()
-          return host === WORKERS_ACCESS.host || host === "*" || (host.startsWith("*.") && WORKERS_ACCESS.host.endsWith(host.slice(1)))
+          return [WORKERS_ACCESS.host, WORKERS_ACCESS.domain].some(
+            (ours) => host === ours || host === "*" || (host.startsWith("*.") && ours.endsWith(host.slice(1))),
+          )
         }) ||
         (other.destinations ?? []).some(
           (d) =>
