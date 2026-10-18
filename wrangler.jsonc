@@ -155,6 +155,9 @@
     "staging": {
       "name": "makom-lizkor-staging",
       "secrets": { "required": ["TRACKING_SECRET", "TRIBUTE_SECRET", "TURNSTILE_SECRET", "DRILL_PRIVATE_KEY"] },
+      // Never production's domain. An environment inherits the top-level routes unless it names its own: on 18 October
+      // 2026 a staging deploy took makomlizkor.org over from production for about 25 minutes (staging-check.mjs).
+      "routes": [],
       "workers_dev": true,
       "preview_urls": false,
       "version_metadata": { "binding": "CF_VERSION_METADATA" },

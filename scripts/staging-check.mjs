@@ -54,6 +54,10 @@ export function stagingBlockers(raw, { deploy = false, env = {} } = {}) {
     if (/SECRET|TOKEN_VALUE|PRIVATE/i.test(key))
       blockers.push(`var ${key} looks like a secret: secrets go in with --secrets-file, never in vars`)
   if (s.preview_urls !== false) blockers.push("staging preview_urls must be false: Access protects the workers.dev address only")
+  // An environment inherits the top-level routes unless it names its own, and a deploy then moves production's Custom
+  // Domain onto staging (18 October 2026). Staging lives on its workers.dev address only.
+  if (!Array.isArray(s.routes) || s.routes.length || s.route)
+    blockers.push("staging must set routes to [] of its own: inherited routes would move production's domain onto staging")
   if (s.observability?.logs?.invocation_logs === true) blockers.push("staging keeps the platform's request logs off too")
   // Nothing that holds data is shared with production.
   const prodDb = names(raw.d1_databases, "database_name")
