@@ -12,6 +12,7 @@ import { contact } from "./routes/contact"
 import { feed } from "./routes/feed"
 import { reports } from "./routes/reports"
 import { share } from "./routes/share"
+import { OLD_HOST } from "./lib/old-host"
 import { submissions } from "./routes/submissions"
 import { tributes } from "./routes/tributes"
 import { tiles } from "./routes/tiles"
@@ -41,9 +42,6 @@ export type Deps = {
   observeFailure?: typeof recordFailure
 }
 export type AppEnv = { Bindings: Env; Variables: Deps }
-
-// The address production served from before it had a domain of its own.
-export const OLD_HOST = "makom-lizkor.makom-staging.workers.dev"
 
 export function createApp(deps: Deps) {
   const app = new Hono<AppEnv>()

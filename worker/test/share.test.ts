@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { call } from "./app"
-import { OLD_HOST } from "../index"
+import { OLD_HOST } from "../lib/old-host"
 import { withSite } from "./helpers"
 import { decide, queued, rev, revise, send, upload } from "./submission-helpers"
 import { seedCurated } from "./curated-helpers"
