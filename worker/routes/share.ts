@@ -67,7 +67,7 @@ async function sharePage(c: Context<AppEnv>, id: string | null) {
       .transform(site)
     return new Response(page.body, {
       status: gone ? 410 : 404,
-      headers: headers({ "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" }),
+      headers: headers({ "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store, no-transform", "X-Robots-Tag": "noindex" }),
     })
   }
 
@@ -110,7 +110,8 @@ async function sharePage(c: Context<AppEnv>, id: string | null) {
     headers: headers({
       "Content-Type": "text/html; charset=utf-8",
       // The browser checks back each time; the edge keeps it a minute, under the place's tag (spec 5; staging).
-      "Cache-Control": "no-cache",
+      // no-transform: no analytics script injected by the zone (scripts/security-headers.mjs).
+      "Cache-Control": "no-cache, no-transform",
       "Cloudflare-CDN-Cache-Control": "max-age=60",
       "Cache-Tag": `place:${id}`,
     }),

@@ -4,7 +4,7 @@ test.skip(!process.env.E2E_PROD, "final static headers and Worker image variants
 
 test("hashed assets are immutable while HTML/API revalidate or remain private", async ({ request }) => {
   const html = await request.get("/")
-  expect(html.headers()["cache-control"]).toBe("no-cache")
+  expect(html.headers()["cache-control"]).toBe("no-cache, no-transform")
   const assets = [...(await html.text()).matchAll(/(?:src|href)="(\/assets\/[^"?]+)"/g)].map((m) => m[1])
   expect(assets.length).toBeGreaterThan(1)
   for (const asset of assets) {
