@@ -42,3 +42,11 @@ test("the repository's own wrangler.jsonc passes", async () => {
   const raw = experimental_readRawConfig({ config: fileURLToPath(new URL("../wrangler.jsonc", import.meta.url)) }).rawConfig
   assert.deepEqual(platformBlockers(raw), [])
 })
+test("no named environment inherits production's domain: each sets routes to [] of its own", async () => {
+  const { experimental_readRawConfig } = await import("wrangler")
+  const raw = experimental_readRawConfig({ config: fileURLToPath(new URL("../wrangler.jsonc", import.meta.url)) }).rawConfig
+  for (const [name, env] of Object.entries(raw.env ?? {})) {
+    assert.deepEqual(env.routes, [], `env.${name}`)
+    assert.equal(env.route, undefined, `env.${name}`)
+  }
+})
