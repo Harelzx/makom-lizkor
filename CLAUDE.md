@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+**Talk to Harel in Hebrew**, every line he sees, short status lines between tool calls included. Code, comments, commits and PR descriptions stay in English, as the repository does. Open sessions on this directory (`web/`), never on its parent: only here do the hooks, the deny list and this file load at the start.
+
 ## What this is
 
 "מקום לזכור" (Makom Lizkor) is a static, Hebrew, RTL memorial map for the people murdered and killed on 7 October 2023. It shows monuments, lookouts, benches, groves and gardens, plus a page for each of the 22 attacked communities with its return status. The site opens at 06:29 on a dark map, and a sunrise turns it to morning. Every place, the site's own included, comes from the server's database (D1) through a versioned feed; the site's own places are imported from `fixtures/curated.json` through the moderators' route (phase 7). All seven backend phases are implemented and merged; the protected Cloudflare staging environment uses synthetic data. Production launched publicly on 11 October 2026 at `https://makom-lizkor.makom-staging.workers.dev` with 90 curated records (68 memorials and 22 communities); since 18 October 2026 its address is `https://makomlizkor.org` (a Custom Domain, a second public destination of the same Access app), and the old address sends visitors on to it. Administration and operations remain owner-protected. In the deployed UX, a proposal is stored in IndexedDB only after a confirmed server receipt; unsuccessful sends stay only in the open form's memory and require a manual retry. Closing the form discards them. Approved places reach other browsers through the versioned feed. Current deployed commit, evidence and verification limits are in `docs/agent-handoff.md`; historical phase plans are not a current status report.
@@ -62,11 +64,6 @@ Several Claude Code sessions may work on this repo at once, each in its own work
 - New milestones from other sessions arrive in your context. Act on one only if it affects your current work; otherwise ignore it silently.
 - For an urgent breaking change, message the affected session directly instead of waiting for the log.
 
-## Delegated adviser while Harel is away (backend session only)
-
-Harel delegated routine decisions for the backend work (branch `claude/system-architecture-design-9a660f`) to a Codex adviser. Other sessions: this section is not yours.
-
-Backend adviser: `/Users/harel/Documents/Codex/2026-10-05/b/outputs/codex-supervisor/CLAUDE-HANDOFF.md` (bridge 5.3; read it and any `RESUME-*.txt` there after compaction/restart). Project state: `docs/agent-handoff.md`; reconcile its HEAD and open findings with actual Git and the latest completed `runtime/decisions.jsonl` entry before continuing. Implementation reports use `--review-access snapshot` (now the default); no source-packet shrinking. Follow `policy-v5.md` for authority, review and failure handling. Do not edit the adviser bundle. Historical workflow instructions are superseded.
 
 ## Architecture
 
@@ -226,6 +223,6 @@ The full rules are in `docs/design-system.md`. The ones code changes most often 
 - `/?specimen` (dev only) renders a sheet of the anemone at every size and state.
 - `window.__map` exposes the MapLibre instance in dev.
 
-## Before going live
+## Mail
 
-`CONTACT_EMAIL` in `src/config.ts` is the project Gmail address. Actual public contact delivery and protected submission/approval emails are verified. Mailbox and backup retention have operational proof; physical erasure is unmeasured. Current evidence is in `docs/agent-handoff.md`. See `docs/go-live-checklist.md` and `docs/legal-brief.md` for the rest.
+`CONTACT_EMAIL` in `src/config.ts` is the project's Gmail address (makomlizkor@gmail.com), which also sends every mail. The contact form and the technical alerts (server and browser errors, failed jobs, the operations check) go to it; moderation, drill and deletion-check alerts go to `MODERATORS`. Current deployment and evidence: `docs/agent-handoff.md`.
