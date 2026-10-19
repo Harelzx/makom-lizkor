@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers"
 import { beforeEach, expect, it, vi } from "vitest"
 import { claimMailBudget } from "../lib/mail-budget"
+import { CONTACT_EMAIL } from "@/config"
 import { alertFailures, alertOperations, pruneCounters, recordFailure, recordRequest, requestErrorRates } from "../lib/metrics"
 import { createApp } from "../index"
 import { runJobs } from "../jobs"
@@ -69,6 +70,7 @@ it("alerts only with aggregate counts, once per day after acceptance, and prunes
   await alertOperations(e, send, now)
   expect(send).toHaveBeenCalledTimes(1)
   expect(send.mock.calls[0]).toBeDefined()
+  expect((send.mock.calls[0] as unknown as [Env, { to: string }])[1].to).toBe(CONTACT_EMAIL)
   await recordRequest(env, 200, 50, new Date(now.getTime() - 72 * 3600_000))
   await claimMailBudget(e, "public", new Date(now.getTime() - 72 * 3600_000))
   await pruneCounters(e, now)
@@ -140,6 +142,8 @@ it("tells the moderators of server errors and failed jobs at once, with counts o
   expect(send).toHaveBeenCalledTimes(1)
   const mail = send.mock.calls[0][1]
   expect(mail.subject).toBe("מקום לזכור - תקלות בשרת")
+  // The site's own inbox, not the moderators' (owner, 19 October 2026).
+  expect(mail.to).toBe(CONTACT_EMAIL)
   expect(mail.text).toContain("שגיאות שרת (500): 1")
   expect(mail.text).toContain("שגיאות שרת (503): 1")
   expect(mail.text).toContain("export: 1")
