@@ -75,7 +75,7 @@ describe("what the public sees of a place with hidden elements", () => {
     expect(await inFeed(id)).toBeUndefined()
     const page = await sharePage(id)
     expect(page.status).toBe(410)
-    expect(page.headers.get("Cache-Control")).toBe("no-store")
+    expect(page.headers.get("Cache-Control")).toBe("no-store, no-transform")
     expect(page.headers.get("X-Robots-Tag")).toBe("noindex")
     expect(page.html).not.toContain("לזכר דני")
     expect((await call(`http://local/media/${photo_key}`)).status).toBe(404)
