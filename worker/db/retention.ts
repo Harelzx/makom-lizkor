@@ -455,10 +455,21 @@ export async function alertStalledRetention(db: D1Database, env: Env, sendMail: 
  * A job's alert to every moderator, with no data of anyone in it; recorded as sent (so repeated only after the job's
  * interval) only when every mail went, so one that couldn't go now is tried at the next run.
  */
-export async function tellModerators(db: D1Database, env: Env, sendMail: SendMail, job: string, subject: string, text: string, now: Date) {
+export async function tellModerators(
+  db: D1Database,
+  env: Env,
+  sendMail: SendMail,
+  job: string,
+  subject: string,
+  text: string,
+  now: Date,
+  // Another address in place of the moderators', for the technical alerts that go to the site's own inbox.
+  to?: string,
+) {
   const moderators = [
     ...new Set(
-      env.MODERATORS.split(",")
+      (to ?? env.MODERATORS)
+        .split(",")
         .map((e) => e.trim().toLowerCase())
         .filter(Boolean),
     ),

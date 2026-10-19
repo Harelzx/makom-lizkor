@@ -1,6 +1,7 @@
 import type { ErrorRates } from "./ops-summary"
 import type { SendMail } from "./mail"
 import { tellModerators } from "../db/retention"
+import { CONTACT_EMAIL } from "@/config"
 
 /** An independent 1/32 sample, including successes and failures equally. This is an estimate, not billing data. */
 export const METRIC_SAMPLE_EVERY = 32
@@ -59,7 +60,10 @@ export async function pruneCounters(env: Env, now: Date) {
   ])
 }
 
-/** Existing moderator alert channel; no visitor data or private URLs, bounded to one successful round per day. */
+/**
+ * To the site's own inbox (CONTACT_EMAIL), like the failure alert below: technical, not a moderator's decision (owner,
+ * 19 October 2026). No visitor data or private URLs, bounded to one successful round per day.
+ */
 export async function alertOperations(env: Env, sendMail: SendMail, now: Date) {
   const latest = await env.DB.prepare("SELECT sent_at FROM job_alerts WHERE job = 'operations'").first<string>("sent_at")
   if (latest && latest > new Date(now.getTime() - 24 * 3600_000).toISOString()) return
@@ -86,13 +90,14 @@ export async function alertOperations(env: Env, sendMail: SendMail, now: Date) {
     "מקום לזכור - נדרשת בדיקת תפעול",
     `מסירות אימות שמצריכות בדיקה: ${blocked}.\nניסיונות דואר היום: ${attempted} מתוך ${limit}.\nדגימת בקשות בשעה האחרונה: ${measured.n ?? 0}; שגיאות שרת: ${measured.errors ?? 0}; תגובות מעל שתי שניות: ${measured.slow ?? 0}.\nהדגימה היא אחת מכל ${METRIC_SAMPLE_EVERY} בקשות בממוצע ואינה מדידת חיוב. אין לבצע שליחה חוזרת למסירה לא ודאית בלי לבדוק.`,
     now,
+    CONTACT_EMAIL,
   )
 }
 
 const FAILURE_ALERT_HOURS = 6
 
 /**
- * Tells the moderators of server errors and failed scheduled parts as soon as a pass sees one (every 15 minutes), then
+ * Tells the site's own inbox (CONTACT_EMAIL, not the moderators: owner, 19 October 2026) of server errors and failed scheduled parts as soon as a pass sees one (every 15 minutes), then
  * at most every six hours while they go on: each mail covers the six hours before it, so a problem that persists keeps
  * being told and one that stopped is told once more at most. Codes and counts only. If a mail can't go,
  * tellModerators records nothing and the next pass tries again.
@@ -122,5 +127,6 @@ export async function alertFailures(env: Env, sendMail: SendMail, now: Date) {
     "מקום לזכור - תקלות בשרת",
     `בשש השעות האחרונות:\n${lines.join("\n")}\n\nכל שגיאה נספרת, בלי דגימה. הפרטים (המסלול וסוג השגיאה, בלי תוכן) ביומני ה־Worker: לוח הבקרה של Cloudflare, Workers & Pages, makom-lizkor, Logs.`,
     now,
+    CONTACT_EMAIL,
   )
 }
