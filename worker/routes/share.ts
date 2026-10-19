@@ -67,7 +67,11 @@ async function sharePage(c: Context<AppEnv>, id: string | null) {
       .transform(site)
     return new Response(page.body, {
       status: gone ? 410 : 404,
-      headers: headers({ "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store, no-transform", "X-Robots-Tag": "noindex" }),
+      headers: headers({
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "no-store, no-transform",
+        "X-Robots-Tag": "noindex",
+      }),
     })
   }
 
