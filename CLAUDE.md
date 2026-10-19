@@ -64,7 +64,6 @@ Several Claude Code sessions may work on this repo at once, each in its own work
 - New milestones from other sessions arrive in your context. Act on one only if it affects your current work; otherwise ignore it silently.
 - For an urgent breaking change, message the affected session directly instead of waiting for the log.
 
-
 ## Architecture
 
 ### State and phases (`src/store.ts`)
