@@ -25,6 +25,7 @@ test("owner imports a curated packet through real moderation and retry leaves it
     ),
   )
   await page.goto("/admin/")
+  await page.getByRole("button", { name: "יבוא", exact: true }).click()
   const publish = page.getByRole("button", { name: "פרסום המקומות שנבחרו", exact: true })
   await expect(page.getByText("יבוא מקומות האתר", { exact: true })).toBeVisible()
   await expect(publish).toHaveCount(0)
@@ -60,6 +61,7 @@ test("invalid import packet cannot publish any record", async ({ page, context, 
     if (r.method() === "POST" && r.url().includes("/api/admin/")) writes++
   })
   await page.goto("/admin/")
+  await page.getByRole("button", { name: "יבוא", exact: true }).click()
   await page.getByLabel("קובץ יבוא JSON", { exact: true }).setInputFiles({
     name: "bad.json",
     mimeType: "application/json",

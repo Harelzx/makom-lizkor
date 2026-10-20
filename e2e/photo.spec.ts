@@ -56,8 +56,10 @@ test(
     await modCtx.request.post("/__dev/login", { data: { email: "dev@example.test" } })
     const mod = await modCtx.newPage()
     await mod.goto("/admin/")
-    await mod.getByText("מצב המערכת", { exact: true }).click()
+    await mod.getByRole("button", { name: "מצב המערכת", exact: true }).click()
     await expect(mod.getByText(/ממתינות לבדיקה:/)).toBeVisible()
+    // On a phone the status covers the list: back to the queue, as a moderator would.
+    await mod.getByRole("button", { name: "תור", exact: true }).click()
     const item = await openItem(mod, name)
     await expect(item.getByRole("img", { name: "שדה כלניות בזריחה" })).toBeVisible()
     await item.getByRole("button", { name: "אישור" }).click()

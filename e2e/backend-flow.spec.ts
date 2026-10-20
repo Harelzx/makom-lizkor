@@ -152,7 +152,7 @@ test("approval while the receipt is open resolves its device id to the public ca
   const mod = await moderator.newPage()
   await mod.goto("/admin/")
   const item = await openItem(mod, name)
-  await item.getByRole("button", { name: "אישור", exact: true }).click()
+  await item.getByRole("button", { name: "אישור ופרסום", exact: true }).click()
   await expect(item).toHaveCount(0)
   await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")))
   await fed
