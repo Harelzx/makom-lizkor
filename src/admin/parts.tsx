@@ -11,7 +11,7 @@ import contours from "./assets/contours.webp"
 import type { Said } from "./inbox-state"
 
 const ART = import.meta.glob<string>("./assets/kinds/*.svg", { eager: true, query: "?url", import: "default" })
-const artOf = (kind: Kind) => ART[`../assets/kinds/${kind}.svg`]
+const artOf = (kind: Kind) => ART[`./assets/kinds/${kind}.svg`]
 
 /** One of the page's hand-drawn marks. Decorative unless labelled: the button or text beside it carries the meaning. */
 export function Glyph({ name, className, label, flip }: { name: GlyphName; className?: string; label?: string; flip?: boolean }) {
