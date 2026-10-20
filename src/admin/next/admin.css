@@ -1,0 +1,115 @@
+/*
+ * The moderators' page's own layer. It sits on the site's palette (ink, anemone, field, sun) but only under
+ * .admin-next, which no public page ever carries: the memorial itself keeps its tokens untouched.
+ */
+.admin-next {
+  --a-bg: #f2f3f7;
+  --a-panel: #ffffff;
+  --a-panel-2: #f7f8fb;
+  --a-sunk: #e9ecf3;
+  --a-ink-1: #131a2c;
+  --a-ink-2: #4c5672;
+  --a-ink-3: #646e8a;
+  --a-line: rgb(19 26 44 / 0.08);
+  --a-line-2: rgb(19 26 44 / 0.14);
+  --a-red: #c8162f;
+  --a-red-ink: #9b0f24;
+  --a-red-soft: #fff0f2;
+  --a-green: #4a7a3c;
+  --a-green-ink: #33522c;
+  --a-green-soft: #edf5e8;
+  --a-sun: #b4610f;
+  --a-sun-soft: #fff4e6;
+  --a-focus: #131a2c;
+  --a-on-solid: #ffffff;
+  --a-contour-opacity: 0.07;
+  --a-shadow: 0 1px 2px rgb(19 26 44 / 0.05), 0 4px 16px -6px rgb(19 26 44 / 0.1);
+  --a-shadow-lg: 0 2px 4px rgb(19 26 44 / 0.04), 0 24px 56px -16px rgb(19 26 44 / 0.25);
+  background: var(--a-bg);
+  color: var(--a-ink-1);
+}
+.dark .admin-next,
+.admin-next.dark {
+  --a-bg: #0b1120;
+  --a-panel: #121a2b;
+  --a-panel-2: #0f1626;
+  --a-sunk: #1a2338;
+  --a-ink-1: #eef1f7;
+  --a-ink-2: #aab3c8;
+  --a-ink-3: #8a94ad;
+  --a-line: rgb(238 241 247 / 0.08);
+  --a-line-2: rgb(238 241 247 / 0.15);
+  --a-red: #f25467;
+  --a-red-ink: #ff8a98;
+  --a-red-soft: rgb(242 84 103 / 0.13);
+  --a-green: #8fc07c;
+  --a-green-ink: #b5dba6;
+  --a-green-soft: rgb(143 192 124 / 0.12);
+  --a-sun: #f3a75a;
+  --a-sun-soft: rgb(243 167 90 / 0.12);
+  --a-focus: #eef1f7;
+  --a-on-solid: #0b1120;
+  --a-contour-opacity: 0.1;
+  --a-shadow: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 4px 16px -6px rgb(0 0 0 / 0.5);
+  --a-shadow-lg: 0 24px 56px -16px rgb(0 0 0 / 0.7);
+}
+
+/* The land under the page: the loess hills' contour lines, drawn once by hand and tiled, barely there. */
+.a-contours {
+  position: relative;
+  isolation: isolate;
+}
+.a-contours::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: url("./../assets/contours.webp") repeat 0 0 / 560px;
+  opacity: var(--a-contour-opacity);
+}
+.dark .a-contours::before {
+  filter: invert(1);
+}
+
+/* A kind's drawing, painted in the current color through its own lines (so it follows the theme like text). */
+.a-art {
+  background: currentColor;
+  mask: var(--art) center / contain no-repeat;
+  -webkit-mask: var(--art) center / contain no-repeat;
+}
+
+.a-focus-ring:focus-visible {
+  outline: 2px solid var(--a-focus);
+  outline-offset: 2px;
+}
+
+/* The ink settling into a stamp when a decision lands. */
+@keyframes a-stamp {
+  0% {
+    opacity: 0;
+    transform: scale(1.6) rotate(-14deg);
+  }
+  55% {
+    opacity: 1;
+    transform: scale(0.94) rotate(-8deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(-8deg);
+  }
+}
+.a-stamp {
+  animation: a-stamp 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .a-stamp {
+    animation: none;
+  }
+}
+
+/* The site's body paints its own canvas; under this page the page's ground shows instead. */
+.admin-next body {
+  background: var(--a-bg);
+  color: var(--a-ink-1);
+}
