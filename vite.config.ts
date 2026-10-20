@@ -36,6 +36,9 @@ export default defineConfig({
   environments: {
     client: {
       build: {
+        // Fonts stay files: the policy allows them only from the site itself (font-src 'self'), so a small subset
+        // inlined as data: (the admin font's Cyrillic one) is blocked and logged on every load.
+        assetsInlineLimit: (file) => (/\.(woff2?|ttf|otf)$/.test(file) ? false : undefined),
         rolldownOptions: {
           input: { main: resolve(import.meta.dirname, "index.html"), admin: resolve(import.meta.dirname, "admin/index.html") },
         },
