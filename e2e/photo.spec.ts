@@ -56,7 +56,7 @@ test(
     await modCtx.request.post("/__dev/login", { data: { email: "dev@example.test" } })
     const mod = await modCtx.newPage()
     await mod.goto("/admin/")
-    await mod.getByText("מצב המערכת", { exact: true }).click()
+    await mod.getByRole("button", { name: "מצב המערכת", exact: true }).click()
     await expect(mod.getByText(/ממתינות לבדיקה:/)).toBeVisible()
     const item = await openItem(mod, name)
     await expect(item.getByRole("img", { name: "שדה כלניות בזריחה" })).toBeVisible()

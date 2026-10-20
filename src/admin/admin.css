@@ -1,8 +1,8 @@
 /*
  * The moderators' page's own layer. It sits on the site's palette (ink, anemone, field, sun) but only under
- * .admin-next, which no public page ever carries: the memorial itself keeps its tokens untouched.
+ * .admin-ui, which no public page ever carries: the memorial itself keeps its tokens untouched.
  */
-.admin-next {
+.admin-ui {
   --a-bg: #f2f3f7;
   --a-panel: #ffffff;
   --a-panel-2: #f7f8fb;
@@ -28,8 +28,8 @@
   background: var(--a-bg);
   color: var(--a-ink-1);
 }
-.dark .admin-next,
-.admin-next.dark {
+.dark .admin-ui,
+.admin-ui.dark {
   --a-bg: #0b1120;
   --a-panel: #121a2b;
   --a-panel-2: #0f1626;
@@ -65,7 +65,7 @@
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background: url("./../assets/contours.webp") repeat 0 0 / 560px;
+  background: url("./assets/contours.webp") repeat 0 0 / 560px;
   opacity: var(--a-contour-opacity);
 }
 .dark .a-contours::before {
@@ -109,7 +109,7 @@
 }
 
 /* The site's body paints its own canvas; under this page the page's ground shows instead. */
-.admin-next body {
+.admin-ui body {
   background: var(--a-bg);
   color: var(--a-ink-1);
 }

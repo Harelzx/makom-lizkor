@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
-import { importCurated } from "../../../scripts/curated-import.mjs"
-import { MAX_PACKET_BYTES, readImportPacket } from "../import-packet"
+import { importCurated } from "../../scripts/curated-import.mjs"
+import { MAX_PACKET_BYTES, readImportPacket } from "./import-packet"
 import { fetchPlace, fetchSummary, request, type OpsSummary, type PlaceView } from "./api"
-import { Btn, fieldLabel, inputClass } from "./controls"
+import { Btn, Field, inputClass } from "./controls"
 import { EraseForm, HideForm } from "./report"
 import { Alert, Glyph, Kbd } from "./parts"
 import { ago } from "./inbox-state"
-import type { GlyphName } from "../glyphs"
+import type { GlyphName } from "./glyphs"
 
 /** The operations counts as a few lines a person reads: each with its own mark, and a red line only where action is due. */
 export function useSummary() {
@@ -160,16 +160,18 @@ export function PlaceLookup() {
           void load(idOf(input))
         }}
       >
-        <label className="min-w-60 flex-1">
-          <span className={fieldLabel}>מקום לפי קישור או מזהה</span>
-          <input
-            dir="ltr"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="https://makomlizkor.org/place/…"
-            className={cn(inputClass, "h-11")}
-          />
-        </label>
+        <Field label="מקום לפי קישור או מזהה" className="min-w-60 flex-1">
+          {(p) => (
+            <input
+              {...p}
+              dir="ltr"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="https://makomlizkor.org/place/…"
+              className={cn(inputClass, "h-11")}
+            />
+          )}
+        </Field>
         <Btn type="submit" variant="primary" disabled={!idOf(input)}>
           <Glyph name="search" />
           פתיחה
@@ -208,7 +210,7 @@ export function PlaceLookup() {
 
 type Packet = ReturnType<typeof readImportPacket>
 /** The site's own places from a packet prepared with their sources, through the ordinary approval route; insert only. */
-export function CuratedImport({ sample }: { sample?: () => Packet }) {
+export function CuratedImport() {
   const [packet, setPacket] = useState<Packet | null>(null)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState("")
@@ -271,9 +273,15 @@ export function CuratedImport({ sample }: { sample?: () => Packet }) {
         )}
       >
         <Glyph name="import" className="size-8 text-(--a-ink-2)" />
-        <span className="text-[0.9375rem] font-semibold text-(--a-ink-1)">קובץ יבוא JSON</span>
-        <span className="text-[0.8125rem] text-(--a-ink-3)">לחיצה לבחירת קובץ</span>
+        <span id="import-file-label" className="text-[0.9375rem] font-semibold text-(--a-ink-1)">
+          קובץ יבוא JSON
+        </span>
+        <span id="import-file-hint" className="text-[0.8125rem] text-(--a-ink-3)">
+          לחיצה לבחירת קובץ
+        </span>
         <input
+          aria-labelledby="import-file-label"
+          aria-describedby="import-file-hint"
           type="file"
           accept="application/json,.json"
           disabled={busy}
@@ -281,15 +289,6 @@ export function CuratedImport({ sample }: { sample?: () => Packet }) {
           onChange={(e) => void choose(e.target.files?.[0])}
         />
       </label>
-      {sample && !packet && (
-        <button
-          type="button"
-          className="a-focus-ring mt-2 rounded-md text-[0.875rem] font-semibold text-(--a-ink-2) underline underline-offset-4"
-          onClick={() => setPacket(sample())}
-        >
-          לנסות עם קובץ דמה
-        </button>
-      )}
       {packet && (
         <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-(--a-line) bg-(--a-panel) p-4">
           <p className="flex items-center gap-2 text-[0.9375rem] font-medium text-(--a-ink-1)">
@@ -344,7 +343,7 @@ export function Shortcuts({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="admin-next font-admin">
+      <DialogContent className="admin-ui font-admin">
         <DialogHeader>
           <DialogTitle className="text-[1.25rem] font-bold">קיצורי מקלדת</DialogTitle>
           <DialogDescription className="text-[0.9375rem] text-(--a-ink-2)">
@@ -376,7 +375,9 @@ export function Shortcuts({
  */
 export function useKeys(on: Partial<Record<"next" | "prev" | "approve" | "return" | "reject" | "escape" | "help" | "list", () => void>>) {
   const ref = useRef(on)
-  ref.current = on
+  useEffect(() => {
+    ref.current = on
+  })
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return

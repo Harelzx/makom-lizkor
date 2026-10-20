@@ -3,8 +3,8 @@ import { AnimatePresence, motion } from "motion/react"
 import { AnemoneMark } from "@/components/anemone"
 import { ease } from "@/lib/motion"
 import { cn } from "@/lib/utils"
-import { isDark, toggleTheme } from "../theme"
-import type { GlyphName } from "../glyphs"
+import { isDark, toggleTheme } from "./theme"
+import type { GlyphName } from "./glyphs"
 import { PROBLEM } from "./problems"
 import { Btn } from "./controls"
 import { ago, elementsOf, overdue, reportName, same, useInbox, type Filter, type Inbox, type Selection } from "./inbox-state"
@@ -13,7 +13,6 @@ import { Checks, Decision, ProposalBody, ProposalMap } from "./proposal"
 import { ReportActions, ReportBody, useReportTools } from "./report"
 import { CuratedImport, PlaceLookup, Shortcuts, SystemStatus, useKeys, useSummary } from "./tools"
 import type { Report } from "./api"
-import { samplePacket } from "./sample-packet"
 
 /**
  * Direction A, the workbench: everything that waits in one list beside the item it opens, the day's numbers above
@@ -28,7 +27,7 @@ const NAV: { view: View; glyph: GlyphName; label: string }[] = [
 ]
 const rowId = (s: Selection) => `row-${s.kind}-${s.id}`
 
-export function Workbench({ sample }: { sample?: boolean }) {
+export function Workbench() {
   const inbox = useInbox()
   const status = useSummary()
   const [view, setView] = useState<View>("queue")
@@ -172,7 +171,7 @@ export function Workbench({ sample }: { sample?: boolean }) {
               </ToolPage>
             ) : view === "import" ? (
               <ToolPage>
-                <CuratedImport sample={sample ? samplePacket : undefined} />
+                <CuratedImport />
               </ToolPage>
             ) : view === "status" ? (
               <ToolPage>

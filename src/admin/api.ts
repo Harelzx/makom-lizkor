@@ -1,18 +1,14 @@
 import type { Element } from "@/shared/contract"
 import type { Kind } from "@/types"
 import type { BASIS_LABEL, REQUESTER_LABEL } from "@/data/reports"
-import { OpsSummary } from "../../../worker/lib/ops-schema"
+import { OpsSummary } from "../../worker/lib/ops-schema"
 
 /**
  * Everything the moderators' page asks of the server, in one place. The calls, paths and bodies are the ones the
- * Worker already serves (worker/routes/admin.ts); nothing here adds a route or a permission. The page never calls
- * `fetch` itself: it goes through `request`, so the prototype can answer from memory (mock-server.ts) and the real
- * page from the Worker, with the same code in between.
+ * Worker already serves (worker/routes/admin.ts); nothing here adds a route or a permission. The browser sends its
+ * own Sec-Fetch-Site and the Access cookie with each call, as the Worker's write guard expects.
  */
-export type Fetcher = (url: string, init?: RequestInit) => Promise<Response>
-let fetcher: Fetcher = (url, init) => fetch(url, init)
-export const useFetcher = (next: Fetcher) => void (fetcher = next)
-export const request: Fetcher = (url, init) => fetcher(url, init)
+export const request = (url: string, init?: RequestInit) => fetch(url, init)
 
 export interface Item {
   id: string

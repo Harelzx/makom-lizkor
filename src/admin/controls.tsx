@@ -1,4 +1,4 @@
-import { forwardRef, type ButtonHTMLAttributes } from "react"
+import { forwardRef, useId, type ButtonHTMLAttributes, type ReactNode } from "react"
 import { cn } from "@/lib/utils"
 
 type Variant = "approve" | "primary" | "outline" | "ghost" | "danger" | "danger-ghost"
@@ -41,3 +41,31 @@ export const inputClass =
 export const fieldLabel = "mb-1.5 block text-[0.875rem] font-semibold text-(--a-ink-1)"
 export const fieldHint = "mt-1.5 block text-[0.8125rem] text-(--a-ink-3)"
 export const checkClass = "mt-0.5 size-[1.125rem] shrink-0 accent-(--a-ink-1)"
+
+/** A labelled control: the label names it, the hint describes it, so a screen reader hears a short name and then the help. */
+export function Field({
+  label,
+  hint,
+  className,
+  children,
+}: {
+  label: string
+  hint?: string
+  className?: string
+  children: (props: { id: string; "aria-describedby"?: string }) => ReactNode
+}) {
+  const id = useId()
+  return (
+    <div className={className}>
+      <label htmlFor={id} className={fieldLabel}>
+        {label}
+      </label>
+      {children({ id, "aria-describedby": hint ? `${id}-hint` : undefined })}
+      {hint && (
+        <p id={`${id}-hint`} className={fieldHint}>
+          {hint}
+        </p>
+      )}
+    </div>
+  )
+}

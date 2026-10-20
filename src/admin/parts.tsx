@@ -4,13 +4,13 @@ import { ease } from "@/lib/motion"
 import { cn } from "@/lib/utils"
 import type { Kind } from "@/types"
 import { KINDS } from "@/data/taxonomy"
-import { GLYPH, type GlyphName } from "../glyphs"
-import allDone from "../assets/all-done.webp"
-import offline from "../assets/offline.webp"
-import contours from "../assets/contours.webp"
+import { GLYPH, type GlyphName } from "./glyphs"
+import allDone from "./assets/all-done.webp"
+import offline from "./assets/offline.webp"
+import contours from "./assets/contours.webp"
 import type { Said } from "./inbox-state"
 
-const ART = import.meta.glob<string>("../assets/kinds/*.svg", { eager: true, query: "?url", import: "default" })
+const ART = import.meta.glob<string>("./assets/kinds/*.svg", { eager: true, query: "?url", import: "default" })
 const artOf = (kind: Kind) => ART[`../assets/kinds/${kind}.svg`]
 
 /** One of the page's hand-drawn marks. Decorative unless labelled: the button or text beside it carries the meaning. */

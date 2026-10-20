@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { ELEMENT_LABEL } from "@/data/reports"
 import type { Element } from "@/shared/contract"
-import { createPager, type PagerState } from "../pager"
+import { createPager, type PagerState } from "./pager"
 import { fetchPage, fetchQueue, transition, type Action, type Attention, type Item, type Report } from "./api"
 
 /**
@@ -77,8 +77,17 @@ export function useInbox() {
     await Promise.all([loadQueue(), loadReports()])
   }, [loadQueue, loadReports])
   useEffect(() => {
-    void reload()
-  }, [reload])
+    let live = true
+    void loadReports()
+    void fetchQueue().then((r) => {
+      if (!live) return
+      if (typeof r === "string") setQueueError(r)
+      else setQueue(r)
+    })
+    return () => {
+      live = false
+    }
+  }, [loadReports])
 
   const say = useCallback((text: string, tone: Said["tone"] = "done") => setSaid((s) => ({ text, tone, n: (s?.n ?? 0) + 1 })), [])
   useEffect(() => {

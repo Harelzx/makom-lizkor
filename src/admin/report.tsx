@@ -5,7 +5,7 @@ import { ELEMENTS, type Element } from "@/shared/contract"
 import { ease } from "@/lib/motion"
 import { cn } from "@/lib/utils"
 import { fetchContact, fetchPlace, send, type Basis, type PlaceView, type Report, type Suppression } from "./api"
-import { Btn, checkClass, fieldHint, fieldLabel, inputClass } from "./controls"
+import { Btn, Field, checkClass, fieldLabel, inputClass } from "./controls"
 import { ago, elementsOf, reportName } from "./inbox-state"
 import { Alert, Chip, Glyph, meta } from "./parts"
 
@@ -36,17 +36,16 @@ function LiftForm({
   const [absent, setAbsent] = useState(false)
   const [busy, setBusy] = useState(false)
   const set = (k: keyof typeof extra) => (e: { target: { value: string } }) => setExtra({ ...extra, [k]: e.target.value })
-  const id = `lift-${sup.id}`
   const text = (k: keyof typeof extra, label: string, hint?: string, long?: boolean, type?: string) => (
-    <label className="block">
-      <span className={fieldLabel}>{label}</span>
-      {long ? (
-        <textarea value={extra[k]} onChange={set(k)} maxLength={500} rows={2} className={cn(inputClass, "resize-none py-2.5")} />
-      ) : (
-        <input type={type ?? "text"} value={extra[k]} onChange={set(k)} maxLength={300} className={cn(inputClass, "h-11")} />
-      )}
-      {hint && <span className={fieldHint}>{hint}</span>}
-    </label>
+    <Field label={label} hint={hint}>
+      {(p) =>
+        long ? (
+          <textarea {...p} value={extra[k]} onChange={set(k)} maxLength={500} rows={2} className={cn(inputClass, "resize-none py-2.5")} />
+        ) : (
+          <input {...p} type={type ?? "text"} value={extra[k]} onChange={set(k)} maxLength={300} className={cn(inputClass, "h-11")} />
+        )
+      }
+    </Field>
   )
   return (
     <motion.form
@@ -75,28 +74,30 @@ function LiftForm({
         setBusy(false)
       }}
     >
-      <label className="block">
-        <span className={fieldLabel}>בסיס ההחזרה</span>
-        <select id={`${id}-code`} className={cn(inputClass, "h-11")} value={code} onChange={(e) => setCode(e.target.value as Basis)}>
-          {Object.entries(BASIS_LABEL).map(([k, label]) => (
-            <option key={k} value={k}>
-              {label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="block">
-        <span className={fieldLabel}>הנימוק בכתב</span>
-        <textarea
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          maxLength={1000}
-          required
-          rows={3}
-          className={cn(inputClass, "resize-none py-2.5")}
-        />
-        <span className={fieldHint}>מה נבדק ומה נמצא. בלי פרטי קשר.</span>
-      </label>
+      <Field label="בסיס ההחזרה">
+        {(p) => (
+          <select {...p} className={cn(inputClass, "h-11")} value={code} onChange={(e) => setCode(e.target.value as Basis)}>
+            {Object.entries(BASIS_LABEL).map(([k, label]) => (
+              <option key={k} value={k}>
+                {label}
+              </option>
+            ))}
+          </select>
+        )}
+      </Field>
+      <Field label="הנימוק בכתב" hint="מה נבדק ומה נמצא. בלי פרטי קשר.">
+        {(p) => (
+          <textarea
+            {...p}
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            maxLength={1000}
+            required
+            rows={3}
+            className={cn(inputClass, "resize-none py-2.5")}
+          />
+        )}
+      </Field>
       {code === "rights_cleared" && text("evidenceRef", "הפניה לראיה")}
       {code === "legal_advice" && (
         <div className="grid gap-4 sm:grid-cols-2">
@@ -223,10 +224,11 @@ export function HideForm({ place, reportId, done }: { place: PlaceView; reportId
           ))}
         </div>
       </fieldset>
-      <label className="block">
-        <span className={fieldLabel}>סיבת ההסתרה</span>
-        <input value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} className={cn(inputClass, "h-11")} />
-      </label>
+      <Field label="סיבת ההסתרה">
+        {(p) => (
+          <input {...p} value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} className={cn(inputClass, "h-11")} />
+        )}
+      </Field>
       <Btn type="submit" variant="outline" className="self-start" disabled={!fields.length || !reason.trim()}>
         <Glyph name="hide" />
         הסתרה עכשיו
@@ -272,14 +274,15 @@ export function useReportPlace(report: Report) {
     const view = await fetchPlace(report.place_id)
     setPlace(typeof view === "string" ? null : view)
   }, [report])
+  // Each request's pane mounts on its own (the layouts key it by id), so this only ever fills an empty place.
   useEffect(() => {
     let live = true
-    if (report.origin !== "contribution") return setPlace(null)
+    if (report.origin !== "contribution") return
     void fetchPlace(report.place_id).then((view) => live && setPlace(typeof view === "string" ? null : view))
     return () => {
       live = false
     }
-  }, [report])
+  }, [report.origin, report.place_id])
   return { place, load }
 }
 
@@ -296,7 +299,6 @@ export function useReportTools(report: Report, reload: () => Promise<void>, say:
     },
     [load, reload, say],
   )
-  useEffect(() => setError(""), [report.id])
   return { place, error, after }
 }
 
@@ -307,10 +309,6 @@ export function ReportBody({ report, tools, aside }: { report: Report; tools: Re
   const [lifting, setLifting] = useState<string | null>(null)
   const hidden = report.outcome === "hidden_for_review"
   const forget = !!(report.has_contact || report.explanation || report.relationship)
-  useEffect(() => {
-    setContact(null)
-    setLifting(null)
-  }, [report.id])
   return (
     <div>
       <div className="flex flex-wrap gap-1.5">
@@ -443,7 +441,6 @@ export function Contact({ report, contact, setContact }: { report: Report; conta
 /** Recording what was done, closing, or opening again: the reminders stop only once handling is written down. */
 export function ReportActions({ report, tools, size = "md" }: { report: Report; tools: ReportTools; size?: "md" | "lg" }) {
   const [note, setNote] = useState("")
-  useEffect(() => setNote(""), [report.id])
   const act = async (verb: "handle" | "close", what: string) => {
     const error = await send(`/api/admin/reports/${report.id}/${verb}`, { note: note.trim() })
     if (!error) setNote("")

@@ -1,10 +1,10 @@
 import { useState } from "react"
 import { cn } from "@/lib/utils"
 import type { Action, Item } from "./api"
-import { Btn, fieldHint, fieldLabel, inputClass } from "./controls"
+import { Btn, Field, inputClass } from "./controls"
 import { ago, overdue } from "./inbox-state"
 import { Chip, Glyph, Kbd, KindArt, kindLabel, MapThumb, meta } from "./parts"
-import type { GlyphName } from "../glyphs"
+import type { GlyphName } from "./glyphs"
 
 export type Decide = (item: Item, action: Action, note?: string) => Promise<void>
 
@@ -171,20 +171,21 @@ export function Decision({
           if (note.trim()) run("return", note.trim())
         }}
       >
-        <label>
-          <span className={fieldLabel}>הערה למגיש</span>
-          <textarea
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            maxLength={500}
-            required
-            autoFocus
-            rows={2}
-            className={cn(inputClass, "min-h-20 resize-none py-2.5")}
-            onKeyDown={(e) => e.key === "Escape" && setReturning(false)}
-          />
-          <span className={fieldHint}>מה צריך לתקן. ההערה מוצגת למי ששלח את ההצעה, בקישור המעקב שלו.</span>
-        </label>
+        <Field label="הערה למגיש" hint="מה צריך לתקן. ההערה מוצגת למי ששלח את ההצעה, בקישור המעקב שלו.">
+          {(p) => (
+            <textarea
+              {...p}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              maxLength={500}
+              required
+              autoFocus
+              rows={2}
+              className={cn(inputClass, "min-h-20 resize-none py-2.5")}
+              onKeyDown={(e) => e.key === "Escape" && setReturning(false)}
+            />
+          )}
+        </Field>
         <div className="flex flex-wrap gap-2">
           <Btn type="submit" variant="primary" size={size} disabled={busy || !note.trim()}>
             {waiting("return") ? spin : <Glyph name="return" />}
