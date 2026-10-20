@@ -1,5 +1,13 @@
 # Backend continuation record
 
+## Release 101592d live - 20 October 2026, 19:36 UTC
+
+Current production is main 101592d9dd50c7696d85b0ea4539e3e42bcba1f8, version 1331402e-1c4d-4457-b5fd-d54bc42cdced/tag release-101592d9dd50, 100%, schema 23, replacing a90672a (version 6890ca32-fa0b-4641-b0af-80a6d473f929; rollback: redeploy it). PR #71: the moderators' page (/admin/) is one workbench (rail, queue list, item pane with checks and map, keyboard decisions by key code so they work on a Hebrew layout, its own tokens under .admin-ui and IBM Plex Sans Hebrew, original generated art). Client only: the same admin API routes and bodies, Access, same-origin writes, erase and purge unchanged. Also carries #69 (CLAUDE.md) and #70 (env.development names its own empty routes; no production drift). Gate: CI 39481801257, staging 39484357580, regression 39484357781. Kit agent-evidence/release-admin-20261020 (release-alerts-20261019's, repointed): no drift, no migration, one deploy attempt, Access identical before and after, 41 live checks including the admin page's hashed files served with the workbench in them. /admin/ itself is behind the owner-only Access policy, so its rendering on production is the owner's to confirm.
+
+## Release a90672a live - 19 October 2026, 07:33 UTC
+
+Not recorded here at the time. Production was main a90672ab95b82b1145f304efedf0450b05cc8cfd, version 6890ca32-fa0b-4641-b0af-80a6d473f929/tag release-a90672ab95b8, replacing 95abe3a. PR #68: the technical alerts (failures, operations check) go to the site's own inbox. Gate: CI 39214067630, staging 39215978407, regression 39215978377. Kit agent-evidence/release-alerts-20261019.
+
 ## Release 95abe3a live - 19 October 2026, 06:24 UTC
 
 Current production is main 95abe3a0f22f4f33328e422d60ba0dac70ec85c9, tag release-95abe3a0f22f, replacing 938e83f (version cc64708d-9834-43d7-9f8e-40c41a3291c5). PR #66, no runtime drift, no migration, no Access change. Gate: CI 39207642298, staging 39209281923, regression 39209281735. Kit agent-evidence/release-stale-20261019; live checks add: no analytics beacon in the HTML served to an iPhone Safari user agent, no-transform on the home page and a share page, the stale-tab reload in the served code.
