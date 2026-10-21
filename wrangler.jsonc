@@ -45,7 +45,7 @@
     "MAIL_FROM": "makomlizkor@gmail.com",
     "GMAIL_ACCOUNT": "makomlizkor@gmail.com",
     // Truthful current status; release:check and runtime refuse Testing for production.
-    "GMAIL_OAUTH_STATUS": "testing",
+    "GMAIL_OAUTH_STATUS": "production",
     // The diagnostic agent's Access service token client ids (spec 12.1), comma-separated; empty: no one.
     "OPS_SERVICE_TOKENS": "",
     // A machine moderator's service token client ids: staging only (H1). Production refuses any, and release:check

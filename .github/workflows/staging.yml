@@ -2,9 +2,10 @@
 # only, on its workers.dev address behind Cloudflare Access, and checked there. Its last step uploads a receipt named
 # for the commit it deployed; release.yml requires that receipt, from a successful run, with a passed edge check.
 #
-# GitHub Free, private repository: no environment secrets, no required reviewers, no deployment branches (GitHub docs,
-# 2026-10-06). So the staging credentials are repository secrets, readable by any workflow on any branch: they must
-# be scoped to the staging account alone, which holds nothing but synthetic data. Production credentials never go into
+# Written when the repository was private on GitHub Free: no environment secrets, no required reviewers, no deployment
+# branches (GitHub docs, 2026-10-06). It is public now; the rule holds either way. The staging credentials are
+# repository secrets, readable by any workflow on any branch: they must be scoped to the staging account alone, which
+# holds nothing but synthetic data. Production credentials never go into
 # this repository's secrets (scripts/ci-policy.mjs keeps their names out of every workflow but release and rollback).
 name: staging
 

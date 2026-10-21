@@ -6,6 +6,7 @@ const SIGN = "\n\nמקום לזכור"
 
 export const verificationMail = (to: string, link: string): Mail => ({
   to,
+  budget: "visitor",
   subject: "אימות כתובת המייל · מקום לזכור",
   text:
     `מישהו הציע מקום ב"מקום לזכור" והשאיר את הכתובת הזו כדי לקבל עדכונים.\n\n` +
@@ -16,6 +17,7 @@ export const verificationMail = (to: string, link: string): Mail => ({
 
 export const trackingMail = (to: string, link: string): Mail => ({
   to,
+  budget: "visitor",
   subject: "קישור המעקב אחרי ההצעה שלכם · מקום לזכור",
   text:
     `הכתובת אומתה. זה קישור המעקב אחרי ההצעה שלכם:\n${link}\n\n` +

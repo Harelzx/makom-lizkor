@@ -29,6 +29,7 @@ contact.post(
       to: CONTACT_EMAIL,
       subject: "פנייה ממקום לזכור",
       text: `כתובת לתשובה: ${email}\n\n${message}`,
+      budget: "visitor",
     })
     return accepted ? c.json({ accepted: true }, 202, PRIVATE) : problem(c, 503, "mail_unavailable")
   },
