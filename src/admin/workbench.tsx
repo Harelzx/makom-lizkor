@@ -12,6 +12,7 @@ import { Alert, Chip, Glyph, Guide, Kbd, kindGlyph, kindLabel, meta, Scene, Toas
 import { Checks, Decision, ProposalBody, ProposalMap } from "./proposal"
 import { ReportActions, ReportBody, useReportTools } from "./report"
 import { CuratedImport, PlaceLookup, Shortcuts, SystemStatus, useKeys, useSummary } from "./tools"
+import { SiteHealthPanel } from "./health"
 import type { Report } from "./api"
 
 /**
@@ -179,6 +180,7 @@ export function Workbench() {
               </ToolPage>
             ) : view === "status" ? (
               <ToolPage guide="status">
+                <SiteHealthPanel summary={status.summary} />
                 <SystemStatus status={status} />
               </ToolPage>
             ) : inbox.report ? (
@@ -660,8 +662,8 @@ const GUIDE = {
     "בוחרים קובץ, עוברים על רשימת השמות ולוחצים פרסום. מקום שכבר קיים באתר לא ישתנה, אז מותר להריץ את אותו קובץ שוב.",
   ],
   status: [
-    "תמונת מצב של האתר, רק מספרים: בלי תוכן, בלי מיילים ובלי שמות. כתום = כדאי לבדוק.",
-    "אין כאן פעולות. אם משהו נשאר כתום יותר מיום, צריך בדיקה טכנית.",
+    "למעלה: האם הכול תקין, ואם לא, מה קרה. למטה: תקינות העבודה השוטפת (הצעות, מיילים, גיבוי). רק מספרים, בלי תוכן, מיילים או שמות.",
+    "אם משהו אדום, או כתום יותר מיום, לחצו «העתקת דוח» והדביקו אותו בשיחה עם מי שמטפל באתר. הדוח כולל את כל מה שצריך כדי להבין מה קרה.",
   ],
 }
 const GUIDE_TITLE: Record<keyof typeof GUIDE, string> = {

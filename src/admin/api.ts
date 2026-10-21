@@ -2,6 +2,7 @@ import type { Element } from "@/shared/contract"
 import type { Kind } from "@/types"
 import type { BASIS_LABEL, REQUESTER_LABEL } from "@/data/reports"
 import { OpsSummary } from "../../worker/lib/ops-schema"
+import { SiteHealth } from "../../worker/lib/health-schema"
 
 /**
  * Everything the moderators' page asks of the server, in one place. The calls, paths and bodies are the ones the
@@ -166,6 +167,15 @@ export async function fetchSummary(): Promise<OpsSummary | null> {
     const res = await request("/api/admin/summary", { cache: "no-store", signal: AbortSignal.timeout(8000) })
     if (!res.ok) return null
     return OpsSummary.parse(await res.json())
+  } catch {
+    return null
+  }
+}
+export async function fetchHealth(): Promise<SiteHealth | null> {
+  try {
+    const res = await request("/api/admin/health", { cache: "no-store", signal: AbortSignal.timeout(8000) })
+    if (!res.ok) return null
+    return SiteHealth.parse(await res.json())
   } catch {
     return null
   }
