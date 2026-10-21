@@ -23,7 +23,8 @@ const post = async (attempt: () => Promise<MailOutcome>, key = crypto.randomUUID
         name_he: "דמו מסירת אימות",
         lat: 31.42,
         lng: 34.49,
-        email: "fixture@example.test",
+        // Its own address each time: one address is mailed for at most three proposals a day.
+        email: `fixture-${key}@example.test`,
         consent_version: CURRENT_SUBMISSION_NOTICE,
       }),
     }),
@@ -134,4 +135,36 @@ it("stops after five safe failures, stops at deletion, and a restore cannot repl
     REAL,
   )
   expect(filtered.contacts[0].verify_mail_state).toBe("uncertain")
+})
+
+it("mails one address the verification of at most three proposals a day; the rest wait for the next", async () => {
+  const e = { ...env, ENVIRONMENT: "production", PUBLIC_ORIGIN: "https://project.test" }
+  const attempt = vi.fn<(e: Env, mail: { to: string }) => Promise<MailOutcome>>(async () => "accepted")
+  const mine = () => attempt.mock.calls.filter(([, mail]) => mail.to === "one-address@example.test").length
+  const app = createApp({ verifyTurnstile: fakeSiteverify, sendMail: async () => true, mailAttempt: attempt, purge: async () => true })
+  for (let i = 0; i < 5; i++) {
+    const ctx = createExecutionContext()
+    const response = await app.fetch(
+      new Request("https://project.test/api/v1/submissions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID(), "Turnstile-Token": "pass" },
+        body: JSON.stringify({
+          kind: "bench",
+          name_he: `דמו כתובת אחת ${i}`,
+          lat: 31.42,
+          lng: 34.49,
+          email: "one-address@example.test",
+          consent_version: CURRENT_SUBMISSION_NOTICE,
+        }),
+      }),
+      e,
+      ctx,
+    )
+    expect(response.status).toBe(201)
+    await waitOnExecutionContext(ctx)
+  }
+  expect(mine()).toBe(3)
+  // A day later, the rest go.
+  await deliverVerification(e, attempt, new Date(Date.now() + 25 * 3600_000))
+  expect(mine()).toBe(5)
 })

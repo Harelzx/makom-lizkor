@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers"
 import { beforeEach, expect, it, vi } from "vitest"
-import { claimMailBudget } from "../lib/mail-budget"
+import { claimMailBudget, VISITOR_RESERVE } from "../lib/mail-budget"
 import { CONTACT_EMAIL } from "@/config"
 import { alertFailures, alertOperations, pruneCounters, recordFailure, recordRequest, requestErrorRates } from "../lib/metrics"
 import { createApp } from "../index"
@@ -46,6 +46,14 @@ it("claims a global mail quota atomically and reserves a separate bounded operat
   expect(await claimMailBudget(e, "ops", now)).toBe(false)
   expect(await claimMailBudget({ ...e, MAIL_DAILY_LIMIT: "1000" }, "public", now)).toBe(false)
   expect(await claimMailBudget(e, "public", new Date("2026-10-13T12:00:00Z"))).toBe(true)
+})
+
+it("keeps part of the public budget from what visitors' actions send, for the moderators' alerts", async () => {
+  const now = new Date("2026-10-14T12:00:00Z")
+  const e = { ...env, MAIL_DAILY_LIMIT: String(VISITOR_RESERVE + 1) }
+  expect(await claimMailBudget(e, "visitor", now)).toBe(true)
+  expect(await claimMailBudget(e, "visitor", now)).toBe(false)
+  expect(await claimMailBudget(e, "public", now)).toBe(true)
 })
 
 it("stores only hourly sampled status counts and latency, marks estimates and excludes counters from backups", async () => {

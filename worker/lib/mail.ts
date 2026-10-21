@@ -4,7 +4,8 @@ import { gmailReady, gmailAttempt, type GmailSettings, type MailOutcome } from "
 import { claimMailBudget } from "./mail-budget"
 import { log } from "./log"
 
-export type Mail = { to: string; subject: string; text: string; budget?: "ops" }
+/** `budget`: "ops" for the owner's operational mail; "visitor" for mail a visitor's action sends (see claimMailBudget). */
+export type Mail = { to: string; subject: string; text: string; budget?: "ops" | "visitor" }
 // Optional commissioning settings; a transport cannot become ready merely by choosing its name.
 type MailEnv = Env & GmailSettings & { MAIL?: SendEmail; MAIL_PROVIDER?: string }
 const cloudflareSelected = (env: MailEnv) => env.MAIL_PROVIDER === undefined || env.MAIL_PROVIDER === "cloudflare"
@@ -54,7 +55,7 @@ export async function attemptMail(env: MailEnv, m: Mail): Promise<MailOutcome> {
   if (env.ENVIRONMENT === "development") return (await devOutbox(env, m)) ? "accepted" : "retryable"
   if (env.ENVIRONMENT !== "production" || !transportReady(env)) return "stopped"
   try {
-    if (!(await claimMailBudget(env, m.budget === "ops" ? "ops" : "public"))) return "deferred"
+    if (!(await claimMailBudget(env, m.budget ?? "public"))) return "deferred"
   } catch {
     // A missing/unavailable budget store cannot bypass the cap or turn provider failure into a thrown HTTP error.
     log("error", "mail_budget_unavailable", { failure: "deferred" })

@@ -9,6 +9,12 @@ export type MailAttempt = (env: Env, mail: Parameters<SendMail>[1]) => Promise<M
 export const productionAttempt: MailAttempt = (env, mail) => attemptMail(env, mail)
 const GAP_MS = 15 * 60_000
 const TRIES = 5
+/**
+ * Proposals whose verification one address may be sent in a day. Anyone can type someone else's address, and each
+ * proposal would otherwise mail it; past this the rest wait for the next day (the link is valid for a week).
+ */
+export const VERIFY_PER_ADDRESS_DAY = 3
+const DAY_MS = 24 * 3600_000
 
 /** Durable contact metadata is committed with the submission, before its receipt. No body, address copy or token. */
 export async function deliverVerification(env: Env, attempt: MailAttempt, now: Date, placeId?: string) {
@@ -26,9 +32,17 @@ export async function deliverVerification(env: Env, attempt: MailAttempt, now: D
      AND c.email IS NOT NULL AND c.email_verified_at IS NULL AND c.email_verify_expires > ?2
      AND c.purge_after > ?2 AND c.ceiling_at > ?2 AND p.status NOT IN ('withdrawn', 'erased')
      AND (?3 IS NULL OR c.place_id = ?3) AND (c.verify_mail_tried_at IS NULL OR c.verify_mail_tried_at <= ?4)
+     AND (SELECT COUNT(*) FROM contacts o WHERE o.email = c.email AND o.id != c.id AND o.verify_mail_tried_at > ?5) < ?6
      ORDER BY c.created_at LIMIT 10`,
     )
-      .bind(TRIES, at, placeId ?? null, new Date(now.getTime() - GAP_MS).toISOString())
+      .bind(
+        TRIES,
+        at,
+        placeId ?? null,
+        new Date(now.getTime() - GAP_MS).toISOString(),
+        new Date(now.getTime() - DAY_MS).toISOString(),
+        VERIFY_PER_ADDRESS_DAY,
+      )
       .all<{ id: string; email: string; email_verify_hash: string }>()
   ).results
   for (const row of rows) {
