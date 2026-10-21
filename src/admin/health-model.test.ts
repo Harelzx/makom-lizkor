@@ -50,3 +50,14 @@ it("the copied report carries the version, every failure with its hours, the tra
   expect(text).toContain("תשובות שנדגמו: 10")
   expect(text).toContain('"code":"err_http_500"')
 })
+
+it("reads browser errors by kind: a dropped connection alone is not our code, until there are many", () => {
+  const h = health([row(1, "err_client_error_network", 4), row(1, "err_client_error_json", 1), row(2, "err_client_error", 1)])
+  const r = readHealth(h, null, 24)
+  expect(r.browserErrors).toBe(6)
+  expect(r.errorKinds).toEqual({ network: 4, json: 1, other: 1 })
+  expect(r.level).toBe("good")
+  expect(failureLabel("err_client_error_json")).toBe("שגיאה בדפדפן של מבקר: תשובה לא צפויה מהשרת")
+  expect(readHealth(health([row(1, "err_client_error_json", 3)]), null, 24).level).toBe("watch")
+  expect(readHealth(health([row(1, "err_client_error_network", 10)]), null, 24).level).toBe("watch")
+})

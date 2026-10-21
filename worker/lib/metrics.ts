@@ -26,7 +26,7 @@ export async function recordRequest(env: Env, status: number, milliseconds: numb
  */
 export async function recordFailure(env: Env, what: string, now = new Date()) {
   if (
-    !/^(http_5\d\d|job_[a-z][a-z0-9_]{0,40}|client_(error|crash|map_missing|map_tiles|map_style|map_webgl|image|feed|stale_bundle))$/.test(
+    !/^(http_5\d\d|job_[a-z][a-z0-9_]{0,40}|client_(error|error_network|error_json|error_chunk|error_other|crash|map_missing|map_tiles|map_style|map_webgl|image|feed|stale_bundle))$/.test(
       what,
     )
   )
@@ -138,6 +138,7 @@ export async function alertFailures(env: Env, sendMail: SendMail, now: Date) {
   const lines = results.map(({ code, n }) => {
     const what = code.slice(4)
     if (what === "client_error") return `שגיאות בדפדפן של מבקרים: ${n}`
+    if (what.startsWith("client_error_")) return `שגיאות בדפדפן של מבקרים (${what.slice(13)}): ${n}`
     if (what.startsWith("client_")) return `תקלה אצל מבקרים (${what.slice(7)}): ${n}`
     return what.startsWith("http_") ? `שגיאות שרת (${what.slice(5)}): ${n}` : `עבודה מתוזמנת שנכשלה, ${what.slice(4)}: ${n}`
   })

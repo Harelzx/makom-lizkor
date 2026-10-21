@@ -7,6 +7,26 @@
  */
 const CLASS = /^[A-Z][A-Za-z]{0,39}$/
 
+/**
+ * What kind of failure it was, read from the message here in the browser and sent as one word from a closed list: the
+ * network (a request that never got an answer), JSON (an answer that wasn't what the code expected), a file of the site
+ * that didn't load, or other. The message itself never leaves the browser.
+ */
+export type ErrorKind = "network" | "json" | "chunk" | "other"
+export function errorKind(error: Error): ErrorKind {
+  const m = error.message ?? ""
+  if (/importing a module script failed|dynamically imported module|loading (css )?chunk|unable to preload css/i.test(m)) return "chunk"
+  if (error.name === "TimeoutError" || error.name === "AbortError") return "network"
+  if (
+    error.name === "TypeError" &&
+    /failed to fetch|load failed|networkerror|network error|network connection was lost|fetch failed/i.test(m)
+  )
+    return "network"
+  if (error.name === "SyntaxError" && /json|unexpected (token|end|character|non-whitespace)|did not match the expected pattern/i.test(m))
+    return "json"
+  return "other"
+}
+
 function chunkOf(url: string | undefined, origin: string) {
   if (!url?.startsWith(`${origin}/assets/`)) return null
   return /\/assets\/([a-z0-9-]+?)-[A-Za-z0-9_-]{8}\.js/.exec(url)?.[1] ?? null
@@ -18,7 +38,9 @@ export function clientErrorReport(event: { error?: unknown; filename?: string },
   const frame = (error.stack ?? "").match(/https?:\/\/[^\s)]+/g)?.find((u) => u.startsWith(`${origin}/assets/`))
   const chunk = chunkOf(event.filename, origin) ?? chunkOf(frame, origin)
   if (!chunk) return null
-  return JSON.stringify([{ type: "client-error", body: { name: CLASS.test(error.name) ? error.name : "Error", chunk } }])
+  return JSON.stringify([
+    { type: "client-error", body: { name: CLASS.test(error.name) ? error.name : "Error", chunk, kind: errorKind(error) } },
+  ])
 }
 
 /** At most three a page: a loop that throws every frame should not become a stream of reports. */
