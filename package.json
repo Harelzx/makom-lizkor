@@ -29,6 +29,8 @@
     "cf-typegen": "wrangler types --strict-vars=false",
     "db:migrate:local": "wrangler d1 migrations apply DB --env development --local",
     "db:seed:local": "node scripts/seed-dev.mjs",
+    "release": "node scripts/release/release.mjs",
+    "release:rollback": "node scripts/release/rollback.mjs",
     "e2e:browsers": "playwright test -c playwright.browsers.config.ts"
   },
   "dependencies": {
