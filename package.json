@@ -68,8 +68,8 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
-    "@cloudflare/vite-plugin": "^1.63.1",
-    "@cloudflare/vitest-plugin": "^1.4.0",
+    "@cloudflare/vite-plugin": "^1.64.0",
+    "@cloudflare/vitest-plugin": "^1.4.2",
     "@eslint/js": "^10",
     "@playwright/test": "^1.64.0",
     "@types/geojson": "^7946.0.16",
