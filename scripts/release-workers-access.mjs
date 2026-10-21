@@ -84,7 +84,8 @@ export function workersAccessProblems(raw, snapshot, { phase = "protected", now 
     out.push("Access application identity mismatch")
   if (!isDeepStrictEqual(a.destinations, accessDestinations(phase)))
     out.push("Access must cover whole Worker with only the exact approved public paths")
-  if (a.session_duration !== "1h" || a.options_preflight_bypass !== false || a.http_only_cookie_attribute !== true)
+  // 720h: the owner signs in once a month on each device (21 October 2026; it was 1h, a new code every hour).
+  if (a.session_duration !== "720h" || a.options_preflight_bypass !== false || a.http_only_cookie_attribute !== true)
     out.push("Access session or preflight protection changed")
   if (
     !Array.isArray(p) ||
@@ -93,7 +94,7 @@ export function workersAccessProblems(raw, snapshot, { phase = "protected", now 
     !isDeepStrictEqual(p[0].include, [{ email: { email: WORKERS_ACCESS.owner } }]) ||
     !isDeepStrictEqual(p[0].exclude, []) ||
     !isDeepStrictEqual(p[0].require, []) ||
-    (p[0].session_duration && p[0].session_duration !== "1h")
+    (p[0].session_duration && p[0].session_duration !== "720h")
   )
     out.push("Only the named human owner may access protected paths")
   if (!isDeepStrictEqual(a.policies, p)) out.push("Policy readback mismatch")
