@@ -23,7 +23,7 @@ function fixture(phase = "protected") {
     domain: T.host,
     self_hosted_domains: [T.host, T.domain],
     destinations: accessDestinations(phase),
-    session_duration: "1h",
+    session_duration: "720h",
     options_preflight_bypass: false,
     http_only_cookie_attribute: true,
     policies: [policy],
