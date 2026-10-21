@@ -4,6 +4,7 @@ import { loadSnapshot, loadUnlisted, relistPublished, saveSnapshot, unlistedGene
 import { useStore } from "@/store"
 import type { Place } from "@/types"
 import { displayTextFields } from "@/lib/display-text"
+import { reportIssue } from "@/lib/error-report"
 
 const EVERY_MS = 30_000
 
@@ -76,7 +77,7 @@ export function startFeedSync(): () => void {
       // anything the response brings back.
       const askedGen = await unlistedGeneration()
       const version = await fetch("/api/v1/version", { cache: "no-store", signal: AbortSignal.timeout(8000) })
-      if (!version.ok) return
+      if (!version.ok) return void (version.status >= 500 && reportIssue("feed"))
       const { v } = (await version.json()) as { v: string }
       const mine = useStore.getState().feedVersion
       // Nothing newer: what is shown is current, and now known to be, even if it came from the offline copy.
@@ -87,7 +88,7 @@ export function startFeedSync(): () => void {
         busy = false
         return void (await check(false))
       }
-      if (!res.ok) return
+      if (!res.ok) return void (res.status >= 500 && reportIssue("feed"))
       const feed = Feed.parse(await res.json())
       const current = useStore.getState().feedVersion
       if (!current || isNewer(feed.v, current)) {
@@ -102,7 +103,9 @@ export function startFeedSync(): () => void {
         )
       }
     } catch {
-      /* offline or the server is down: the map keeps what it already shows */
+      // Offline or the server is down: the map keeps what it already shows. Told only when the device says it is
+      // online, so a visitor on a train doesn't read as a fault of ours.
+      if (navigator.onLine) reportIssue("feed")
     } finally {
       busy = false
     }

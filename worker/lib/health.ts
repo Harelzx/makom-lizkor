@@ -20,6 +20,6 @@ export async function siteHealth(env: Env, now: Date): Promise<SiteHealth> {
     sample_every: METRIC_SAMPLE_EVERY,
     window_hours: HEALTH_WINDOW_HOURS,
     // A code this view doesn't know (an older row, a future one) is left out rather than failing the whole view.
-    hours: results.filter((r) => /^(http_[1-5]\d\d|err_[a-z][a-z0-9_]{0,47})$/.test(r.code)),
+    hours: results.filter((r) => /^(http_[1-5]\d\d|(err|ev)_[a-z][a-z0-9_]{0,47})$/.test(r.code)),
   })
 }

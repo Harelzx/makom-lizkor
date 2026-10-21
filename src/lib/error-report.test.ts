@@ -24,3 +24,27 @@ describe("a browser error report", () => {
     expect(clientErrorReport({ error: null, filename: "" }, origin)).toBeNull()
   })
 })
+
+describe("a visitor's issue", () => {
+  it("is sent by kind only, once a page per kind", async () => {
+    const sent: string[] = []
+    Object.defineProperty(globalThis, "navigator", {
+      value: {
+        sendBeacon: (_url: string, blob: Blob) => {
+          void blob.text().then((t) => sent.push(t))
+          return true
+        },
+      },
+      configurable: true,
+    })
+    const { reportIssue } = await import("./error-report")
+    reportIssue("map_tiles")
+    reportIssue("map_tiles")
+    reportIssue("image")
+    await new Promise((r) => setTimeout(r, 10))
+    expect(sent.map((t) => JSON.parse(t)[0])).toEqual([
+      { type: "client-issue", body: { kind: "map_tiles" } },
+      { type: "client-issue", body: { kind: "image" } },
+    ])
+  })
+})

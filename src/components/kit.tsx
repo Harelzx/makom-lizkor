@@ -3,6 +3,7 @@ import { ChevronDownIcon } from "lucide-react"
 import { RETURN_LABEL } from "@/data/taxonomy"
 import type { Revival } from "@/types"
 import { cn } from "@/lib/utils"
+import { reportIssue } from "@/lib/error-report"
 
 /** A card raised off the sheet's material (or the panel), holding a group of rows. */
 export const CARD = "overflow-hidden rounded-2xl bg-raised shadow-chip ring-1 ring-line"
@@ -34,6 +35,10 @@ export function Img({ className, onLoad, placeholder, style, ...props }: React.C
             setLoaded(true)
             onLoad?.(e)
           }}
+          onError={(e) => {
+            reportIssue("image")
+            props.onError?.(e)
+          }}
           className={cn("size-full object-cover transition-opacity duration-500", loaded ? "opacity-100" : "opacity-0")}
         />
       </span>
@@ -47,6 +52,11 @@ export function Img({ className, onLoad, placeholder, style, ...props }: React.C
       onLoad={(e) => {
         setLoaded(true)
         onLoad?.(e)
+      }}
+      // A picture that didn't load is told by kind only, never which (error-report.ts).
+      onError={(e) => {
+        reportIssue("image")
+        props.onError?.(e)
       }}
       className={cn(
         "bg-surface-3 transition-[opacity,filter] duration-500 ease-out",
