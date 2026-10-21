@@ -3,7 +3,7 @@ import type { AppEnv } from "../index"
 import { problem } from "../lib/http"
 import { rateKey } from "../lib/ids"
 import { CSP_DIRECTIVES, log, type CspSource } from "../lib/log"
-import { recordFailure } from "../lib/metrics"
+import { recordFailure, recordVisit } from "../lib/metrics"
 
 export const csp = new Hono<AppEnv>()
 
@@ -63,6 +63,25 @@ function clientErrors(parsed: unknown): { name: string; chunk: string }[] {
     }))
 }
 
+const ISSUES = ["crash", "map_missing", "map_tiles", "map_style", "map_webgl", "image", "feed", "stale_bundle"]
+
+/** What went wrong for a visitor, by kind from the closed list (src/lib/error-report.ts reportIssue); others are dropped. */
+function clientIssues(parsed: unknown): string[] {
+  if (!Array.isArray(parsed)) return []
+  const kinds = parsed
+    .filter((r) => r?.type === "client-issue" && typeof r.body === "object" && r.body && ISSUES.includes(r.body.kind))
+    .map((r) => r.body.kind as string)
+  return [...new Set(kinds)].slice(0, ISSUES.length)
+}
+
+/** A visit's ratings (watchVisit): one visit a report at most, each measure rated good, ni or poor. */
+function clientVisit(parsed: unknown): string[] | null {
+  if (!Array.isArray(parsed)) return null
+  const r = parsed.find((x) => x?.type === "client-visit" && typeof x.body === "object" && x.body)
+  if (!r) return null
+  return (["lcp", "inp", "cls"] as const).filter((m) => ["good", "ni", "poor"].includes(r.body[m])).map((m) => `${m}_${r.body[m]}`)
+}
+
 /**
  * The body as text if it is at most MAX_BYTES bytes, read only that far: a body sent without a length (or with a false
  * one) is cancelled at the bound, never buffered whole. Null past the bound.
@@ -118,5 +137,10 @@ csp.post("/", async (c) => {
     log("warn", "client_error", { error: e.name, chunk: e.chunk })
     await recordFailure(c.env, "client_error").catch((err: Error) => log("error", "metrics_failed", { error: err.name }))
   }
+  // What else went wrong for a visitor, and how fast a visit felt: counted by kind only, never logged.
+  for (const kind of clientIssues(parsed))
+    await recordFailure(c.env, `client_${kind}`).catch((err: Error) => log("error", "metrics_failed", { error: err.name }))
+  const visit = clientVisit(parsed)
+  if (visit) await recordVisit(c.env, visit).catch((err: Error) => log("error", "metrics_failed", { error: err.name }))
   return c.body(null, 204)
 })

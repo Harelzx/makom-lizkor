@@ -33,3 +33,39 @@ it("gives the moderators every hourly counter of the last two days, codes and co
   expect(codes.err_http_502).toBeUndefined()
   expect(JSON.stringify(h)).not.toMatch(/email|token|path|address|body|ip/i)
 })
+
+const beacon = (reports: unknown[]) =>
+  call("http://local/api/csp-report", {
+    method: "POST",
+    headers: { "Content-Type": "application/reports+json", "CF-Connecting-IP": `198.51.100.${Math.floor(Math.random() * 250) + 1}` },
+    body: JSON.stringify(reports),
+  })
+const counted = async () =>
+  Object.fromEntries(
+    (
+      await env.DB.prepare("SELECT code, SUM(samples) AS n FROM request_metrics GROUP BY code").all<{ code: string; n: number }>()
+    ).results.map((r) => [r.code, r.n]),
+  )
+
+it("counts what went wrong for a visitor by kind from the closed list, and nothing else of the report", async () => {
+  expect(
+    (
+      await beacon([
+        { type: "client-issue", body: { kind: "crash" } },
+        { type: "client-issue", body: { kind: "map_tiles", url: "https://tiles.example/1/2/3.pbf" } },
+        { type: "client-issue", body: { kind: "crash" } },
+        { type: "client-issue", body: { kind: "../../etc" } },
+        { type: "client-issue", body: { kind: "constructor" } },
+      ])
+    ).status,
+  ).toBe(204)
+  expect(await counted()).toEqual({ err_client_crash: 1, err_client_map_tiles: 1 })
+})
+
+it("counts a visit and its speed ratings, dropping a rating it doesn't know", async () => {
+  await beacon([{ type: "client-visit", body: { lcp: "good", inp: "poor", cls: "huge", page: "/place/secret" } }])
+  await beacon([{ type: "client-visit", body: {} }])
+  expect(await counted()).toEqual({ ev_visit: 2, ev_lcp_good: 1, ev_inp_poor: 1 })
+  const r = await admin("/api/admin/health")
+  expect(SiteHealth.parse(await r.json()).hours.map((h) => h.code)).toEqual(expect.arrayContaining(["ev_visit", "ev_lcp_good"]))
+})

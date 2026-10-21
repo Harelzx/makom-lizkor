@@ -34,3 +34,58 @@ export function watchErrors() {
   addEventListener("error", (e) => send({ error: e.error, filename: e.filename }))
   addEventListener("unhandledrejection", (e) => send({ error: e.reason }))
 }
+
+/**
+ * What went wrong for a visitor that isn't an error thrown in our code, named from a closed list: the page crashed
+ * (React gave up and the screen went blank), the map couldn't be drawn or its tiles or style didn't load, a picture didn't
+ * load, the places couldn't be fetched, or an old tab asked for a build that is gone. Only the kind is sent, once per
+ * kind a page: never which place, picture or tile.
+ */
+export const ISSUES = ["crash", "map_missing", "map_tiles", "map_style", "map_webgl", "image", "feed", "stale_bundle"] as const
+export type Issue = (typeof ISSUES)[number]
+const told = new Set<Issue>()
+
+const beacon = (report: unknown) =>
+  navigator.sendBeacon?.("/api/csp-report", new Blob([JSON.stringify([report])], { type: "application/reports+json" }))
+
+export function reportIssue(kind: Issue) {
+  if (told.has(kind)) return
+  told.add(kind)
+  try {
+    beacon({ type: "client-issue", body: { kind } })
+  } catch {
+    /* a report that can't go is not worth an error of its own */
+  }
+}
+
+export type Rating = "good" | "ni" | "poor"
+const RATING = { good: "good", "needs-improvement": "ni", poor: "poor" } as const
+
+/**
+ * How fast this visit felt, once, when the visitor leaves or hides the page: Google's three ratings (good, needs
+ * improvement, poor) for the largest paint, the slowest response to a tap, and how much the layout jumped. The rating
+ * only, never the milliseconds, the page or the element. The visit itself is counted with it, so failures can be read
+ * against how many visits there were.
+ */
+export function watchVisit() {
+  const seen: Partial<Record<"lcp" | "inp" | "cls", Rating>> = {}
+  let sent = false
+  const send = () => {
+    if (sent || document.visibilityState !== "hidden") return
+    sent = true
+    try {
+      beacon({ type: "client-visit", body: seen })
+    } catch {
+      /* as above */
+    }
+  }
+  void import("web-vitals")
+    .then(({ onLCP, onINP, onCLS }) => {
+      onLCP((m) => (seen.lcp = RATING[m.rating]))
+      onINP((m) => (seen.inp = RATING[m.rating]))
+      onCLS((m) => (seen.cls = RATING[m.rating]))
+    })
+    .catch(() => {})
+    // Added after the library's own listeners, so the final ratings it settles on hiding are in.
+    .finally(() => addEventListener("visibilitychange", send))
+}

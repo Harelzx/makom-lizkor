@@ -6,7 +6,7 @@ import App from "./App.tsx"
 import { Specimen } from "@/components/specimen"
 import { DirectionProvider } from "@/components/ui/direction"
 import { TooltipProvider } from "@/components/ui/tooltip"
-import { watchErrors } from "@/lib/error-report"
+import { reportIssue, watchErrors, watchVisit } from "@/lib/error-report"
 
 // The site moved to its own domain on 18 October 2026, and the old workers.dev address still serves it. Anyone who
 // lands there goes on to the same page (the hash keeps the place) before anything loads: the server takes anemones,
@@ -25,14 +25,23 @@ addEventListener("vite:preloadError", (event) => {
     return
   }
   event.preventDefault()
+  reportIssue("stale_bundle")
   location.reload()
 })
 
 // Before anything renders, so an error in the first paint is told too.
 watchErrors()
+if (!moved) watchVisit()
 
 if (!moved)
-  createRoot(document.getElementById("root")!).render(
+  createRoot(document.getElementById("root")!, {
+    // React gave up on the page: the screen is blank. Told as a crash, then handed on as React would have, so the error
+    // itself is reported too (watchErrors) and shows in the console.
+    onUncaughtError: (error) => {
+      reportIssue("crash")
+      globalThis.reportError?.(error)
+    },
+  }).render(
     <StrictMode>
       {/* Anyone who asked their device for less motion gets fades instead of movement, everywhere at once. */}
       <MotionConfig reducedMotion="user">

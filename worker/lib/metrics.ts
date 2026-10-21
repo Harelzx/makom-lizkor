@@ -25,13 +25,34 @@ export async function recordRequest(env: Env, status: number, milliseconds: numb
  * before it can fire. A code only (http_500, job_export), so nothing of a request or a person is ever stored.
  */
 export async function recordFailure(env: Env, what: string, now = new Date()) {
-  if (!/^(http_5\d\d|job_[a-z][a-z0-9_]{0,40}|client_error)$/.test(what)) return
+  if (
+    !/^(http_5\d\d|job_[a-z][a-z0-9_]{0,40}|client_(error|crash|map_missing|map_tiles|map_style|map_webgl|image|feed|stale_bundle))$/.test(
+      what,
+    )
+  )
+    return
   await env.DB.prepare(
     `INSERT INTO request_metrics (hour, code, samples, total_ms, slow) VALUES (?1, ?2, 1, 0, 0)
      ON CONFLICT (hour, code) DO UPDATE SET samples = samples + 1`,
   )
     .bind(hourOf(now), `err_${what}`)
     .run()
+}
+
+/**
+ * A visit, and how fast it felt (src/lib/error-report.ts watchVisit): `visit`, and a rating per measure such as
+ * `lcp_good`. Counted under `ev_` beside the failures, so a count of them reads against the visits; the same two days.
+ */
+export async function recordVisit(env: Env, ratings: string[], now = new Date()) {
+  const codes = ["visit", ...ratings.filter((r) => /^(lcp|inp|cls)_(good|ni|poor)$/.test(r))]
+  await env.DB.batch(
+    codes.map((code) =>
+      env.DB.prepare(
+        `INSERT INTO request_metrics (hour, code, samples, total_ms, slow) VALUES (?1, ?2, 1, 0, 0)
+         ON CONFLICT (hour, code) DO UPDATE SET samples = samples + 1`,
+      ).bind(hourOf(now), `ev_${code}`),
+    ),
+  )
 }
 
 export const requestErrorRates: ErrorRates = async (env) => {
@@ -110,13 +131,14 @@ export async function alertFailures(env: Env, sendMail: SendMail, now: Date) {
   )
     .bind(hourOf(new Date(now.getTime() - FAILURE_ALERT_HOURS * 3600_000)))
     .all<{ code: string; n: number }>()
-  // A server error or a failed job is ours at once; an error in a visitors' browser counts from three, since one alone
-  // may be an old browser or an extension the filter didn't catch.
-  const client = results.find((r) => r.code === "err_client_error")?.n ?? 0
-  if (!results.some((r) => r.code !== "err_client_error") && client < 3) return
+  // A server error or a failed job is ours at once; what went wrong in visitors' browsers counts from three, since one
+  // alone may be an old browser, an extension the filter didn't catch, or a bad connection.
+  const client = results.filter((r) => r.code.startsWith("err_client_")).reduce((a, r) => a + r.n, 0)
+  if (!results.some((r) => !r.code.startsWith("err_client_")) && client < 3) return
   const lines = results.map(({ code, n }) => {
     const what = code.slice(4)
     if (what === "client_error") return `שגיאות בדפדפן של מבקרים: ${n}`
+    if (what.startsWith("client_")) return `תקלה אצל מבקרים (${what.slice(7)}): ${n}`
     return what.startsWith("http_") ? `שגיאות שרת (${what.slice(5)}): ${n}` : `עבודה מתוזמנת שנכשלה, ${what.slice(4)}: ${n}`
   })
   await tellModerators(

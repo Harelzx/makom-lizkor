@@ -3,6 +3,7 @@ import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url"
 import { FIRST_LIGHT, MORNING, NIGHT, type Palette } from "./palette"
 import { applyPalette, buildStyle, OWN_LABEL_LAYERS, ownLabelsFilter } from "./style"
 import { tiltFor } from "./tilt"
+import { reportIssue } from "@/lib/error-report"
 
 // MapLibre's own relative worker lookup doesn't survive a production build.
 maplibregl.setWorkerUrl(workerUrl)
@@ -40,6 +41,7 @@ export function createMap(container: HTMLElement, light: "night" | "morning", la
     if (ownLabels.length) setOwnLabels(ownLabels)
   } catch (error) {
     console.warn(error)
+    reportIssue("map_missing")
     map = null
   }
   return map
@@ -81,6 +83,19 @@ function build(container: HTMLElement, labels: boolean) {
   // folded from the start, and the full list stays in About. The map appears with the opening, so by day it's an (i).
   map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right")
   map.on("zoomend", settleTilt)
+  // A tile or the style that didn't load, or a graphics card that dropped the map's drawing context: told by kind, once
+  // a page (error-report.ts). A request cut short because the camera moved on is not a failure.
+  map.on("error", (e) => {
+    const { error, sourceId, tile } = e as { error?: { name?: string }; sourceId?: string; tile?: unknown }
+    if (error?.name === "AbortError") return
+    reportIssue(tile || sourceId ? "map_tiles" : "map_style")
+  })
+  // Not when the map is taken down on purpose (destroyMap: its canvas has left the page by the time the loss arrives) or
+  // the page is being left: both drop the context too.
+  const canvas = map.getCanvas()
+  canvas.addEventListener("webglcontextlost", () => {
+    if (canvas.isConnected && document.visibilityState === "visible") reportIssue("map_webgl")
+  })
   return map
 }
 

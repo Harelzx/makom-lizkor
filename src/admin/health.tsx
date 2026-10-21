@@ -5,7 +5,7 @@ import type { SiteHealth } from "../../worker/lib/health-schema"
 import { Btn } from "./controls"
 import { Alert, Glyph } from "./parts"
 import { ago } from "./inbox-state"
-import { HEADLINE, healthReport, readHealth, type Level } from "./health-model"
+import { failureLabel, HEADLINE, healthReport, readHealth, type Level } from "./health-model"
 
 const WINDOWS = [
   { hours: 6, label: "שש שעות" },
@@ -61,6 +61,13 @@ export function SiteHealthPanel({ summary }: { summary: OpsSummary | null }) {
   }
 
   const tone = TONE[reading?.level ?? "empty"]
+  const otherIssues = reading ? Object.entries(reading.issues).filter(([k]) => k !== "crash" && k !== "stale_bundle") : []
+  const others = (reading?.browserErrors ?? 0) + otherIssues.reduce((a, [, n]) => a + n, 0)
+  const breakdown = [
+    ...(reading?.browserErrors ? [`${failureLabel("err_client_error")}: ${reading.browserErrors}`] : []),
+    ...otherIssues.map(([k, n]) => `${failureLabel(`err_client_${k}`)}: ${n}`),
+  ].join(" · ")
+  const lcpTotal = reading ? reading.vitals.lcp.good + reading.vitals.lcp.ni + reading.vitals.lcp.poor : 0
   return (
     <section aria-labelledby="health-title" aria-busy={busy || undefined} className="mb-10">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -142,18 +149,38 @@ export function SiteHealthPanel({ summary }: { summary: OpsSummary | null }) {
               detail="גיבוי, מחיקה אוטומטית, מיילים וכדומה. אם משהו כאן לא אפס, צריך בדיקה טכנית."
             />
             <Card
-              title="שגיאות בדפדפן של מבקרים"
-              value={reading.browserErrors}
-              warn={reading.browserErrors >= 3}
-              detail="קוד האתר נתקע אצל מבקר. נשלח רק סוג השגיאה ושם הקובץ, בלי שום פרט על המבקר."
+              title="קריסות (מסך לבן)"
+              value={reading.issues.crash ?? 0}
+              warn={(reading.issues.crash ?? 0) > 0}
+              detail="פעמים שהאתר קרס אצל מבקר והוא נשאר מול מסך ריק. כל קריסה חשובה."
+            />
+            <Card
+              title="תקלות אחרות אצל מבקרים"
+              value={others}
+              warn={others >= 5}
+              detail={
+                others
+                  ? `${breakdown}. נשלח רק סוג התקלה, בלי שום פרט על המבקר או על המקום.`
+                  : "מפה, תמונות, רשימת המקומות ושגיאות בקוד האתר. נשלח רק סוג התקלה, בלי שום פרט על המבקר."
+              }
+            />
+            <Card
+              title="מהירות טעינה אצל מבקרים"
+              value={lcpTotal ? `${Math.round((reading.vitals.lcp.good * 100) / lcpTotal)}%` : "—"}
+              warn={lcpTotal >= 20 && reading.vitals.lcp.poor / lcpTotal >= 0.25}
+              detail={
+                lcpTotal
+                  ? `מהביקורים נטענו מהר. ${reading.vitals.lcp.ni} בינוניים, ${reading.vitals.lcp.poor} איטיים, מתוך ${reading.visits.toLocaleString("he-IL")} ביקורים שדווחו.`
+                  : "עוד לא דווחו ביקורים בטווח הזה. ביקור נספר כשהמבקר עוזב את הדף."
+              }
             />
             <Card
               title="מהירות השרת"
-              value={reading.meanMs === null ? "—" : `${reading.meanMs} ms`}
+              value={reading.meanMs === null ? "—" : `${(reading.meanMs / 1000).toLocaleString("he-IL", { maximumFractionDigits: 2 })} שנ׳`}
               warn={reading.sampled >= 20 && reading.slow / reading.sampled >= 0.1}
               detail={
                 reading.sampled
-                  ? `זמן ממוצע לתשובה. ${reading.slow} מתוך ${reading.sampled} תשובות שנבדקו לקחו שתי שניות או יותר. בערך ${reading.estimated.toLocaleString("he-IL")} תשובות בסך הכול (נבדקת אחת מכל ${health!.sample_every}).`
+                  ? `זמן ממוצע לתשובה, בשניות. ${reading.slow} מתוך ${reading.sampled} תשובות שנבדקו לקחו שתי שניות או יותר. בערך ${reading.estimated.toLocaleString("he-IL")} תשובות בסך הכול (נבדקת אחת מכל ${health!.sample_every}).`
                   : "עוד אין תשובות שנבדקו בטווח הזה."
               }
             />

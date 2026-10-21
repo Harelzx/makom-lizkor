@@ -26,10 +26,23 @@ const JOBS: Record<string, string> = {
   abuse_codes: "ניקוי קודי הגבלה",
 }
 
+/** What went wrong for a visitor (src/lib/error-report.ts reportIssue). */
+const ISSUES: Record<string, string> = {
+  crash: "האתר קרס אצל מבקר (מסך לבן)",
+  map_missing: "המפה לא יכלה להיפתח אצל מבקר (הדפדפן לא תומך)",
+  map_tiles: "חלקים מהמפה לא נטענו",
+  map_style: "עיצוב המפה לא נטען",
+  map_webgl: "המפה נעלמה באמצע (כרטיס המסך)",
+  image: "תמונה לא נטענה",
+  feed: "רשימת המקומות לא נטענה מהשרת",
+  stale_bundle: "לשונית ישנה נטענה מחדש אחרי עדכון",
+}
+
 /** What each failure code means; a code from a later version reads as itself rather than being dropped. */
 export function failureLabel(code: string): string {
   const what = code.replace(/^err_/, "")
   if (what === "client_error") return "שגיאה בדפדפן של מבקר"
+  if (what.startsWith("client_")) return ISSUES[what.slice(7)] ?? what
   if (what.startsWith("http_")) return `שגיאה בשרת (${what.slice(5)})`
   if (what.startsWith("job_")) return `עבודה ברקע נכשלה: ${JOBS[what.slice(4)] ?? what.slice(4)}`
   return what
@@ -45,6 +58,11 @@ export interface Reading {
   serverErrors: number
   jobFailures: number
   browserErrors: number
+  /** What went wrong for visitors besides errors in our code, by kind (crash, map_tiles …). */
+  issues: Record<string, number>
+  /** Visits told (one a page, sent as it is left), and how many were rated good, ni or poor on each measure. */
+  visits: number
+  vitals: Record<"lcp" | "inp" | "cls", { good: number; ni: number; poor: number }>
   /** The sampled answers: how many were sampled, what that estimates, their mean time and how many took 2 s or more. */
   sampled: number
   estimated: number
@@ -82,6 +100,18 @@ export function readHealth(health: SiteHealth, summary: OpsSummary | null, hours
     errs.filter((r) => r.code === "err_client_error"),
     (r) => r.samples,
   )
+  const issues: Record<string, number> = {}
+  for (const r of errs.filter((r) => r.code.startsWith("err_client_") && r.code !== "err_client_error"))
+    issues[r.code.slice(11)] = (issues[r.code.slice(11)] ?? 0) + r.samples
+  const ev = (code: string) =>
+    sum(
+      rows.filter((r) => r.code === `ev_${code}`),
+      (r) => r.samples,
+    )
+  const visits = ev("visit")
+  const vitals = Object.fromEntries(
+    (["lcp", "inp", "cls"] as const).map((m) => [m, { good: ev(`${m}_good`), ni: ev(`${m}_ni`), poor: ev(`${m}_poor`) }]),
+  ) as Reading["vitals"]
   const sampled = sum(http, (r) => r.samples)
   const slow = sum(http, (r) => r.slow)
   const statuses = new Map<string, number>()
@@ -111,6 +141,16 @@ export function readHealth(health: SiteHealth, summary: OpsSummary | null, hours
   }
   if (serverErrors >= 5) bad.push(`השרת נכשל ${times(serverErrors)}: מבקרים קיבלו שגיאה במקום תשובה.`)
   else if (serverErrors) watch.push(`השרת נכשל ${times(serverErrors)}. מעט, אבל כדאי לבדוק אם זה חוזר.`)
+  const crashes = issues.crash ?? 0
+  if (crashes >= 3) bad.push(`האתר קרס ${times(crashes)} אצל מבקרים: הם ראו מסך לבן.`)
+  else if (crashes) watch.push(`האתר קרס ${times(crashes)} אצל מבקר: הוא ראה מסך לבן.`)
+  const map = (issues.map_tiles ?? 0) + (issues.map_style ?? 0) + (issues.map_webgl ?? 0)
+  if (map >= 5) watch.push(`${map} דיווחים על מפה שלא נטענה כמו שצריך.`)
+  if ((issues.image ?? 0) >= 10) watch.push(`${issues.image} דיווחים על תמונות שלא נטענו.`)
+  if ((issues.feed ?? 0) >= 3) watch.push(`${issues.feed} מבקרים לא קיבלו מהשרת את רשימת המקומות.`)
+  const lcp = vitals.lcp.good + vitals.lcp.ni + vitals.lcp.poor
+  if (lcp >= 20 && vitals.lcp.poor / lcp >= 0.25)
+    watch.push(`האתר נטען לאט: ב־${percent(vitals.lcp.poor, lcp)} מהביקורים הטעינה הייתה איטית.`)
   if (browserErrors >= 3) watch.push(`${browserErrors} דיווחים על שגיאה בדפדפן של מבקרים (ייתכן שכמה מאותו מבקר).`)
   if (sampled >= 20 && slow / sampled >= 0.1) watch.push(`השרת איטי: ${percent(slow, sampled)} מהתשובות שנבדקו לקחו שתי שניות או יותר.`)
   if (summary) {
@@ -129,6 +169,9 @@ export function readHealth(health: SiteHealth, summary: OpsSummary | null, hours
     serverErrors,
     jobFailures,
     browserErrors,
+    issues,
+    visits,
+    vitals,
     sampled,
     estimated: sampled * health.sample_every,
     meanMs: sampled ? Math.round(sum(http, (r) => r.total_ms) / sampled) : null,
@@ -146,6 +189,13 @@ export const HEADLINE: Record<Level, string> = {
   bad: "יש תקלה שצריך לטפל בה",
   empty: "עוד אין נתונים",
 }
+
+/** Google's three measures of how a visit felt, by what a visitor would notice. */
+export const VITAL = {
+  lcp: "מהירות טעינה (LCP)",
+  inp: "תגובה ללחיצה (INP)",
+  cls: "קפיצות בעמוד (CLS)",
+} as const
 
 const times = (n: number) => (n === 1 ? "פעם אחת" : `${n.toLocaleString("he-IL")} פעמים`)
 const percent = (a: number, b: number) => `${Math.round((a * 1000) / b) / 10}%`
@@ -207,7 +257,14 @@ export function healthReport(health: SiteHealth, summary: OpsSummary | null, r: 
     lines.push(`  התראות אחרונות שנשלחו: ${summary.alerts.map((a) => `${a.job} ${clock(a.sent_at)}`).join(", ") || "אין"}`)
   }
   lines.push("")
-  lines.push("מה עוד לא נמדד: מסך לבן אצל מבקר, תקלות בטעינת המפה והתמונות, וזמני טעינה בדפדפן.")
+  lines.push(`ביקורים שדווחו: ${r.visits} (נספר ביקור כשהמבקר עוזב או מסתיר את הדף, אז זו הערכה מלמטה)`)
+  for (const m of ["lcp", "inp", "cls"] as const) {
+    const v = r.vitals[m]
+    const n = v.good + v.ni + v.poor
+    lines.push(`  ${VITAL[m]}: ${n ? `טוב ${v.good}, בינוני ${v.ni}, איטי ${v.poor} (${percent(v.good, n)} טוב)` : "אין נתונים"}`)
+  }
+  lines.push("")
+  lines.push("מה עוד לא נמדד: Worker שנעצר בגלל חריגת זמן או זיכרון (רק בלוח של Cloudflare), ותקלות שקורות לפני שהדף נטען בכלל.")
   lines.push("")
   lines.push("המונים הגולמיים (JSON):")
   lines.push(JSON.stringify(health.hours.filter((h) => r.timeline.some((t) => t.hour === h.hour))))
