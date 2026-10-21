@@ -41,6 +41,7 @@ npm run test:scripts       # node:test for scripts/ (the release check's mail ru
 npm run db:migrate:local   # apply migrations/ to the local D1 the dev server uses (e2e runs migrate their own fresh copy)
 npm run db:seed:local      # import the site's own places into the running dev server's D1 (insert-only)
 npm run cf-typegen         # regenerate worker-configuration.d.ts after changing wrangler.jsonc or .dev.vars
+npm run release -- --dry-run   # production release of main's head, up to the deploy (docs/operations-runbook.md); then npm run release
 ```
 
 - Two kinds of tests: Playwright e2e specs in `e2e/`, and the Worker's tests in `worker/test/` (`npm test`). The e2e specs find elements by their **Hebrew accessible names** (`getByRole("button", { name: "כל המקומות" })`), so renaming a Hebrew label can break a test.
