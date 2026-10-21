@@ -51,8 +51,13 @@ function violations(parsed: unknown): { directive: unknown; blocked: unknown }[]
   return [{ directive: r["effective-directive"] ?? r["violated-directive"], blocked: r["blocked-uri"] }]
 }
 
-/** The site's own error reports (src/lib/error-report.ts): a class name and a file of ours, or unknown. Three at most. */
-function clientErrors(parsed: unknown): { name: string; chunk: string }[] {
+const ERROR_KINDS = ["network", "json", "chunk", "other"]
+
+/**
+ * The site's own error reports (src/lib/error-report.ts): a class name, a file of ours and the kind of failure, each
+ * from what it may be or unknown (an older page sends no kind: other). Three at most.
+ */
+function clientErrors(parsed: unknown): { name: string; chunk: string; kind: string }[] {
   if (!Array.isArray(parsed)) return []
   return parsed
     .filter((r) => r?.type === "client-error" && typeof r.body === "object" && r.body)
@@ -60,6 +65,7 @@ function clientErrors(parsed: unknown): { name: string; chunk: string }[] {
     .map((r) => ({
       name: typeof r.body.name === "string" && /^[A-Z][A-Za-z]{0,39}$/.test(r.body.name) ? r.body.name : "unknown",
       chunk: typeof r.body.chunk === "string" && /^[a-z][a-z0-9-]{0,39}$/.test(r.body.chunk) ? r.body.chunk : "unknown",
+      kind: ERROR_KINDS.includes(r.body.kind) ? (r.body.kind as string) : "other",
     }))
 }
 
@@ -134,8 +140,8 @@ csp.post("/", async (c) => {
     log("warn", "csp_report", { directive: directiveOf(v.directive), source: sourceOf(v.blocked, ownHost) })
   // Errors in the site's own code, from visitors' browsers: counted for the failures alert, logged as two codes.
   for (const e of clientErrors(parsed)) {
-    log("warn", "client_error", { error: e.name, chunk: e.chunk })
-    await recordFailure(c.env, "client_error").catch((err: Error) => log("error", "metrics_failed", { error: err.name }))
+    log("warn", "client_error", { error: e.name, chunk: e.chunk, failure: e.kind })
+    await recordFailure(c.env, `client_error_${e.kind}`).catch((err: Error) => log("error", "metrics_failed", { error: err.name }))
   }
   // What else went wrong for a visitor, and how fast a visit felt: counted by kind only, never logged.
   for (const kind of clientIssues(parsed))

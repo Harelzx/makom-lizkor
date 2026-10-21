@@ -186,11 +186,14 @@ describe("a CSP report", () => {
   })
 
   it("carries the site's own error reports from visitors' browsers: counted, and logged as the error's class and the file only", async () => {
-    await env.DB.prepare("DELETE FROM request_metrics WHERE code = 'err_client_error'").run()
+    await env.DB.prepare("DELETE FROM request_metrics WHERE code GLOB 'err_client_error*'").run()
     const res = await report(
       [
-        { type: "client-error", body: { name: "TypeError", chunk: "map-canvas", message: "x of visitor@example.test", stack: "at p_01J" } },
-        { type: "client-error", body: { name: "not a class name", chunk: "../../etc" } },
+        {
+          type: "client-error",
+          body: { name: "TypeError", chunk: "map-canvas", kind: "network", message: "x of visitor@example.test", stack: "at p_01J" },
+        },
+        { type: "client-error", body: { name: "not a class name", chunk: "../../etc", kind: "../../etc" } },
         { type: "client-error", body: { name: "RangeError", chunk: "index" } },
         { type: "client-error", body: { name: "Error", chunk: "index" } },
         { type: "client-error", body: { name: "Error", chunk: "index" } },
@@ -200,15 +203,22 @@ describe("a CSP report", () => {
     )
     expect(res.status).toBe(204)
     const errors = warn.mock.calls.map((c) => JSON.parse(String(c[0]))).filter((l) => l.event === "client_error")
-    // At most three from one report, each a class name and a file of ours, or unknown; never the message or the stack.
+    // At most three from one report, each a class name, a file of ours and a kind from the closed list, or unknown and
+    // other; never the message or the stack.
     expect(errors).toEqual([
-      { level: "warn", event: "client_error", error: "TypeError", chunk: "map-canvas" },
-      { level: "warn", event: "client_error", error: "unknown", chunk: "unknown" },
-      { level: "warn", event: "client_error", error: "RangeError", chunk: "index" },
+      { level: "warn", event: "client_error", error: "TypeError", chunk: "map-canvas", failure: "network" },
+      { level: "warn", event: "client_error", error: "unknown", chunk: "unknown", failure: "other" },
+      { level: "warn", event: "client_error", error: "RangeError", chunk: "index", failure: "other" },
     ])
     const written = warn.mock.calls.map((c) => String(c[0])).join("\n")
     for (const word of ["visitor@", "p_01J", "etc"]) expect(written).not.toContain(word)
-    expect(await env.DB.prepare("SELECT samples FROM request_metrics WHERE code = 'err_client_error'").first<number>("samples")).toBe(3)
+    const counted = await env.DB.prepare(
+      "SELECT code, samples FROM request_metrics WHERE code GLOB 'err_client_error*' ORDER BY code",
+    ).all()
+    expect(counted.results).toEqual([
+      { code: "err_client_error_network", samples: 1 },
+      { code: "err_client_error_other", samples: 2 },
+    ])
   })
 
   it("is read only up to its byte bound when it comes without a length, and the rest is never pulled (P6-CSP-2)", async () => {

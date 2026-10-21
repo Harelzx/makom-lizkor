@@ -64,7 +64,7 @@ export function SiteHealthPanel({ summary }: { summary: OpsSummary | null }) {
   const otherIssues = reading ? Object.entries(reading.issues).filter(([k]) => k !== "crash" && k !== "stale_bundle") : []
   const others = (reading?.browserErrors ?? 0) + otherIssues.reduce((a, [, n]) => a + n, 0)
   const breakdown = [
-    ...(reading?.browserErrors ? [`${failureLabel("err_client_error")}: ${reading.browserErrors}`] : []),
+    ...Object.entries(reading?.errorKinds ?? {}).map(([k, n]) => `${failureLabel(`err_client_error_${k}`)}: ${n}`),
     ...otherIssues.map(([k, n]) => `${failureLabel(`err_client_${k}`)}: ${n}`),
   ].join(" · ")
   const lcpTotal = reading ? reading.vitals.lcp.good + reading.vitals.lcp.ni + reading.vitals.lcp.poor : 0

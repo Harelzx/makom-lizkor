@@ -38,10 +38,19 @@ const ISSUES: Record<string, string> = {
   stale_bundle: "לשונית ישנה נטענה מחדש אחרי עדכון",
 }
 
+/** The kind of an error in a visitor's browser (src/lib/error-report.ts errorKind). */
+const ERROR_KINDS: Record<string, string> = {
+  network: "בעיית רשת",
+  json: "תשובה לא צפויה מהשרת",
+  chunk: "קובץ של האתר לא נטען",
+  other: "אחר",
+}
+
 /** What each failure code means; a code from a later version reads as itself rather than being dropped. */
 export function failureLabel(code: string): string {
   const what = code.replace(/^err_/, "")
   if (what === "client_error") return "שגיאה בדפדפן של מבקר"
+  if (what.startsWith("client_error_")) return `שגיאה בדפדפן של מבקר: ${ERROR_KINDS[what.slice(13)] ?? what.slice(13)}`
   if (what.startsWith("client_")) return ISSUES[what.slice(7)] ?? what
   if (what.startsWith("http_")) return `שגיאה בשרת (${what.slice(5)})`
   if (what.startsWith("job_")) return `עבודה ברקע נכשלה: ${JOBS[what.slice(4)] ?? what.slice(4)}`
@@ -58,6 +67,8 @@ export interface Reading {
   serverErrors: number
   jobFailures: number
   browserErrors: number
+  /** The same errors by kind (network, json, chunk, other); reports from before kinds were sent count as other. */
+  errorKinds: Record<string, number>
   /** What went wrong for visitors besides errors in our code, by kind (crash, map_tiles …). */
   issues: Record<string, number>
   /** Visits told (one a page, sent as it is left), and how many were rated good, ni or poor on each measure. */
@@ -97,11 +108,16 @@ export function readHealth(health: SiteHealth, summary: OpsSummary | null, hours
     (r) => r.samples,
   )
   const browserErrors = sum(
-    errs.filter((r) => r.code === "err_client_error"),
+    errs.filter((r) => r.code === "err_client_error" || r.code.startsWith("err_client_error_")),
     (r) => r.samples,
   )
   const issues: Record<string, number> = {}
-  for (const r of errs.filter((r) => r.code.startsWith("err_client_") && r.code !== "err_client_error"))
+  const errorKinds: Record<string, number> = {}
+  for (const r of errs.filter((r) => r.code === "err_client_error" || r.code.startsWith("err_client_error_"))) {
+    const kind = r.code.slice(17) || "other"
+    errorKinds[kind] = (errorKinds[kind] ?? 0) + r.samples
+  }
+  for (const r of errs.filter((r) => r.code.startsWith("err_client_") && !r.code.startsWith("err_client_error")))
     issues[r.code.slice(11)] = (issues[r.code.slice(11)] ?? 0) + r.samples
   const ev = (code: string) =>
     sum(
@@ -151,7 +167,11 @@ export function readHealth(health: SiteHealth, summary: OpsSummary | null, hours
   const lcp = vitals.lcp.good + vitals.lcp.ni + vitals.lcp.poor
   if (lcp >= 20 && vitals.lcp.poor / lcp >= 0.25)
     watch.push(`האתר נטען לאט: ב־${percent(vitals.lcp.poor, lcp)} מהביקורים הטעינה הייתה איטית.`)
-  if (browserErrors >= 3) watch.push(`${browserErrors} דיווחים על שגיאה בדפדפן של מבקרים (ייתכן שכמה מאותו מבקר).`)
+  // A dropped connection is the visitor's network, not our code: it is worth a look only when there are many.
+  const network = errorKinds.network ?? 0
+  if (browserErrors - network >= 3)
+    watch.push(`${browserErrors - network} דיווחים על שגיאה בקוד האתר בדפדפן של מבקרים (ייתכן שכמה מאותו מבקר).`)
+  if (network >= 10) watch.push(`${network} מבקרים איבדו את החיבור באמצע. לרוב זו רשת חלשה אצלם, אבל אם זה רב, אולי השרת לא עונה.`)
   if (sampled >= 20 && slow / sampled >= 0.1) watch.push(`השרת איטי: ${percent(slow, sampled)} מהתשובות שנבדקו לקחו שתי שניות או יותר.`)
   if (summary) {
     if (summary.export && !summary.export.ok) bad.push("הגיבוי הלילי האחרון לא הושלם.")
@@ -169,6 +189,7 @@ export function readHealth(health: SiteHealth, summary: OpsSummary | null, hours
     serverErrors,
     jobFailures,
     browserErrors,
+    errorKinds,
     issues,
     visits,
     vitals,
