@@ -1,13 +1,13 @@
 import { getTributeTotals, sendTribute } from "@/lib/api"
 import { changeTributeOutbox, deviceId, storageWorks, type PendingTribute, type TributeEntry } from "@/lib/storage"
+import { jerusalemDay } from "@/lib/jerusalem-day"
 import { useStore } from "@/store"
 
 /** An anemone not sent within a week is dropped; the visitor's own flowers stay (spec 4). */
 const WEEK = 7 * 24 * 3600 * 1000
 
-const JERUSALEM = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem", year: "numeric", month: "2-digit", day: "2-digit" })
 /** Today in Jerusalem by this device's clock: only to avoid sending what the server would not count anyway. */
-const today = () => JERUSALEM.format(new Date())
+const today = jerusalemDay
 
 /**
  * Whether anemones at a place reach the shared count: every place the server publishes does, the site's own places
@@ -97,9 +97,15 @@ async function drainOnce(): Promise<boolean> {
   return true
 }
 
+/**
+ * The shared counts as the server has them. The answer may be up to a minute old at the edge, so a count this device
+ * just raised is never taken back down; a place missing from the answer is gone, and so is its count.
+ */
 export async function refreshTotals() {
   const totals = await getTributeTotals()
-  if (totals) useStore.getState().setTributeTotals(totals)
+  if (!totals) return
+  const known = useStore.getState().tributeTotals
+  useStore.getState().setTributeTotals(Object.fromEntries(Object.entries(totals).map(([id, n]) => [id, Math.max(n, known[id] ?? 0)])))
 }
 
 /** Once the day begins: the shared counts, and anything left waiting, now and whenever the tab comes back. */

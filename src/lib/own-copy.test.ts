@@ -5,6 +5,8 @@ const server = vi.hoisted(() => ({ byToken: {} as Record<string, unknown> }))
 vi.mock("@/lib/storage", () => ({
   loadLocal: async () => [],
   loadTributes: async () => ({}),
+  loadTributeDays: async () => ({}),
+  saveTributeDays: async () => undefined,
   saveTributes: async () => undefined,
   changeLocal: async (change: (stored: Place[]) => Place[]) => change([]),
 }))

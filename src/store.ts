@@ -1,7 +1,8 @@
 import { create } from "zustand"
 import type { LocalFields, Place } from "@/types"
 import { importable } from "@/lib/export"
-import { changeLocal, loadLocal, loadTributes, markUnlisted, saveTributes } from "@/lib/storage"
+import { changeLocal, loadLocal, loadTributeDays, loadTributes, markUnlisted, saveTributeDays, saveTributes } from "@/lib/storage"
+import { jerusalemDay } from "@/lib/jerusalem-day"
 import { unacceptedLocal } from "@/lib/local-policy"
 import { superviseReports } from "@/lib/report-outbox"
 
@@ -68,6 +69,8 @@ interface State {
   feedLive: boolean
   local: Place[]
   tributes: Record<string, number>
+  /** The Jerusalem day this device last left an anemone at each place: one a day. */
+  tributeDays: Record<string, string>
   /** The shared anemone counts of published places, from the server (kept here; fetched by src/lib/tributes.ts). */
   tributeTotals: Record<string, number>
   selectedId: string | null
@@ -120,7 +123,8 @@ interface State {
   removeLocal: (id: string) => Promise<"removed" | "kept" | "unknown">
   /** How many places were new, and whether they were also saved on the device. */
   importLocal: (places: Place[]) => Promise<{ added: number; saved: boolean }>
-  leaveAnemone: (id: string) => void
+  /** False when one was already left here today: nothing changes. */
+  leaveAnemone: (id: string) => boolean
   setTributeTotals: (t: Record<string, number>) => void
   setJourney: (i: number, playing?: boolean) => void
   celebrate: () => void
@@ -175,6 +179,7 @@ export const useStore = create<State>((set, get) => ({
   feedLive: false,
   local: [],
   tributes: {},
+  tributeDays: {},
   tributeTotals: {},
   selectedId: linkedPlaceId(),
   hoveredId: null,
@@ -198,7 +203,7 @@ export const useStore = create<State>((set, get) => ({
     // Removal requests kept past their window go the moment the site runs, and at each deadline after, even in a visit
     // that ends in the opening.
     void superviseReports()
-    const [stored, tributes] = await Promise.all([loadLocal(), loadTributes()])
+    const [stored, tributes, tributeDays] = await Promise.all([loadLocal(), loadTributes(), loadTributeDays()])
     readable = stored !== null
     // Earlier builds kept unsuccessful sends. Remove them on upgrade; they must never be auto-submitted again.
     const local = (stored ?? []).filter((p) => !unacceptedLocal(p))
@@ -213,7 +218,7 @@ export const useStore = create<State>((set, get) => ({
       held.add(p.id)
       onDevice.add(p.id)
     }
-    set((s) => ({ local, tributes, selectedId: visibleSelection(s.remote, local, s.selectedId) }))
+    set((s) => ({ local, tributes, tributeDays, selectedId: visibleSelection(s.remote, local, s.selectedId) }))
   },
   setPhase: (phase) => set({ phase }),
   setLight: (light) => set({ light }),
@@ -293,9 +298,14 @@ export const useStore = create<State>((set, get) => ({
     return { added: added.length, saved }
   },
   leaveAnemone: (id) => {
+    const day = jerusalemDay()
+    if (get().tributeDays[id] === day) return false
     const tributes = { ...get().tributes, [id]: (get().tributes[id] ?? 0) + 1 }
-    set({ tributes })
+    const tributeDays = { ...get().tributeDays, [id]: day }
+    set({ tributes, tributeDays })
     void saveTributes(tributes)
+    void saveTributeDays(tributeDays)
+    return true
   },
   setTributeTotals: (tributeTotals) => set({ tributeTotals }),
   celebrate: () => set({ celebration: get().celebration + 1 }),

@@ -13,6 +13,8 @@ const disk = vi.hoisted(() => ({
 vi.mock("@/lib/storage", () => ({
   loadLocal: async () => (disk.unreadable ? null : disk.stored),
   loadTributes: async () => ({}),
+  loadTributeDays: async () => ({}),
+  saveTributeDays: async () => undefined,
   saveTributes: async () => undefined,
   changeLocal: async (change: (s: Place[]) => Place[]) => {
     if (disk.fail) throw disk.fail
@@ -193,5 +195,24 @@ describe("the visitor's places in the store", () => {
     expect(await useStore.getState().stillLocal("local-b")).toBe(false)
     expect(useStore.getState().local.map((p) => p.id)).toEqual(["local-a"])
     expect(await useStore.getState().stillLocal("local-a")).toBe(true)
+  })
+})
+
+describe("anemones", () => {
+  beforeEach(() => {
+    useStore.setState({ tributes: {}, tributeDays: {} })
+    vi.useFakeTimers({ toFake: ["Date"] })
+  })
+
+  it("one a day at a place, like the shared count, and another the next day in Jerusalem", () => {
+    // 23:30 in Jerusalem on 6 October, then 00:30 on the 7th.
+    vi.setSystemTime(new Date("2026-10-06T20:30:00Z"))
+    expect(useStore.getState().leaveAnemone("p_1")).toBe(true)
+    expect(useStore.getState().leaveAnemone("p_1")).toBe(false)
+    expect(useStore.getState().leaveAnemone("p_2")).toBe(true)
+    expect(useStore.getState().tributes).toEqual({ p_1: 1, p_2: 1 })
+    vi.setSystemTime(new Date("2026-10-06T21:30:00Z"))
+    expect(useStore.getState().leaveAnemone("p_1")).toBe(true)
+    expect(useStore.getState().tributes.p_1).toBe(2)
   })
 })
