@@ -43,7 +43,7 @@ describe("curated import packet", () => {
     expect(() => readImportPacket(JSON.stringify(duplicate))).toThrow()
     const missing = packet()
     delete missing.files[missing.places[0].photos[0].file]
-    expect(() => readImportPacket(JSON.stringify(missing))).toThrow("חסרה תמונה")
+    expect(() => readImportPacket(JSON.stringify(missing))).toThrow("חסרה בקובץ תמונה")
   })
   it("refuses path traversal and non-image payloads", () => {
     const p = packet()
@@ -51,6 +51,6 @@ describe("curated import packet", () => {
     expect(() => readImportPacket(JSON.stringify(p))).toThrow()
     const bad = packet()
     bad.files[bad.places[0].photos[0].file].file = btoa("not an image")
-    expect(() => readImportPacket(JSON.stringify(bad))).toThrow("WebP או JPEG")
+    expect(() => readImportPacket(JSON.stringify(bad))).toThrow("בסוג שלא נתמך")
   })
 })

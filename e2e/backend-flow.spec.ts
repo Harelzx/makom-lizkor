@@ -87,7 +87,7 @@ test(
     const mod = await modCtx.newPage()
     await mod.goto("/admin/")
     const item = await openItem(mod, name)
-    await item.getByRole("button", { name: "אישור" }).click()
+    await item.getByRole("button", { name: "פרסום באתר", exact: true }).click()
     await expect(item).toHaveCount(0)
 
     // The other browser's next check (it also runs whenever the tab comes back into view) brings the place in.
@@ -152,7 +152,7 @@ test("approval while the receipt is open resolves its device id to the public ca
   const mod = await moderator.newPage()
   await mod.goto("/admin/")
   const item = await openItem(mod, name)
-  await item.getByRole("button", { name: "אישור ופרסום", exact: true }).click()
+  await item.getByRole("button", { name: "פרסום באתר", exact: true }).click()
   await expect(item).toHaveCount(0)
   await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")))
   await fed

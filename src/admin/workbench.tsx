@@ -8,7 +8,7 @@ import type { GlyphName } from "./glyphs"
 import { PROBLEM } from "./problems"
 import { Btn } from "./controls"
 import { ago, elementsOf, overdue, reportName, same, useInbox, type Filter, type Inbox, type Selection } from "./inbox-state"
-import { Alert, Chip, Glyph, Kbd, kindGlyph, kindLabel, meta, Scene, Toast, today, useMinute } from "./parts"
+import { Alert, Chip, Glyph, Guide, Kbd, kindGlyph, kindLabel, meta, Scene, Toast, today, useMinute } from "./parts"
 import { Checks, Decision, ProposalBody, ProposalMap } from "./proposal"
 import { ReportActions, ReportBody, useReportTools } from "./report"
 import { CuratedImport, PlaceLookup, Shortcuts, SystemStatus, useKeys, useSummary } from "./tools"
@@ -20,10 +20,10 @@ import type { Report } from "./api"
  */
 type View = "queue" | "lookup" | "import" | "status"
 const NAV: { view: View; glyph: GlyphName; label: string }[] = [
-  { view: "queue", glyph: "queue", label: "תור" },
-  { view: "lookup", glyph: "link", label: "לפי קישור" },
-  { view: "import", glyph: "import", label: "יבוא" },
-  { view: "status", glyph: "pulse", label: "מצב המערכת" },
+  { view: "queue", glyph: "queue", label: "לבדיקה" },
+  { view: "lookup", glyph: "link", label: "חיפוש מקום" },
+  { view: "import", glyph: "import", label: "יבוא מקומות" },
+  { view: "status", glyph: "pulse", label: "תקינות האתר" },
 ]
 const rowId = (s: Selection) => `row-${s.kind}-${s.id}`
 
@@ -34,6 +34,8 @@ export function Workbench() {
   const [layer, setLayer] = useState(false)
   const [keysOpen, setKeysOpen] = useState(false)
   const [dark, setDark] = useState(isDark)
+  // A place a stuck removal named, opened in the lookup so the moderator can hide it again.
+  const [lookup, setLookup] = useState("")
   const detail = useRef<HTMLDivElement>(null)
   useMinute()
 
@@ -106,14 +108,22 @@ export function Workbench() {
       {/* The list */}
       <aside className="flex min-h-0 flex-col border-e border-(--a-line) bg-(--a-panel-2) max-lg:pb-16">
         <ListHead inbox={inbox} overdue={overdueCount} dark={dark} setDark={setDark} />
-        <QueueList inbox={inbox} current={view === "queue" ? inbox.shown : null} open={open} />
+        <QueueList
+          inbox={inbox}
+          current={view === "queue" ? inbox.shown : null}
+          open={open}
+          openPlace={(id) => {
+            setLookup(id)
+            go("lookup")
+          }}
+        />
         <p className="hidden items-center gap-3 border-t border-(--a-line) px-5 py-3 text-[0.8125rem] text-(--a-ink-3) pointer-fine:flex">
           <span className="flex items-center gap-1">
             <Kbd className="pointer-fine:inline-grid">J</Kbd>
-            <Kbd className="pointer-fine:inline-grid">K</Kbd> מעבר
+            <Kbd className="pointer-fine:inline-grid">K</Kbd> מעבר בין פריטים
           </span>
           <span className="flex items-center gap-1">
-            <Kbd className="pointer-fine:inline-grid">?</Kbd> כל הקיצורים
+            <Kbd className="pointer-fine:inline-grid">?</Kbd> כל קיצורי המקלדת
           </span>
         </p>
       </aside>
@@ -135,7 +145,7 @@ export function Workbench() {
           {view === "queue" && inbox.shown && (
             <>
               <p className="text-[0.875rem] text-(--a-ink-3) max-lg:hidden">
-                {inbox.shown.kind === "report" ? "בקשה" : "הצעה"} ·{" "}
+                {inbox.shown.kind === "report" ? "בקשת הסרה" : "הצעת מקום"} ·{" "}
                 <b className="font-semibold text-(--a-ink-1) tabular-nums">{inbox.position + 1}</b> מתוך{" "}
                 <span className="tabular-nums">{inbox.order.length}</span>
               </p>
@@ -166,21 +176,22 @@ export function Workbench() {
             exit={{ opacity: 0, transition: { duration: 0.1 } }}
           >
             {view === "lookup" ? (
-              <ToolPage>
-                <PlaceLookup />
+              <ToolPage guide="lookup">
+                <PlaceLookup key={lookup} initial={lookup} />
               </ToolPage>
             ) : view === "import" ? (
-              <ToolPage>
+              <ToolPage guide="import">
                 <CuratedImport />
               </ToolPage>
             ) : view === "status" ? (
-              <ToolPage>
+              <ToolPage guide="status">
                 <SystemStatus status={status} />
               </ToolPage>
             ) : inbox.report ? (
               <ReportPane report={inbox.report} inbox={inbox} />
             ) : inbox.proposal ? (
               <article aria-label={inbox.proposal.name_he} className="flex flex-1 flex-col">
+                <ScreenGuide screen="proposal" className="mx-auto mt-6 w-[calc(100%-2rem)] max-w-[66rem] sm:w-[calc(100%-4rem)]" />
                 <div className="mx-auto grid w-full max-w-[66rem] flex-1 gap-8 px-4 pt-7 pb-10 sm:px-8 xl:grid-cols-[minmax(0,1fr)_19.5rem]">
                   <ProposalBody item={inbox.proposal} />
                   <div className="flex flex-col gap-3">
@@ -289,13 +300,13 @@ export function ListHead({
 }) {
   const filters: [Filter, string, number][] = [
     ["all", "הכול", inbox.remaining],
-    ["reports", "בקשות", inbox.openReports + inbox.ops.length],
-    ["proposals", "הצעות", inbox.proposals.length],
+    ["reports", "בקשות הסרה", inbox.openReports + inbox.ops.length],
+    ["proposals", "הצעות מקומות", inbox.proposals.length],
   ]
   const kpis: { n: number; label: string; tone?: string }[] = [
     { n: inbox.hot.length + inbox.ops.length, label: "דחוף", tone: "text-(--a-red)" },
-    { n: inbox.remaining, label: "מחכים" },
-    { n: overdue, label: "מעל שבועיים", tone: "text-(--a-sun)" },
+    { n: inbox.remaining, label: "ממתינים" },
+    { n: overdue, label: "ממתינים מעל שבועיים", tone: "text-(--a-sun)" },
   ]
   return (
     <div className="a-contours px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-3 sm:px-5">
@@ -303,8 +314,10 @@ export function ListHead({
         <div>
           <p className="text-[0.8125rem] font-medium text-(--a-ink-3)">{today()}</p>
           <p className="mt-0.5 flex items-baseline gap-2.5 text-[1.5rem] leading-tight font-bold text-(--a-ink-1)">
-            תור המנהלים
-            {inbox.done > 0 && <span className="text-[0.8125rem] font-medium text-(--a-green-ink) tabular-nums">טופלו {inbox.done}</span>}
+            מה מחכה לבדיקה
+            {inbox.done > 0 && (
+              <span className="text-[0.8125rem] font-medium text-(--a-green-ink) tabular-nums">טיפלתם היום ב־{inbox.done}</span>
+            )}
           </p>
         </div>
         <Btn
@@ -350,7 +363,17 @@ export function ListHead({
   )
 }
 
-export function QueueList({ inbox, current, open }: { inbox: Inbox; current: Selection | null; open: (s: Selection) => void }) {
+export function QueueList({
+  inbox,
+  current,
+  open,
+  openPlace,
+}: {
+  inbox: Inbox
+  current: Selection | null
+  open: (s: Selection) => void
+  openPlace: (id: string) => void
+}) {
   const { reports, attention, hot, rest, proposals, ops, filter, loaded } = inbox
   const showReports = filter !== "proposals"
   const showProposals = filter !== "reports"
@@ -383,20 +406,22 @@ export function QueueList({ inbox, current, open }: { inbox: Inbox; current: Sel
   )
   return (
     <nav aria-label="מה ממתין" className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2.5 pb-4">
+      {/* On a phone the list is the first screen; at a desk the overview beside it carries these lines. */}
+      <ScreenGuide screen="queue" className="mx-1.5 mt-1 mb-2 lg:hidden" />
       <div className="flex flex-col gap-2 px-1.5 pt-1 empty:hidden">
         {inbox.queueError && <Alert>{inbox.queueError}</Alert>}
-        {attention.error && <Alert>הפעולות שדורשות תשומת לב לא נטענו. {attention.error}</Alert>}
+        {attention.error && <Alert>רשימת הפעולות שלא הושלמו לא נטענה. {attention.error}</Alert>}
         {attention.failed === "refresh" && (
           <Btn variant="ghost" size="sm" className="self-start" disabled={attention.busy} onClick={() => void attention.refresh()}>
             <Glyph name="restore" className="size-3.5" />
-            לנסות שוב לטעון את הפעולות
+            לנסות שוב לטעון את הרשימה
           </Btn>
         )}
-        {reports.error && <Alert>הבקשות לא נטענו. {reports.error}</Alert>}
+        {reports.error && <Alert>בקשות ההסרה לא נטענו. {reports.error}</Alert>}
         {reports.failed === "refresh" && (
           <Btn variant="ghost" size="sm" className="self-start" disabled={reports.busy} onClick={() => void reports.refresh()}>
             <Glyph name="restore" className="size-3.5" />
-            לנסות שוב לטעון את הבקשות
+            לנסות שוב לטעון את בקשות ההסרה
           </Btn>
         )}
       </div>
@@ -416,23 +441,30 @@ export function QueueList({ inbox, current, open }: { inbox: Inbox; current: Sel
       )}
 
       {showReports && (hot.length > 0 || ops.length > 0) && (
-        <Group title="דחוף · מוסתר עד החלטה" n={hot.length + ops.length} hot>
+        <Group title="דחוף: הוסתר מהאתר עד שתחליטו" n={hot.length + ops.length} hot>
           {hot.map((r) => reportRow(r, true))}
         </Group>
       )}
       {showReports && ops.length > 0 && (
-        <ul aria-label="דורש תשומת לב" className="mt-1 flex flex-col gap-1 px-1">
+        <ul aria-label="פעולות שלא הושלמו" className="mt-1 flex flex-col gap-1 px-1">
           {ops.map((a) => (
             <li
               key={a.id}
               className="flex gap-3 rounded-xl border border-dashed border-(--a-sun)/40 bg-(--a-sun-soft) px-3 py-2.5 text-[0.8125rem] text-(--a-ink-1)"
             >
               <Glyph name="clock" className="mt-0.5 size-4 text-(--a-sun)" />
-              <span>
-                {PROBLEM[a.problem]}
-                <span className="block text-(--a-ink-3)" dir="ltr">
-                  {a.place_id}
+              <span className="flex min-w-0 flex-col gap-0.5">
+                <span className="font-semibold">{PROBLEM[a.problem].title}</span>
+                <span className="text-(--a-ink-2)">{PROBLEM[a.problem].detail}</span>
+                <span className="text-(--a-ink-3)">
+                  מזהה המקום: <span dir="ltr">{a.place_id}</span>
                 </span>
+                {PROBLEM[a.problem].redo && (
+                  <Btn size="sm" className="mt-1 self-start" onClick={() => openPlace(a.place_id)}>
+                    <Glyph name="search" className="size-3.5" />
+                    פתיחת המקום
+                  </Btn>
+                )}
               </span>
             </li>
           ))}
@@ -440,21 +472,21 @@ export function QueueList({ inbox, current, open }: { inbox: Inbox; current: Sel
       )}
       {showReports && attention.next && (
         <Btn variant="ghost" size="sm" className="mt-1" disabled={attention.busy} onClick={() => void attention.more()}>
-          פעולות נוספות שדורשות תשומת לב
+          להציג עוד פעולות שלא הושלמו
         </Btn>
       )}
       {showReports && rest.length > 0 && (
-        <Group title="בקשות" n={rest.length}>
+        <Group title="בקשות הסרה ותיקון" n={rest.length}>
           {rest.map((r) => reportRow(r))}
         </Group>
       )}
       {showReports && reports.next && (
         <Btn variant="ghost" size="sm" className="mt-1" disabled={reports.busy} onClick={() => void reports.more()}>
-          בקשות ישנות יותר
+          להציג בקשות ישנות יותר
         </Btn>
       )}
       {showProposals && proposals.length > 0 && (
-        <Group title="הצעות · הוותיקה ראשונה" n={proposals.length}>
+        <Group title="הצעות מקומות, מהוותיקה לחדשה" n={proposals.length}>
           {proposals.map((i) => (
             <Row
               key={i.id}
@@ -468,11 +500,11 @@ export function QueueList({ inbox, current, open }: { inbox: Inbox; current: Sel
                   {meta([kindLabel(i.kind), i.place_he])}
                   {overdue(i) && (
                     <Chip tone="sun" className="h-5 px-2 text-[0.6875rem]">
-                      מעל שבועיים
+                      ממתינה מעל שבועיים
                     </Chip>
                   )}
-                  {!!i.correction && <Chip className="h-5 px-2 text-[0.6875rem]">תיקון</Chip>}
-                  {!!i.on_private_property && <Chip className="h-5 px-2 text-[0.6875rem]">פרטי</Chip>}
+                  {!!i.correction && <Chip className="h-5 px-2 text-[0.6875rem]">תיקון למקום קיים</Chip>}
+                  {!!i.on_private_property && <Chip className="h-5 px-2 text-[0.6875rem]">בשטח פרטי</Chip>}
                 </>
               }
               onSelect={() => open({ kind: "proposal", id: i.id })}
@@ -482,7 +514,11 @@ export function QueueList({ inbox, current, open }: { inbox: Inbox; current: Sel
       )}
       {loaded && !inbox.order.length && !ops.length && (
         <p className="px-3 pt-8 text-center text-[0.9375rem] text-(--a-ink-2)">
-          {filter === "proposals" ? "אין הצעות ממתינות." : filter === "reports" ? "אין בקשות פתוחות." : "אין כלום בתור."}
+          {filter === "proposals"
+            ? "אין הצעות מקומות שממתינות. הצעה חדשה תופיע כאן."
+            : filter === "reports"
+              ? "אין בקשות הסרה פתוחות. בקשה חדשה תופיע כאן."
+              : "אין מה לבדוק כרגע. כל דבר חדש יופיע כאן."}
         </p>
       )}
     </nav>
@@ -587,7 +623,8 @@ function ReportPane({ report, inbox }: { report: Report; inbox: Inbox }) {
   const tools = useReportTools(report, inbox.loadReports, inbox.say)
   return (
     <article aria-label={`בקשה על ${reportName(report)}`} className="flex flex-1 flex-col">
-      <div className="mx-auto w-full max-w-[46rem] flex-1 px-4 pt-7 pb-10 sm:px-8">
+      <div className="mx-auto w-full max-w-[46rem] flex-1 px-4 pt-6 pb-10 sm:px-8">
+        <ScreenGuide screen="report" className="mb-7" />
         <ReportBody report={report} tools={tools} />
       </div>
       <Bar>
@@ -597,16 +634,66 @@ function ReportPane({ report, inbox }: { report: Report; inbox: Inbox }) {
   )
 }
 
-function ToolPage({ children }: { children: ReactNode }) {
-  return <div className="mx-auto w-full max-w-[46rem] px-4 pt-8 pb-24 sm:px-8">{children}</div>
+function ToolPage({ guide, children }: { guide: keyof typeof GUIDE; children: ReactNode }) {
+  return (
+    <div className="mx-auto w-full max-w-[46rem] px-4 pt-6 pb-24 sm:px-8">
+      <ScreenGuide screen={guide} className="mb-7" />
+      {children}
+    </div>
+  )
+}
+
+/** Each screen's few lines: what it is for, what the moderator is expected to do, and in what order. */
+const GUIDE = {
+  queue: [
+    "כאן כל מה שמחכה להחלטה שלכם.",
+    "מתחילים מהדחופים (באדום): בקשות שבגללן הסתרנו משהו מהאתר. אחריהם בקשות הסרה אחרות, ובסוף הצעות מקומות, מהוותיקה לחדשה.",
+  ],
+  proposal: [
+    "מישהו הציע מקום חדש או תיקון למקום קיים. קראו, עברו על «מה לבדוק לפני פרסום» ובדקו את המיקום במפה.",
+    "הכול תקין: «פרסום באתר». צריך שינוי קטן: «החזרה לשולח לתיקון» עם הסבר. לא מתאים לאתר: «דחיית ההצעה». את התוכן עצמו לא עורכים כאן.",
+  ],
+  report: [
+    "מישהו ביקש להסיר או לתקן משהו באתר. אם הבקשה הייתה מלאה, האתר כבר הסתיר את מה שביקשו עד שתחליטו.",
+    "1. קראו מה ביקשו ולמה. 2. החליטו: להשאיר מוסתר, להחזיר לאתר, להסתיר עוד או למחוק. 3. כתבו למטה מה עשיתם ולחצו «רישום וסגירת הבקשה». עד שנרשם טיפול, נשלחת תזכורת במייל כל 6 שעות.",
+  ],
+  lookup: [
+    "לבקשה שהגיעה במייל או בטלפון, לא דרך האתר.",
+    "מדביקים את הקישור למקום, ואז מסתירים חלק ממנו (אפשר להחזיר אחר כך) או מוחקים אותו לצמיתות (אי אפשר לבטל).",
+  ],
+  import: [
+    "רק למקומות שהאתר עצמו מוסיף, מקובץ שהוכן מראש עם מקורות ותמונות מורשות.",
+    "בוחרים קובץ, עוברים על רשימת השמות ולוחצים פרסום. מקום שכבר קיים באתר לא ישתנה, אז מותר להריץ את אותו קובץ שוב.",
+  ],
+  status: [
+    "תמונת מצב של האתר, רק מספרים: בלי תוכן, בלי מיילים ובלי שמות. כתום = כדאי לבדוק.",
+    "אין כאן פעולות. אם משהו נשאר כתום יותר מיום, צריך בדיקה טכנית.",
+  ],
+}
+const GUIDE_TITLE: Record<keyof typeof GUIDE, string> = {
+  queue: "איך עובדים כאן",
+  proposal: "איך מחליטים על הצעה",
+  report: "איך מטפלים בבקשת הסרה",
+  lookup: "מתי משתמשים בחיפוש מקום",
+  import: "מתי משתמשים ביבוא",
+  status: "מה רואים כאן",
+}
+function ScreenGuide({ screen, className }: { screen: keyof typeof GUIDE; className?: string }) {
+  return (
+    <Guide screen={screen} title={GUIDE_TITLE[screen]} className={className}>
+      {GUIDE[screen].map((line) => (
+        <p key={line}>{line}</p>
+      ))}
+    </Guide>
+  )
 }
 
 function Overview({ inbox, start }: { inbox: Inbox; start: () => void }) {
   if (inbox.failed)
     return (
       <div className="grid flex-1 place-items-center px-6 py-16">
-        <Scene kind="offline" title="אין חיבור לשרת">
-          <p>מה שכבר נטען נשמר. ננסה שוב כשתבקשו.</p>
+        <Scene kind="offline" title="לא הצלחנו להתחבר לאתר">
+          <p>בדקו את החיבור לאינטרנט ולחצו «לנסות שוב». אם זה חוזר, רעננו את העמוד: ייתכן שצריך להתחבר מחדש.</p>
           <Btn variant="primary" className="mt-5" onClick={() => void inbox.reload()}>
             <Glyph name="restore" />
             לנסות שוב
@@ -625,28 +712,37 @@ function Overview({ inbox, start }: { inbox: Inbox; start: () => void }) {
     return (
       <div className="a-contours grid flex-1 place-items-center px-6 py-16">
         <Scene kind="done" title="הכול טופל">
-          <p>אין בקשות ואין הצעות שמחכות. מה שיגיע יופיע ברשימה{inbox.done ? `; טיפלתם היום ב־${inbox.done}.` : "."}</p>
+          <p>אין בקשות ואין הצעות שמחכות לכם. כל דבר חדש יופיע ברשימה{inbox.done ? `. היום טיפלתם ב־${inbox.done}.` : "."}</p>
         </Scene>
       </div>
     )
   const parts = [
-    inbox.hot.length && `${inbox.hot.length} דחופות`,
-    inbox.openReports && `${inbox.openReports} בקשות הסרה`,
-    inbox.proposals.length && `${inbox.proposals.length} הצעות`,
+    inbox.hot.length && (inbox.hot.length === 1 ? "בקשה דחופה אחת" : `${inbox.hot.length} בקשות דחופות`),
+    inbox.openReports && (inbox.openReports === 1 ? "בקשת הסרה אחת" : `${inbox.openReports} בקשות הסרה`),
+    inbox.proposals.length && (inbox.proposals.length === 1 ? "הצעת מקום אחת" : `${inbox.proposals.length} הצעות מקומות`),
   ].filter(Boolean)
   return (
     <div className="a-contours flex flex-1 items-center">
       <div className="mx-auto w-full max-w-[46rem] px-6 py-16 sm:px-8">
+        <ScreenGuide screen="queue" className="mb-10" />
         <p className="text-[0.875rem] font-medium text-(--a-ink-3)">{today()}</p>
         <h2 className="mt-1 text-[2.5rem] leading-[1.1] font-bold tracking-[-0.02em] text-(--a-ink-1)">
-          נשארו <span className="tabular-nums">{inbox.remaining}</span>
+          {inbox.remaining === 1 ? (
+            "דבר אחד ממתין לבדיקה"
+          ) : (
+            <>
+              <span className="tabular-nums">{inbox.remaining}</span> ממתינים לבדיקה
+            </>
+          )}
         </h2>
         <p className="mt-3 max-w-[52ch] text-[1.0625rem] leading-relaxed text-(--a-ink-2)">
           {parts.join(", ")}.{" "}
-          {inbox.hot.length ? "הדחופות ראשונות: המקום כבר מוסתר עד שתחליטו." : "מנהלים לא עורכים את מה שנכתב: מאשרים, מחזירים או דוחים."}
+          {inbox.hot.length
+            ? "מתחילים מהדחופות: שם משהו כבר מוסתר מהאתר עד שתחליטו."
+            : "את התוכן לא עורכים כאן: מפרסמים, מחזירים לשולח לתיקון, או דוחים."}
         </p>
         <Btn variant="primary" size="lg" className="mt-7" onClick={start}>
-          להתחיל מהראשון
+          להתחיל לבדוק
           <Glyph name="arrow" flip />
         </Btn>
       </div>

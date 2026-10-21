@@ -15,24 +15,25 @@ export function checksOf(item: Item) {
     list.push({
       glyph: "pencil",
       tone: "sun",
-      title: item.hidden ? "תיקון למקום שמוסתר כרגע" : "תיקון למקום שכבר מופיע באתר",
-      detail: item.hidden ? "אישור לא יחזיר אותו לאתר." : "הגרסה שבאתר נשארת עד האישור.",
+      title: item.hidden ? "תיקון למקום שמוסתר כרגע מהאתר" : "תיקון למקום שכבר מופיע באתר",
+      detail: item.hidden ? "פרסום התיקון לא יחזיר את המקום לאתר." : "הגרסה הנוכחית נשארת באתר עד שתפרסמו את התיקון.",
     })
   if (item.on_private_property)
     list.push({
       glyph: "lock",
       tone: "sun",
-      title: item.location_permission ? "במקום פרטי, במיקום מדויק באישור הבעלים" : "במקום פרטי, בלי אישור הבעלים: יוצג מיקום משוער",
-      detail: item.access_note_he ? `איך מגיעים (יפורסם): ${item.access_note_he}` : undefined,
+      title: item.location_permission ? "בשטח פרטי, במיקום מדויק באישור הבעלים" : "בשטח פרטי, בלי אישור הבעלים: באתר יוצג רק אזור משוער",
+      detail: item.access_note_he ? `איך מגיעים (יפורסם באתר): ${item.access_note_he}` : undefined,
     })
   // Shown as text, never as a link: the moderator reads where it goes before anyone can follow it.
-  if (item.link_url) list.push({ glyph: "link", tone: "sun", title: "קישור חיצוני", detail: item.link_url, ltr: true })
+  if (item.link_url)
+    list.push({ glyph: "link", tone: "sun", title: "קישור לאתר אחר: בדקו לאן הוא מוביל לפני פרסום", detail: item.link_url, ltr: true })
   if (overdue(item)) list.push({ glyph: "clock", tone: "sun", title: `ממתינה יותר משבועיים`, detail: `נשלחה ${ago(item.created_at)}` })
   if (item.photo_url)
     list.push({
       glyph: "camera",
       tone: "green",
-      title: item.photo_credit ? "תמונה עם קרדיט" : "תמונה בלי קרדיט",
+      title: item.photo_credit ? "יש תמונה, עם שם הצלם" : "יש תמונה, בלי שם הצלם",
       detail: item.photo_alt ?? undefined,
     })
   if (!item.story_he && !item.photo_url)
@@ -45,12 +46,12 @@ export function Checks({ item, className }: { item: Item; className?: string }) 
   const attention = list.filter((c) => c.tone === "sun").length
   return (
     <section
-      aria-label="מה לבדוק לפני אישור"
+      aria-label="מה לבדוק לפני פרסום"
       className={cn("overflow-hidden rounded-2xl border border-(--a-line) bg-(--a-panel)", className)}
     >
       <h3 className="flex items-center justify-between border-b border-(--a-line) px-4 py-3 text-[0.8125rem] font-bold text-(--a-ink-3)">
-        מה לבדוק לפני אישור
-        {attention > 0 ? <Chip tone="sun">{attention}</Chip> : <Chip tone="green">הכול רגיל</Chip>}
+        מה לבדוק לפני פרסום
+        {attention > 0 ? <Chip tone="sun">{attention} לבדיקה</Chip> : <Chip tone="green">אין משהו מיוחד לבדוק</Chip>}
       </h3>
       <ul className="divide-y divide-(--a-line)">
         {list.map((c) => (
@@ -100,10 +101,10 @@ export function ProposalBody({ item, compact, art = true }: { item: Item; compac
         <div className="mt-4 flex flex-wrap gap-1.5">
           {!!item.correction && (
             <Chip tone="sun" glyph="pencil">
-              {item.hidden ? "תיקון · המקום מוסתר" : "תיקון"}
+              {item.hidden ? "תיקון למקום מוסתר" : "תיקון למקום קיים"}
             </Chip>
           )}
-          {!!item.on_private_property && <Chip glyph="lock">מקום פרטי</Chip>}
+          {!!item.on_private_property && <Chip glyph="lock">בשטח פרטי</Chip>}
           {overdue(item) && (
             <Chip tone="sun" glyph="clock">
               ממתינה מעל שבועיים
@@ -139,6 +140,7 @@ export const ProposalMap = ({ item, className }: { item: Item; className?: strin
 /**
  * Approve, return to the sender with a note, or reject. The note is the only thing a moderator writes: a returned
  * place comes back as the sender's own correction. Keys reach these buttons through their data-shortcut, from anywhere.
+ * A rejection is final (the photo goes, the sender is told), so it asks first, saying exactly that.
  */
 export function Decision({
   item,
@@ -154,6 +156,7 @@ export function Decision({
   skip?: () => void
 }) {
   const [returning, setReturning] = useState(false)
+  const [rejecting, setRejecting] = useState(false)
   const [note, setNote] = useState("")
   const [pressed, setPressed] = useState<Action | null>(null)
   const run = (action: Action, text?: string) => {
@@ -171,7 +174,7 @@ export function Decision({
           if (note.trim()) run("return", note.trim())
         }}
       >
-        <Field label="הערה למגיש" hint="מה צריך לתקן. ההערה מוצגת למי ששלח את ההצעה, בקישור המעקב שלו.">
+        <Field label="מה צריך לתקן (השולח יראה את זה)" hint="ההערה מוצגת לשולח בעמוד המעקב שלו, והוא יוכל לתקן ולשלוח שוב.">
           {(p) => (
             <textarea
               {...p}
@@ -189,30 +192,56 @@ export function Decision({
         <div className="flex flex-wrap gap-2">
           <Btn type="submit" variant="primary" size={size} disabled={busy || !note.trim()}>
             {waiting("return") ? spin : <Glyph name="return" />}
-            שליחת ההחזרה
+            החזרה לשולח עם ההערה
           </Btn>
           <Btn variant="ghost" size={size} onClick={() => setReturning(false)}>
-            ביטול
+            חזרה בלי לשלוח
           </Btn>
         </div>
       </form>
+    )
+  if (rejecting)
+    return (
+      <div
+        role="alertdialog"
+        aria-label="דחיית ההצעה"
+        className="flex w-full flex-col gap-3"
+        onKeyDown={(e) => e.key === "Escape" && setRejecting(false)}
+      >
+        <p className="text-[0.9375rem] leading-relaxed text-(--a-ink-1)">
+          לדחות את «{item.name_he}»? ההצעה לא תתפרסם{item.photo_url ? ", התמונה שצורפה תימחק" : ""}, ואם השולח השאיר מייל הוא יקבל הודעה
+          שההצעה לא אושרה. אי אפשר לבטל.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <Btn variant="danger" size={size} disabled={busy} autoFocus onClick={() => run("reject")}>
+            {waiting("reject") ? spin : <Glyph name="reject" className="size-3.5" />}
+            דחייה סופית
+          </Btn>
+          <Btn variant="ghost" size={size} disabled={busy} onClick={() => setRejecting(false)}>
+            לא לדחות
+          </Btn>
+        </div>
+      </div>
     )
   return (
     <div className="grid w-full grid-cols-[1.3fr_1fr_auto] items-center gap-2 sm:flex sm:flex-wrap">
       <Btn data-shortcut="approve" variant="approve" size={size} disabled={busy} onClick={() => run("approve")} className="sm:min-w-36">
         {waiting("approve") ? spin : <Glyph name="approve" />}
-        אישור<span className="max-sm:sr-only"> ופרסום</span>
-        <Kbd>א</Kbd>
+        פרסום באתר
+        <Kbd>A</Kbd>
       </Btn>
       <Btn data-shortcut="return" variant="outline" size={size} disabled={busy} onClick={() => setReturning(true)}>
         <Glyph name="return" flip />
-        החזרה<span className="max-sm:sr-only"> לתיקון</span>
-        <Kbd>ת</Kbd>
+        החזרה<span className="max-sm:sr-only"> לשולח לתיקון</span>
+        <Kbd>R</Kbd>
       </Btn>
-      <Btn data-shortcut="reject" variant="ghost" size={size} disabled={busy} onClick={() => run("reject")} className="max-sm:px-3">
-        {waiting("reject") ? spin : <Glyph name="reject" className="size-3.5" />}
-        דחייה
-        <Kbd>ד</Kbd>
+      <Btn data-shortcut="reject" variant="ghost" size={size} disabled={busy} onClick={() => setRejecting(true)} className="max-sm:px-3">
+        <Glyph name="reject" className="size-3.5" />
+        <span aria-hidden className="sm:hidden">
+          דחייה
+        </span>
+        <span className="max-sm:sr-only">דחיית ההצעה</span>
+        <Kbd>D</Kbd>
       </Btn>
       {skip && (
         <Btn variant="ghost" size={size} onClick={skip} className="ms-auto max-sm:hidden">
