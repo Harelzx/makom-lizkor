@@ -25,11 +25,11 @@ test("owner imports a curated packet through real moderation and retry leaves it
     ),
   )
   await page.goto("/admin/")
-  await page.getByRole("button", { name: "יבוא", exact: true }).click()
-  const publish = page.getByRole("button", { name: "פרסום המקומות שנבחרו", exact: true })
+  await page.getByRole("button", { name: "יבוא מקומות", exact: true }).click()
+  const publish = page.getByRole("button", { name: "פרסום 1 המקומות באתר", exact: true })
   await expect(page.getByText("יבוא מקומות האתר", { exact: true })).toBeVisible()
   await expect(publish).toHaveCount(0)
-  await page.getByLabel("קובץ יבוא JSON", { exact: true }).setInputFiles({
+  await page.getByLabel("קובץ המקומות", { exact: true }).setInputFiles({
     name: "approved-packet.json",
     mimeType: "application/json",
     buffer: Buffer.from(JSON.stringify({ format: "makom-curated-v1", places: [record], files })),
@@ -61,13 +61,13 @@ test("invalid import packet cannot publish any record", async ({ page, context, 
     if (r.method() === "POST" && r.url().includes("/api/admin/")) writes++
   })
   await page.goto("/admin/")
-  await page.getByRole("button", { name: "יבוא", exact: true }).click()
-  await page.getByLabel("קובץ יבוא JSON", { exact: true }).setInputFiles({
+  await page.getByRole("button", { name: "יבוא מקומות", exact: true }).click()
+  await page.getByLabel("קובץ המקומות", { exact: true }).setInputFiles({
     name: "bad.json",
     mimeType: "application/json",
     buffer: Buffer.from('{"format":"makom-curated-v1","places":[],"files":{}}'),
   })
-  await expect(page.getByRole("alert")).toContainText("קובץ היבוא אינו בפורמט הנדרש")
-  await expect(page.getByRole("button", { name: "פרסום המקומות שנבחרו" })).toHaveCount(0)
+  await expect(page.getByRole("alert")).toContainText("זה לא קובץ המקומות שהוכן ליבוא")
+  await expect(page.getByRole("button", { name: /^פרסום .* המקומות באתר$/ })).toHaveCount(0)
   expect(writes).toBe(0)
 })

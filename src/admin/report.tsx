@@ -74,7 +74,7 @@ function LiftForm({
         setBusy(false)
       }}
     >
-      <Field label="בסיס ההחזרה">
+      <Field label="למה מחזירים">
         {(p) => (
           <select {...p} className={cn(inputClass, "h-11")} value={code} onChange={(e) => setCode(e.target.value as Basis)}>
             {Object.entries(BASIS_LABEL).map(([k, label]) => (
@@ -85,7 +85,7 @@ function LiftForm({
           </select>
         )}
       </Field>
-      <Field label="הנימוק בכתב" hint="מה נבדק ומה נמצא. בלי פרטי קשר.">
+      <Field label="מה בדקתם ומה מצאתם" hint="נשמר ברישום הפעולה. בלי טלפונים ובלי מיילים.">
         {(p) => (
           <textarea
             {...p}
@@ -98,41 +98,41 @@ function LiftForm({
           />
         )}
       </Field>
-      {code === "rights_cleared" && text("evidenceRef", "הפניה לראיה")}
+      {code === "rights_cleared" && text("evidenceRef", "איפה האישור על הזכויות", "קישור, או תיאור של המסמך ושל מי ששלח אותו.")}
       {code === "legal_advice" && (
         <div className="grid gap-4 sm:grid-cols-2">
-          {text("adviserName", "שם היועץ")}
+          {text("adviserName", "שם עורך הדין")}
           {text("adviceDate", "תאריך הייעוץ", undefined, false, "date")}
         </div>
       )}
       {(code === "requester_withdrew" || code === "family_requested_restore") &&
-        text("verificationNote", "איך נבדקה הבקשה", "בדיקה מידתית, למשל מאותה כתובת מייל. לעולם לא מסמכי זיהוי.", true)}
+        text("verificationNote", "איך וידאתם שזה באמת המבקש", "למשל: הבקשה הגיעה מאותה כתובת מייל. לעולם לא לבקש תעודת זהות.", true)}
       {code === "content_corrected" && (
         <label className="flex items-start gap-3 text-[0.9375rem] text-(--a-ink-1)">
           <input type="checkbox" className={checkClass} checked={absent} onChange={(e) => setAbsent(e.target.checked)} />
-          בדקתי שהחומר שבמחלוקת איננו בגרסה החדשה
+          בדקתי שמה שביקשו להסיר כבר לא מופיע בגרסה החדשה
         </label>
       )}
       {/* Required by the server whenever the hide came from a family's request; a verified request of theirs can be it. */}
-      {text("contactNote", "הפנייה למשפחה או לגוף שהקים את האנדרטה", "חובה כשההסתרה נבעה מבקשה של המשפחה.", true)}
-      {text("contactDate", "תאריך הפנייה", undefined, false, "date")}
+      {text("contactNote", "שיחה עם המשפחה או עם מי שהקים את האנדרטה", "חובה אם ההסתרה הייתה בבקשת המשפחה: עם מי דיברתם ומה סוכם.", true)}
+      {text("contactDate", "תאריך השיחה", undefined, false, "date")}
       <div className="flex flex-col gap-3 border-t border-(--a-line) pt-4">
         <label className="flex items-start gap-3 text-[0.9375rem] text-(--a-ink-1)">
           <input type="checkbox" className={checkClass} checked={affirmative} onChange={(e) => setAffirmative(e.target.checked)} />
-          יש בסיס חיובי ומתועד להחזרה
+          יש סיבה ברורה וכתובה להחזיר
         </label>
         <label className="flex items-start gap-3 text-[0.9375rem] text-(--a-ink-1)">
           <input type="checkbox" className={checkClass} checked={notSilence} onChange={(e) => setNotSilence(e.target.checked)} />
-          הבסיס אינו היעדר תגובה, ואינו מחלוקת בין בני משפחה
+          הסיבה איננה «לא ענו לנו», ואיננה ויכוח בין בני משפחה
         </label>
       </div>
       <div className="flex flex-wrap gap-2">
         <Btn type="submit" variant="primary" disabled={!note.trim() || busy}>
           <Glyph name="restore" />
-          החזרת {ELEMENT_LABEL[sup.field]}
+          החזרת {ELEMENT_LABEL[sup.field]} לאתר
         </Btn>
         <Btn variant="ghost" onClick={cancel}>
-          ביטול
+          חזרה בלי להחזיר
         </Btn>
       </div>
     </motion.form>
@@ -148,7 +148,7 @@ export function EraseForm({ place, done }: { place: PlaceView; done: (error: str
     return (
       <Btn variant="danger-ghost" className="-ms-3 self-start" onClick={() => setOpen(true)}>
         <Glyph name="trash" />
-        מחיקת המקום לפי בקשה
+        מחיקת המקום לצמיתות
       </Btn>
     )
   return (
@@ -160,7 +160,8 @@ export function EraseForm({ place, done }: { place: PlaceView; done: (error: str
       }}
     >
       <p className="text-[0.9375rem] leading-relaxed text-(--a-ink-1)">
-        המחיקה סופית: התוכן, התמונות, המקורות ופרטי השולח נמחקים מיד, וגם שחזור מגיבוי לא יחזיר אותם. נשאר רק רישום שהמקום נמחק.
+        יימחקו מיד: השם, הסיפור, התמונות, המקורות ופרטי השולח. אי אפשר לבטל, וגם שחזור מגיבוי לא יחזיר אותם. נשאר רק רישום שהיה כאן מקום
+        ושהוא נמחק.
       </p>
       <label className="flex items-start gap-3 text-[0.9375rem] font-medium text-(--a-ink-1)">
         <input type="checkbox" className={cn(checkClass, "accent-(--a-red)")} checked={sure} onChange={(e) => setSure(e.target.checked)} />
@@ -168,10 +169,10 @@ export function EraseForm({ place, done }: { place: PlaceView; done: (error: str
       </label>
       <div className="flex flex-wrap gap-2">
         <Btn type="submit" variant="danger" disabled={!sure}>
-          מחיקה סופית
+          מחיקת המקום לצמיתות
         </Btn>
         <Btn variant="ghost" onClick={() => setOpen(false)}>
-          ביטול
+          לא למחוק
         </Btn>
       </div>
     </form>
@@ -201,7 +202,7 @@ export function HideForm({ place, reportId, done }: { place: PlaceView; reportId
       }}
     >
       <fieldset>
-        <legend className={fieldLabel}>מה להסתיר</legend>
+        <legend className={fieldLabel}>מה להסתיר מהאתר</legend>
         <div className="flex flex-wrap gap-2">
           {ELEMENTS.map((el) => (
             <label
@@ -224,14 +225,14 @@ export function HideForm({ place, reportId, done }: { place: PlaceView; reportId
           ))}
         </div>
       </fieldset>
-      <Field label="סיבת ההסתרה">
+      <Field label="למה מסתירים" hint="נשמר ברישום הפעולה. אפשר להחזיר אחר כך, עם «החזרה לאתר».">
         {(p) => (
           <input {...p} value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} className={cn(inputClass, "h-11")} />
         )}
       </Field>
       <Btn type="submit" variant="outline" className="self-start" disabled={!fields.length || !reason.trim()}>
         <Glyph name="hide" />
-        הסתרה עכשיו
+        הסתרת מה שסומן
       </Btn>
     </form>
   )
@@ -244,7 +245,7 @@ function PurgeRequester({ report, done }: { report: Report; done: (error: string
     return (
       <Btn variant="danger-ghost" className="-ms-3 self-start" onClick={() => setAsking(true)}>
         <Glyph name="trash" />
-        מחיקת פרטי המבקש והנוסח עכשיו
+        מחיקת פרטי המבקש
       </Btn>
     )
   return (
@@ -253,13 +254,16 @@ function PurgeRequester({ report, done }: { report: Report; done: (error: string
       aria-label="מחיקת פרטי המבקש"
       className="flex flex-col gap-3 rounded-2xl border border-(--a-red)/40 bg-(--a-red-soft) p-4"
     >
-      <p className="text-[0.9375rem] text-(--a-ink-1)">למחוק עכשיו את פרטי המבקש ואת נוסח הבקשה? אי אפשר לבטל, והבקשה תיסגר.</p>
+      <p className="text-[0.9375rem] leading-relaxed text-(--a-ink-1)">
+        למחוק עכשיו את המייל של המבקש, את הקשר שלו למקום ואת מה שכתב? הבקשה תיסגר. אי אפשר לבטל. (בלי מחיקה ידנית, הפרטים נמחקים מעצמם עד 90
+        יום אחרי שהבקשה נסגרת.)
+      </p>
       <div className="flex flex-wrap gap-2">
         <Btn variant="danger" onClick={async () => done(await send(`/api/admin/reports/${report.id}/purge`, {}))}>
-          כן, למחוק את הפרטים
+          מחיקת הפרטים
         </Btn>
         <Btn variant="ghost" onClick={() => setAsking(false)}>
-          ביטול
+          לא למחוק
         </Btn>
       </div>
     </div>
@@ -314,13 +318,13 @@ export function ReportBody({ report, tools, aside }: { report: Report; tools: Re
       <div className="flex flex-wrap gap-1.5">
         {hidden ? (
           <Chip tone={report.status === "closed" ? "ink" : "red"} glyph="hide">
-            הוסתר באופן זהיר
+            הוסתר מהאתר עד החלטה
           </Chip>
         ) : (
-          <Chip>לא הוסתר אוטומטית</Chip>
+          <Chip>עדיין מוצג באתר</Chip>
         )}
         {report.status === "in_review" && <Chip tone="sun">בטיפול</Chip>}
-        {report.status === "closed" && <Chip>סגור</Chip>}
+        {report.status === "closed" && <Chip>הבקשה סגורה</Chip>}
         {report.origin === "curated" && <Chip>מקום של האתר עצמו</Chip>}
       </div>
       <p className="mt-4 text-[0.875rem] text-(--a-ink-3)">
@@ -331,7 +335,7 @@ export function ReportBody({ report, tools, aside }: { report: Report; tools: Re
 
       {report.explanation && (
         <>
-          <h3 className="mt-7 mb-2 text-[0.8125rem] font-bold text-(--a-ink-3)">במילים שלהם</h3>
+          <h3 className="mt-7 mb-2 text-[0.8125rem] font-bold text-(--a-ink-3)">מה כתבו</h3>
           <blockquote className="border-s-[3px] border-(--a-red) ps-4 text-[1.0625rem] leading-[1.8] whitespace-pre-line text-(--a-ink-1)">
             {report.explanation}
           </blockquote>
@@ -339,7 +343,7 @@ export function ReportBody({ report, tools, aside }: { report: Report; tools: Re
       )}
       {report.handling_note && (
         <p className="mt-5 rounded-xl bg-(--a-sunk) px-4 py-3 text-[0.9375rem] text-(--a-ink-1)">
-          <span className="font-semibold">טיפול: </span>
+          <span className="font-semibold">מה נעשה: </span>
           {report.handling_note}
         </p>
       )}
@@ -348,12 +352,12 @@ export function ReportBody({ report, tools, aside }: { report: Report; tools: Re
       {place && (
         <section className="mt-7">
           <h3 className="mb-2 text-[0.8125rem] font-bold text-(--a-ink-3)">
-            {place.status === "hidden" ? "המקום מוסתר כולו" : "מוסתר כרגע"}
+            {place.status === "hidden" ? "המקום כולו מוסתר מהאתר" : "מה מוסתר עכשיו מהאתר"}
           </h3>
           {place.suppressions.length === 0 ? (
             <p className="flex items-center gap-2.5 rounded-2xl border border-(--a-line) px-4 py-4 text-[0.9375rem] text-(--a-ink-2)">
               <Glyph name="approve" className="size-4 text-(--a-green)" />
-              שום דבר לא מוסתר.
+              שום דבר לא מוסתר. המקום מוצג באתר במלואו.
             </p>
           ) : (
             <ul className="divide-y divide-(--a-line) overflow-hidden rounded-2xl border border-(--a-line) bg-(--a-panel)">
@@ -370,13 +374,13 @@ export function ReportBody({ report, tools, aside }: { report: Report; tools: Re
                       <p className="flex-1 text-[0.9375rem] text-(--a-ink-1)">
                         <span className="font-semibold">{ELEMENT_LABEL[s.field]}</span>
                         <span className="block text-[0.8125rem] text-(--a-ink-3)">
-                          {s.kind === "precautionary" ? "הסתרה זהירה" : "הסתרה ידנית"} · מאז {ago(s.created_at)}
+                          {s.kind === "precautionary" ? "הוסתר אוטומטית בעקבות הבקשה" : "הוסתר ידנית"} · {ago(s.created_at)}
                         </span>
                       </p>
                       {lifting !== s.id && (
                         <Btn size="sm" onClick={() => setLifting(s.id)}>
                           <Glyph name="restore" className="size-3.5" />
-                          החזרה עם בסיס מתועד
+                          החזרה לאתר
                         </Btn>
                       )}
                     </div>
@@ -387,7 +391,7 @@ export function ReportBody({ report, tools, aside }: { report: Report; tools: Re
                         cancel={() => setLifting(null)}
                         done={async (error) => {
                           if (!error) setLifting(null)
-                          await after(`${ELEMENT_LABEL[s.field]} הוחזר לאתר`, error)
+                          await after(`הוחזר לאתר: ${ELEMENT_LABEL[s.field]}`, error)
                         }}
                       />
                     )}
@@ -402,12 +406,12 @@ export function ReportBody({ report, tools, aside }: { report: Report; tools: Re
       {(place || forget) && (
         <details className="group mt-7 rounded-2xl border border-(--a-line) bg-(--a-panel)">
           <summary className="a-focus-ring flex min-h-12 cursor-pointer list-none items-center justify-between gap-2 rounded-2xl px-4 text-[0.9375rem] font-semibold text-(--a-ink-1) [&::-webkit-details-marker]:hidden">
-            פעולות נוספות
+            הסתרה ידנית ומחיקה
             <Glyph name="arrow" className="size-3.5 rotate-90 text-(--a-ink-3) transition-transform duration-300 group-open:-rotate-90" />
           </summary>
           <div className="flex flex-col gap-5 border-t border-(--a-line) p-4">
-            {place && <HideForm place={place} reportId={report.id} done={(e) => after("ההסתרה נשמרה", e)} />}
-            {place && <EraseForm place={place} done={(e) => after("המקום נמחק", e)} />}
+            {place && <HideForm place={place} reportId={report.id} done={(e) => after("מה שסומן הוסתר מהאתר", e)} />}
+            {place && <EraseForm place={place} done={(e) => after("המקום נמחק לצמיתות", e)} />}
             {forget && <PurgeRequester report={report} done={(e) => after("פרטי המבקש נמחקו", e)} />}
           </div>
         </details>
@@ -424,17 +428,20 @@ export function Contact({ report, contact, setContact }: { report: Report; conta
       <span dir="ltr">{contact}</span>
     </p>
   ) : (
-    <Btn
-      variant="ghost"
-      className="-ms-3 mt-3"
-      onClick={async () => {
-        const email = await fetchContact(report.id)
-        if (email) setContact(email)
-      }}
-    >
-      <Glyph name="mail" />
-      הצגת כתובת המבקש
-    </Btn>
+    <div className="mt-3 flex flex-wrap items-center gap-x-2">
+      <Btn
+        variant="ghost"
+        className="-ms-3"
+        onClick={async () => {
+          const email = await fetchContact(report.id)
+          if (email) setContact(email)
+        }}
+      >
+        <Glyph name="mail" />
+        הצגת המייל של המבקש
+      </Btn>
+      <span className="text-[0.8125rem] text-(--a-ink-3)">כל צפייה נרשמת. פותחים רק כשצריך לענות.</span>
+    </div>
   )
 }
 
@@ -452,10 +459,10 @@ export function ReportActions({ report, tools, size = "md" }: { report: Report; 
       {report.status !== "closed" ? (
         <div className="flex w-full flex-wrap items-stretch gap-2">
           <label className="min-w-60 flex-1">
-            <span className="sr-only">מה נעשה</span>
+            <span className="sr-only">מה עשיתם</span>
             <textarea
               value={note}
-              placeholder="מה נעשה? התזכורות נעצרות רק כשמתועד טיפול."
+              placeholder="מה עשיתם? למשל: השם נשאר מוסתר, דיברתי עם המשפחה."
               onChange={(e) => setNote(e.target.value)}
               maxLength={500}
               rows={1}
@@ -463,13 +470,18 @@ export function ReportActions({ report, tools, size = "md" }: { report: Report; 
             />
           </label>
           {report.status === "open" && (
-            <Btn variant="primary" size={size} disabled={!note.trim()} onClick={() => act("handle", "הטיפול תועד")}>
-              תיעוד טיפול
+            <Btn variant="primary" size={size} disabled={!note.trim()} onClick={() => act("handle", "הטיפול נרשם")}>
+              רישום בלי לסגור
             </Btn>
           )}
           <Btn variant="outline" size={size} disabled={!note.trim()} onClick={() => act("close", "הבקשה נסגרה")}>
-            סגירת הבקשה
+            רישום וסגירת הבקשה
           </Btn>
+          <p className="w-full text-[0.8125rem] text-(--a-ink-3)">
+            {report.status === "open"
+              ? "שני הכפתורים עוצרים את התזכורות במייל. «רישום בלי לסגור» משאיר את הבקשה ברשימה להמשך טיפול."
+              : "הטיפול כבר נרשם. כשסיימתם, כתבו מה הוחלט ולחצו «רישום וסגירת הבקשה»."}
+          </p>
         </div>
       ) : (
         <Btn
@@ -479,7 +491,7 @@ export function ReportActions({ report, tools, size = "md" }: { report: Report; 
           onClick={async () => tools.after("הבקשה נפתחה מחדש", await send(`/api/admin/reports/${report.id}/reopen`, {}))}
         >
           <Glyph name="restore" />
-          פתיחה מחדש
+          פתיחת הבקשה מחדש
         </Btn>
       )}
     </div>

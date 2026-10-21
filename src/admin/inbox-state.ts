@@ -35,8 +35,8 @@ export function ago(iso: string) {
 
 /** What a decision says once it is saved, in the action's own words. */
 export const DONE: Record<Action, string> = {
-  approve: "ההצעה אושרה ותופיע במפה",
-  return: "ההצעה הוחזרה למגיש לתיקון",
+  approve: "המקום פורסם באתר",
+  return: "ההצעה הוחזרה לשולח לתיקון",
   reject: "ההצעה נדחתה",
 }
 

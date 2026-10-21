@@ -15,15 +15,15 @@ export const REQUESTER_LABEL = {
   other: "אחר (טעות, תוכן פוגע)",
 } as const
 
-/** The restoration codes of spec 6, as a moderator chooses among them. */
+/** The restoration codes of spec 6, as a moderator chooses among them (the moderators' page only). */
 export const BASIS_LABEL = {
   requester_withdrew: "המבקש חזר בו מהבקשה",
   family_requested_restore: "המבקש או המשפחה ביקשו להחזיר",
   rights_cleared: "הזכויות בתמונה הוסדרו",
   content_corrected: "התוכן תוקן בגרסה חדשה שנבדקה",
-  hidden_in_error: "הוסתר בטעות (מפסק, ספאם, סיווג שגוי)",
-  review_supports_restore: "בדיקה מידתית ומתועדת תומכת בהחזרה",
-  legal_advice: "ייעוץ משפטי",
+  hidden_in_error: "הוסתר בטעות (ספאם, בקשה שגויה, טעות בסיווג)",
+  review_supports_restore: "בדקנו, ואין סיבה להמשיך להסתיר",
+  legal_advice: "עורך דין אישר להחזיר",
 } as const
 
 /** The button that lets a kept request go; the report notice names it, word for word (notice.test.ts checks). */

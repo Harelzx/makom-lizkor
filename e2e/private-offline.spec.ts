@@ -167,7 +167,7 @@ test("the moderator sees that a place is on private property, the owner's permis
   const mod = await ctx.newPage()
   await mod.goto("/admin/")
   const item = await openItem(mod, name)
-  await expect(item.getByText("במקום פרטי, במיקום מדויק באישור הבעלים")).toBeVisible()
+  await expect(item.getByText("בשטח פרטי, במיקום מדויק באישור הבעלים")).toBeVisible()
   await expect(item.getByText(note)).toBeVisible()
 })
 
@@ -192,6 +192,6 @@ test("the moderator sees that a place on private property without the owner's pe
   const mod = await ctx.newPage()
   await mod.goto("/admin/")
   const item = await openItem(mod, name)
-  await expect(item.getByText("במקום פרטי, בלי אישור הבעלים: יוצג מיקום משוער")).toBeVisible()
+  await expect(item.getByText("בשטח פרטי, בלי אישור הבעלים: באתר יוצג רק אזור משוער")).toBeVisible()
   await expect(item.getByText("איך מגיעים", { exact: false })).toHaveCount(0)
 })

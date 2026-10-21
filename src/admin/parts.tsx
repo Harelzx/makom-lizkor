@@ -122,7 +122,7 @@ export function MapThumb({ lat, lng, approximate, className }: { lat: number; ln
         </a>
       </div>
       <p className="border-t border-(--a-line) px-4 py-2.5 text-[0.8125rem] text-(--a-ink-2)">
-        {approximate ? "מיקום משוער: יוצג באתר כאזור, לא כנקודה" : "מיקום מדויק: יוצג באתר כנקודה"}
+        {approximate ? "מיקום משוער: באתר יוצג אזור, לא נקודה מדויקת" : "מיקום מדויק: באתר תוצג הנקודה עצמה"}
       </p>
     </div>
   )
@@ -194,6 +194,62 @@ export function Alert({ children, className }: { children: ReactNode; className?
       <Glyph name="reject" className="mt-1 size-3.5" />
       <span>{children}</span>
     </p>
+  )
+}
+
+/**
+ * A screen's few lines on what it is for and what to do, in the same place on every screen. Folding it away is
+ * remembered per screen in this browser only, so a storage that refuses it just shows the lines again.
+ */
+export function Guide({ screen, title, children, className }: { screen: string; title: string; children: ReactNode; className?: string }) {
+  const key = `makom-admin-guide-${screen}`
+  const [open, setOpen] = useState(() => {
+    try {
+      return localStorage.getItem(key) !== "closed"
+    } catch {
+      return true
+    }
+  })
+  const toggle = () => {
+    setOpen(!open)
+    try {
+      if (open) localStorage.setItem(key, "closed")
+      else localStorage.removeItem(key)
+    } catch {
+      // Remembering is a convenience; the toggle works without it.
+    }
+  }
+  const body = `guide-${screen}`
+  return (
+    <section aria-label={title} className={cn("rounded-2xl border border-(--a-line) bg-(--a-panel-2)", className)}>
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={open ? body : undefined}
+        onClick={toggle}
+        className="a-focus-ring flex min-h-11 w-full items-center gap-2 rounded-2xl px-4 text-start text-[0.875rem] font-semibold text-(--a-ink-2) hover:text-(--a-ink-1)"
+      >
+        <span
+          aria-hidden
+          className="grid size-5 shrink-0 place-items-center rounded-full border-[1.5px] border-current text-[0.75rem] font-bold text-(--a-ink-3)"
+        >
+          ?
+        </span>
+        <span className="flex-1">{title}</span>
+        <span aria-hidden className="text-[0.8125rem] font-medium text-(--a-ink-3)">
+          {open ? "הסתרת ההסבר" : "הצגת ההסבר"}
+        </span>
+        <Glyph
+          name="arrow"
+          className={cn("size-3.5 text-(--a-ink-3) transition-transform duration-300", open ? "-rotate-90" : "rotate-90")}
+        />
+      </button>
+      {open && (
+        <div id={body} className="flex flex-col gap-1.5 px-4 pb-4 text-[0.9375rem] leading-relaxed text-(--a-ink-1)">
+          {children}
+        </div>
+      )}
+    </section>
   )
 }
 
