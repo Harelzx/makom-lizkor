@@ -685,8 +685,9 @@ function ScreenGuide({ screen, className }: { screen: keyof typeof GUIDE; classN
 function Overview({ inbox, start }: { inbox: Inbox; start: () => void }) {
   if (inbox.failed)
     return (
-      <div className="grid flex-1 place-items-center px-6 py-16">
-        <Scene kind="offline" title="לא הצלחנו להתחבר לאתר">
+      <div className="flex flex-1 flex-col items-center px-6 py-10">
+        <ScreenGuide screen="queue" className="w-full max-w-[46rem]" />
+        <Scene kind="offline" title="לא הצלחנו להתחבר לאתר" className="my-auto pt-10">
           <p>בדקו את החיבור לאינטרנט ולחצו «לנסות שוב». אם זה חוזר, רעננו את העמוד: ייתכן שצריך להתחבר מחדש.</p>
           <Btn variant="primary" className="mt-5" onClick={() => void inbox.reload()}>
             <Glyph name="restore" />
@@ -704,8 +705,9 @@ function Overview({ inbox, start }: { inbox: Inbox; start: () => void }) {
     )
   if (!inbox.remaining)
     return (
-      <div className="a-contours grid flex-1 place-items-center px-6 py-16">
-        <Scene kind="done" title="הכול טופל">
+      <div className="a-contours flex flex-1 flex-col items-center px-6 py-10">
+        <ScreenGuide screen="queue" className="w-full max-w-[46rem]" />
+        <Scene kind="done" title="הכול טופל" className="my-auto pt-10">
           <p>אין בקשות ואין הצעות שמחכות לכם. כל דבר חדש יופיע ברשימה{inbox.done ? `. היום טיפלתם ב־${inbox.done}.` : "."}</p>
         </Scene>
       </div>
