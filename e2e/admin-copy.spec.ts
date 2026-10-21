@@ -87,3 +87,28 @@ test("every screen opens with what it is for, and an explanation folded away sta
   await expect(mod.getByRole("button", { name: "מה רואים כאן", exact: true })).toHaveAttribute("aria-expanded", "true")
   await ctx.close()
 })
+
+test("a removal that never landed says it is the moderator's to redo, and opens its place in the lookup in one press", async ({
+  browser,
+}) => {
+  const ctx = await browser.newContext()
+  await ctx.request.post("/__dev/login", { data: { email: "dev@example.test" } })
+  const mod = await ctx.newPage()
+  const op = { id: "op_stuck", place_id: "p_stuck_demo", kind: "suppress", problem: "interrupted", created_at: "2029-01-03T00:00:00.000Z" }
+  await mod.route("**/api/admin/attention**", (route) => route.fulfill({ json: { ops: [op], next: null } }))
+  await mod.route("**/api/admin/places/p_stuck_demo", (route) =>
+    route.fulfill({ json: { id: "p_stuck_demo", status: "published", rev: 3, suppressions: [] } }),
+  )
+  await mod.goto("/admin/")
+  const stuck = mod.getByRole("list", { name: "פעולות שלא הושלמו" }).getByRole("listitem")
+  await expect(stuck).toContainText("הסתרה לא הושלמה, והמקום עדיין מוצג")
+  await stuck.getByRole("button", { name: "פתיחת המקום", exact: true }).click()
+  await expect(mod.getByLabel("הקישור למקום", { exact: true })).toHaveValue("p_stuck_demo")
+  await expect(mod.getByText("מצב באתר: מוצג", { exact: false })).toBeVisible()
+
+  // From the menu the lookup opens empty again.
+  await mod.getByRole("button", { name: "לבדיקה", exact: true }).click()
+  await mod.getByRole("button", { name: "חיפוש מקום", exact: true }).click()
+  await expect(mod.getByLabel("הקישור למקום", { exact: true })).toHaveValue("")
+  await ctx.close()
+})

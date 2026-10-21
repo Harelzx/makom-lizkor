@@ -59,7 +59,7 @@ test(
     await mod.getByRole("button", { name: "תקינות האתר", exact: true }).click()
     await expect(mod.getByText(/הצעות ממתינות לבדיקה/)).toBeVisible()
     // On a phone the status covers the list: back to the queue, as a moderator would.
-    await mod.getByRole("button", { name: "תור", exact: true }).click()
+    await mod.getByRole("button", { name: "לבדיקה", exact: true }).click()
     const item = await openItem(mod, name)
     await expect(item.getByRole("img", { name: "שדה כלניות בזריחה" })).toBeVisible()
     await item.getByRole("button", { name: "פרסום באתר", exact: true }).click()

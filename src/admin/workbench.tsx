@@ -65,7 +65,9 @@ export function Workbench() {
   })
 
   const overdueCount = inbox.proposals.filter(overdue).length
-  const go = (v: View) => {
+  // The lookup opens empty from the menu, and with the place filled in only from a stuck removal's own button.
+  const go = (v: View, place = "") => {
+    setLookup(place)
     setView(v)
     if (v !== "queue") setLayer(true)
     else setLayer(!!inbox.shown)
@@ -108,15 +110,7 @@ export function Workbench() {
       {/* The list */}
       <aside className="flex min-h-0 flex-col border-e border-(--a-line) bg-(--a-panel-2) max-lg:pb-16">
         <ListHead inbox={inbox} overdue={overdueCount} dark={dark} setDark={setDark} />
-        <QueueList
-          inbox={inbox}
-          current={view === "queue" ? inbox.shown : null}
-          open={open}
-          openPlace={(id) => {
-            setLookup(id)
-            go("lookup")
-          }}
-        />
+        <QueueList inbox={inbox} current={view === "queue" ? inbox.shown : null} open={open} openPlace={(id) => go("lookup", id)} />
         <p className="hidden items-center gap-3 border-t border-(--a-line) px-5 py-3 text-[0.8125rem] text-(--a-ink-3) pointer-fine:flex">
           <span className="flex items-center gap-1">
             <Kbd className="pointer-fine:inline-grid">J</Kbd>
