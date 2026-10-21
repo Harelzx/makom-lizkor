@@ -31,6 +31,7 @@ import { machineMay, syntheticRev } from "../lib/synthetic"
 import { opEnv } from "../lib/purge"
 import { commissioningAllowed, commissioningStatus, manualRecovery, manualSnapshot } from "../db/commissioning"
 import { opsSummary } from "../lib/ops-summary"
+import { siteHealth } from "../lib/health"
 
 type AdminEnv = { Bindings: Env; Variables: AppEnv["Variables"] & { actor: string; machine: boolean; machineRev: number | null } }
 type AdminContext = Context<AdminEnv>
@@ -57,6 +58,8 @@ admin.use("*", async (c, next) => {
 
 // The existing human administrator's view; machine scopes and the diagnostic-agent boundary stay unchanged.
 admin.get("/summary", async (c) => c.json(await opsSummary(c.env, c.get("errorRates"), clock(c.req.raw, c.env)), 200, PRIVATE))
+// Every hourly counter still kept, for the site-health screen (src/admin/health.tsx): codes and counts only.
+admin.get("/health", async (c) => c.json(await siteHealth(c.env, clock(c.req.raw, c.env)), 200, PRIVATE))
 
 // A dated private commissioning screen, behind the same human Access verification as every moderator action.
 const commissioningPage = (receipt: object) =>
