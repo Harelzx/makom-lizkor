@@ -81,6 +81,25 @@ export async function saveTributes(t: Record<string, number>): Promise<void> {
   }
 }
 
+/** The Jerusalem day each place's last anemone was left on here: one a day, like the shared count. */
+export async function loadTributeDays(): Promise<Record<string, string>> {
+  try {
+    const s = db()
+    return (s && (await get<Record<string, string>>("tributeDays", s))) ?? {}
+  } catch {
+    return {}
+  }
+}
+
+export async function saveTributeDays(t: Record<string, string>): Promise<void> {
+  try {
+    const s = db()
+    if (s) await set("tributeDays", t, s)
+  } catch {
+    /* without it, the flower is still left; only the day isn't kept */
+  }
+}
+
 let device: Promise<string | null> | undefined
 /**
  * This device's random id for the shared anemone count, kept in IndexedDB and read back before it is trusted. Null

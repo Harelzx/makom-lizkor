@@ -33,16 +33,21 @@ async function open(browser: Browser, id: string, init?: string) {
 const total = async (page: Page, id: string) =>
   ((await (await page.request.get("/api/v1/tributes")).json()) as { totals: Record<string, number> }).totals[id] ?? 0
 
-test("ten taps at a published place: ten flowers here, one anemone counted for everyone", async ({ browser }) => {
+test("an anemone at a published place: one a day, counted for everyone, and the button says it was left", async ({ browser }) => {
   const { id } = await published(browser, `גינת דמו כלניות ${Date.now()}`)
   const { page, posts } = await open(browser, id)
   const counted = page.waitForResponse((r) => r.url().endsWith("/api/v1/tributes") && r.request().method() === "POST")
-  for (let i = 0; i < 10; i++) await page.getByRole("button", { name: "השארת כלנית" }).click()
+  await page.getByRole("button", { name: "השארת כלנית" }).click()
   await counted
-  await expect(page.getByText("השארתם כאן 10 כלניות")).toBeVisible()
+  // The local count and the shared one never disagree: the second tap that used to add a flower here is gone.
+  await expect(page.getByRole("button", { name: "השארתם היום" })).toBeDisabled()
   await expect(page.getByText("השאירו כאן כלנית אחת")).toBeVisible()
+  await expect(page.getByText("הכלנית שלכם, מהיום")).toBeVisible()
   await page.waitForTimeout(1000)
   expect(posts).toHaveLength(1)
+  // Opened again the same day, it is still left.
+  await page.reload()
+  await expect(page.getByRole("button", { name: "השארתם היום" })).toBeVisible(DAY)
   // Another browser sees the shared count.
   const other = await open(browser, id)
   await expect(other.page.getByText("השאירו כאן כלנית אחת")).toBeVisible(DAY)
@@ -81,7 +86,7 @@ test("at one of the site's own places, from the database since phase 7, an anemo
   const before = 0
   const { page, posts } = await open(browser, "nova-memorial-reim")
   await page.getByRole("button", { name: "השארת כלנית" }).click()
-  await expect(page.getByText("השארתם כאן כלנית אחת")).toBeVisible()
+  await expect(page.getByRole("button", { name: "השארתם היום" })).toBeDisabled()
   await expect(page.getByText("נשמר רק במכשיר הזה")).toHaveCount(0)
   await expect.poll(() => posts.length).toBe(1)
   await expect.poll(() => total(page, "nova-memorial-reim")).toBe(before + 1)

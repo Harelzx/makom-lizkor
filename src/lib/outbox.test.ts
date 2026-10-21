@@ -5,6 +5,8 @@ const disk = vi.hoisted(() => ({ places: [] as Place[] }))
 vi.mock("@/lib/storage", () => ({
   loadLocal: async () => disk.places,
   loadTributes: async () => ({}),
+  loadTributeDays: async () => ({}),
+  saveTributeDays: async () => undefined,
   saveTributes: async () => undefined,
   changeLocal: async (fn: (rows: Place[]) => Place[]) => (disk.places = fn(disk.places)),
 }))

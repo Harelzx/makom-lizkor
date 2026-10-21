@@ -11,6 +11,8 @@ vi.mock("@/lib/storage", () => {
     changeTributeOutbox: change("tributeOutbox"),
     loadLocal: async () => [],
     loadTributes: async () => ({}),
+    loadTributeDays: async () => ({}),
+    saveTributeDays: async () => undefined,
     saveTributes: async () => undefined,
     changeLocal: async () => [],
   }

@@ -6,6 +6,8 @@ vi.mock("@/lib/storage", () => ({
   markUnlisted: async (id: string) => void marked.ids.push(id),
   loadLocal: async () => [],
   loadTributes: async () => ({}),
+  loadTributeDays: async () => ({}),
+  saveTributeDays: async () => undefined,
   saveTributes: async () => undefined,
   changeLocal: async () => [],
 }))

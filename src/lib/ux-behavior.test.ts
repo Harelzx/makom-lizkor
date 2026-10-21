@@ -12,6 +12,8 @@ vi.mock("@/lib/storage", () => ({
   },
   loadLocal: async () => [],
   loadTributes: async () => ({}),
+  loadTributeDays: async () => ({}),
+  saveTributeDays: async () => undefined,
   saveTributes: async () => {},
 }))
 const { useVisits, visitKey, nextPlace } = await import("@/lib/visit-list")
