@@ -16,6 +16,7 @@ TRACKING_SECRET=development-tracking-secret-not-a-secret
 TRIBUTE_SECRET=development-tribute-secret-not-a-secret
 # A synthetic key pair's public half: the dev server's exports are encrypted to it. Its private half is in no file.
 EXPORT_PUBLIC_KEYS=[{"alg":"RSA-OAEP-256","kty":"RSA","n":"wfcEJWzpHraut9eGSD3mXeX5lzTaZrcPU1xFCn_S7v_D0Mj_wnY8Zg0k2c3di4SFFqD4cpeLwB-6PRulG5vrlN1LK10M0whdQkM-VSS1IgNhZorKpOZM3VyiJrnHv5gxmaE5w6mG0RtpgZTGuMdUV37-M-Qaq9CvgwJCazwQggRw2XCwKMkaPAwYBYVqNWIaWrrE6yvUVog1wWLYJUcd51Gw1ApBDjOv2K68KCJLmqScgHGU2GwOrghGL8-wOx29IR8KbigYNjfKL5F-Dzq-s0QrDm0xJ3kEQLM1WaA2UKnlghC27y-H4Uwi4wC37BuMffyzvsCiDrG05_Dcu5uNT1-hmk93O57Yhn-SGUVxkjjrz82c5-SHFdx8gKX5QSLVIsNWX0PzftfN3BFT_-wdgYn592r6Cy0Y8YQUzQ3U4wxGb49MTBD1Xclo46xwhXZgnX5mz2w8FLOiCzxjA0FV5bh5oX0pN-ZMwPV_zMFGJafSrDz3uhfCxjpNaLwXoDFD","e":"AQAB"}]
-# Where the dev server's Worker gets map tiles while its own bucket has no basemap archive: the public site's tiles,
-# relayed (worker/routes/tiles.ts). Development only; a deployed Worker never relays.
-TILES_UPSTREAM=https://makom-lizkor.makom-staging.workers.dev
+# Where the dev server's Worker gets map tiles while its own bucket has no basemap archive: staging's tiles, the same
+# archive, relayed (worker/routes/tiles.ts). Not production's: every e2e run, here and in CI, asks for hundreds of tiles,
+# and production's counters (the site-health screen) read them as visitors. Development only; a deployed Worker never relays.
+TILES_UPSTREAM=https://makom-lizkor-staging.makom-staging.workers.dev

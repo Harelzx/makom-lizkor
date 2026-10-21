@@ -227,8 +227,8 @@ export function healthReport(health: SiteHealth, summary: OpsSummary | null, r: 
   for (const f of r.failures) {
     const when = health.hours
       .filter((h) => h.code === f.code && r.timeline.some((t) => t.hour === h.hour))
-      .map((h) => `${clock(h.hour)}×${h.samples}`)
-      .join(", ")
+      .map((h) => `${clock(h.hour)} ×${h.samples}`)
+      .join(" · ")
     lines.push(`  - ${f.code} (${f.label}): ${f.n} [${when}]`)
   }
   lines.push("")
