@@ -228,16 +228,19 @@ export function stopOrbit() {
   cancelAnimationFrame(orbitRaf)
 }
 
-/** The last flight to a place: when it was asked for, and when it has landed (or been cut short, or timed out). */
-let flight: { at: number; done: Promise<void> } | null = null
+/** The last flight to a place: which place it was for, and when it has landed (or been cut short, or timed out). */
+let flight: { id: string | null; done: Promise<void> } | null = null
 
 /** Fly to a place, leaving room for the panel (start side on desktop, bottom sheet on phones). */
-export function flyToPlace(lng: number, lat: number, opts: { zoom?: number; pitch?: number; bearing?: number; duration?: number } = {}) {
+export function flyToPlace(
+  lng: number,
+  lat: number,
+  opts: { id?: string; zoom?: number; pitch?: number; bearing?: number; duration?: number } = {},
+) {
   if (!map) return
   const mobile = isMobile()
   const m = map
   const duration = reducedMotion() ? 0 : (opts.duration ?? 2800)
-  const at = performance.now()
   map.flyTo({
     center: [lng, lat],
     zoom: opts.zoom ?? 15,
@@ -251,7 +254,7 @@ export function flyToPlace(lng: number, lat: number, opts: { zoom?: number; pitc
   // Listened for once this flight has begun: a flight it cut short ends (moveend) as it starts, and that is not this
   // one landing. One with nothing to move (no motion asked for) has already ended.
   flight = {
-    at,
+    id: opts.id ?? null,
     done: m.isMoving()
       ? new Promise<void>((done) => {
           const t = setTimeout(done, duration + 1200)
@@ -265,15 +268,15 @@ export function flyToPlace(lng: number, lat: number, opts: { zoom?: number; pitc
 }
 
 /**
- * Resolves once the flight to a place chosen at `since` (performance.now()) has landed. The flight starts once the
- * selection's render has committed, which on a slow phone can be several frames after the choice, so this waits for a
- * flight asked for since then, for up to `start` ms (a second), rather than judging from whether the map happens to be moving yet
- * (it said "still" before the flight began, and the sheet rose over the map). No flight by then (a choice that doesn't
- * fly): at once. Capped by the flight's own timeout, so a lost moveend never holds it.
+ * Resolves once the flight to the place `id` has landed. The map flies in the store's own update, so the flight is
+ * usually there already; this waits for it up to `start` ms (a second), rather than judging from whether the map happens
+ * to be moving yet (it said "still" before the flight began, and the sheet rose over the map). No flight by then (a choice
+ * that doesn't fly): at once. Capped by the flight's own timeout, so a lost moveend never holds it.
  */
-export async function landed(since: number, start = 1000): Promise<void> {
-  while (!(flight && flight.at >= since) && performance.now() - since < start) await new Promise((r) => requestAnimationFrame(r))
-  if (flight && flight.at >= since) await flight.done
+export async function landed(id: string, start = 1000): Promise<void> {
+  const since = performance.now()
+  while (flight?.id !== id && performance.now() - since < start) await new Promise((r) => requestAnimationFrame(r))
+  if (flight?.id === id) await flight.done
 }
 
 /** Back to 06:29 for the opening played again: night, no names, low over Be'eri, drifting. */
