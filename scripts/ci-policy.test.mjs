@@ -410,3 +410,25 @@ test("a Cloudflare token is given only to the steps that call wrangler, never to
     "gives a Cloudflare token to a step that doesn't call wrangler",
   )
 })
+
+test("availability's read-only analytics token reaches only its one step, in a job that installs nothing", () => {
+  const job = "      - run: node scripts/worker-limits.mjs\n"
+  fails(
+    withChange(
+      "availability.yml",
+      "          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}\n",
+      "          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}\n          T: ${{ secrets.CLOUDFLARE_API_TOKEN }}\n",
+    ),
+    "job resources reads",
+  )
+  fails(withChange("availability.yml", job, "      - run: npm ci\n" + job), "job resources reads")
+  fails(withChange("availability.yml", job, "      - run: node scripts/other.mjs\n"), "job resources reads")
+  fails(
+    withChange(
+      "availability.yml",
+      "  public:\n    runs-on: ubuntu-26.04\n",
+      "  public:\n    runs-on: ubuntu-26.04\n    env:\n      T: ${{ secrets.CF_ANALYTICS_READ }}\n",
+    ),
+    "job public reads",
+  )
+})

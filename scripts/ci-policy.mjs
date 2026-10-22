@@ -9,6 +9,15 @@ import { parse } from "yaml"
 
 const PRODUCTION = ["release.yml", "rollback.yml"]
 const STAGING = "staging.yml"
+// The one secret outside production's and staging's: availability.yml counts the Worker's stopped invocations with a
+// token that can only read account analytics (Account Analytics: Read), handed to that one step, in a job that installs
+// nothing (22 October 2026).
+const ANALYTICS = {
+  workflow: "availability.yml",
+  job: "resources",
+  run: "node scripts/worker-limits.mjs",
+  secrets: ["CF_ACCOUNT_ID", "CF_ANALYTICS_READ"],
+}
 const SHA_REF = "${{ needs.verify.outputs.sha }}"
 
 const runs = (job) => (job.steps ?? []).map((s) => (typeof s.run === "string" ? s.run : ""))
@@ -44,7 +53,14 @@ export function policyProblems(workflows) {
       const secrets = [...body.matchAll(/\$\{\{\s*secrets\.([A-Za-z_][A-Za-z0-9_]*)/g)].map((m) => m[1]).filter((s) => s !== "GITHUB_TOKEN")
       // Staging's own secrets (STAGING_*, scoped to the staging account) in staging.yml; any other only in production's.
       const staging = name === STAGING && secrets.every((s) => s.startsWith("STAGING_"))
-      if (secrets.length && env !== "production" && !staging)
+      const analytics =
+        name === ANALYTICS.workflow &&
+        id === ANALYTICS.job &&
+        secrets.every((s) => ANALYTICS.secrets.includes(s)) &&
+        !/secrets\./.test(text({ env: job.env, with: job.with })) &&
+        (job.steps ?? []).every((s) => !/secrets\./.test(text(s)) || s.run === ANALYTICS.run) &&
+        !runs(job).some((r) => /\bnpm\s+(ci|i|install)\b/.test(r))
+      if (secrets.length && env !== "production" && !staging && !analytics)
         say(`job ${id} reads ${secrets.join(", ")} outside the production environment`)
       if (production && secrets.some((s) => s.startsWith("STAGING_"))) say(`job ${id} reads staging secrets in a production workflow`)
       // The retention time scale is staging's alone (L-RET A2, a87): no other workflow may name it.
