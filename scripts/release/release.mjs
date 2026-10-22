@@ -94,6 +94,8 @@ console.log(JSON.stringify(runs))
 
 step("worktree at the commit")
 const tree = resolve(ws, `release-${SHA.slice(0, 7)}`)
+// main's head is read from GitHub, so this checkout may not have it yet (a merge made a minute ago).
+run("git", ["fetch", "--quiet", "origin", SHA])
 if (!existsSync(tree)) run("git", ["worktree", "add", "--detach", tree, SHA], { stdio: ["ignore", "pipe", "inherit"] })
 assert.equal(run("git", ["rev-parse", "HEAD"], { cwd: tree }).trim(), SHA)
 assert.equal(run("git", ["status", "--porcelain"], { cwd: tree }).trim(), "", "the release worktree is not clean")
