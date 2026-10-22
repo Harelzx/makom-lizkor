@@ -54,7 +54,7 @@ for (const [name, options] of Object.entries({
   })
 }
 
-test("scheduled probe is bounded, read-only and needs no cloud or mail credentials", () => {
+test("the public probe is bounded, read-only and needs no cloud or mail credentials", () => {
   const workflow = parse(readFileSync(new URL("../.github/workflows/availability.yml", import.meta.url), "utf8"))
   assert.deepEqual(workflow.permissions, { contents: "read" })
   assert.deepEqual(workflow.on.schedule, [{ cron: "23 */6 * * *" }])
@@ -66,7 +66,8 @@ test("scheduled probe is bounded, read-only and needs no cloud or mail credentia
       .join("\n"),
     "node scripts/public-smoke.mjs",
   )
-  const text = JSON.stringify(workflow)
+  // The workflow's other job (worker-limits.mjs) holds a read-only analytics token; this one holds nothing.
+  const text = JSON.stringify(workflow.jobs.public)
   assert(!text.includes("secrets."))
   assert(!text.includes("npm ci"))
   assert(!text.includes("id-token"))
