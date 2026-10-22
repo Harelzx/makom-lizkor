@@ -71,13 +71,13 @@ if (priorTag === tag && !dryRun) {
   console.log(`${tag} is already live`)
   process.exit(0)
 }
-const evidence = resolve(
-  ws,
-  "agent-evidence",
-  `release-${SHA.slice(0, 7)}-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}${dryRun ? "-dry-run" : ""}`,
-)
+const folder = `release-${SHA.slice(0, 7)}-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}`
+let evidence = resolve(ws, "agent-evidence", `${folder}${dryRun ? "-dry-run" : ""}`)
 // A dry run's folder is its own, and starts empty each time; a real release's is never reused once it has deployed.
 if (dryRun) rmSync(evidence, { recursive: true, force: true })
+// A release that was rolled back may go out again (the rollback drill): its folder keeps its record, the new one its own.
+for (let n = 2; !dryRun && existsSync(resolve(evidence, "rollback-result.json")); n++)
+  evidence = resolve(ws, "agent-evidence", `${folder}-${n}`)
 assert(!existsSync(resolve(evidence, "production-deploy-result.json")), `${evidence} already has a deploy`)
 mkdirSync(evidence, { recursive: true })
 const log = resolve(evidence, "release.log")
@@ -285,14 +285,19 @@ async function gates(sha) {
   return { ci: ci.id, staging: staging.id }
 }
 
-/** The package production runs now, by the commit its tag names, among the evidence of earlier releases. */
+/** The package production runs now, by the commit its tag names, among the evidence of earlier releases. Only a
+ * release that deployed counts (a dry run packs the same commit too), and of a commit released twice (after a rollback)
+ * the latest. */
 function findPackage(priorShort) {
   const base = resolve(ws, "agent-evidence")
   const found = readdirSync(base)
-    .filter((d) => resolve(base, d) !== evidence)
-    .map((d) => resolve(base, d, `package-${priorShort}`))
+    .map((d) => resolve(base, d))
+    .filter((d) => d !== evidence && existsSync(resolve(d, "production-deploy-result.json")))
+    .filter((d) => readJson(resolve(d, "production-deploy-result.json")).tag === `release-${priorShort}`)
+    .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)
+    .map((d) => resolve(d, `package-${priorShort}`))
     .filter((p) => existsSync(resolve(p, "worker/wrangler.json")))
-  assert.equal(found.length, 1, `production's package (package-${priorShort}) not found once in agent-evidence`)
+  assert(found.length, `production's package (package-${priorShort}) not found in a deployed release in agent-evidence`)
   return found[0]
 }
 

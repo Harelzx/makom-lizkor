@@ -4,7 +4,8 @@
 //   npm run release:rollback -- <evidence>   a given release's evidence folder
 //
 // Code only: a rollback never undoes a migration (they are expand-only, so the older code still runs on the newer
-// database) or Access. Not yet exercised on production: until it is, read what it prints before trusting it.
+// database) or Access. Exercised on production on 22 October 2026 (88c9fe8 back to 29c69eb in about 30 s); to go
+// forward again, run npm run release, which gives a rolled-back release a fresh evidence folder.
 import assert from "node:assert/strict"
 import { existsSync, readdirSync, statSync } from "node:fs"
 import { resolve } from "node:path"
