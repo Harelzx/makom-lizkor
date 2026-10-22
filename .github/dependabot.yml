@@ -15,8 +15,10 @@ updates:
       - dependency-name: typescript
         update-types: ["version-update:semver-major"]
     groups:
+      # vitest moves with the Workers pool that runs it: 5.0.4 alone broke every suite in workerd (its new cache file
+      # was never written there), so the two are proposed, and tested, together.
       cloudflare-toolchain:
-        patterns: ["@cloudflare/*", "wrangler"]
+        patterns: ["@cloudflare/*", "wrangler", "vitest", "@vitest/*"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
