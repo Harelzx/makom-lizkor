@@ -230,10 +230,7 @@ export function Shell() {
         // place is seen arriving before the sheet covers half of it. From the list the sheet is already up.
         if (foldedNow.current && s.selectedId && s.selectedId !== was.selectedId) {
           const id = s.selectedId
-          const chosen = performance.now()
-          void import("@/map/controller")
-            .then((m) => m.landed(chosen))
-            .then(() => useStore.getState().selectedId === id && setSnap(SNAPS[2]))
+          void import("@/map/controller").then((m) => m.landed(id)).then(() => useStore.getState().selectedId === id && setSnap(SNAPS[2]))
         } else setSnap(SNAPS[2])
       }),
     [],

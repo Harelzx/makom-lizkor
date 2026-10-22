@@ -144,15 +144,11 @@ export function MapCanvas() {
 
   // Camera follows the selection: once when it changes, or when the chosen place first arrives (a shared link to
   // an approved place can open before the feed does). A later feed update leaves the camera where the visitor put it.
+  // A change is followed in the store's own update, not after the render it causes: on a slow phone the story's render
+  // took over a second, and the sheet, which waits for this flight only that long, rose over the map before it.
   const flownTo = useRef<string | null>(null)
-  useEffect(() => {
-    const p = places.find((x) => x.id === selectedId)
-    if (!p) return void (flownTo.current = null)
-    if (flownTo.current === p.id) return
-    flownTo.current = p.id
-    if (useStore.getState().tab === "journey") return
-    flyToPlace(p.lng, p.lat, { zoom: p.kind === "community" ? 13.6 : p.precision === "exact" ? 16 : 14 })
-  }, [selectedId, places])
+  useEffect(() => follow(flownTo, places, selectedId), [selectedId, places])
+  useEffect(() => useStore.subscribe((s, was) => s.selectedId !== was.selectedId && follow(flownTo, allPlaces(s), s.selectedId)), [])
 
   // Draft pin while a visitor is adding a place.
   useEffect(() => {
@@ -298,4 +294,13 @@ function PlaceMarker({ place, bloomDelay, selected }: { place: Place; bloomDelay
       </span>
     </button>
   )
+}
+
+function follow(flownTo: { current: string | null }, places: Place[], selectedId: string | null) {
+  const p = places.find((x) => x.id === selectedId)
+  if (!p) return void (flownTo.current = null)
+  if (flownTo.current === p.id) return
+  flownTo.current = p.id
+  if (useStore.getState().tab === "journey") return
+  flyToPlace(p.lng, p.lat, { id: p.id, zoom: p.kind === "community" ? 13.6 : p.precision === "exact" ? 16 : 14 })
 }
