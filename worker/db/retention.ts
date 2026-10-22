@@ -5,6 +5,7 @@ import type { SendMail } from "../lib/mail"
 import { runOp, WATCH_FIRST_LOOK_MS, type OpEnv } from "./ops"
 import { erasePhotos, retirePhotos } from "./photos"
 import { log } from "../lib/log"
+import { pushAlert } from "../lib/push"
 
 /** Places erased in one run; the job runs every 15 minutes, so a backlog clears long before the day's bound. */
 const ERASE_BATCH = 100
@@ -474,6 +475,14 @@ export async function tellModerators(
         .filter(Boolean),
     ),
   ]
+  // The phone first, at most once in six hours per alert (push_<job>), even while its mail keeps failing and the alert
+  // is tried again every pass.
+  const pushed = await db.prepare("SELECT sent_at FROM job_alerts WHERE job = ?").bind(`push_${job}`).first<string>("sent_at")
+  if ((!pushed || pushed <= new Date(now.getTime() - 6 * 3600_000).toISOString()) && (await pushAlert(env, subject, text)))
+    await db
+      .prepare("INSERT INTO job_alerts (job, sent_at) VALUES (?1, ?2) ON CONFLICT (job) DO UPDATE SET sent_at = excluded.sent_at")
+      .bind(`push_${job}`, now.toISOString())
+      .run()
   let all = moderators.length > 0
   for (const to of moderators) if (!(await sendMail(env, { to, subject, text, budget: "ops" }))) all = false
   if (!all) return false

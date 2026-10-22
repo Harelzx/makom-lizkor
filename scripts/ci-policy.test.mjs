@@ -432,3 +432,16 @@ test("availability's read-only analytics token reaches only its one step, in a j
     "job public reads",
   )
 })
+
+test("availability's phone alert hands its topic only to the one ntfy step", () => {
+  const step = "        run: |\n          set -o pipefail\n"
+  fails(withChange("availability.yml", step, "        run: |\n          npm ci\n          set -o pipefail\n"), "job notify reads")
+  fails(
+    withChange(
+      "availability.yml",
+      "          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}\n",
+      "          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}\n          X: ${{ secrets.GMAIL_REFRESH_TOKEN }}\n",
+    ),
+    "job notify reads",
+  )
+})
