@@ -32,3 +32,16 @@ jobs:
         env:
           CF_ANALYTICS_READ: ${{ secrets.CF_ANALYTICS_READ }}
           CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+  # A failure above reaches the owner's phone too (ntfy), beside GitHub's own mail: the topic, a title and a link to the run.
+  notify:
+    needs: [public, resources]
+    if: failure()
+    runs-on: ubuntu-26.04
+    timeout-minutes: 1
+    steps:
+      - env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -o pipefail
+          jq -n --arg topic "$NTFY_TOPIC" --arg click "$RUN" '{topic: $topic, title: "מקום לזכור: בדיקת הזמינות נכשלה", message: "האתר, גבול הפרטיות או עצירות השרת. הפרטים בריצה.", tags: ["warning"], click: $click}' | curl -fsS -m 15 -H "content-type: application/json" --data-binary @- https://ntfy.sh/ > /dev/null

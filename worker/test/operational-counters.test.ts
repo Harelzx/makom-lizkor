@@ -175,3 +175,36 @@ it("tells of errors in visitors' browsers only once there are three in six hours
   expect(send).toHaveBeenCalledTimes(1)
   expect(send.mock.calls[0][1].text).toContain("שגיאות בדפדפן של מבקרים: 3")
 })
+
+it("pushes the alert to the owner's phone (ntfy) too, even while its mail fails, at most every six hours", async () => {
+  const now = new Date()
+  const pushes: { url: string; body: { topic: string; title: string; message: string } }[] = []
+  vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+    pushes.push({ url, body: JSON.parse(String(init.body)) })
+    return new Response("{}")
+  })
+  try {
+    const withTopic = { ...env, NTFY_TOPIC: "unit-topic" } as Env
+    const failing = vi.fn(async () => false)
+    await recordFailure(withTopic, "http_500", now)
+    await alertFailures(withTopic, failing, now)
+    expect(failing).toHaveBeenCalledTimes(1)
+    expect(pushes).toHaveLength(1)
+    expect(pushes[0].url).toBe("https://ntfy.sh/")
+    expect(pushes[0].body.topic).toBe("unit-topic")
+    expect(pushes[0].body.title).toBe("מקום לזכור - תקלות בשרת")
+    expect(pushes[0].body.message).toContain("שגיאות שרת (500): 1")
+    expect(pushes[0].body.message).not.toMatch(/@|token|body/)
+    // The mail is tried again at the next pass; the phone isn't told again within six hours.
+    await alertFailures(withTopic, failing, new Date(now.getTime() + 15 * 60_000))
+    expect(failing).toHaveBeenCalledTimes(2)
+    expect(pushes).toHaveLength(1)
+    await alertFailures(withTopic, failing, new Date(now.getTime() + 6 * 3600_000 + 60_000))
+    expect(pushes).toHaveLength(2)
+    // No topic (development, tests): nothing leaves.
+    await alertFailures(env, failing, new Date(now.getTime() + 13 * 3600_000))
+    expect(pushes).toHaveLength(2)
+  } finally {
+    vi.unstubAllGlobals()
+  }
+})
