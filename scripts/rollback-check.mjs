@@ -112,6 +112,25 @@ const crons = (cwd, rev) => {
   }
 }
 
+/**
+ * The migrations `to` adds over `from`, as the code at `from` would meet them: each must be new (a released migration
+ * is never edited or removed) and expand-only by the grammar above. The pull-request and release gates
+ * (scripts/migration-check.mjs, scripts/release/release.mjs) and the rollback check all read this one list.
+ */
+export function migrationProblems({ cwd = process.cwd(), from, to }) {
+  const problems = []
+  for (const line of git(cwd, ["diff", "--name-status", "--no-renames", from, to, "--", "migrations"]).split("\n").filter(Boolean)) {
+    const [status, file] = line.split("\t")
+    if (status !== "A") {
+      problems.push(`${file}: a released migration was changed or removed`)
+      continue
+    }
+    for (const what of sqlProblems(git(cwd, ["show", `${to}:${file}`])))
+      problems.push(`${file} ${what}: the earlier code may fail on today's schema`)
+  }
+  return problems
+}
+
 export function rollbackProblems({ cwd = process.cwd(), target, deployed }) {
   const t = git(cwd, ["rev-parse", `${target}^{commit}`]).trim()
   const d = git(cwd, ["rev-parse", `${deployed}^{commit}`]).trim()
@@ -121,16 +140,7 @@ export function rollbackProblems({ cwd = process.cwd(), target, deployed }) {
   } catch {
     return ["the target is not an earlier commit of the deployed one"]
   }
-  const problems = []
-  for (const line of git(cwd, ["diff", "--name-status", "--no-renames", t, d, "--", "migrations"]).split("\n").filter(Boolean)) {
-    const [status, file] = line.split("\t")
-    if (status !== "A") {
-      problems.push(`${file}: a released migration was changed or removed`)
-      continue
-    }
-    for (const what of sqlProblems(git(cwd, ["show", `${d}:${file}`])))
-      problems.push(`${file} ${what}: the earlier code may fail on today's schema`)
-  }
+  const problems = migrationProblems({ cwd, from: t, to: d })
   const touched = git(cwd, ["diff", "--name-only", t, d, "--", ...SAFEGUARDS])
     .split("\n")
     .filter(Boolean)

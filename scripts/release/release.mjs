@@ -8,7 +8,8 @@
 // commit in a clean worktree with the real Turnstile sitekey; packages the build and compares its runtime configuration
 // with the package production runs now, refusing any change not named in --accept-drift; runs the release blockers;
 // reads Access and production's version before, deploys once, and checks the version, the migrations, Access and the
-// live site after. A pending migration stops it: migrations are applied by hand, first, and expand-only.
+// live site after. Every migration since the live release must be expand-only (scripts/migration-check.mjs's rule); a
+// pending one is applied only with --apply-migrations, after the before snapshots and right before the deploy.
 // Evidence goes to ../agent-evidence/release-<sha7>-<date>/; secrets and raw logs stay in ../.production-private/.
 // Rollback: scripts/release/rollback.mjs.
 import assert from "node:assert/strict"
@@ -49,6 +50,7 @@ import {
 
 const argv = process.argv.slice(2)
 const dryRun = argv.includes("--dry-run")
+const applyMigrations = argv.includes("--apply-migrations")
 const acceptDrift = (argv.find((a) => a.startsWith("--accept-drift="))?.split("=")[1] ?? "").split(",").filter(Boolean)
 const asked = argv.find((a) => /^[0-9a-f]{40}$/.test(a))
 
@@ -172,13 +174,30 @@ const before = serving(tree, ws, configPath)
 assert.equal(before.versions.length, 1, "production is split across versions")
 assert.equal(before.versions[0].percentage, 100)
 writeJson(resolve(evidence, "deployment-before.json"), { at: new Date().toISOString(), tag: priorTag, ...before })
-for (const db of ["DB", "DRILL_DB"])
-  assert.deepEqual(pendingMigrations(tree, ws, configPath, db), [], `${db}: a migration is pending; apply it first`)
-console.log(JSON.stringify({ serving: before.versions[0].id, tag: priorTag, migrations_pending: 0 }))
+// The live release's commit, from its tag: every migration since then must leave a schema both versions work on.
+const priorSha = run("git", ["rev-parse", `${priorTag.slice("release-".length)}^{commit}`], { cwd: tree }).trim()
+const { migrationProblems } = await import(resolve(tree, "scripts/rollback-check.mjs"))
+assert.deepEqual(migrationProblems({ cwd: tree, from: priorSha, to: SHA }), [], "a migration since the live release is not expand-only")
+const pending = Object.fromEntries(["DB", "DRILL_DB"].map((db) => [db, pendingMigrations(tree, ws, configPath, db)]))
+const anyPending = Object.values(pending).some((p) => p.length)
+assert(!anyPending || applyMigrations || dryRun, `migrations pending (${JSON.stringify(pending)}); run again with --apply-migrations`)
+console.log(JSON.stringify({ serving: before.versions[0].id, tag: priorTag, migrations_pending: pending }))
 
 if (dryRun) {
   step("dry run: stopping before the deploy; production is unchanged")
   process.exit(0)
+}
+
+if (anyPending) {
+  // Expand-only (checked above), so the code now serving runs on the new schema too; then the deploy.
+  step("migrations")
+  for (const db of ["DB", "DRILL_DB"]) {
+    if (!pending[db].length) continue
+    const r = wrangler(tree, ws, ["d1", "migrations", "apply", db, "--remote", "--config", configPath])
+    writeFileSync(resolve(evidence, `migrations-${db}-apply.log`), (r.stdout ?? "") + (r.stderr ?? ""))
+    assert.equal(r.status, 0, `${db}: the migration failed; see migrations-${db}-apply.log (nothing deployed)`)
+    assert.deepEqual(pendingMigrations(tree, ws, configPath, db), [], `${db}: still pending after applying`)
+  }
 }
 
 step("deploy (one attempt)")

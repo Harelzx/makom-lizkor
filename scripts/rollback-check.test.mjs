@@ -2,7 +2,7 @@
 import assert from "node:assert/strict"
 import { after, test } from "node:test"
 import { fixtureRepo } from "./release-fixture.mjs"
-import { rollbackProblems, SAFEGUARDS } from "./rollback-check.mjs"
+import { migrationProblems, rollbackProblems, SAFEGUARDS } from "./rollback-check.mjs"
 
 const repos = []
 after(() => repos.forEach((r) => r.remove()))
@@ -169,4 +169,21 @@ test("a required column whose default is NULL is added to an empty table, then b
   db.exec("ALTER TABLE places ADD seen INTEGER DEFAULT NULL")
   db.exec("ALTER TABLE places ADD n INTEGER NOT NULL DEFAULT 0")
   db.exec("INSERT INTO places (id) VALUES ('a')")
+})
+
+test("the migration gate reads only the migrations: new and expand-only passes, a drop or an edit is refused", () => {
+  const { repo, base } = start()
+  const fine = repo.commit("expand", {
+    "migrations/0002_add.sql": "ALTER TABLE places ADD COLUMN note TEXT;\n",
+    // A deletion safeguard changing is the rollback check's concern, not the migration gate's.
+    "worker/db/retention.ts": "export const days = 31\n",
+  })
+  assert.deepEqual(migrationProblems({ cwd: repo.dir, from: base, to: fine }), [])
+  const dropped = repo.commit("contract", { "migrations/0003_drop.sql": "ALTER TABLE places DROP COLUMN note;\n" })
+  assert.match(migrationProblems({ cwd: repo.dir, from: fine, to: dropped }).join("\n"), /0003_drop\.sql drops something/)
+  const edited = repo.commit("edit", { "migrations/0001_init.sql": "CREATE TABLE places (id TEXT PRIMARY KEY, x TEXT);\n" })
+  assert.match(
+    migrationProblems({ cwd: repo.dir, from: dropped, to: edited }).join("\n"),
+    /0001_init\.sql: a released migration was changed/,
+  )
 })
