@@ -40,9 +40,11 @@
     "ENVIRONMENT": "production",
     "EPOCH": "0",
     "MODERATORS": "harelzx41@gmail.com",
-    // Gmail API was explicitly selected instead of a purchased sender domain. No automatic fallback.
-    "MAIL_PROVIDER": "gmail",
-    "MAIL_FROM": "makomlizkor@gmail.com",
+    // Cloudflare Email Sending from the site's own domain (owner, 23 October 2026): makomlizkor.org is onboarded with
+    // its SPF, DKIM and DMARC, and replies to this address reach the project's Gmail through Email Routing. The Gmail
+    // settings below stay so the switch back is one line; no automatic fallback either way.
+    "MAIL_PROVIDER": "cloudflare",
+    "MAIL_FROM": "info@makomlizkor.org",
     "GMAIL_ACCOUNT": "makomlizkor@gmail.com",
     // Truthful current status; release:check and runtime refuse Testing for production.
     "GMAIL_OAUTH_STATUS": "production",
@@ -81,6 +83,8 @@
   // Photos: quarantine/ until a moderator approves, public/ after. No public bucket; the Worker serves public/ only.
   // The ledger: every decision, ids and codes only, written before and after it (spec 8.2). Bucket lock is an account
   // setting, applied with the retention work before launch.
+  // The production sender (worker/lib/mail.ts); not inherited by the named environments, which never send.
+  "send_email": [{ "name": "MAIL" }],
   "r2_buckets": [
     { "binding": "MEDIA", "bucket_name": "makom-media", "jurisdiction": "eu" },
     { "binding": "LEDGER", "bucket_name": "makom-ledger", "jurisdiction": "eu" },
