@@ -8,7 +8,7 @@ import type { GlyphName } from "./glyphs"
 import { PROBLEM } from "./problems"
 import { Btn } from "./controls"
 import { ago, elementsOf, overdue, reportName, same, useInbox, type Filter, type Inbox, type Selection } from "./inbox-state"
-import { Alert, Chip, Glyph, Guide, Kbd, kindGlyph, kindLabel, meta, Scene, Toast, today, useMinute } from "./parts"
+import { Alert, Chip, Glyph, Guide, Kbd, kindGlyph, kindLabel, meta, Scene, Toast, today, useMinute, Vignette } from "./parts"
 import { Checks, Decision, ProposalBody, ProposalMap } from "./proposal"
 import { ReportActions, ReportBody, useReportTools } from "./report"
 import { CuratedImport, PlaceLookup, Shortcuts, SystemStatus, useKeys, useSummary } from "./tools"
@@ -75,7 +75,7 @@ export function Workbench() {
   }
 
   return (
-    <div className="grid h-dvh grid-cols-1 lg:grid-cols-[4.5rem_23.5rem_minmax(0,1fr)]">
+    <div className="grid h-dvh grid-cols-1 lg:grid-cols-[4.5rem_clamp(23.5rem,10.6rem+20.2vw,30rem)_minmax(0,1fr)]">
       <h1 className="sr-only">ניהול · מקום לזכור</h1>
       {/* The rail */}
       <nav aria-label="אזורים" className="hidden flex-col items-center gap-1.5 border-e border-(--a-line) bg-(--a-panel-2) py-4 lg:flex">
@@ -112,7 +112,7 @@ export function Workbench() {
       <aside className="flex min-h-0 flex-col border-e border-(--a-line) bg-(--a-panel-2) max-lg:pb-16">
         <ListHead inbox={inbox} overdue={overdueCount} dark={dark} setDark={setDark} />
         <QueueList inbox={inbox} current={view === "queue" ? inbox.shown : null} open={open} openPlace={(id) => go("lookup", id)} />
-        <p className="hidden items-center gap-3 border-t border-(--a-line) px-5 py-3 text-[0.8125rem] text-(--a-ink-3) pointer-fine:flex">
+        <p className="hidden items-center gap-3 border-t border-(--a-line) px-5 py-3 text-a-13 text-(--a-ink-3) pointer-fine:flex">
           <span className="flex items-center gap-1">
             <Kbd className="pointer-fine:inline-grid">J</Kbd>
             <Kbd className="pointer-fine:inline-grid">K</Kbd> מעבר בין פריטים
@@ -139,7 +139,7 @@ export function Workbench() {
           </Btn>
           {view === "queue" && inbox.shown && (
             <>
-              <p className="text-[0.875rem] text-(--a-ink-3) max-lg:hidden">
+              <p className="text-a-14 text-(--a-ink-3) max-lg:hidden">
                 {inbox.shown.kind === "report" ? "בקשת הסרה" : "הצעת מקום"} ·{" "}
                 <b className="font-semibold text-(--a-ink-1) tabular-nums">{inbox.position + 1}</b> מתוך{" "}
                 <span className="tabular-nums">{inbox.order.length}</span>
@@ -187,8 +187,11 @@ export function Workbench() {
               <ReportPane report={inbox.report} inbox={inbox} />
             ) : inbox.proposal ? (
               <article aria-label={inbox.proposal.name_he} className="flex flex-1 flex-col">
-                <ScreenGuide screen="proposal" className="mx-auto mt-6 w-[calc(100%-2rem)] max-w-[66rem] sm:w-[calc(100%-4rem)]" />
-                <div className="mx-auto grid w-full max-w-[66rem] flex-1 gap-8 px-4 pt-7 pb-10 sm:px-8 xl:grid-cols-[minmax(0,1fr)_19.5rem]">
+                <ScreenGuide
+                  screen="proposal"
+                  className="mx-auto mt-6 w-[calc(100%-2rem)] max-w-[66rem] sm:w-[calc(100%-4rem)] xl:max-w-[74rem]"
+                />
+                <div className="mx-auto grid w-full max-w-[66rem] flex-1 gap-8 px-4 pt-7 pb-10 sm:px-8 xl:max-w-[74rem] xl:grid-cols-[minmax(0,1fr)_21rem]">
                   <ProposalBody item={inbox.proposal} />
                   <div className="flex flex-col gap-3">
                     <Checks item={inbox.proposal} />
@@ -221,7 +224,7 @@ export function Workbench() {
             aria-current={view === n.view || undefined}
             onClick={() => (n.view === "queue" ? (setView("queue"), setLayer(false)) : go(n.view))}
             className={cn(
-              "a-focus-ring flex h-16 flex-col items-center justify-center gap-1 text-[0.75rem] font-medium",
+              "a-focus-ring flex h-16 flex-col items-center justify-center gap-1 text-a-12 font-medium",
               view === n.view ? "text-(--a-ink-1)" : "text-(--a-ink-3)",
             )}
           >
@@ -274,7 +277,7 @@ function RailButton({
       {!!badge && (
         <span
           aria-hidden
-          className="absolute -end-0.5 -top-0.5 grid h-[1.125rem] min-w-[1.125rem] place-items-center rounded-full bg-(--a-red) px-1 text-[0.6875rem] font-bold text-(--a-on-solid) tabular-nums"
+          className="absolute -end-0.5 -top-0.5 grid h-[1.125rem] min-w-[1.125rem] place-items-center rounded-full bg-(--a-red) px-1 text-a-11 font-bold text-(--a-on-solid) tabular-nums"
         >
           {badge}
         </span>
@@ -308,12 +311,10 @@ export function ListHead({
     <div className="a-contours px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-3 sm:px-5">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="text-[0.8125rem] font-medium text-(--a-ink-3)">{today()}</p>
-          <p className="mt-0.5 flex items-baseline gap-2.5 text-[1.5rem] leading-tight font-bold text-(--a-ink-1)">
+          <p className="text-a-13 font-medium text-(--a-ink-3)">{today()}</p>
+          <p className="mt-0.5 flex items-baseline gap-2.5 text-a-24 leading-tight font-bold text-(--a-ink-1)">
             מה מחכה לבדיקה
-            {inbox.done > 0 && (
-              <span className="text-[0.8125rem] font-medium text-(--a-green-ink) tabular-nums">טיפלתם היום ב־{inbox.done}</span>
-            )}
+            {inbox.done > 0 && <span className="text-a-13 font-medium text-(--a-green-ink) tabular-nums">טיפלתם היום ב־{inbox.done}</span>}
           </p>
         </div>
         <Btn
@@ -332,10 +333,10 @@ export function ListHead({
       <dl className="mt-4 grid grid-cols-3 gap-2">
         {kpis.map((k) => (
           <div key={k.label} className="rounded-2xl border border-(--a-line) bg-(--a-panel) px-3 py-2.5">
-            <dd className={cn("text-[1.375rem] leading-none font-bold tabular-nums", k.n ? k.tone : "text-(--a-ink-1)")}>
+            <dd className={cn("text-a-22 leading-none font-bold tabular-nums", k.n ? k.tone : "text-(--a-ink-1)")}>
               {inbox.loaded ? k.n : "–"}
             </dd>
-            <dt className="mt-1 text-[0.75rem] font-medium text-(--a-ink-3)">{k.label}</dt>
+            <dt className="mt-1 text-a-12 font-medium text-(--a-ink-3)">{k.label}</dt>
           </div>
         ))}
       </dl>
@@ -347,7 +348,7 @@ export function ListHead({
             aria-pressed={inbox.filter === f}
             onClick={() => inbox.setFilter(f)}
             className={cn(
-              "a-focus-ring pressable min-h-9 rounded-lg text-[0.875rem] font-semibold transition-colors",
+              "a-focus-ring pressable min-h-9 rounded-lg text-a-14 font-semibold transition-colors",
               inbox.filter === f ? "bg-(--a-panel) text-(--a-ink-1) shadow-(--a-shadow)" : "text-(--a-ink-2) hover:text-(--a-ink-1)",
             )}
           >
@@ -391,7 +392,7 @@ export function QueueList({
         <>
           {elementsOf(r).join(", ")}
           {r.status === "in_review" && (
-            <Chip tone="sun" className="h-5 px-2 text-[0.6875rem]">
+            <Chip tone="sun" className="h-5 px-2 text-a-11">
               בטיפול
             </Chip>
           )}
@@ -446,7 +447,7 @@ export function QueueList({
           {ops.map((a) => (
             <li
               key={a.id}
-              className="flex gap-3 rounded-xl border border-dashed border-(--a-sun)/40 bg-(--a-sun-soft) px-3 py-2.5 text-[0.8125rem] text-(--a-ink-1)"
+              className="flex gap-3 rounded-xl border border-dashed border-(--a-sun)/40 bg-(--a-sun-soft) px-3 py-2.5 text-a-13 text-(--a-ink-1)"
             >
               <Glyph name="clock" className="mt-0.5 size-4 text-(--a-sun)" />
               <span className="flex min-w-0 flex-col gap-0.5">
@@ -495,12 +496,12 @@ export function QueueList({
                 <>
                   {meta([kindLabel(i.kind), i.place_he])}
                   {overdue(i) && (
-                    <Chip tone="sun" className="h-5 px-2 text-[0.6875rem]">
+                    <Chip tone="sun" className="h-5 px-2 text-a-11">
                       ממתינה מעל שבועיים
                     </Chip>
                   )}
-                  {!!i.correction && <Chip className="h-5 px-2 text-[0.6875rem]">תיקון למקום קיים</Chip>}
-                  {!!i.on_private_property && <Chip className="h-5 px-2 text-[0.6875rem]">בשטח פרטי</Chip>}
+                  {!!i.correction && <Chip className="h-5 px-2 text-a-11">תיקון למקום קיים</Chip>}
+                  {!!i.on_private_property && <Chip className="h-5 px-2 text-a-11">בשטח פרטי</Chip>}
                 </>
               }
               onSelect={() => open({ kind: "proposal", id: i.id })}
@@ -509,13 +510,13 @@ export function QueueList({
         </Group>
       )}
       {loaded && !inbox.order.length && !ops.length && (
-        <p className="px-3 pt-8 text-center text-[0.9375rem] text-(--a-ink-2)">
-          {filter === "proposals"
-            ? "אין הצעות מקומות שממתינות. הצעה חדשה תופיע כאן."
-            : filter === "reports"
-              ? "אין בקשות הסרה פתוחות. בקשה חדשה תופיע כאן."
-              : "אין מה לבדוק כרגע. כל דבר חדש יופיע כאן."}
-        </p>
+        <Vignette
+          kind="waiting"
+          className="px-3 pt-10"
+          title={filter === "proposals" ? "אין הצעות שממתינות" : filter === "reports" ? "אין בקשות הסרה פתוחות" : "אין מה לבדוק כרגע"}
+        >
+          {filter === "proposals" ? "הצעה חדשה תופיע כאן." : filter === "reports" ? "בקשה חדשה תופיע כאן." : "כל דבר חדש יופיע כאן."}
+        </Vignette>
       )}
     </nav>
   )
@@ -524,7 +525,7 @@ export function QueueList({
 function Group({ title, n, hot, children }: { title: string; n: number; hot?: boolean; children: ReactNode }) {
   return (
     <section aria-label={title} className="mt-4">
-      <h2 className={cn("mb-1.5 flex items-center gap-2 px-2.5 text-[0.75rem] font-bold", hot ? "text-(--a-red)" : "text-(--a-ink-3)")}>
+      <h2 className={cn("mb-1.5 flex items-center gap-2 px-2.5 text-a-12 font-bold", hot ? "text-(--a-red)" : "text-(--a-ink-3)")}>
         {title}
         <span className="font-medium tabular-nums opacity-70">{n}</span>
         <span aria-hidden className="h-px flex-1 bg-(--a-line)" />
@@ -588,11 +589,11 @@ function Row({
         >
           <Glyph name={glyph} className="size-[1.125rem]" />
         </span>
-        <span id={`${id}-t`} className="truncate text-[0.9375rem] font-semibold text-(--a-ink-1)">
+        <span id={`${id}-t`} className="truncate text-a-15 font-semibold text-(--a-ink-1)">
           {title}
         </span>
-        <span className="text-[0.75rem] whitespace-nowrap text-(--a-ink-3) tabular-nums">{age}</span>
-        <span id={`${id}-m`} className="col-span-2 col-start-2 flex items-center gap-1.5 truncate text-[0.8125rem] text-(--a-ink-2)">
+        <span className="text-a-12 whitespace-nowrap text-(--a-ink-3) tabular-nums">{age}</span>
+        <span id={`${id}-m`} className="col-span-2 col-start-2 flex items-center gap-1.5 truncate text-a-13 text-(--a-ink-2)">
           {line}
         </span>
       </button>
@@ -603,10 +604,10 @@ function Row({
 function Bar({ children, next }: { children: ReactNode; next?: string | null }) {
   return (
     <div className="sticky bottom-0 z-10 mt-auto border-t border-(--a-line) bg-(--a-panel)/92 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-md max-lg:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-      <div className="mx-auto flex w-full max-w-[66rem] items-center gap-4 px-4 pt-3 sm:px-8">
+      <div className="mx-auto flex w-full max-w-[66rem] items-center gap-4 px-4 pt-3 sm:px-8 xl:max-w-[74rem]">
         <div className="min-w-0 flex-1">{children}</div>
         {next && (
-          <p className="hidden max-w-56 truncate text-[0.8125rem] text-(--a-ink-3) xl:block">
+          <p className="hidden max-w-56 truncate text-a-13 text-(--a-ink-3) xl:block">
             הבא: <b className="font-semibold text-(--a-ink-1)">{next}</b>
           </p>
         )}
@@ -619,7 +620,7 @@ function ReportPane({ report, inbox }: { report: Report; inbox: Inbox }) {
   const tools = useReportTools(report, inbox.loadReports, inbox.say)
   return (
     <article aria-label={`בקשה על ${reportName(report)}`} className="flex flex-1 flex-col">
-      <div className="mx-auto w-full max-w-[46rem] flex-1 px-4 pt-6 pb-10 sm:px-8">
+      <div className="mx-auto w-full max-w-[46rem] flex-1 px-4 pt-6 pb-10 sm:px-8 xl:max-w-[52rem]">
         <ScreenGuide screen="report" className="mb-7" />
         <ReportBody report={report} tools={tools} />
       </div>
@@ -632,7 +633,7 @@ function ReportPane({ report, inbox }: { report: Report; inbox: Inbox }) {
 
 function ToolPage({ guide, children }: { guide: keyof typeof GUIDE; children: ReactNode }) {
   return (
-    <div className="mx-auto w-full max-w-[46rem] px-4 pt-6 pb-24 sm:px-8">
+    <div className="mx-auto w-full max-w-[46rem] px-4 pt-6 pb-24 sm:px-8 xl:max-w-[52rem]">
       <ScreenGuide screen={guide} className="mb-7" />
       {children}
     </div>
@@ -688,7 +689,7 @@ function Overview({ inbox, start }: { inbox: Inbox; start: () => void }) {
   if (inbox.failed)
     return (
       <div className="flex flex-1 flex-col items-center px-6 py-10">
-        <ScreenGuide screen="queue" className="w-full max-w-[46rem]" />
+        <ScreenGuide screen="queue" className="w-full max-w-[46rem] xl:max-w-[52rem]" />
         <Scene kind="offline" title="לא הצלחנו להתחבר לאתר" className="my-auto pt-10">
           <p>בדקו את החיבור לאינטרנט ולחצו «לנסות שוב». אם זה חוזר, רעננו את העמוד: ייתכן שצריך להתחבר מחדש.</p>
           <Btn variant="primary" className="mt-5" onClick={() => void inbox.reload()}>
@@ -700,7 +701,7 @@ function Overview({ inbox, start }: { inbox: Inbox; start: () => void }) {
     )
   if (!inbox.loaded)
     return (
-      <div aria-hidden className="mx-auto w-full max-w-[46rem] px-8 pt-16">
+      <div aria-hidden className="mx-auto w-full max-w-[46rem] px-8 pt-16 xl:max-w-[52rem]">
         <div className="h-4 w-40 animate-pulse rounded-full bg-(--a-sunk)" />
         <div className="mt-4 h-9 w-72 animate-pulse rounded-full bg-(--a-sunk)" />
       </div>
@@ -708,7 +709,7 @@ function Overview({ inbox, start }: { inbox: Inbox; start: () => void }) {
   if (!inbox.remaining)
     return (
       <div className="a-contours flex flex-1 flex-col items-center px-6 py-10">
-        <ScreenGuide screen="queue" className="w-full max-w-[46rem]" />
+        <ScreenGuide screen="queue" className="w-full max-w-[46rem] xl:max-w-[52rem]" />
         <Scene kind="done" title="הכול טופל" className="my-auto pt-10">
           <p>אין בקשות ואין הצעות שמחכות לכם. כל דבר חדש יופיע ברשימה{inbox.done ? `. היום טיפלתם ב־${inbox.done}.` : "."}</p>
         </Scene>
@@ -721,10 +722,10 @@ function Overview({ inbox, start }: { inbox: Inbox; start: () => void }) {
   ].filter(Boolean)
   return (
     <div className="a-contours flex flex-1 items-center">
-      <div className="mx-auto w-full max-w-[46rem] px-6 py-16 sm:px-8">
+      <div className="mx-auto w-full max-w-[46rem] px-6 py-16 sm:px-8 xl:max-w-[52rem]">
         <ScreenGuide screen="queue" className="mb-10" />
-        <p className="text-[0.875rem] font-medium text-(--a-ink-3)">{today()}</p>
-        <h2 className="mt-1 text-[2.5rem] leading-[1.1] font-bold tracking-[-0.02em] text-(--a-ink-1)">
+        <p className="text-a-14 font-medium text-(--a-ink-3)">{today()}</p>
+        <h2 className="mt-1 text-a-40 leading-[1.1] font-bold tracking-[-0.02em] text-(--a-ink-1)">
           {inbox.remaining === 1 ? (
             "דבר אחד ממתין לבדיקה"
           ) : (
@@ -733,7 +734,7 @@ function Overview({ inbox, start }: { inbox: Inbox; start: () => void }) {
             </>
           )}
         </h2>
-        <p className="mt-3 max-w-[52ch] text-[1.0625rem] leading-relaxed text-(--a-ink-2)">
+        <p className="mt-3 max-w-[52ch] text-a-17 leading-relaxed text-(--a-ink-2)">
           {parts.join(", ")}.{" "}
           {inbox.hot.length
             ? "מתחילים מהדחופות: שם משהו כבר מוסתר מהאתר עד שתחליטו."

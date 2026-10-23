@@ -49,13 +49,13 @@ export function Checks({ item, className }: { item: Item; className?: string }) 
       aria-label="מה לבדוק לפני פרסום"
       className={cn("overflow-hidden rounded-2xl border border-(--a-line) bg-(--a-panel)", className)}
     >
-      <h3 className="flex items-center justify-between border-b border-(--a-line) px-4 py-3 text-[0.8125rem] font-bold text-(--a-ink-3)">
+      <h3 className="flex items-center justify-between border-b border-(--a-line) px-4 py-3 text-a-13 font-bold text-(--a-ink-3)">
         מה לבדוק לפני פרסום
         {attention > 0 ? <Chip tone="sun">{attention} לבדיקה</Chip> : <Chip tone="green">אין משהו מיוחד לבדוק</Chip>}
       </h3>
       <ul className="divide-y divide-(--a-line)">
         {list.map((c) => (
-          <li key={c.title} className="flex gap-3 px-4 py-3 text-[0.9375rem]">
+          <li key={c.title} className="flex gap-3 px-4 py-3 text-a-15">
             <Glyph
               name={c.glyph}
               className={cn(
@@ -66,10 +66,7 @@ export function Checks({ item, className }: { item: Item; className?: string }) 
             <div className="min-w-0">
               <p className="font-medium text-(--a-ink-1)">{c.title}</p>
               {c.detail && (
-                <p
-                  dir={c.ltr ? "ltr" : undefined}
-                  className={cn("mt-0.5 text-[0.875rem] break-words text-(--a-ink-2)", c.ltr && "text-right")}
-                >
+                <p dir={c.ltr ? "ltr" : undefined} className={cn("mt-0.5 text-a-14 break-words text-(--a-ink-2)", c.ltr && "text-right")}>
                   {c.detail}
                 </p>
               )}
@@ -88,13 +85,11 @@ export function ProposalBody({ item, compact, art = true }: { item: Item; compac
       <div className="flex items-start gap-4">
         {art && <KindArt kind={item.kind} className={cn("shrink-0 text-(--a-ink-1)", compact ? "size-14" : "size-20")} />}
         <div className="min-w-0 pt-1">
-          <p className="text-[0.875rem] text-(--a-ink-3)">{meta([kindLabel(item.kind), item.place_he, `נשלחה ${ago(item.created_at)}`])}</p>
-          <h2
-            className={cn("mt-1 leading-tight font-bold tracking-[-0.01em] text-(--a-ink-1)", compact ? "text-[1.75rem]" : "text-[2rem]")}
-          >
+          <p className="text-a-14 text-(--a-ink-3)">{meta([kindLabel(item.kind), item.place_he, `נשלחה ${ago(item.created_at)}`])}</p>
+          <h2 className={cn("mt-1 leading-tight font-bold tracking-[-0.01em] text-(--a-ink-1)", compact ? "text-a-28" : "text-a-32")}>
             {item.name_he}
           </h2>
-          {item.in_memory_of && <p className="mt-1 text-[1rem] text-(--a-ink-2)">לזכר {item.in_memory_of}</p>}
+          {item.in_memory_of && <p className="mt-1 text-a-16 text-(--a-ink-2)">לזכר {item.in_memory_of}</p>}
         </div>
       </div>
       {(!!item.correction || overdue(item) || !!item.on_private_property) && (
@@ -119,15 +114,15 @@ export function ProposalBody({ item, compact, art = true }: { item: Item; compac
             alt={item.photo_alt ?? ""}
             className="aspect-[16/9] w-full rounded-2xl border border-(--a-line) bg-(--a-sunk) object-cover"
           />
-          <figcaption className="mt-2 text-[0.8125rem] text-(--a-ink-3)">
+          <figcaption className="mt-2 text-a-13 text-(--a-ink-3)">
             {meta([item.photo_alt, item.photo_credit && `צילום: ${item.photo_credit}`])}
           </figcaption>
         </figure>
       )}
       {item.story_he ? (
-        <p className="mt-6 max-w-[62ch] text-[1.0625rem] leading-[1.85] whitespace-pre-line text-(--a-ink-1)">{item.story_he}</p>
+        <p className="mt-6 max-w-[62ch] text-a-17 leading-[1.85] whitespace-pre-line text-(--a-ink-1)">{item.story_he}</p>
       ) : (
-        !item.photo_url && <p className="mt-6 text-[0.9375rem] text-(--a-ink-3)">בלי סיפור ובלי תמונה: רק השם והמיקום.</p>
+        !item.photo_url && <p className="mt-6 text-a-15 text-(--a-ink-3)">בלי סיפור ובלי תמונה: רק השם והמיקום.</p>
       )}
     </div>
   )
@@ -208,7 +203,7 @@ export function Decision({
         className="flex w-full flex-col gap-3"
         onKeyDown={(e) => e.key === "Escape" && setRejecting(false)}
       >
-        <p className="text-[0.9375rem] leading-relaxed text-(--a-ink-1)">
+        <p className="text-a-15 leading-relaxed text-(--a-ink-1)">
           לדחות את «{item.name_he}»? ההצעה לא תתפרסם{item.photo_url ? ", התמונה שצורפה תימחק" : ""}, ואם השולח השאיר מייל הוא יקבל הודעה
           שההצעה לא אושרה. אי אפשר לבטל.
         </p>

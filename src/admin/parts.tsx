@@ -7,6 +7,8 @@ import { KINDS } from "@/data/taxonomy"
 import { GLYPH, type GlyphName } from "./glyphs"
 import allDone from "./assets/all-done.webp"
 import offline from "./assets/offline.webp"
+import bud from "./assets/bud.webp"
+import bouquet from "./assets/bouquet.webp"
 import contours from "./assets/contours.webp"
 import type { Said } from "./inbox-state"
 
@@ -61,7 +63,7 @@ export function Chip({
   return (
     <span
       className={cn(
-        "inline-flex h-6 items-center gap-1.5 rounded-full px-2.5 text-[0.8125rem] font-semibold whitespace-nowrap",
+        "inline-flex h-6 items-center gap-1.5 rounded-full px-2.5 text-a-13 font-semibold whitespace-nowrap",
         TONE[tone],
         className,
       )}
@@ -78,7 +80,7 @@ export function Kbd({ children, className }: { children: ReactNode; className?: 
     <kbd
       aria-hidden
       className={cn(
-        "hidden h-5 min-w-5 place-items-center rounded-md border border-current px-1 font-sans text-[0.6875rem] leading-none font-semibold opacity-60 pointer-fine:inline-grid",
+        "hidden h-5 min-w-5 place-items-center rounded-md border border-current px-1 font-sans text-a-11 leading-none font-semibold opacity-60 pointer-fine:inline-grid",
         className,
       )}
     >
@@ -107,7 +109,7 @@ export function MapThumb({ lat, lng, approximate, className }: { lat: number; ln
         )}
         <Glyph name="pin" className="absolute start-1/2 top-1/2 size-9 translate-x-1/2 -translate-y-full text-(--a-red) drop-shadow-sm" />
       </div>
-      <div className="flex items-center justify-between gap-3 px-4 py-3 text-[0.875rem]">
+      <div className="flex items-center justify-between gap-3 px-4 py-3 text-a-14">
         <span dir="ltr" className="font-medium text-(--a-ink-1) tabular-nums [unicode-bidi:isolate]">
           {lat.toFixed(5)}, {lng.toFixed(5)}
         </span>
@@ -121,7 +123,7 @@ export function MapThumb({ lat, lng, approximate, className }: { lat: number; ln
           <Glyph name="external" className="size-3.5" />
         </a>
       </div>
-      <p className="border-t border-(--a-line) px-4 py-2.5 text-[0.8125rem] text-(--a-ink-2)">
+      <p className="border-t border-(--a-line) px-4 py-2.5 text-a-13 text-(--a-ink-2)">
         {approximate ? "מיקום משוער: באתר יוצג אזור, לא נקודה מדויקת" : "מיקום מדויק: באתר תוצג הנקודה עצמה"}
       </p>
     </div>
@@ -150,8 +152,39 @@ export function Scene({
         className="h-auto w-72 max-w-full select-none dark:drop-shadow-[0_0_40px_rgb(255_240_220/0.08)]"
         draggable={false}
       />
-      <h2 className="mt-4 text-[1.375rem] font-bold text-(--a-ink-1)">{title}</h2>
-      {children && <div className="mt-2 max-w-sm text-[0.9375rem] leading-relaxed text-(--a-ink-2)">{children}</div>}
+      <h2 className="mt-4 text-a-22 font-bold text-(--a-ink-1)">{title}</h2>
+      {children && <div className="mt-2 max-w-sm text-a-15 leading-relaxed text-(--a-ink-2)">{children}</div>}
+    </div>
+  )
+}
+
+/**
+ * A smaller drawing for a quiet corner: a list with nothing in it (a bud, waiting), or a check with nothing wrong (a
+ * bouquet). The site's own anemones, so an empty place reads as calm rather than as missing.
+ */
+export function Vignette({
+  kind,
+  title,
+  children,
+  className,
+}: {
+  kind: "waiting" | "calm"
+  title: string
+  children?: ReactNode
+  className?: string
+}) {
+  return (
+    <div className={cn("flex flex-col items-center text-center", className)}>
+      <img
+        src={kind === "waiting" ? bud : bouquet}
+        alt=""
+        width={140}
+        height={140}
+        className="size-24 select-none dark:brightness-90 dark:drop-shadow-[0_0_28px_rgb(255_240_220/0.08)]"
+        draggable={false}
+      />
+      <p className="mt-2 text-a-17 font-bold text-(--a-ink-1)">{title}</p>
+      {children && <div className="mt-1 max-w-[18rem] text-a-14 leading-relaxed text-(--a-ink-2)">{children}</div>}
     </div>
   )
 }
@@ -168,7 +201,7 @@ export function Toast({ said, className }: { said: Said | null; className?: stri
             animate={{ opacity: 1, y: 0, scale: 1, transition: { duration: 0.26, ease } }}
             exit={{ opacity: 0, y: -6, transition: { duration: 0.16 } }}
             className={cn(
-              "flex items-center gap-2.5 rounded-2xl px-4 py-3 text-[0.9375rem] font-medium shadow-(--a-shadow-lg)",
+              "flex items-center gap-2.5 rounded-2xl px-4 py-3 text-a-15 font-medium shadow-(--a-shadow-lg)",
               said.tone === "error" ? "bg-(--a-red) text-(--a-on-solid)" : "bg-(--a-ink-1) text-(--a-panel)",
             )}
           >
@@ -189,7 +222,7 @@ export function Alert({ children, className }: { children: ReactNode; className?
   return (
     <p
       role="alert"
-      className={cn("flex items-start gap-2.5 rounded-xl bg-(--a-red-soft) px-3.5 py-3 text-[0.9375rem] text-(--a-red-ink)", className)}
+      className={cn("flex items-start gap-2.5 rounded-xl bg-(--a-red-soft) px-3.5 py-3 text-a-15 text-(--a-red-ink)", className)}
     >
       <Glyph name="reject" className="mt-1 size-3.5" />
       <span>{children}</span>
@@ -227,16 +260,16 @@ export function Guide({ screen, title, children, className }: { screen: string; 
         aria-expanded={open}
         aria-controls={open ? body : undefined}
         onClick={toggle}
-        className="a-focus-ring flex min-h-11 w-full items-center gap-2 rounded-2xl px-4 text-start text-[0.875rem] font-semibold text-(--a-ink-2) hover:text-(--a-ink-1)"
+        className="a-focus-ring flex min-h-11 w-full items-center gap-2 rounded-2xl px-4 text-start text-a-14 font-semibold text-(--a-ink-2) hover:text-(--a-ink-1)"
       >
         <span
           aria-hidden
-          className="grid size-5 shrink-0 place-items-center rounded-full border-[1.5px] border-current text-[0.75rem] font-bold text-(--a-ink-3)"
+          className="grid size-5 shrink-0 place-items-center rounded-full border-[1.5px] border-current text-a-12 font-bold text-(--a-ink-3)"
         >
           ?
         </span>
         <span className="flex-1">{title}</span>
-        <span aria-hidden className="text-[0.8125rem] font-medium text-(--a-ink-3)">
+        <span aria-hidden className="text-a-13 font-medium text-(--a-ink-3)">
           {open ? "הסתרת ההסבר" : "הצגת ההסבר"}
         </span>
         <Glyph
@@ -245,7 +278,7 @@ export function Guide({ screen, title, children, className }: { screen: string; 
         />
       </button>
       {open && (
-        <div id={body} className="flex flex-col gap-1.5 px-4 pb-4 text-[0.9375rem] leading-relaxed text-(--a-ink-1)">
+        <div id={body} className="flex flex-col gap-1.5 px-4 pb-4 text-a-15 leading-relaxed text-(--a-ink-1)">
           {children}
         </div>
       )}
