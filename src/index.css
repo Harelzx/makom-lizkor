@@ -206,6 +206,23 @@
   --text-label--font-weight: 550;
   --text-caption: 0.875rem;
   --text-caption--line-height: 1.55;
+  /* The moderators' page (src/admin) only: its sizes as on a phone up to 768px, growing with the screen to about a fifth
+     larger at 1440px, the small ones most, so a desktop doesn't make them work to read (owner, 23 October 2026). */
+  --text-a-11: clamp(0.6875rem, 0.5446rem + 0.2976vw, 0.8125rem);
+  --text-a-12: clamp(0.75rem, 0.6071rem + 0.2976vw, 0.875rem);
+  --text-a-13: clamp(0.8125rem, 0.6696rem + 0.2976vw, 0.9375rem);
+  --text-a-14: clamp(0.875rem, 0.7321rem + 0.2976vw, 1rem);
+  --text-a-15: clamp(0.9375rem, 0.7946rem + 0.2976vw, 1.0625rem);
+  --text-a-16: clamp(1rem, 0.8571rem + 0.2976vw, 1.125rem);
+  --text-a-17: clamp(1.0625rem, 0.9196rem + 0.2976vw, 1.1875rem);
+  --text-a-18: clamp(1.125rem, 0.9821rem + 0.2976vw, 1.25rem);
+  --text-a-20: clamp(1.25rem, 1.1071rem + 0.2976vw, 1.375rem);
+  --text-a-22: clamp(1.375rem, 1.0893rem + 0.5952vw, 1.625rem);
+  --text-a-24: clamp(1.5rem, 1.2143rem + 0.5952vw, 1.75rem);
+  --text-a-26: clamp(1.625rem, 1.3393rem + 0.5952vw, 1.875rem);
+  --text-a-28: clamp(1.75rem, 1.4643rem + 0.5952vw, 2rem);
+  --text-a-32: clamp(2rem, 1.5714rem + 0.8929vw, 2.375rem);
+  --text-a-40: clamp(2.5rem, 2.0714rem + 0.8929vw, 2.875rem);
   --text-micro: 0.75rem;
   --text-micro--line-height: 1.5;
 

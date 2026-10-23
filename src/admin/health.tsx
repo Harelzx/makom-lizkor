@@ -4,6 +4,7 @@ import { fetchHealth, type OpsSummary } from "./api"
 import type { SiteHealth } from "../../worker/lib/health-schema"
 import { Btn } from "./controls"
 import { Alert, Glyph } from "./parts"
+import bouquet from "./assets/bouquet.webp"
 import { ago } from "./inbox-state"
 import { failureLabel, HEADLINE, healthReport, readHealth, type Level } from "./health-model"
 
@@ -71,7 +72,7 @@ export function SiteHealthPanel({ summary }: { summary: OpsSummary | null }) {
   return (
     <section aria-labelledby="health-title" aria-busy={busy || undefined} className="mb-10">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 id="health-title" className="text-[1.375rem] font-bold text-(--a-ink-1)">
+        <h2 id="health-title" className="text-a-22 font-bold text-(--a-ink-1)">
           מה שלום האתר
         </h2>
         <div className="flex items-center gap-1">
@@ -85,7 +86,7 @@ export function SiteHealthPanel({ summary }: { summary: OpsSummary | null }) {
           </Btn>
         </div>
       </div>
-      <p className="mt-1 text-[0.8125rem] text-(--a-ink-3)" aria-live="polite">
+      <p className="mt-1 text-a-13 text-(--a-ink-3)" aria-live="polite">
         {copied === "done"
           ? "הדוח המלא בלוח. אפשר להדביק אותו בשיחה עם מי שמטפל באתר."
           : health
@@ -97,19 +98,29 @@ export function SiteHealthPanel({ summary }: { summary: OpsSummary | null }) {
 
       {reading && (
         <div className={cn("mt-4 transition-opacity", busy && "opacity-60")}>
-          <div className={cn("rounded-2xl p-4", tone.soft)}>
-            <p className={cn("flex items-center gap-2.5 text-[1.125rem] font-bold", tone.ink)}>
+          <div className={cn("relative overflow-hidden rounded-2xl p-4", tone.soft, reading.level === "good" && "pe-28 sm:pe-36")}>
+            {reading.level === "good" && (
+              <img
+                src={bouquet}
+                alt=""
+                width={140}
+                height={140}
+                className="pointer-events-none absolute -end-2 -bottom-4 size-28 -rotate-12 select-none sm:size-36"
+                draggable={false}
+              />
+            )}
+            <p className={cn("flex items-center gap-2.5 text-a-18 font-bold", tone.ink)}>
               <span aria-hidden className={cn("size-2.5 rounded-full", tone.dot)} />
               {HEADLINE[reading.level]}
             </p>
             {reading.reasons.length > 0 ? (
-              <ul className="mt-2 space-y-1 text-[0.9375rem] leading-relaxed text-(--a-ink-1)">
+              <ul className="mt-2 space-y-1 text-a-15 leading-relaxed text-(--a-ink-1)">
                 {reading.reasons.map((r) => (
                   <li key={r}>{r}</li>
                 ))}
               </ul>
             ) : (
-              <p className="mt-1.5 text-[0.9375rem] text-(--a-ink-2)">
+              <p className="mt-1.5 text-a-15 text-(--a-ink-2)">
                 {reading.level === "empty"
                   ? "השרת עוד לא אסף מספרים. זה לא אומר שאין תקלות."
                   : `ב־${hours} השעות האחרונות לא נרשמה תקלה בשרת, בעבודות הרקע או בדפדפנים של מבקרים.`}
@@ -126,7 +137,7 @@ export function SiteHealthPanel({ summary }: { summary: OpsSummary | null }) {
                 aria-checked={hours === w.hours}
                 onClick={() => setHours(w.hours)}
                 className={cn(
-                  "h-8 rounded-lg px-3 text-[0.8125rem] font-semibold transition-colors",
+                  "h-8 rounded-lg px-3 text-a-13 font-semibold transition-colors",
                   hours === w.hours ? "bg-(--a-panel) text-(--a-ink-1) shadow-sm" : "text-(--a-ink-3) hover:text-(--a-ink-1)",
                 )}
               >
@@ -190,10 +201,10 @@ export function SiteHealthPanel({ summary }: { summary: OpsSummary | null }) {
 
           {reading.failures.length > 0 && (
             <div className="mt-5">
-              <h3 className="text-[0.9375rem] font-bold text-(--a-ink-1)">כל התקלות בטווח</h3>
+              <h3 className="text-a-15 font-bold text-(--a-ink-1)">כל התקלות בטווח</h3>
               <ul className="mt-2 divide-y divide-(--a-line) rounded-2xl border border-(--a-line) bg-(--a-panel)">
                 {reading.failures.map((f) => (
-                  <li key={f.code} className="flex items-center justify-between gap-3 px-4 py-2.5 text-[0.875rem]">
+                  <li key={f.code} className="flex items-center justify-between gap-3 px-4 py-2.5 text-a-14">
                     <span className="text-(--a-ink-1)">{f.label}</span>
                     <span className="font-bold text-(--a-ink-1) tabular-nums">{f.n}</span>
                   </li>
@@ -210,11 +221,11 @@ export function SiteHealthPanel({ summary }: { summary: OpsSummary | null }) {
 function Card({ title, value, detail, warn }: { title: string; value: number | string; detail: string; warn?: boolean }) {
   return (
     <li className="rounded-2xl border border-(--a-line) bg-(--a-panel) p-4">
-      <p className="text-[0.8125rem] font-bold text-(--a-ink-3)">{title}</p>
-      <p className={cn("mt-1.5 text-[1.625rem] leading-none font-bold tabular-nums", warn ? "text-(--a-sun)" : "text-(--a-ink-1)")}>
+      <p className="text-a-13 font-bold text-(--a-ink-3)">{title}</p>
+      <p className={cn("mt-1.5 text-a-26 leading-none font-bold tabular-nums", warn ? "text-(--a-sun)" : "text-(--a-ink-1)")}>
         {typeof value === "number" ? value.toLocaleString("he-IL") : value}
       </p>
-      <p className="mt-2 text-[0.8125rem] leading-relaxed text-(--a-ink-2)">{detail}</p>
+      <p className="mt-2 text-a-13 leading-relaxed text-(--a-ink-2)">{detail}</p>
     </li>
   )
 }
@@ -226,7 +237,7 @@ function Timeline({ timeline }: { timeline: { hour: string; failures: number; sa
     new Date(iso).toLocaleTimeString("he-IL", { timeZone: "Asia/Jerusalem", hour: "2-digit", minute: "2-digit" })
   return (
     <figure className="mt-5">
-      <figcaption className="text-[0.8125rem] font-bold text-(--a-ink-3)">שעה אחרי שעה</figcaption>
+      <figcaption className="text-a-13 font-bold text-(--a-ink-3)">שעה אחרי שעה</figcaption>
       <div className="mt-2 flex h-16 items-end gap-px" dir="ltr">
         {timeline.map((t) => (
           <div
@@ -239,11 +250,11 @@ function Timeline({ timeline }: { timeline: { hour: string; failures: number; sa
           </div>
         ))}
       </div>
-      <div className="mt-1 flex justify-between text-[0.75rem] text-(--a-ink-3) tabular-nums" dir="ltr">
+      <div className="mt-1 flex justify-between text-a-12 text-(--a-ink-3) tabular-nums" dir="ltr">
         <span>{label(timeline[0].hour)}</span>
         <span>עכשיו</span>
       </div>
-      <p className="mt-1.5 text-[0.75rem] text-(--a-ink-3)">אפור: כמה פניות היו לשרת. קו אדום מעל שעה: הייתה בה תקלה.</p>
+      <p className="mt-1.5 text-a-12 text-(--a-ink-3)">אפור: כמה פניות היו לשרת. קו אדום מעל שעה: הייתה בה תקלה.</p>
     </figure>
   )
 }

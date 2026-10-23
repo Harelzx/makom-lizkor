@@ -11,9 +11,9 @@ const VARIANT: Record<Variant, string> = {
   "danger-ghost": "text-(--a-red-ink) hover:bg-(--a-red-soft)",
 }
 const SIZE = {
-  sm: "h-9 gap-1.5 rounded-xl px-3 text-[0.875rem]",
-  md: "h-11 gap-2 rounded-xl px-4 text-[0.9375rem]",
-  lg: "h-12 gap-2.5 rounded-2xl px-5 text-[1rem]",
+  sm: "h-9 gap-1.5 rounded-xl px-3 text-a-14",
+  md: "h-11 gap-2 rounded-xl px-4 text-a-15",
+  lg: "h-12 gap-2.5 rounded-2xl px-5 text-a-16",
 }
 
 /** The page's one button: a size a finger can hit, a visible focus, and a press that gives a little. */
@@ -37,9 +37,9 @@ export const Btn = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButton
 
 /** Inputs in the page's own look, keeping native semantics (labels, required, dates). */
 export const inputClass =
-  "a-focus-ring w-full rounded-xl border border-(--a-line-2) bg-(--a-panel-2) px-3.5 text-[0.9375rem] text-(--a-ink-1) placeholder:text-(--a-ink-3) outline-none focus:border-(--a-ink-3)"
-export const fieldLabel = "mb-1.5 block text-[0.875rem] font-semibold text-(--a-ink-1)"
-export const fieldHint = "mt-1.5 block text-[0.8125rem] text-(--a-ink-3)"
+  "a-focus-ring w-full rounded-xl border border-(--a-line-2) bg-(--a-panel-2) px-3.5 text-a-15 text-(--a-ink-1) placeholder:text-(--a-ink-3) outline-none focus:border-(--a-ink-3)"
+export const fieldLabel = "mb-1.5 block text-a-14 font-semibold text-(--a-ink-1)"
+export const fieldHint = "mt-1.5 block text-a-13 text-(--a-ink-3)"
 export const checkClass = "mt-0.5 size-[1.125rem] shrink-0 accent-(--a-ink-1)"
 
 /** A labelled control: the label names it, the hint describes it, so a screen reader hears a short name and then the help. */

@@ -87,7 +87,7 @@ export function SystemStatus({ status }: { status: ReturnType<typeof useSummary>
   return (
     <section aria-labelledby="status-title" aria-busy={busy || undefined}>
       <div className="flex items-center justify-between gap-3">
-        <h2 id="status-title" className="text-[1.375rem] font-bold text-(--a-ink-1)">
+        <h2 id="status-title" className="text-a-22 font-bold text-(--a-ink-1)">
           תקינות האתר
         </h2>
         <Btn size="sm" variant="ghost" disabled={busy} onClick={() => void load()}>
@@ -95,7 +95,7 @@ export function SystemStatus({ status }: { status: ReturnType<typeof useSummary>
           רענון הנתונים
         </Btn>
       </div>
-      {summary && <p className="mt-1 text-[0.8125rem] text-(--a-ink-3)">עודכן {ago(summary.generated_at)}.</p>}
+      {summary && <p className="mt-1 text-a-13 text-(--a-ink-3)">עודכן {ago(summary.generated_at)}.</p>}
       {failed && <Alert className="mt-4">לא הצלחנו לקרוא את הנתונים. רעננו את העמוד (ייתכן שצריך להתחבר מחדש) ונסו שוב.</Alert>}
       {!summary && busy && (
         <div aria-hidden className="mt-4 grid gap-2 sm:grid-cols-2">
@@ -108,16 +108,14 @@ export function SystemStatus({ status }: { status: ReturnType<typeof useSummary>
         <ul className={cn("mt-4 grid gap-2 transition-opacity sm:grid-cols-2", busy && "opacity-60")}>
           {rows.map((r) => (
             <li key={r.title} className="rounded-2xl border border-(--a-line) bg-(--a-panel) p-4">
-              <div className="flex items-center gap-2 text-[0.8125rem] font-bold text-(--a-ink-3)">
+              <div className="flex items-center gap-2 text-a-13 font-bold text-(--a-ink-3)">
                 <Glyph name={r.glyph} className="size-4" />
                 {r.title}
               </div>
-              <p
-                className={cn("mt-1.5 text-[1.625rem] leading-none font-bold tabular-nums", r.warn ? "text-(--a-sun)" : "text-(--a-ink-1)")}
-              >
+              <p className={cn("mt-1.5 text-a-26 leading-none font-bold tabular-nums", r.warn ? "text-(--a-sun)" : "text-(--a-ink-1)")}>
                 {r.value}
               </p>
-              {r.detail && <p className="mt-2 text-[0.8125rem] leading-relaxed text-(--a-ink-2)">{r.detail}</p>}
+              {r.detail && <p className="mt-2 text-a-13 leading-relaxed text-(--a-ink-2)">{r.detail}</p>}
             </li>
           ))}
         </ul>
@@ -156,10 +154,10 @@ export function PlaceLookup({ initial = "" }: { initial?: string }) {
   }, [initial, show])
   return (
     <section aria-labelledby="lookup-title">
-      <h2 id="lookup-title" className="text-[1.375rem] font-bold text-(--a-ink-1)">
+      <h2 id="lookup-title" className="text-a-22 font-bold text-(--a-ink-1)">
         בקשה שהגיעה במייל או בטלפון
       </h2>
-      <p className="mt-1 text-[0.9375rem] text-(--a-ink-2)">
+      <p className="mt-1 text-a-15 text-(--a-ink-2)">
         הדביקו את הקישור למקום (מעתיקים אותו מכפתור «שיתוף» בכרטיס המקום באתר), ואז הסתירו או מחקו לפי הבקשה.
       </p>
       <form
@@ -187,13 +185,13 @@ export function PlaceLookup({ initial = "" }: { initial?: string }) {
         </Btn>
       </form>
       {message && (
-        <p role="status" className="mt-4 text-[0.9375rem] text-(--a-ink-2)">
+        <p role="status" className="mt-4 text-a-15 text-(--a-ink-2)">
           {message}
         </p>
       )}
       {place && (
         <div className="mt-5 flex flex-col gap-5 rounded-2xl border border-(--a-line) bg-(--a-panel) p-4 sm:p-5">
-          <p className="text-[0.875rem] text-(--a-ink-3)">
+          <p className="text-a-14 text-(--a-ink-3)">
             מצב באתר: <b className="font-semibold text-(--a-ink-1)">{PLACE_STATUS[place.status] ?? place.status}</b>
             {place.suppressions.length > 0 &&
               (place.suppressions.length === 1 ? " · חלק אחד מוסתר" : ` · ${place.suppressions.length} חלקים מוסתרים`)}{" "}
@@ -282,10 +280,10 @@ export function CuratedImport() {
   const done = !busy && message.startsWith("היבוא הושלם")
   return (
     <section aria-labelledby="import-title">
-      <h2 id="import-title" className="text-[1.375rem] font-bold text-(--a-ink-1)">
+      <h2 id="import-title" className="text-a-22 font-bold text-(--a-ink-1)">
         יבוא מקומות האתר
       </h2>
-      <p className="mt-1 text-[0.9375rem] text-(--a-ink-2)">
+      <p className="mt-1 text-a-15 text-(--a-ink-2)">
         מקומות שהאתר עצמו מביא, מקובץ שהוכן מראש עם המקורות, התמונות והרישיונות. מקומות שכבר קיימים באתר לא ישתנו.
       </p>
       <label
@@ -295,10 +293,10 @@ export function CuratedImport() {
         )}
       >
         <Glyph name="import" className="size-8 text-(--a-ink-2)" />
-        <span id="import-file-label" className="text-[0.9375rem] font-semibold text-(--a-ink-1)">
+        <span id="import-file-label" className="text-a-15 font-semibold text-(--a-ink-1)">
           קובץ המקומות
         </span>
-        <span id="import-file-hint" className="text-[0.8125rem] text-(--a-ink-3)">
+        <span id="import-file-hint" className="text-a-13 text-(--a-ink-3)">
           לחיצה לבחירת הקובץ שהוכן מראש
         </span>
         <input
@@ -313,11 +311,11 @@ export function CuratedImport() {
       </label>
       {packet && (
         <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-(--a-line) bg-(--a-panel) p-4">
-          <p className="flex items-center gap-2 text-[0.9375rem] font-medium text-(--a-ink-1)">
+          <p className="flex items-center gap-2 text-a-15 font-medium text-(--a-ink-1)">
             <Glyph name="queue" className="size-4 text-(--a-ink-3)" />
             מוכנים לפרסום: {packet.places.length} מקומות ו־{packet.photoCount} תמונות.
           </p>
-          <ul className="max-h-48 divide-y divide-(--a-line) overflow-auto rounded-xl border border-(--a-line) text-[0.875rem]">
+          <ul className="max-h-48 divide-y divide-(--a-line) overflow-auto rounded-xl border border-(--a-line) text-a-14">
             {packet.places.map((p) => (
               <li key={p.id} className="px-3 py-2">
                 {p.name_he}
@@ -335,7 +333,7 @@ export function CuratedImport() {
         </div>
       )}
       {message && (
-        <p role="status" className={cn("mt-4 flex items-start gap-2.5 text-[0.9375rem]", done ? "text-(--a-ink-1)" : "text-(--a-ink-2)")}>
+        <p role="status" className={cn("mt-4 flex items-start gap-2.5 text-a-15", done ? "text-(--a-ink-1)" : "text-(--a-ink-2)")}>
           <Glyph name={done ? "approve" : "clock"} className={cn("mt-1 size-4", done && "text-(--a-green)")} />
           {message}
         </p>
@@ -367,17 +365,17 @@ export function Shortcuts({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="admin-ui font-admin">
         <DialogHeader>
-          <DialogTitle className="text-[1.25rem] font-bold">קיצורי מקלדת</DialogTitle>
-          <DialogDescription className="text-[0.9375rem] text-(--a-ink-2)">
+          <DialogTitle className="text-a-20 font-bold">קיצורי מקלדת</DialogTitle>
+          <DialogDescription className="text-a-15 text-(--a-ink-2)">
             פועלים בכל מקום בעמוד, חוץ מבתוך שדה כתיבה. גם כשהמקלדת בעברית: לוחצים על המקש שמסומן באות האנגלית.
           </DialogDescription>
         </DialogHeader>
-        <dl className="grid grid-cols-[auto_1fr] items-center gap-x-6 gap-y-3 text-[0.9375rem]">
+        <dl className="grid grid-cols-[auto_1fr] items-center gap-x-6 gap-y-3 text-a-15">
           {[...SHORTCUTS, ...extra].map(([k, what]) => (
             <div key={what} className="contents">
               <dt className="flex gap-1">
                 {k.map((key) => (
-                  <Kbd key={key} className="inline-grid h-6 min-w-6 text-[0.75rem] opacity-80">
+                  <Kbd key={key} className="inline-grid h-6 min-w-6 text-a-12 opacity-80">
                     {key}
                   </Kbd>
                 ))}

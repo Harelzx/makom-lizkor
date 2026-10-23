@@ -108,7 +108,7 @@ function LiftForm({
       {(code === "requester_withdrew" || code === "family_requested_restore") &&
         text("verificationNote", "איך וידאתם שזה באמת המבקש", "למשל: הבקשה הגיעה מאותה כתובת מייל. לעולם לא לבקש תעודת זהות.", true)}
       {code === "content_corrected" && (
-        <label className="flex items-start gap-3 text-[0.9375rem] text-(--a-ink-1)">
+        <label className="flex items-start gap-3 text-a-15 text-(--a-ink-1)">
           <input type="checkbox" className={checkClass} checked={absent} onChange={(e) => setAbsent(e.target.checked)} />
           בדקתי שמה שביקשו להסיר כבר לא מופיע בגרסה החדשה
         </label>
@@ -117,11 +117,11 @@ function LiftForm({
       {text("contactNote", "שיחה עם המשפחה או עם מי שהקים את האנדרטה", "חובה אם ההסתרה הייתה בבקשת המשפחה: עם מי דיברתם ומה סוכם.", true)}
       {text("contactDate", "תאריך השיחה", undefined, false, "date")}
       <div className="flex flex-col gap-3 border-t border-(--a-line) pt-4">
-        <label className="flex items-start gap-3 text-[0.9375rem] text-(--a-ink-1)">
+        <label className="flex items-start gap-3 text-a-15 text-(--a-ink-1)">
           <input type="checkbox" className={checkClass} checked={affirmative} onChange={(e) => setAffirmative(e.target.checked)} />
           יש סיבה ברורה וכתובה להחזיר
         </label>
-        <label className="flex items-start gap-3 text-[0.9375rem] text-(--a-ink-1)">
+        <label className="flex items-start gap-3 text-a-15 text-(--a-ink-1)">
           <input type="checkbox" className={checkClass} checked={notSilence} onChange={(e) => setNotSilence(e.target.checked)} />
           הסיבה איננה «לא ענו לנו», ואיננה ויכוח בין בני משפחה
         </label>
@@ -159,11 +159,11 @@ export function EraseForm({ place, done }: { place: PlaceView; done: (error: str
         await done(await send(`/api/admin/places/${place.id}/erase`, { expectedRev: place.rev, confirm: true }))
       }}
     >
-      <p className="text-[0.9375rem] leading-relaxed text-(--a-ink-1)">
+      <p className="text-a-15 leading-relaxed text-(--a-ink-1)">
         יימחקו מיד: השם, הסיפור, התמונות, המקורות ופרטי השולח. אי אפשר לבטל, וגם שחזור מגיבוי לא יחזיר אותם. נשאר רק רישום שהיה כאן מקום
         ושהוא נמחק.
       </p>
-      <label className="flex items-start gap-3 text-[0.9375rem] font-medium text-(--a-ink-1)">
+      <label className="flex items-start gap-3 text-a-15 font-medium text-(--a-ink-1)">
         <input type="checkbox" className={cn(checkClass, "accent-(--a-red)")} checked={sure} onChange={(e) => setSure(e.target.checked)} />
         ביקשו למחוק את המקום, ואני מבין או מבינה שאי אפשר לבטל את המחיקה
       </label>
@@ -208,7 +208,7 @@ export function HideForm({ place, reportId, done }: { place: PlaceView; reportId
             <label
               key={el}
               className={cn(
-                "flex h-10 cursor-pointer items-center gap-2 rounded-xl border px-3 text-[0.875rem] font-medium transition-colors has-focus-visible:outline-2 has-focus-visible:outline-(--a-focus)",
+                "flex h-10 cursor-pointer items-center gap-2 rounded-xl border px-3 text-a-14 font-medium transition-colors has-focus-visible:outline-2 has-focus-visible:outline-(--a-focus)",
                 fields.includes(el)
                   ? "border-(--a-ink-1) bg-(--a-ink-1) text-(--a-panel)"
                   : "border-(--a-line-2) text-(--a-ink-1) hover:bg-(--a-panel-2)",
@@ -254,7 +254,7 @@ function PurgeRequester({ report, done }: { report: Report; done: (error: string
       aria-label="מחיקת פרטי המבקש"
       className="flex flex-col gap-3 rounded-2xl border border-(--a-red)/40 bg-(--a-red-soft) p-4"
     >
-      <p className="text-[0.9375rem] leading-relaxed text-(--a-ink-1)">
+      <p className="text-a-15 leading-relaxed text-(--a-ink-1)">
         למחוק עכשיו את המייל של המבקש, את הקשר שלו למקום ואת מה שכתב? הבקשה תיסגר. אי אפשר לבטל. (בלי מחיקה ידנית, הפרטים נמחקים מעצמם עד 90
         יום אחרי שהבקשה נסגרת.)
       </p>
@@ -327,22 +327,22 @@ export function ReportBody({ report, tools, aside }: { report: Report; tools: Re
         {report.status === "closed" && <Chip>הבקשה סגורה</Chip>}
         {report.origin === "curated" && <Chip>מקום של האתר עצמו</Chip>}
       </div>
-      <p className="mt-4 text-[0.875rem] text-(--a-ink-3)">
+      <p className="mt-4 text-a-14 text-(--a-ink-3)">
         {meta([`התקבלה ${ago(report.received_at)}`, REQUESTER_LABEL[report.requester_type], report.relationship])}
       </p>
-      <h2 className="mt-1 text-[2rem] leading-tight font-bold tracking-[-0.01em] text-(--a-ink-1)">{reportName(report)}</h2>
-      <p className="mt-1.5 text-[1rem] text-(--a-ink-2)">מבקשים להסיר: {elementsOf(report).join(", ")}</p>
+      <h2 className="mt-1 text-a-32 leading-tight font-bold tracking-[-0.01em] text-(--a-ink-1)">{reportName(report)}</h2>
+      <p className="mt-1.5 text-a-16 text-(--a-ink-2)">מבקשים להסיר: {elementsOf(report).join(", ")}</p>
 
       {report.explanation && (
         <>
-          <h3 className="mt-7 mb-2 text-[0.8125rem] font-bold text-(--a-ink-3)">מה כתבו</h3>
-          <blockquote className="border-s-[3px] border-(--a-red) ps-4 text-[1.0625rem] leading-[1.8] whitespace-pre-line text-(--a-ink-1)">
+          <h3 className="mt-7 mb-2 text-a-13 font-bold text-(--a-ink-3)">מה כתבו</h3>
+          <blockquote className="border-s-[3px] border-(--a-red) ps-4 text-a-17 leading-[1.8] whitespace-pre-line text-(--a-ink-1)">
             {report.explanation}
           </blockquote>
         </>
       )}
       {report.handling_note && (
-        <p className="mt-5 rounded-xl bg-(--a-sunk) px-4 py-3 text-[0.9375rem] text-(--a-ink-1)">
+        <p className="mt-5 rounded-xl bg-(--a-sunk) px-4 py-3 text-a-15 text-(--a-ink-1)">
           <span className="font-semibold">מה נעשה: </span>
           {report.handling_note}
         </p>
@@ -351,11 +351,11 @@ export function ReportBody({ report, tools, aside }: { report: Report; tools: Re
 
       {place && (
         <section className="mt-7">
-          <h3 className="mb-2 text-[0.8125rem] font-bold text-(--a-ink-3)">
+          <h3 className="mb-2 text-a-13 font-bold text-(--a-ink-3)">
             {place.status === "hidden" ? "המקום כולו מוסתר מהאתר" : "מה מוסתר עכשיו מהאתר"}
           </h3>
           {place.suppressions.length === 0 ? (
-            <p className="flex items-center gap-2.5 rounded-2xl border border-(--a-line) px-4 py-4 text-[0.9375rem] text-(--a-ink-2)">
+            <p className="flex items-center gap-2.5 rounded-2xl border border-(--a-line) px-4 py-4 text-a-15 text-(--a-ink-2)">
               <Glyph name="approve" className="size-4 text-(--a-green)" />
               שום דבר לא מוסתר. המקום מוצג באתר במלואו.
             </p>
@@ -371,9 +371,9 @@ export function ReportBody({ report, tools, aside }: { report: Report; tools: Re
                   >
                     <div className="flex min-h-11 flex-wrap items-center gap-3">
                       <Glyph name="hide" className="size-4 text-(--a-red)" />
-                      <p className="flex-1 text-[0.9375rem] text-(--a-ink-1)">
+                      <p className="flex-1 text-a-15 text-(--a-ink-1)">
                         <span className="font-semibold">{ELEMENT_LABEL[s.field]}</span>
-                        <span className="block text-[0.8125rem] text-(--a-ink-3)">
+                        <span className="block text-a-13 text-(--a-ink-3)">
                           {s.kind === "precautionary" ? "הוסתר אוטומטית בעקבות הבקשה" : "הוסתר ידנית"} · {ago(s.created_at)}
                         </span>
                       </p>
@@ -405,7 +405,7 @@ export function ReportBody({ report, tools, aside }: { report: Report; tools: Re
 
       {(place || forget) && (
         <details className="group mt-7 rounded-2xl border border-(--a-line) bg-(--a-panel)">
-          <summary className="a-focus-ring flex min-h-12 cursor-pointer list-none items-center justify-between gap-2 rounded-2xl px-4 text-[0.9375rem] font-semibold text-(--a-ink-1) [&::-webkit-details-marker]:hidden">
+          <summary className="a-focus-ring flex min-h-12 cursor-pointer list-none items-center justify-between gap-2 rounded-2xl px-4 text-a-15 font-semibold text-(--a-ink-1) [&::-webkit-details-marker]:hidden">
             הסתרה ידנית ומחיקה
             <Glyph name="arrow" className="size-3.5 rotate-90 text-(--a-ink-3) transition-transform duration-300 group-open:-rotate-90" />
           </summary>
@@ -423,7 +423,7 @@ export function ReportBody({ report, tools, aside }: { report: Report; tools: Re
 /** The requester's address, shown only when asked for (the reading is recorded on the server). */
 export function Contact({ report, contact, setContact }: { report: Report; contact: string | null; setContact: (c: string) => void }) {
   return contact ? (
-    <p className="mt-4 flex items-center gap-2 text-[0.9375rem] text-(--a-ink-1)">
+    <p className="mt-4 flex items-center gap-2 text-a-15 text-(--a-ink-1)">
       <Glyph name="mail" className="size-4 text-(--a-ink-3)" />
       <span dir="ltr">{contact}</span>
     </p>
@@ -440,7 +440,7 @@ export function Contact({ report, contact, setContact }: { report: Report; conta
         <Glyph name="mail" />
         הצגת המייל של המבקש
       </Btn>
-      <span className="text-[0.8125rem] text-(--a-ink-3)">כל צפייה נרשמת. פותחים רק כשצריך לענות.</span>
+      <span className="text-a-13 text-(--a-ink-3)">כל צפייה נרשמת. פותחים רק כשצריך לענות.</span>
     </div>
   )
 }
@@ -466,7 +466,7 @@ export function ReportActions({ report, tools, size = "md" }: { report: Report; 
               onChange={(e) => setNote(e.target.value)}
               maxLength={500}
               rows={1}
-              className={cn(inputClass, "h-full min-h-11 resize-none py-2.5")}
+              className={cn(inputClass, "h-full min-h-11 resize-none py-2.5 max-sm:min-h-[4.5rem]")}
             />
           </label>
           {report.status === "open" && (
@@ -477,7 +477,7 @@ export function ReportActions({ report, tools, size = "md" }: { report: Report; 
           <Btn variant="outline" size={size} disabled={!note.trim()} onClick={() => act("close", "הבקשה נסגרה")}>
             רישום וסגירת הבקשה
           </Btn>
-          <p className="w-full text-[0.8125rem] text-(--a-ink-3)">
+          <p className="w-full text-a-13 text-(--a-ink-3)">
             {report.status === "open"
               ? "שני הכפתורים עוצרים את התזכורות במייל. «רישום בלי לסגור» משאיר את הבקשה ברשימה להמשך טיפול."
               : "הטיפול כבר נרשם. כשסיימתם, כתבו מה הוחלט ולחצו «רישום וסגירת הבקשה»."}
