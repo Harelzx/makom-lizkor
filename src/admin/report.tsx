@@ -466,7 +466,7 @@ export function ReportActions({ report, tools, size = "md" }: { report: Report; 
               onChange={(e) => setNote(e.target.value)}
               maxLength={500}
               rows={1}
-              className={cn(inputClass, "h-full min-h-11 resize-none py-2.5")}
+              className={cn(inputClass, "h-full min-h-11 resize-none py-2.5 max-sm:min-h-[4.5rem]")}
             />
           </label>
           {report.status === "open" && (

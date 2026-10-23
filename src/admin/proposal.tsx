@@ -86,7 +86,14 @@ export function ProposalBody({ item, compact, art = true }: { item: Item; compac
         {art && <KindArt kind={item.kind} className={cn("shrink-0 text-(--a-ink-1)", compact ? "size-14" : "size-20")} />}
         <div className="min-w-0 pt-1">
           <p className="text-a-14 text-(--a-ink-3)">{meta([kindLabel(item.kind), item.place_he, `נשלחה ${ago(item.created_at)}`])}</p>
-          <h2 className={cn("mt-1 leading-tight font-bold tracking-[-0.01em] text-(--a-ink-1)", compact ? "text-a-28" : "text-a-32")}>
+          {/* The size before the leading: the merger drops a leading that a font size follows. */}
+          <h2
+            className={cn(
+              "mt-1 font-bold tracking-[-0.01em] text-balance text-(--a-ink-1)",
+              compact ? "text-a-28" : "text-a-32",
+              "leading-tight",
+            )}
+          >
             {item.name_he}
           </h2>
           {item.in_memory_of && <p className="mt-1 text-a-16 text-(--a-ink-2)">לזכר {item.in_memory_of}</p>}

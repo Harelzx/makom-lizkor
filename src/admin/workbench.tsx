@@ -132,7 +132,13 @@ export function Workbench() {
           layer ? "max-lg:translate-x-0" : "max-lg:invisible max-lg:-translate-x-full",
         )}
       >
-        <div className="sticky top-0 z-20 flex min-h-14 items-center gap-2 border-b border-(--a-line) bg-(--a-panel)/92 px-3 pt-[env(safe-area-inset-top)] backdrop-blur-md lg:px-8">
+        {/* At a desk the bar holds only the item's place and its arrows, so without an item it isn't drawn at all. */}
+        <div
+          className={cn(
+            "sticky top-0 z-20 flex min-h-14 items-center gap-2 border-b border-(--a-line) bg-(--a-panel)/92 px-3 pt-[env(safe-area-inset-top)] backdrop-blur-md lg:px-8",
+            !(view === "queue" && inbox.shown) && "lg:hidden",
+          )}
+        >
           <Btn variant="ghost" size="sm" className="lg:hidden" onClick={() => setLayer(false)}>
             <Glyph name="arrow" />
             לרשימה
@@ -405,23 +411,34 @@ export function QueueList({
     <nav aria-label="מה ממתין" className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2.5 pb-4">
       {/* On a phone the list is the first screen; at a desk the overview beside it carries these lines. */}
       <ScreenGuide screen="queue" className="mx-1.5 mt-1 mb-2 lg:hidden" />
-      <div className="flex flex-col gap-2 px-1.5 pt-1 empty:hidden">
-        {inbox.queueError && <Alert>{inbox.queueError}</Alert>}
-        {attention.error && <Alert>רשימת הפעולות שלא הושלמו לא נטענה. {attention.error}</Alert>}
-        {attention.failed === "refresh" && (
-          <Btn variant="ghost" size="sm" className="self-start" disabled={attention.busy} onClick={() => void attention.refresh()}>
-            <Glyph name="restore" className="size-3.5" />
-            לנסות שוב לטעון את הרשימה
+      {/* Nothing came back at all: one drawn failure and one way to try again, not an alert per list. */}
+      {inbox.failed ? (
+        <Scene kind="offline" title="הרשימה לא נטענה" className="px-3 pt-8 [&_img]:w-52 lg:[&_img]:hidden">
+          <p>{inbox.queueError || reports.error || "האתר לא ענה."}</p>
+          <Btn variant="primary" className="mt-4" onClick={() => void inbox.reload()}>
+            <Glyph name="restore" />
+            לנסות שוב
           </Btn>
-        )}
-        {reports.error && <Alert>בקשות ההסרה לא נטענו. {reports.error}</Alert>}
-        {reports.failed === "refresh" && (
-          <Btn variant="ghost" size="sm" className="self-start" disabled={reports.busy} onClick={() => void reports.refresh()}>
-            <Glyph name="restore" className="size-3.5" />
-            לנסות שוב לטעון את בקשות ההסרה
-          </Btn>
-        )}
-      </div>
+        </Scene>
+      ) : (
+        <div className="flex flex-col gap-2 px-1.5 pt-1 empty:hidden">
+          {inbox.queueError && <Alert>{inbox.queueError}</Alert>}
+          {attention.error && <Alert>רשימת הפעולות שלא הושלמו לא נטענה. {attention.error}</Alert>}
+          {attention.failed === "refresh" && (
+            <Btn variant="ghost" size="sm" className="self-start" disabled={attention.busy} onClick={() => void attention.refresh()}>
+              <Glyph name="restore" className="size-3.5" />
+              לנסות שוב לטעון את הרשימה
+            </Btn>
+          )}
+          {reports.error && <Alert>בקשות ההסרה לא נטענו. {reports.error}</Alert>}
+          {reports.failed === "refresh" && (
+            <Btn variant="ghost" size="sm" className="self-start" disabled={reports.busy} onClick={() => void reports.refresh()}>
+              <Glyph name="restore" className="size-3.5" />
+              לנסות שוב לטעון את בקשות ההסרה
+            </Btn>
+          )}
+        </div>
+      )}
 
       {!loaded && !inbox.failed && (
         <div aria-hidden className="flex flex-col gap-1 pt-3">
