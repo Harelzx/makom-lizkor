@@ -9,6 +9,7 @@ const health = (rows: SiteHealth["hours"]): SiteHealth => ({
   version: "release-60a872939f5f",
   sample_every: 32,
   window_hours: 48,
+  seen_at: null,
   hours: rows,
 })
 const row = (h: number, code: string, samples: number, total_ms = 0, slow = 0) => ({ hour: hour(h), code, samples, total_ms, slow })
@@ -60,4 +61,19 @@ it("reads browser errors by kind: a dropped connection alone is not our code, un
   expect(failureLabel("err_client_error_json")).toBe("שגיאה בדפדפן של מבקר: תשובה לא צפויה מהשרת")
   expect(readHealth(health([row(1, "err_client_error_json", 3)]), null, 24).level).toBe("watch")
   expect(readHealth(health([row(1, "err_client_error_network", 10)]), null, 24).level).toBe("watch")
+})
+
+it("puts aside what came before a moderator marked it looked at, and reads what came after", () => {
+  const rows = [row(5, "err_http_500", 6), row(5, "err_client_crash", 1), row(1, "err_client_crash", 1)]
+  const before = readHealth(health(rows), null, 24)
+  expect(before.level).toBe("bad")
+  const after = readHealth({ ...health(rows), seen_at: new Date(Date.UTC(2026, 9, 21, 9)).toISOString() }, null, 24)
+  expect(after.seenFailures).toBe(7)
+  expect(after.serverErrors).toBe(0)
+  expect(after.failures).toEqual([
+    { code: "err_client_crash", label: "האתר קרס אצל מבקר (מסך לבן)", n: 1, when: [{ hour: hour(1), n: 1 }] },
+  ])
+  expect(after.level).toBe("watch")
+  expect(after.timeline.find((t) => t.hour === hour(5))).toMatchObject({ failures: 0, seen: 7 })
+  expect(healthReport(health(rows), null, after)).toContain("7 תקלות מלפני כן")
 })

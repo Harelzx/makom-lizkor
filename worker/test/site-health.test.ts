@@ -6,7 +6,7 @@ import { admin } from "./helpers"
 import { call } from "./app"
 
 beforeEach(async () => {
-  await env.DB.prepare("DELETE FROM request_metrics").run()
+  await env.DB.batch([env.DB.prepare("DELETE FROM request_metrics"), env.DB.prepare("DELETE FROM job_alerts WHERE job = 'health_seen'")])
 })
 
 it("gives the moderators every hourly counter of the last two days, codes and counts only", async () => {
@@ -68,4 +68,24 @@ it("counts a visit and its speed ratings, dropping a rating it doesn't know", as
   expect(await counted()).toEqual({ ev_visit: 2, ev_lcp_good: 1, ev_inp_poor: 1 })
   const r = await admin("/api/admin/health")
   expect(SiteHealth.parse(await r.json()).hours.map((h) => h.code)).toEqual(expect.arrayContaining(["ev_visit", "ev_lcp_good"]))
+})
+
+it("keeps a moderator's «looked at» time for everyone, takes it back, and touches no counter", async () => {
+  await recordFailure(env, "http_500", new Date())
+  expect(SiteHealth.parse(await (await admin("/api/admin/health")).json()).seen_at).toBeNull()
+
+  const marked = await admin("/api/admin/health/seen", { method: "POST", body: JSON.stringify({ seen: true }) })
+  expect(marked.status).toBe(200)
+  const h = SiteHealth.parse(await marked.json())
+  expect(Date.now() - Date.parse(h.seen_at!)).toBeLessThan(60_000)
+  expect(h.hours.find((x) => x.code === "err_http_500")?.samples).toBe(1)
+  expect(SiteHealth.parse(await (await admin("/api/admin/health")).json()).seen_at).toBe(h.seen_at)
+
+  expect((await admin("/api/admin/health/seen", { method: "POST", body: JSON.stringify({ seen: "yes" }) })).status).toBe(400)
+  expect((await admin("/api/admin/health/seen", { method: "POST", body: "{}", headers: { "Sec-Fetch-Site": "cross-site" } })).status).toBe(
+    403,
+  )
+
+  const undone = await admin("/api/admin/health/seen", { method: "POST", body: JSON.stringify({ seen: false }) })
+  expect(SiteHealth.parse(await undone.json()).seen_at).toBeNull()
 })

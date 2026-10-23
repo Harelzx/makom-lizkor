@@ -81,8 +81,11 @@ export interface Reading {
   slow: number
   /** Sampled answers by status (http_200 …). */
   byStatus: { code: string; n: number }[]
-  /** Per hour, oldest first, over the whole window: failures counted and answers sampled. */
-  timeline: { hour: string; failures: number; sampled: number }[]
+  /** Per hour, oldest first, over the whole window: failures counted (and those already looked at), answers sampled. */
+  timeline: { hour: string; failures: number; seen: number; sampled: number }[]
+  /** When a moderator marked the failures as looked at, and how many in the window that put aside. */
+  seenAt: string | null
+  seenFailures: number
   level: Level
   /** Why the level is what it is, a sentence each, the worst first. */
   reasons: string[]
@@ -94,7 +97,13 @@ export function readHealth(health: SiteHealth, summary: OpsSummary | null, hours
   const top = Math.floor(now.getTime() / 3600_000) * 3600_000
   const from = top - (hours - 1) * 3600_000
   const rows = health.hours.filter((r) => new Date(r.hour).getTime() >= from)
-  const errs = rows.filter((r) => r.code.startsWith("err_"))
+  // An hour that began before a moderator marked the failures as looked at is put aside, the marking's own hour with it:
+  // what is read below is only what came after. A failure later in that same hour waits for the next one to show here;
+  // the mail and phone alerts go out regardless.
+  const seenAt = health.seen_at ?? null
+  const looked = (r: Row) => seenAt !== null && r.hour <= seenAt
+  const allErrs = rows.filter((r) => r.code.startsWith("err_"))
+  const errs = allErrs.filter((r) => !looked(r))
   const http = rows.filter((r) => r.code.startsWith("http_"))
   const byCode = new Map<string, number>()
   for (const r of errs) byCode.set(r.code, (byCode.get(r.code) ?? 0) + r.samples)
@@ -149,7 +158,11 @@ export function readHealth(health: SiteHealth, summary: OpsSummary | null, hours
     return {
       hour,
       failures: sum(
-        at.filter((r) => r.code.startsWith("err_")),
+        at.filter((r) => r.code.startsWith("err_") && !looked(r)),
+        (r) => r.samples,
+      ),
+      seen: sum(
+        at.filter((r) => r.code.startsWith("err_") && looked(r)),
         (r) => r.samples,
       ),
       sampled: sum(
@@ -209,6 +222,11 @@ export function readHealth(health: SiteHealth, summary: OpsSummary | null, hours
     slow,
     byStatus: [...statuses].map(([code, n]) => ({ code, n })).sort((a, b) => b.n - a.n),
     timeline,
+    seenAt,
+    seenFailures: sum(
+      allErrs.filter((r) => looked(r)),
+      (r) => r.samples,
+    ),
     level,
     reasons: [...bad, ...watch],
   }
@@ -253,6 +271,7 @@ export function healthReport(health: SiteHealth, summary: OpsSummary | null, r: 
   lines.push(`מצב: ${HEADLINE[r.level]}`)
   for (const reason of r.reasons) lines.push(`  - ${reason}`)
   lines.push("")
+  if (r.seenAt) lines.push(`סומן כנבדק: ${clock(r.seenAt)}. ${r.seenFailures} תקלות מלפני כן לא נמנות למטה (הן במונים הגולמיים בסוף).`)
   lines.push("תקלות (כל אחת נספרת, בלי דגימה):")
   if (!r.failures.length) lines.push("  אין")
   for (const f of r.failures) {

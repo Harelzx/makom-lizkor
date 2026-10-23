@@ -180,4 +180,18 @@ export async function fetchHealth(): Promise<SiteHealth | null> {
     return null
   }
 }
+/** «סימון כנבדק» or its undo; the health as it now reads, or null when it didn't save. */
+export async function markHealthSeen(seen: boolean): Promise<SiteHealth | null> {
+  try {
+    const res = await request("/api/admin/health/seen", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ seen }),
+      signal: AbortSignal.timeout(8000),
+    })
+    return res.ok ? SiteHealth.parse(await res.json()) : null
+  } catch {
+    return null
+  }
+}
 export type { OpsSummary }
