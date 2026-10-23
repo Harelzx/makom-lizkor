@@ -32,6 +32,8 @@ export function SiteHealthPanel({ summary }: { summary: OpsSummary | null }) {
   const [failed, setFailed] = useState(false)
   const [hours, setHours] = useState<number>(24)
   const [copied, setCopied] = useState<"" | "done" | "failed">("")
+  // When neither way of copying is allowed (some embedded browsers), the report is shown to select and copy by hand.
+  const [manual, setManual] = useState("")
   const settle = useCallback((h: SiteHealth | null) => {
     setBusy(false)
     setFailed(!h)
@@ -52,12 +54,10 @@ export function SiteHealthPanel({ summary }: { summary: OpsSummary | null }) {
 
   const copy = async () => {
     if (!health || !reading) return
-    try {
-      await navigator.clipboard.writeText(healthReport(health, summary, reading))
-      setCopied("done")
-    } catch {
-      setCopied("failed")
-    }
+    const text = healthReport(health, summary, reading)
+    const done = await copyText(text)
+    setCopied(done ? "done" : "failed")
+    setManual(done ? "" : text)
     window.setTimeout(() => setCopied(""), 4000)
   }
 
@@ -93,6 +93,23 @@ export function SiteHealthPanel({ summary }: { summary: OpsSummary | null }) {
             ? `עודכן ${ago(health.generated_at)} · גרסה ${health.version ?? "לא ידועה"}`
             : ""}
       </p>
+      {manual && (
+        <div className="mt-4 rounded-2xl border border-(--a-line) bg-(--a-panel) p-4">
+          <p className="text-a-14 text-(--a-ink-1)">הדפדפן לא איפשר העתקה אוטומטית. סמנו את הדוח שבתיבה (לחיצה עליה מסמנת הכול) והעתיקו.</p>
+          <textarea
+            readOnly
+            value={manual}
+            onFocus={(e) => e.currentTarget.select()}
+            rows={8}
+            dir="rtl"
+            aria-label="הדוח להעתקה"
+            className="a-focus-ring mt-2 w-full resize-y rounded-xl border border-(--a-line) bg-(--a-sunk) p-3 font-mono text-a-12 text-(--a-ink-1)"
+          />
+          <Btn size="sm" variant="ghost" className="mt-1" onClick={() => setManual("")}>
+            סגירה
+          </Btn>
+        </div>
+      )}
       {failed && <Alert className="mt-4">לא הצלחנו לקרוא את הנתונים. רעננו את העמוד (ייתכן שצריך להתחבר מחדש) ונסו שוב.</Alert>}
       {!reading && busy && <div aria-hidden className="mt-4 h-40 animate-pulse rounded-2xl bg-(--a-sunk)" />}
 
@@ -201,11 +218,16 @@ export function SiteHealthPanel({ summary }: { summary: OpsSummary | null }) {
 
           {reading.failures.length > 0 && (
             <div className="mt-5">
-              <h3 className="text-a-15 font-bold text-(--a-ink-1)">כל התקלות בטווח</h3>
+              <h3 className="text-a-15 font-bold text-(--a-ink-1)">כל התקלות בטווח, ומתי</h3>
               <ul className="mt-2 divide-y divide-(--a-line) rounded-2xl border border-(--a-line) bg-(--a-panel)">
                 {reading.failures.map((f) => (
-                  <li key={f.code} className="flex items-center justify-between gap-3 px-4 py-2.5 text-a-14">
-                    <span className="text-(--a-ink-1)">{f.label}</span>
+                  <li key={f.code} className="flex items-start justify-between gap-3 px-4 py-2.5 text-a-14">
+                    <span className="flex min-w-0 flex-col gap-0.5">
+                      <span className="text-(--a-ink-1)">{f.label}</span>
+                      <span className="text-a-13 text-(--a-ink-3) tabular-nums">
+                        {f.when.map((w) => `${hourLabel(w.hour)}${w.n > 1 ? ` (${w.n})` : ""}`).join(" · ")}
+                      </span>
+                    </span>
                     <span className="font-bold text-(--a-ink-1) tabular-nums">{f.n}</span>
                   </li>
                 ))}
@@ -230,31 +252,89 @@ function Card({ title, value, detail, warn }: { title: string; value: number | s
   )
 }
 
-/** Hour by hour, oldest at the start of the line: a red mark for each hour with a failure, grey for the traffic. */
+/** «22.10 בשעה 20:00», in Israel's time: the hour a counter starts. A word between the numbers keeps them in order in RTL. */
+const hourLabel = (iso: string) => {
+  const at = new Date(iso)
+  const day = at.toLocaleDateString("he-IL", { timeZone: "Asia/Jerusalem", day: "numeric", month: "numeric" })
+  return `${day} בשעה ${at.toLocaleTimeString("he-IL", { timeZone: "Asia/Jerusalem", hour: "2-digit", minute: "2-digit" })}`
+}
+
+const faults = (n: number) => (n === 1 ? "תקלה אחת" : `${n} תקלות`)
+
+/** Copy to the clipboard; where the clipboard API is refused, the older selection copy. False when both are. */
+async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text)
+    return true
+  } catch {
+    const area = document.createElement("textarea")
+    area.value = text
+    area.setAttribute("readonly", "")
+    area.style.cssText = "position:fixed;opacity:0;inset-inline-start:0;top:0"
+    document.body.append(area)
+    area.select()
+    try {
+      return document.execCommand("copy")
+    } catch {
+      return false
+    } finally {
+      area.remove()
+    }
+  }
+}
+
+/**
+ * Hour by hour, the oldest at the end of the reading line and now at its start, as the page reads: a grey column for how
+ * busy the server was, a red cap on an hour that had a failure. Each hour is a button that says what it held, so a
+ * phone (no hover) can read it too.
+ */
 function Timeline({ timeline }: { timeline: { hour: string; failures: number; sampled: number }[] }) {
+  const [picked, setPicked] = useState<string | null>(null)
   const peak = Math.max(1, ...timeline.map((t) => t.sampled))
-  const label = (iso: string) =>
-    new Date(iso).toLocaleTimeString("he-IL", { timeZone: "Asia/Jerusalem", hour: "2-digit", minute: "2-digit" })
+  const ordered = [...timeline].reverse()
+  const shown = timeline.find((t) => t.hour === picked) ?? [...timeline].reverse().find((t) => t.failures > 0) ?? null
+  const mid = timeline[Math.floor(timeline.length / 2)]
   return (
-    <figure className="mt-5">
-      <figcaption className="text-a-13 font-bold text-(--a-ink-3)">שעה אחרי שעה</figcaption>
-      <div className="mt-2 flex h-16 items-end gap-px" dir="ltr">
-        {timeline.map((t) => (
-          <div
+    <figure className="mt-6">
+      <figcaption className="text-a-15 font-bold text-(--a-ink-1)">שעה אחרי שעה</figcaption>
+      <p className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-a-13 text-(--a-ink-2)">
+        <span className="flex items-center gap-1.5">
+          <span aria-hidden className="h-3 w-2.5 rounded-sm bg-(--a-line-2)" />
+          גובה העמודה: כמה עבודה הייתה לשרת באותה שעה
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span aria-hidden className="h-1.5 w-3 rounded-full bg-(--a-red)" />
+          פס אדום: באותה שעה נרשמה תקלה
+        </span>
+      </p>
+      <div className="mt-3 flex h-20 items-end gap-0.5">
+        {ordered.map((t) => (
+          <button
             key={t.hour}
-            title={`${label(t.hour)}: ${t.failures} תקלות, ${t.sampled} תשובות שנבדקו`}
-            className="relative flex h-full flex-1 items-end"
+            type="button"
+            aria-pressed={shown?.hour === t.hour}
+            aria-label={`${hourLabel(t.hour)}: ${t.failures ? faults(t.failures) : "בלי תקלות"}`}
+            onClick={() => setPicked(t.hour)}
+            className={cn("a-focus-ring relative flex h-full flex-1 items-end rounded-t-sm", shown?.hour === t.hour && "bg-(--a-sunk)")}
           >
-            <div className="w-full rounded-t-sm bg-(--a-line-2)" style={{ height: `${Math.max(4, (t.sampled / peak) * 100)}%` }} />
-            {t.failures > 0 && <div className="absolute inset-x-0 top-0 h-1.5 rounded-full bg-(--a-red)" />}
-          </div>
+            <span
+              className={cn("w-full rounded-t-sm", shown?.hour === t.hour ? "bg-(--a-ink-3)" : "bg-(--a-line-2)")}
+              style={{ height: `${Math.max(4, (t.sampled / peak) * 100)}%` }}
+            />
+            {t.failures > 0 && <span className="absolute inset-x-0 top-0 h-1.5 rounded-full bg-(--a-red)" />}
+          </button>
         ))}
       </div>
-      <div className="mt-1 flex justify-between text-a-12 text-(--a-ink-3) tabular-nums" dir="ltr">
-        <span>{label(timeline[0].hour)}</span>
+      <div className="mt-1 flex justify-between text-a-12 text-(--a-ink-3) tabular-nums">
         <span>עכשיו</span>
+        <span>{hourLabel(mid.hour)}</span>
+        <span>{hourLabel(timeline[0].hour)}</span>
       </div>
-      <p className="mt-1.5 text-a-12 text-(--a-ink-3)">אפור: כמה פניות היו לשרת. קו אדום מעל שעה: הייתה בה תקלה.</p>
+      <p className="mt-2 rounded-xl bg-(--a-sunk) px-3 py-2 text-a-13 text-(--a-ink-1)" aria-live="polite">
+        {shown
+          ? `${hourLabel(shown.hour)}: ${shown.failures ? faults(shown.failures) : "בלי תקלות"}${shown.sampled ? `, ${shown.sampled} פניות לשרת שנבדקו` : ", בלי פניות שנבדקו"}.`
+          : "לחצו על שעה כדי לראות מה היה בה."}
+      </p>
     </figure>
   )
 }

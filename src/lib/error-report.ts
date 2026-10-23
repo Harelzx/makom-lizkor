@@ -43,11 +43,21 @@ export function clientErrorReport(event: { error?: unknown; filename?: string },
   ])
 }
 
+/**
+ * The page is about to load again (an old tab, main.tsx): what fails between now and then is that leaving, not
+ * something a visitor sees. The cancelled chunk resolves empty, React gives up on it and the screen would read as a
+ * crash, a moment before the reload replaces it.
+ */
+let reloading = false
+export function leaving() {
+  reloading = true
+}
+
 /** At most three a page: a loop that throws every frame should not become a stream of reports. */
 export function watchErrors() {
   let left = 3
   const send = (event: { error?: unknown; filename?: string }) => {
-    if (left <= 0 || !navigator.sendBeacon) return
+    if (reloading || left <= 0 || !navigator.sendBeacon) return
     const body = clientErrorReport(event, location.origin)
     if (!body) return
     left--
@@ -71,7 +81,7 @@ const beacon = (report: unknown) =>
   navigator.sendBeacon?.("/api/csp-report", new Blob([JSON.stringify([report])], { type: "application/reports+json" }))
 
 export function reportIssue(kind: Issue) {
-  if (told.has(kind)) return
+  if (reloading || told.has(kind)) return
   told.add(kind)
   try {
     beacon({ type: "client-issue", body: { kind } })

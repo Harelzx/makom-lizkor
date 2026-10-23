@@ -6,7 +6,7 @@ import App from "./App.tsx"
 import { Specimen } from "@/components/specimen"
 import { DirectionProvider } from "@/components/ui/direction"
 import { TooltipProvider } from "@/components/ui/tooltip"
-import { reportIssue, watchErrors, watchVisit } from "@/lib/error-report"
+import { leaving, reportIssue, watchErrors, watchVisit } from "@/lib/error-report"
 
 // The site moved to its own domain on 18 October 2026, and the old workers.dev address still serves it. Anyone who
 // lands there goes on to the same page (the hash keeps the place) before anything loads: the server takes anemones,
@@ -26,6 +26,7 @@ addEventListener("vite:preloadError", (event) => {
   }
   event.preventDefault()
   reportIssue("stale_bundle")
+  leaving()
   location.reload()
 })
 
