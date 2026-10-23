@@ -62,8 +62,8 @@ type Row = SiteHealth["hours"][number]
 
 export interface Reading {
   hours: number
-  /** Every counted failure in the window, by code, most first. */
-  failures: { code: string; label: string; n: number }[]
+  /** Every counted failure in the window, by code, most first, with the hours it came in (oldest first). */
+  failures: { code: string; label: string; n: number; when: { hour: string; n: number }[] }[]
   serverErrors: number
   jobFailures: number
   browserErrors: number
@@ -98,7 +98,17 @@ export function readHealth(health: SiteHealth, summary: OpsSummary | null, hours
   const http = rows.filter((r) => r.code.startsWith("http_"))
   const byCode = new Map<string, number>()
   for (const r of errs) byCode.set(r.code, (byCode.get(r.code) ?? 0) + r.samples)
-  const failures = [...byCode].map(([code, n]) => ({ code, label: failureLabel(code), n })).sort((a, b) => b.n - a.n)
+  const failures = [...byCode]
+    .map(([code, n]) => ({
+      code,
+      label: failureLabel(code),
+      n,
+      when: errs
+        .filter((r) => r.code === code)
+        .map((r) => ({ hour: r.hour, n: r.samples }))
+        .sort((a, b) => a.hour.localeCompare(b.hour)),
+    }))
+    .sort((a, b) => b.n - a.n)
   const serverErrors = sum(
     errs.filter((r) => r.code.startsWith("err_http_")),
     (r) => r.samples,

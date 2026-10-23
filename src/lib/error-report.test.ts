@@ -47,6 +47,25 @@ describe("a visitor's issue", () => {
       { type: "client-issue", body: { kind: "image" } },
     ])
   })
+
+  it("is not sent once the page is loading again for a newer build: the failure is the old tab leaving", async () => {
+    const sent: string[] = []
+    Object.defineProperty(globalThis, "navigator", {
+      value: {
+        sendBeacon: (_url: string, blob: Blob) => {
+          void blob.text().then((t) => sent.push(t))
+          return true
+        },
+      },
+      configurable: true,
+    })
+    const { reportIssue, leaving } = await import("./error-report")
+    reportIssue("stale_bundle")
+    leaving()
+    reportIssue("crash")
+    await new Promise((r) => setTimeout(r, 10))
+    expect(sent.map((t) => JSON.parse(t)[0])).toEqual([{ type: "client-issue", body: { kind: "stale_bundle" } }])
+  })
 })
 
 describe("an error's kind", () => {
