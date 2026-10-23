@@ -31,7 +31,7 @@ import { machineMay, syntheticRev } from "../lib/synthetic"
 import { opEnv } from "../lib/purge"
 import { commissioningAllowed, commissioningStatus, manualRecovery, manualSnapshot } from "../db/commissioning"
 import { opsSummary } from "../lib/ops-summary"
-import { siteHealth } from "../lib/health"
+import { markHealthSeen, siteHealth } from "../lib/health"
 
 type AdminEnv = { Bindings: Env; Variables: AppEnv["Variables"] & { actor: string; machine: boolean; machineRev: number | null } }
 type AdminContext = Context<AdminEnv>
@@ -280,6 +280,12 @@ admin.get("/media/*", async (c) => {
 })
 
 const invalid = (r: { success: boolean }, c: Parameters<typeof problem>[0]) => (r.success ? undefined : problem(c, 400, "invalid_input"))
+
+// «סימון כנבדק» on the site-health screen, or its undo: a time, nothing else.
+admin.post("/health/seen", zValidator("json", z.object({ seen: z.boolean() }).strict(), invalid), async (c) => {
+  await markHealthSeen(c.env, c.req.valid("json").seen ? clock(c.req.raw, c.env) : null)
+  return c.json(await siteHealth(c.env, clock(c.req.raw, c.env)), 200, PRIVATE)
+})
 const outcomeOf = (c: Parameters<typeof problem>[0], outcome: string) =>
   outcome === "ok"
     ? c.json({ ok: true })

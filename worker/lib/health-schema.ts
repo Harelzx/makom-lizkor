@@ -18,6 +18,8 @@ export const SiteHealth = z
     version: z.string().max(80).nullable(),
     sample_every: count,
     window_hours: count,
+    /** When a moderator last marked the failures as looked at (health_seen), or null: what came before is not news. */
+    seen_at: iso.nullable(),
     hours: z.array(
       z
         .object({
