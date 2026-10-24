@@ -49,10 +49,12 @@ describe("bounded contact mail, without a database copy", () => {
     expect(provider).toHaveBeenCalledTimes(1)
     expect(provider.mock.calls[0][0]).toMatchObject({
       to: "makomlizkor@gmail.com",
-      from: "contact@makom-unit.org",
+      from: { email: "contact@makom-unit.org", name: "מקום לזכור" },
       subject: "פנייה ממקום לזכור",
     })
     expect(provider.mock.calls[0][0].text).toContain(body.email)
+    // The same message as a page beside the text: right to left, the visitor's words escaped.
+    expect(provider.mock.calls[0][0].html).toMatch(/dir="rtl"/)
     expect(r.headers.get("Cache-Control")).toBe("private, no-store")
   })
   it("refuses extra recipient fields and header injection", async () => {
