@@ -33,6 +33,13 @@ it("frames a text-only mail the same way, linking only the site's own addresses"
   expect(html).toContain("שורה<br>שנייה")
 })
 
+it("links no address that only starts like the site's own", () => {
+  const html = textHtml("s", "https://makomlizkor.org@evil.example/x https://makomlizkor.org.evil.example/x https://makomlizkor.org")
+  expect(html).not.toContain('href="https://makomlizkor.org@')
+  expect(html).not.toContain('href="https://makomlizkor.org.evil')
+  expect(html).toContain('<a href="https://makomlizkor.org"')
+})
+
 it("keeps the moderators' alert free of the requester's words in both forms", () => {
   const m = reportAlertMail("m@example.org", {
     link: "https://makomlizkor.org/admin/#reports",

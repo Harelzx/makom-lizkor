@@ -80,7 +80,12 @@ export function textHtml(subject: string, text: string): string {
   const paragraphs = text.trim().split(/\n{2,}/)
   const body = paragraphs
     .map((p) => {
-      const linked = lines(p).replace(/https:\/\/makomlizkor\.org[^\s<]*/g, (url) => `<a href="${url}" style="color:${INK};">${url}</a>`)
+      // The host must end where the address's path does: «makomlizkor.org@other» and «makomlizkor.org.other» lead elsewhere,
+      // and these texts carry words from outside (a browser's error report, a visitor's message).
+      const linked = lines(p).replace(
+        /https:\/\/makomlizkor\.org(?:[/?#][^\s<]*)?(?![^\s<])/g,
+        (url) => `<a href="${url}" style="color:${INK};">${url}</a>`,
+      )
       return `<p dir="rtl" style="margin:0 0 12px;font-family:${FONT};font-size:15px;line-height:1.7;color:${INK};">${linked}</p>`
     })
     .join("\n")
