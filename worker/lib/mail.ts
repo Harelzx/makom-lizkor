@@ -3,9 +3,11 @@ import { MAIL_BINDING, validMailFrom } from "./mail-binding"
 import { gmailReady, gmailAttempt, type GmailSettings, type MailOutcome } from "./gmail"
 import { claimMailBudget } from "./mail-budget"
 import { log } from "./log"
+import { textHtml } from "./mail-html"
 
 /** `budget`: "ops" for the owner's operational mail; "visitor" for mail a visitor's action sends (see claimMailBudget). */
-export type Mail = { to: string; subject: string; text: string; budget?: "ops" | "visitor" }
+/** `html`: the same mail as a page (lib/mail-html.ts); without one, the text is set in the same frame when sent. */
+export type Mail = { to: string; subject: string; text: string; html?: string; budget?: "ops" | "visitor" }
 // Optional commissioning settings; a transport cannot become ready merely by choosing its name.
 type MailEnv = Env & GmailSettings & { MAIL?: SendEmail; MAIL_PROVIDER?: string }
 const cloudflareSelected = (env: MailEnv) => env.MAIL_PROVIDER === undefined || env.MAIL_PROVIDER === "cloudflare"
@@ -43,7 +45,13 @@ const productionMail: SendMail = async (env, m) => {
   const binding = env[MAIL_BINDING]
   if (!validMailFrom(env.MAIL_FROM) || !binding || typeof binding.send !== "function") return false
   try {
-    const result = await binding.send({ from: env.MAIL_FROM, to: m.to, subject: m.subject, text: m.text })
+    const result = await binding.send({
+      from: { email: env.MAIL_FROM, name: "מקום לזכור" },
+      to: m.to,
+      subject: m.subject,
+      text: m.text,
+      html: m.html ?? textHtml(m.subject, m.text),
+    })
     return typeof result?.messageId === "string" && result.messageId.trim().length > 0
   } catch {
     return false
