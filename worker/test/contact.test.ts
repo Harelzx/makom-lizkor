@@ -5,7 +5,7 @@ import { createApp } from "../index"
 import { sendMail } from "../lib/mail"
 
 const body = { email: "visitor@example.test", message: "פניית בדיקה בלבד" }
-const provider = vi.fn(async (mail: { to: string; from: string; subject: string; text: string }) => {
+const provider = vi.fn(async (mail: EmailMessageBuilder) => {
   void mail
   return { messageId: "test-only" }
 })
