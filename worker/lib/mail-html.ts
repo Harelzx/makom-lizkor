@@ -19,8 +19,8 @@ const INK = "#131a2c"
 const MUTED = "#5f6472"
 const GROUND = "#f4f2ec"
 const LINE = "#e4e1d8"
-// The site's anemone (public/art/mail-logo.png, from favicon.svg): a picture, since mail clients don't draw SVG. A client
-// that holds images back still shows the name beside it.
+// The site's mark (AnemoneMark: the anemone as an ink line, only its heart red) as public/art/mail-logo.png, a picture
+// since mail clients don't draw SVG. A client that holds images back still shows the name beside it.
 const LOGO = "https://makomlizkor.org/art/mail-logo.png"
 const FONT = "Arial, 'Segoe UI', Helvetica, sans-serif"
 
