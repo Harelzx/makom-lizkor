@@ -131,7 +131,27 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium webkit
+      # The system packages come from Ubuntu's mirror, which some days stalls for minutes on one package (three
+      # timeouts on 23 October 2026, each passing on a rerun): each attempt gets four minutes, a healthy one takes
+      # seconds, and a new attempt opens new connections.
+      - name: Install browser system packages
+        run: |
+          for attempt in 1 2 3; do
+            timeout -k 10s 240s npx playwright install-deps chromium webkit && exit 0
+            sudo dpkg --configure -a || true
+            echo "::warning::playwright install-deps attempt $attempt failed"
+          done
+          exit 1
+        timeout-minutes: 13
+      - id: playwright
+        run: echo "version=$(node -p "require('./node_modules/playwright-core/package.json').version")" >> "$GITHUB_OUTPUT"
+      # The browsers themselves, kept between runs for the installed Playwright; install still runs on a hit, a no-op
+      # that also mends a partial restore.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}-chromium-webkit
+      - run: npx playwright install chromium webkit
         timeout-minutes: 10
       - run: node scripts/ci-browser.mjs run webkit
       - if: always()
