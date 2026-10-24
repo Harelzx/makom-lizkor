@@ -27,7 +27,12 @@ test("production sends the exact structured message and accepts the provider's m
     },
   }
   assert.equal(await sendMail({ ENVIRONMENT: "production", DB, MAIL_FROM: sender, MAIL: binding }, message), true)
-  assert.deepEqual(calls, [{ from: sender, ...message }])
+  assert.equal(calls.length, 1)
+  const { html, ...sent } = calls[0]
+  assert.deepEqual(sent, { from: { email: sender, name: "מקום לזכור" }, ...message })
+  // A text-only mail also goes out as a right-to-left page, its words as they are.
+  assert.match(html, /<html lang="he" dir="rtl">/)
+  assert.ok(html.includes(message.text))
 })
 
 test("missing or invalid production sender and missing binding never call the provider", async () => {
