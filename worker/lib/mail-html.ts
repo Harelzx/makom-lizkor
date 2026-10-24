@@ -19,7 +19,9 @@ const INK = "#131a2c"
 const MUTED = "#5f6472"
 const GROUND = "#f4f2ec"
 const LINE = "#e4e1d8"
-const ANEMONE = "#c8302c"
+// The site's anemone (public/art/mail-logo.png, from favicon.svg): a picture, since mail clients don't draw SVG. A client
+// that holds images back still shows the name beside it.
+const LOGO = "https://makomlizkor.org/art/mail-logo.png"
 const FONT = "Arial, 'Segoe UI', Helvetica, sans-serif"
 
 const escape = (s: string) =>
@@ -37,7 +39,10 @@ function page(subject: string, body: string) {
 <tr><td align="center" style="padding:28px 12px;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;background:#ffffff;border:1px solid ${LINE};border-radius:14px;" dir="rtl">
 <tr><td dir="rtl" align="right" style="padding:28px 28px 24px;font-family:${FONT};color:${INK};text-align:right;direction:rtl;">
-<p dir="rtl" style="margin:0;font-family:${FONT};font-size:13px;line-height:1;color:${MUTED};"><span style="color:${ANEMONE};font-size:14px;">&#9679;</span>&nbsp; מקום לזכור</p>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" dir="rtl"><tr>
+<td style="width:32px;vertical-align:middle;"><img src="${LOGO}" width="32" height="32" alt="" style="display:block;width:32px;height:32px;border:0;"></td>
+<td style="padding-right:10px;vertical-align:middle;font-family:${FONT};font-size:16px;font-weight:bold;color:${INK};">מקום לזכור</td>
+</tr></table>
 ${body}
 </td></tr>
 </table>

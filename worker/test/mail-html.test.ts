@@ -8,7 +8,9 @@ it("sets a mail right to left, with its one action as a button and the link kept
   expect(m.html).toContain('href="https://makomlizkor.org/verify?t=abc&amp;x=1"')
   expect(m.html).toContain("אישור הכתובת")
   expect(m.text).toContain("https://makomlizkor.org/verify?t=abc&x=1")
-  expect(m.html).not.toMatch(/<script|<img|@import|url\(/i)
+  expect(m.html).not.toMatch(/<script|@import|url\(/i)
+  // One picture only: the site's own anemone, from its public art.
+  expect(m.html!.match(/<img [^>]*src="([^"]+)"/g)).toEqual([expect.stringContaining('src="https://makomlizkor.org/art/mail-logo.png"')])
 })
 
 it("escapes what a person wrote, so a place's name or a note can't become markup or a link", () => {
