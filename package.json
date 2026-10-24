@@ -71,7 +71,7 @@
     "@cloudflare/vite-plugin": "^1.64.0",
     "@cloudflare/vitest-plugin": "^1.4.2",
     "@eslint/js": "^10",
-    "@playwright/test": "^1.64.0",
+    "@playwright/test": "^1.64.1",
     "@types/geojson": "^7946.0.16",
     "@types/node": "^26",
     "@types/react": "^19",
